@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="description" content="Apache AGE - PostgreSQL extension for graph database functionality" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="assets/styles/index.css" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/images/favicon/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon/favicon-16x16.png" />
+
+    <title>Apache AGE - PostgreSQL extension for graph database functionality</title>
+
+    <script type="text/javascript" src="assets/scripts/index.js"></script>
+  </head>
+
+  <body>
+    <div class="root">
+      <div class="header">
+        <img src="assets/images/logo.png" width="250px" />
+        <div class="header--title">A Graph Extension for PostgreSQL</div>
+        <div class="header--hamburger" id="menu">
+          <div class="header--hamburger-div"></div>
+          <div class="header--hamburger-div"></div>
+          <div class="header--hamburger-div"></div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <p class="sidebar--section">
+          <span class="emph">APACHE AGE</span><br />
+          <span id="sidebar-overview" class="sidebar-item sidebar--selected"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Overview</a></span> <br />
+          <!-- FAQs <br /> -->
+          <span id="sidebar-license" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">License</a></span> <br />
+          <!-- Downloads <br /> -->
+          <span id="sidebar-roadmap" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Roadmap</a></span> <br />
+        </p>
+
+        <p class="sidebar--section">
+          <span class="emph">DOCUMENTATION</span> <br />
+          <span id="sidebar-installing" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Installing AGE</a></span> <br />
+          <span id="sidebar-gettingstarted" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Getting Started</a></span> <br />
+          Glossary <br />
+        </p>
+
+        <p class="sidebar--section">
+          <span class="emph">CONTRIBUTION</span> <br />
+          Welcome <br />
+          Committer Guide <br />
+          Coding Guideline <br />
+        </p>
+
+        <p class="sidebar--section">
+          <span class="emph">COMMUNITY</span> <br />
+          Team <br />
+          Mailing List <br />
+          <a class="sidebar-link external-link" target="_" href="https://issues.apache.org/jira/projects/AGE/issues">Issue Tracker</a> <br />
+          <a class="sidebar-link external-link" target="_" href="https://github.com/apache/incubator-age">Github</a> <br />
+        </p>
+
+        <p class="sidebar--section">
+          <span class="emph">ASF</span> <br />
+          <a class="sidebar-link external-link" target="_" href="https://www.apache.org/foundation/">Apache Software Foundation</a> <br />
+          <a class="sidebar-link external-link" target="_" href="https://www.apache.org/foundation/how-it-works.html">How Apache Works</a> <br />
+          <a class="sidebar-link external-link" target="_" href="https://www.apache.org/foundation/sponsorship.html">Sponsorship</a> <br />
+          <a class="sidebar-link external-link" target="_" href="https://www.apache.org/foundation/thanks.html">Thanks</a> <br />
+        </p>
+      </div>
+
+      <div class="main">
+        <!-- 
+          *
+          * AGE 
+          *
+        -->
+        <div class="main-item main--selected" id="main-overview">
+          <div class="title">Apache AGE (Incubating)</div>
+          <div class="main-body">
+            <p class="main-content">
+              Apache AGE a PostgreSQL extension that provides graph database functionality. AGE is an acronym for AgensGraph Extension, and is inspired by Bitnine's fork of
+              PostgreSQL 10, AgensGraph, which is a multi-model database. The goal of the project is to create single storage that can handle both relational and graph model data
+              so that users can use standard ANSI SQL along with openCypher, the Graph query language.
+            </p>
+
+            <div class="subtitle">Features</div>
+          </div>
+        </div>
+        <div class="main-item" id="main-license">
+          <div class="title">License</div>
+          <div class="main-body">Apache AGE is licensed under <a target="_" href="http://www.apache.org/licenses/LICENSE-2.0.html">Apache License, version 2.0</a></div>
+        </div>
+        <div class="main-item" id="main-roadmap">
+          <div class="title">Roadmap</div>
+          <div class="main-body">here is the roadmap</div>
+        </div>
+
+        <!-- 
+          *
+          * DOCUMENTATION 
+          *
+        -->
+        <div class="main-item" id="main-installing">
+          <div class="title">Installing AGE</div>
+          <div class="subtitle">Using Docker</div>
+          <div class="main-body">
+            Docker images are available on Docker Hub and are based on the official PostgreSQL 11 Debian and Alpine images. <br />
+            <ul>
+              <li><a class="external-link" target="_" href="https://hub.docker.com/r/sorrell/agensgraph-extension">Debian AGE</a></li>
+              <li><a class="external-link" target="_" href="https://hub.docker.com/r/sorrell/agensgraph-extension-alpine">Alpine AGE</a></li>
+            </ul>
+          </div>
+          <div class="subtitle">Installing from source</div>
+          <div class="main-body">
+            Building AGE from source depends on the following Linux libraries (Ubuntu package names shown below):
+
+            <div class="code">$ sudo apt-get install bison build-essential flex postgresql-server-dev-11</div>
+
+            The build process will attempt to use the first path in the PATH environment variable when installing AGE. If the pg_config path if located there, run the following
+            command in the source code directory of Apache AGE to build and install the extension.
+
+            <div class="code">$ make install</div>
+
+            If the path to your Postgres installation is not in the PATH variable, add the path in the arguements:
+
+            <div class="code">$ make PG_CONFIG=/path/to/postgres/bin/pg_config install</div>
+
+            Since Apache AGE will be installed in the directory of the PostgreSQL installation, proper permissions on the directory are required. Run the following statements in
+            psql to create and load age in PostgreSQL.
+
+            <div class="code">
+              =# CREATE EXTENSION age; -- run this statement only once
+              CREATE EXTENSION
+              =# LOAD 'age'; 
+              LOAD 
+              =# SET search_path = ag_catalog, "$user", public; 
+              SET
+            </div>
+          </div>
+        </div>
+        <div class="main-item" id="main-gettingstarted">
+          <div class="title">Getting Started</div>
+          <div class="main-body">
+            <div class="subtitle">Loading AGE</div>
+            Connect to your containerized Postgres instance and then run the following commands:
+
+            <div class="code">
+            CREATE EXTENSION age;
+            LOAD 'age';
+            SET search_path = ag_catalog, "$user", public;
+            </div>
+            
+            <div class="subtitle">Using AGE</div>
+            First you will need to create a graph:
+
+            <div class="code">
+              SELECT create_graph('my_graph_name');
+            </div>
+
+            To execute Cypher queries, you will need to wrap them in the following syntax:
+
+            <div class="code">
+              SELECT * from cypher('my_graph_name', $$
+                CypherQuery
+              $$) as (a agtype);
+            </div>
+
+            For example, if we wanted to create a graph with 4 nodes, we could do something as shown below:
+
+            <div class="code">
+              SELECT * from cypher('my_graph_name', $$
+                CREATE (a:Part {part_num: '123'}), 
+                      (b:Part {part_num: '345'}), 
+                      (c:Part {part_num: '456'}), 
+                      (d:Part {part_num: '789'})
+              $$) as (a agtype);
+  
+              --- RESULTS
+              a
+              ---
+              (0 rows)
+            </div>
+
+            Then we could query the graph with the following:
+
+            <div class="code">
+              SELECT * from cypher('my_graph_name', $$
+                MATCH (a)
+                RETURN a
+              $$) as (a agtype);
+  
+              --- RESULTS
+                                                        a
+              -------------------------------------------------------------------------------------
+              {"id": 844424930131969, "label": "Part", "properties": {"part_num": "123"}}::vertex
+              {"id": 844424930131970, "label": "Part", "properties": {"part_num": "345"}}::vertex
+              {"id": 844424930131971, "label": "Part", "properties": {"part_num": "456"}}::vertex
+              {"id": 844424930131972, "label": "Part", "properties": {"part_num": "789"}}::vertex
+              (4 rows)
+            </div>
+
+            Next, we could create a relationship between a couple of nodes:
+
+            <div class="code">
+              SELECT * from cypher('my_graph_name', $$
+                MATCH (a:Part {part_num: '123'}), (b:Part {part_num: '345'})
+                CREATE (a)-[u:used_by { quantity: 1 }]->(b)
+              $$) as (a agtype);
+  
+              --- RESULTS
+              a
+              ---
+              (0 rows)
+            </div>
+
+            Next we can return the path we just created (results have been formatted for readability):
+            
+            <div class="code">
+              SELECT * from cypher('age', $$
+                MATCH p=(a)-[]-(b)
+                RETURN p
+              $$) as (a agtype);
+  
+              // RESULTS
+              // ROW 1
+              [
+                {
+                    "id":844424930131969,
+                    "label":"Part",
+                    "properties":{
+                      "part_num":"123"
+                    }
+                }::"vertex",
+                {
+                    "id":1125899906842625,
+                    "label":"used_by",
+                    "end_id":844424930131970,
+                    "start_id":844424930131969,
+                    "properties":{
+                      "quantity":1
+                    }
+                }::"edge",
+                {
+                    "id":844424930131970,
+                    "label":"Part",
+                    "properties":{
+                      "part_num":"345"
+                    }
+                }::"vertex"
+              ]::"path"
+              // ROW 2
+              [
+                {
+                    "id":844424930131970,
+                    "label":"Part",
+                    "properties":{
+                      "part_num":"345"
+                    }
+                }::"vertex",
+                {
+                    "id":1125899906842625,
+                    "label":"used_by",
+                    "end_id":844424930131970,
+                    "start_id":844424930131969,
+                    "properties":{
+                      "quantity":1
+                    }
+                }::"edge",
+                {
+                    "id":844424930131969,
+                    "label":"Part",
+                    "properties":{
+                      "part_num":"123"
+                    }
+                }::"vertex"
+              ]::"path"
+              (2 rows)
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

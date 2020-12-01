@@ -1,0 +1,120 @@
+.root {
+  display: grid;
+  grid-template-columns: 1.5fr 5fr;
+  grid-template-rows: 20vh 80vh;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  max-width: 1600px;
+  margin: auto;
+}
+
+/*
+ *   HEADER 
+ */
+
+.header {
+  grid-column: 1 / -1;
+  background-color: black;
+  padding-bottom: 0.5rem;
+}
+
+.header--title {
+  color: antiquewhite;
+  font-size: 1.3rem;
+  padding-left: 1rem;
+}
+
+.header--hamburger {
+  display: none;
+  float: right;
+  top: 1rem;
+  right: 1rem;
+  position: fixed;
+}
+
+.header--hamburger-div {
+  width: 35px;
+  height: 5px;
+  background-color: white;
+  margin: 6px 0;
+}
+
+/*
+ *   SIDEBAR
+ */
+
+.sidebar {
+  grid-column: 1 / 2;
+  grid-row: 2;
+  background-color: rgb(240, 239, 239);
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.sidebar--selected {
+  border-bottom: 1px dotted blue;
+}
+
+.sidebar--selected::before {
+  content: "➔";
+}
+
+.sidebar-link {
+  text-decoration: none;
+  color: black;
+}
+
+/*
+ *   MAIN AREA 
+ */
+
+.main {
+  grid-column: 2 / 3;
+  grid-row: 2;
+  padding-right: 2rem;
+}
+
+.main-body {
+  padding-left: 1rem;
+}
+
+.main-item {
+  display: none;
+}
+
+.main--selected {
+  display: contents;
+}
+
+/*
+ *   GENERAL 
+ */
+
+.emph {
+  font-weight: 700;
+}
+
+.title {
+  font-size: 3rem;
+  padding-bottom: 1rem;
+  padding-left: 1rem;
+}
+
+.subtitle {
+  font-size: 2rem;
+  padding-left: 1rem;
+}
+
+.code {
+  margin: 1rem;
+  background-color: lightgoldenrodyellow;
+  font-family: "Courier New", Courier, monospace;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-bottom: 1rem;
+  white-space: pre-line;
+}
+
+.external-link::after {
+  color: blue;
+  content: "➚";
+}
