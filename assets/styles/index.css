@@ -1,7 +1,7 @@
 .root {
   display: grid;
   grid-template-columns: 1.5fr 5fr;
-  grid-template-rows: 20vh 80vh;
+  grid-template-rows: 20vh auto-fill;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   max-width: 1600px;
   margin: auto;
@@ -111,7 +111,8 @@
   padding-left: 1rem;
   padding-right: 1rem;
   padding-bottom: 1rem;
-  white-space: pre-line;
+  padding-top: 1rem;
+  white-space: pre;
 }
 
 .external-link::after {
