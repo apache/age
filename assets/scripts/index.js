@@ -1,6 +1,7 @@
 var handleClick = function (el) {
   decorateSidebar(el);
   showMainContent(el);
+  handleMenuClick();
 }
 
 var decorateSidebar = function (el) {
@@ -18,4 +19,14 @@ var showMainContent = function (el) {
   }
   let divId = "main-" + el.parentElement.id.split("-")[1];
   document.getElementById(divId).classList.add("main--selected");
+}
+
+var handleMenuClick = function (el) {
+  let sidebar = document.getElementById("sidebar");
+  let display = window.getComputedStyle(sidebar).display;
+  if (display === "none") {
+    sidebar.style.display = "block";
+  } else {
+    sidebar.style.display = "none";
+  }
 }

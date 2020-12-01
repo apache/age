@@ -20,14 +20,14 @@
       <div class="header">
         <img src="assets/images/logo.png" width="250px" />
         <div class="header--title">A Graph Extension for PostgreSQL</div>
-        <div class="header--hamburger" id="menu">
+        <div class="header--hamburger" id="menu" onclick="handleMenuClick(this)">
           <div class="header--hamburger-div"></div>
           <div class="header--hamburger-div"></div>
           <div class="header--hamburger-div"></div>
         </div>
       </div>
 
-      <div class="sidebar">
+      <div class="sidebar" id="sidebar">
         <p class="sidebar--section">
           <span class="emph">APACHE AGE</span><br />
           <span id="sidebar-overview" class="sidebar-item sidebar--selected"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Overview</a></span> <br />

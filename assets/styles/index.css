@@ -24,17 +24,21 @@
 }
 
 .header--hamburger {
-  display: none;
-  float: right;
   top: 1rem;
   right: 1rem;
   position: fixed;
+  cursor: pointer;
+}
+@media only screen and (min-width: 800px) {
+  .header--hamburger {
+    display: none;
+  }
 }
 
 .header--hamburger-div {
   width: 35px;
   height: 5px;
-  background-color: white;
+  background-color: darkgoldenrod;
   margin: 6px 0;
 }
 
@@ -48,6 +52,12 @@
   background-color: rgb(240, 239, 239);
   padding-left: 1rem;
   padding-right: 1rem;
+}
+@media only screen and (max-width: 800px) {
+  .sidebar {
+    display: none;
+    z-index: 100;
+  }
 }
 
 .sidebar--selected {
@@ -67,10 +77,16 @@
  *   MAIN AREA 
  */
 
+
 .main {
   grid-column: 2 / 3;
   grid-row: 2;
   padding-right: 2rem;
+}
+@media only screen and (max-width: 800px) {
+  .main {
+    grid-column: 1 / -1;
+  }
 }
 
 .main-body {
@@ -113,6 +129,7 @@
   padding-bottom: 1rem;
   padding-top: 1rem;
   white-space: pre;
+  overflow: auto;
 }
 
 .external-link::after {
