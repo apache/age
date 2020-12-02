@@ -52,6 +52,7 @@
   background-color: rgb(240, 239, 239);
   padding-left: 1rem;
   padding-right: 1rem;
+  display: block;
 }
 @media only screen and (max-width: 800px) {
   .sidebar {
@@ -82,6 +83,7 @@
   grid-column: 2 / 3;
   grid-row: 2;
   padding-right: 2rem;
+  overflow: auto;
 }
 @media only screen and (max-width: 800px) {
   .main {
@@ -121,7 +123,12 @@
  *   GENERAL 
  */
 
- .center {
+.heading {
+  font-size: 1.3rem;
+  padding-left: .5rem;
+}
+
+.center {
    text-align: center;
    margin: auto;
  }
@@ -159,6 +166,12 @@
   font-family: "Courier New", Courier, monospace;
   padding-left: .4rem;
   padding-right: .4rem;
+}
+
+.codebox {
+  border: 5px solid black;
+  white-space: pre;
+  overflow: auto;
 }
 
 .external-link::after {
