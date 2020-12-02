@@ -54,7 +54,7 @@
           <span class="emph">COMMUNITY</span> <br />
           <span id="sidebar-team" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Team</a></span> <br />          
           <span id="sidebar-mailinglists" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Mailing Lists</a></span> <br />          
-          <a class="sidebar-link external-link" target="_blank" href="https://issues.apache.org/jira/projects/AGE/issues">Issue Tracker</a> <br />
+          <a class="sidebar-link external-link" target="_blank" href="https://issues.apache.org/jira/projects/AGE/issues">JIRA Issues</a> <br />
           <a class="sidebar-link external-link" target="_blank" href="https://github.com/apache/incubator-age">Github</a> <br />
         </p>
 
@@ -304,35 +304,36 @@ $$) as (a agtype);
         <div class="main-item" id="main-contribute">
           <div class="heading"><h1>How to contribute</h1></div>
           <div class="main-body">
-            There are multiple ways you can contribute to the project.And help is always welcome! All details can be 
+            There are multiple ways you can contribute to the project. And help is always welcome! All details can be 
             found on the contributing page. Keep reading for a quick overview!
   
-            <div class="heading"><h2>Becoming a Commiter</h2></div>
+            <div class="heading"><h2>Becoming a Committer</h2></div>
             If you are interested in the project and looking for ways to help, consult the list of tasks in JIRA, or ask the mailing list.
   
   
             <div class="heading"><h2>Contributing by Helping Other Users</h2></div>
-            A great way to contribute to AGE is to help answer user questions on the TODO_LINK:mailing list or on TODO_LINK:StackOverflow. 
+            A great way to contribute to AGE is to help answer user questions on the mailing list or on StackOverflow. 
             There are always many new AGE users; taking a few minutes to help answer a question is a very valuable community service.
             <br>
             Contributors should subscribe to this list and follow it to keep up to date on what's happening in AGE. Answering 
             questions is an excellent and visible way to help the community, which also demonstrates your expertise.
-            <br>
-            See the Mailing Lists guide for guidelines about how to effectively participate in discussions on the mailing list, 
-            as well as forums like StackOverflow.
   
   
             <div class="heading"><h2>Contributing by Reviewing Changes</h2></div>
-            Changes to AGE source code are proposed, reviewed, and committed via Github pull requests (described in Instruction Link). 
+            Changes to AGE source code are proposed, reviewed, and committed via Github pull requests (described in 
+            <span id="inline_contribure-devguidelines"> <a href="#" onclick="handleClick(this)">Developer Guidelines</a></span>). 
             Anyone can view and comment on active changes here. Reviewing others' changes is a good way to learn how the change process works 
             and gain exposure to activity in various parts of the code. You can help by reviewing the changes and asking questions 
             or pointing out issues as simple as typos or small issues of style.
   
   
             <div class="heading"><h2>Contributing Documentation Changes</h2></div>
-            To propose a change to release documentation (that is, docs that appear under TODO_LINK:https://AGE.apache.org/instruction/), 
-            edit the Markdown source files in AGE's <span class="inline-code">docs/</span> directory on GitHub, whose README file shows how to 
-            build the documentation locally to test your changes. The process to propose a doc change is otherwise the same as the 
+            To propose a change to release documentation (that is, docs that appear under <a href="https://age.apache.org/docs/">https://age.apache.org/docs/</a>), 
+            edit the Markdown source files in AGE's <span class="inline-code">doc/</span> 
+            <a class="external-link" href="https://github.com/apache/incubator-age/tree/master/doc">directory on GitHub</a>. 
+            Instructions for building the documentation can be found 
+            <span id="inline_contribure-devguidelines"> <a href="#createdocs" onclick="handleClick(this)">here</a></span>. 
+            The process to propose a doc change is otherwise the same as the 
             process for proposing code changes below.
   
   
@@ -447,7 +448,7 @@ $$) as (a agtype);
                 <ul> 	
                   <li>The title of the email must be "[Review] [JIRA Ticket Name Here] summary-of-the-issue"
                     <br>(e.g. [Review] [JIRA Ticket Name] Support changing graph name)
-                    <ul><li>If the commit is not for any issues on Jira, omit " [JIRA Ticket Name Here]". OR make a Jira ticket</li></ul>
+                    <ul><li>If the commit is not for any issues on JIRA, omit " [JIRA Ticket Name Here]". OR make a JIRA ticket</li></ul>
                   </li>
                   <li> 	The email body will look like this:
                     <div class="codebox">
@@ -763,7 +764,7 @@ make html
         <div class="main-item" id="main-team">
           <div class="heading"><h1>Apache AGE Team Members</h1></div>
           <div class="main-body">
-            <div class="subtitle center">✪ Champions and Mentors ✪</div>
+            <div class="heading center"><h2>✪ Champions and Mentors ✪</h2></div>
             <table class="center">
               <thead>
                 <tr><th scope="col">Name</th><th scope="col">Email</th></tr>
@@ -775,7 +776,7 @@ make html
                 <tr><td>Kevin Ratnasekera</td>	<td>kevin at agsft dot com</td></tr>
               </tbody>
             </table>
-            <div class="subtitle center">✰ Committers ✰</div>
+            <div class="heading center"><h2>✰ Committers ✰</h2></div>
             <p class="center">AGE's active Committers are (sorted on lastname in alphabetical order):</p>
             <table class="center">
               <thead>
