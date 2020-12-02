@@ -35,8 +35,9 @@ var handleMenuClick = function (el) {
   let display = window.getComputedStyle(sidebar).display;
   if (display === "none") {
     sidebar.style.display = "block";
+    document.getElementById("sidebar-overview").scrollIntoView();
   } else {
-    sidebar.style.gridColumn = 0;
+    sidebar.style.display = "none";
   }
 }
 
