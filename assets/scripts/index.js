@@ -36,6 +36,11 @@ var handleMenuClick = function (el) {
   if (display === "none") {
     sidebar.style.display = "block";
   } else {
-    sidebar.style.display = "none";
+    sidebar.style.gridColumn = 0;
   }
+}
+
+var handleJiraSearch = function () {
+  let searchTerms = document.getElementById("jira-search").value;
+  window.open(`https://issues.apache.org/jira/browse/AGE-1?jql=(project%3DAGE)%20and%20text%20~%20%22${searchTerms}%22`, "_blank");
 }
