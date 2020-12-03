@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta name="description" content="Apache AGE - PostgreSQL extension for graph database functionality" />
+    <meta name="description" content="Apache AGE - A Graph Extension for PostgreSQL" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -10,7 +10,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon/favicon-16x16.png" />
 
-    <title>Apache AGE - PostgreSQL extension for graph database functionality</title>
+    <title>Apache AGE - A Graph Extension for PostgreSQL</title>
 
     <script type="text/javascript" src="assets/scripts/index.js"></script>
   </head>
@@ -41,7 +41,8 @@
           <span class="emph">DOCUMENTATION</span> <br />
           <span id="sidebar-installing" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Installing AGE</a></span> <br />
           <span id="sidebar-gettingstarted" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Getting Started</a></span> <br />
-          <span id="sidebar-docs" class="sidebar-item"> <a target="_blank" class="sidebar-link" href="docs/">Full Documentation</a></span> <br />
+          <span id="sidebar-ageworks" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">How AGE Works</a></span> <br />
+          <span id="sidebar-docs" class="sidebar-item"> <a target="_blank" class="sidebar-link" href="docs/">Release Docs</a></span> <br />
         </p>
 
         <p class="sidebar--section">
@@ -109,7 +110,133 @@
         </div>
         <div class="main-item" id="main-roadmap">
           <div class="heading"><h1>Roadmap</h1></div>
-          <div class="main-body">here is the roadmap</div>
+          <div class="main-body">
+            <table>
+              <tbody>
+                <tr>
+                  <td colspan="2"><b>v0.1.0-alpha</b> ✅</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Date</td>
+                  <td>2020 Q1</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Notes</td>
+                  <td><a href="https://github.com/apache/incubator-age/releases/tag/v0.1.0">https://github.com/apache/incubator-age/releases/tag/v0.1.0</a></td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Functionality</td>
+                  <td>
+                    <ul>
+                      <li>Agtype to support all datatype requirements in Cypher queries</li>
+                      <li>Basic MATCH and CREATE clause support</li>
+                      <li>Expression support</li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <br>
+            <table>
+              <tbody>
+                <tr>
+                  <td colspan="2"><b>v0.2.0-alpha</b> ✅</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Date</td>
+                  <td>2020 Q2</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Notes</td>
+                  <td><a href="https://github.com/apache/incubator-age/releases/tag/v0.2.0">https://github.com/apache/incubator-age/releases/tag/v0.2.0</a></td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Functionality</td>
+                  <td>
+                    <ul>
+                      <li>Extend Agtype to function better for SQL queries</li>
+                      <li>Scalar functions</li>
+                      <li>Advanced MATCH and CREATE clause support (except for VLE)</li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <br>
+            <table>
+              <tbody>
+                <tr>
+                  <td colspan="2"><b>v0.3.0-alpha</b> ⌛</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Date</td>
+                  <td>Target 2020-12-31</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Notes</td>
+                  <td>N/A</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Functionality</td>
+                  <td>
+                    <ul>
+                      <li>DELETE, SET, REMOVE, MERGE clause support</li>
+                      <li>Label Inheritance</li>
+                      <li>Mathematical computation functions</li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <br>
+            <table>
+              <tbody>
+                <tr>
+                  <td colspan="2"><b>v0.4.0-beta</b></td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Date</td>
+                  <td>Target 2021-02-28</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Notes</td>
+                  <td>N/A</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Functionality</td>
+                  <td>
+                    <ul>
+                      <li>Aggregation query support</li>
+                      <li>Java driver support</li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <br>
+            <table>
+              <tbody>
+                <tr>
+                  <td colspan="2"><b>v1.0.0-incubating (first stable release)</b></td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Date</td>
+                  <td>Target 2021-02-28</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Release Notes</td>
+                  <td>N/A</td>
+                </tr>
+                <tr>
+                  <td class="tblhead">Functionality</td>
+                  <td>
+                    N/A
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p>* Support for PostgreSQL 12+ and VLE will be added in the later releases in 2021.</p>
+          </div>
         </div>
 
         <!-- 
@@ -133,12 +260,13 @@
 
             <div class="code">$ sudo apt-get install bison build-essential flex postgresql-server-dev-11</div>
 
-            The build process will attempt to use the first path in the PATH environment variable when installing AGE. If the pg_config path if located there, run the following
+            The build process will attempt to use the first path in the PATH environment variable when installing AGE. 
+            If the <span class="inline-code">pg_config</span> path if located there, run the following
             command in the source code directory of Apache AGE to build and install the extension.
 
             <div class="code">$ make install</div>
 
-            If the path to your Postgres installation is not in the PATH variable, add the path in the arguements:
+            If the path to your Postgres installation is not in the PATH variable, add the path in the arguments:
 
             <div class="code">$ make PG_CONFIG=/path/to/postgres/bin/pg_config install</div>
 
@@ -296,6 +424,13 @@ $$) as (a agtype);
           </div>
         </div>
 
+        <div class="main-item" id="main-ageworks">
+          <div class="heading"><h1>How AGE Works</h1></div>
+          <div class="main-body">
+            <img src="assets/images/ageworks.png">
+          </div>
+        </div>
+
          <!-- 
           *
           * CONTRIBUTION 
@@ -328,7 +463,7 @@ $$) as (a agtype);
   
   
             <div class="heading"><h2>Contributing Documentation Changes</h2></div>
-            To propose a change to release documentation (that is, docs that appear under <a href="https://age.apache.org/docs/">https://age.apache.org/docs/</a>), 
+            To propose a change to release documentation (that is, docs that appear <a href="docs/">here</a>), 
             edit the Markdown source files in AGE's <span class="inline-code">doc/</span> 
             <a class="external-link" href="https://github.com/apache/incubator-age/tree/master/doc">directory on GitHub</a>. 
             Instructions for building the documentation can be found 
@@ -404,14 +539,14 @@ $$) as (a agtype);
             <ol>
               <li><span class="emph">Basic:</span>
                 <ol>
-                  <li>Visit <a href="https://issues.apache.org/jira/projects/AGE/issues">AGE JIRA</a></li>
+                  <li>Visit <a class="external-link" target="_blank" href="https://issues.apache.org/jira/projects/AGE/issues">AGE JIRA</a></li>
                   <li>Type query into search box in top right (beware this will return results from all projects)</li>
                 </ol>
               </li>
               <li>
                 <span class="emph">Advanced: </span>
                 <ol>
-                  <li>Visit <a href="https://issues.apache.org/jira/issues/?jql=(project%3DAGE)%20and%20text%20~%20%22%22">AGE JIRA Advanced Search</a></li>
+                  <li>Visit <a class="external-link" target="_blank" href="https://issues.apache.org/jira/issues/?jql=(project%3DAGE)%20and%20text%20~%20%22%22">AGE JIRA Advanced Search</a></li>
                   <li>Replace the empty quotes with quoted text (such as "cypher")</li>
                 </ol>
               </li>
@@ -419,7 +554,7 @@ $$) as (a agtype);
                 <span class="emph">Search Now:</span>
                 <ol>
                   <li>Use the search box below</li>
-                  <li><input class="search" id="jira-search" placeholder="search term"><button class="search" id="jira-submit" onclick="handleJiraSearch()">Search</button></li>
+                  <li><input class="search" id="jira-search" placeholder="search term"><button class="search external-link" id="jira-submit" onclick="handleJiraSearch()">Search</button></li>
                 </ol>
                 
               </li>
@@ -519,15 +654,18 @@ Description
               <p class="emph">Multiple Commits for a Single Task</p>
               
                 Keeping Commit History <br>
-                Sometimes, having logically separated multiple commits for a single task helps developers to grasp the logical process of the work that had been done for the task. If the commits are merged with fast-forward strategy, the commits will not be grouped together. Therefore, to group the commits, create an explicit merge commit.
+                Sometimes, having logically separated multiple commits for a single task helps developers to grasp the logical process of the work that had been done for the task. 
+                If the commits are merged with fast-forward strategy, the commits will not be grouped together. Therefore, to group the commits, create an explicit merge commit.
                 <br>
                 In this case, the commits will be merged into the master branch with the same process above except the last step(step 7).
                 <br>
-                For the last step, the local task branch will be merged into the local master branch with an explicit merge commit by running the following command. If you omit --no-ff option, the command will do fast-forward merge instead.
+                For the last step, the local task branch will be merged into the local master branch with an explicit merge commit by running the following command. 
+                If you omit --no-ff option, the command will do fast-forward merge instead.
 
                 <div class="code">$ git merge --no-ff</div>
 
-                The above process will result, for example, the following commit history. (This is captured from bitnine/agensgraph-ext.) There is an explicit merge commit, 69f3b32. Each explicit merge commit groups related commits.
+                The above process will result, for example, the following commit history. (This is captured from apache/incubator-age.) There is an explicit merge commit, 
+                69f3b32. Each explicit merge commit groups related commits.
                 <div class="code codebox"> 	
 * 9779a0b Implement property and element access operators
 *   69f3b32 Implement + (concatenating strings) operator
@@ -544,7 +682,8 @@ Description
             <!-- BEGIN STYLE GUIDE -->
             <a id="style"></a>
             <div class="heading"><h2>Code Style Guide</h2></div>
-            For a full list of coding style guidelines, please refer to the style setup in the <a href="https://github.com/bitnine-oss/agensgraph-ext/blob/master/clang-format.5">clang-format.5</a> in the AGE git repository.
+            For a full list of coding style guidelines, please refer to the style setup in the 
+            <a href="https://github.com/bitnine-oss/agensgraph-ext/blob/master/clang-format.5">clang-format.5</a> in the AGE git repository.
 
             <div class="heading"><h3>Indentation</h3></div>
             Use 4 spaces per indentation level. (no tab character)
@@ -800,7 +939,8 @@ make html
     <div class="footer">
       <hr>
       <img class="footer-img" src="assets/images/incubator_ring_logo.png"> <br>
-      <p class="center">Copyright © 2020 The Apache Software Foundation.Apache and the Apache feather logo are trademarks of The Apache Software Foundation</p>
+      <p class="center">Copyright © 2020 The Apache Software Foundation. <br>
+        Apache and the Apache feather logo are trademarks of The Apache Software Foundation.</p>
     </div>
   </body>
 </html>

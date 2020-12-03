@@ -214,11 +214,11 @@ td,
 th {
   border: 1px solid black;
   padding: 5px 10px;
-  width: 40%;
 }
 tr:nth-child(even) { 
   background-color: lightgrey; 
 } 
-td {
-  text-align: center;
+
+.tblhead {
+  width: 9rem;
 }
