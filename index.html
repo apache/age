@@ -41,7 +41,7 @@
           <span class="emph">DOCUMENTATION</span> <br />
           <span id="sidebar-installing" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Installing AGE</a></span> <br />
           <span id="sidebar-gettingstarted" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">Getting Started</a></span> <br />
-          <span id="sidebar-ageworks" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">How AGE Works</a></span> <br />
+          <!-- <span id="sidebar-ageworks" class="sidebar-item"> <a class="sidebar-link" href="#" onclick="handleClick(this)">How AGE Works</a></span> <br /> -->
           <span id="sidebar-docs" class="sidebar-item"> <a target="_blank" class="sidebar-link" href="docs/">Release Docs</a></span> <br />
         </p>
 
@@ -81,6 +81,11 @@
               Apache AGE a PostgreSQL extension that provides graph database functionality. AGE is an acronym for AgensGraph Extension, and is inspired by Bitnine's fork of
               PostgreSQL 10, AgensGraph, which is a multi-model database. The goal of the project is to create single storage that can handle both relational and graph model data
               so that users can use standard ANSI SQL along with openCypher, the Graph query language.
+            </p>
+            <p>
+              Below is a brief overview of the AGE architecture in relation to the PostgreSQL architecture and backend. 
+            Every component runs on the PostgreSQL transaction cache layer and storage layer.
+            <img src="assets/images/ageworks.png">
             </p>
 
             <div class="heading"><h2>Features</h2></div>
@@ -423,13 +428,15 @@ $$) as (a agtype);
 
           </div>
         </div>
-
+<!-- 
         <div class="main-item" id="main-ageworks">
           <div class="heading"><h1>How AGE Works</h1></div>
           <div class="main-body">
+            Here is the brief overview of the AGE architecture in which some are related to the PostgreSQL architecture and backend. 
+            Every component runs on the PostgreSQL transaction cache layer and storage layer.
             <img src="assets/images/ageworks.png">
           </div>
-        </div>
+        </div> -->
 
          <!-- 
           *
@@ -654,10 +661,10 @@ Description
               <p class="emph">Multiple Commits for a Single Task</p>
               
                 Keeping Commit History <br>
-                Sometimes, having logically separated multiple commits for a single task helps developers to grasp the logical process of the work that had been done for the task. 
+                Sometimes, having logically separated, multiple commits for a single task helps developers to grasp the logical process of the work that had been done for the task. 
                 If the commits are merged with fast-forward strategy, the commits will not be grouped together. Therefore, to group the commits, create an explicit merge commit.
                 <br>
-                In this case, the commits will be merged into the master branch with the same process above except the last step(step 7).
+                In this case, the commits will be merged into the master branch with the same process above except the last step (step 7).
                 <br>
                 For the last step, the local task branch will be merged into the local master branch with an explicit merge commit by running the following command. 
                 If you omit --no-ff option, the command will do fast-forward merge instead.
@@ -702,7 +709,7 @@ switch (suffix) {
         break;
     case 'K':
     case 'k':
-        mem <== 10;
+        mem <<= 10;
         // fall through
     default:
         break;
@@ -926,6 +933,7 @@ make html
                 <tr><td>John Gemignani</td>	<td>john dot gemignani at bitnine dot net</td></tr>
                 <tr><td>Josh Innis</td>	<td>josh dot innis at bitnine dot net</td></tr>
                 <tr><td>Mason Sharp</td>	<td>mason dot sharp at gmail dot com</td></tr>
+                <tr><td>Nick Sorrell</td> <td>nick at canvouch dot com</td></tr>
                 <tr><td>Junseok Yang</td>	<td>jsyang at bitnine dot net</td></tr>
               </tbody>
             </table>
