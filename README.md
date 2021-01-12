@@ -13,6 +13,8 @@ For more information about the project, including a roadmap and how to contribut
 
 [Apache AGE Jira](https://issues.apache.org/jira/browse/age) for bugs, features and requests. 
 
+Apache AGE Tweets: twitter.com/apache_age
+
 News and Updates
 ==========
 - The next release, 0.3.0-incubating, will be out around mid January.
