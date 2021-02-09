@@ -1,3 +1,4 @@
+:Q
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -954,7 +955,7 @@ make html
     <div class="footer">
       <hr>
       <img class="footer-img" src="assets/images/incubator_ring_logo.png"> <br>
-      <p class="center">Copyright © 2021 The Apache Software Foundation. <br>
+      <p class="center">Copyright © 2020 The Apache Software Foundation. <br>
         Apache and the Apache feather logo are trademarks of The Apache Software Foundation.</p>
     </div>
   </body>
