@@ -30,7 +30,10 @@
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
+#include "catalog/pg_aggregate_d.h"
 #include "catalog/pg_collation_d.h"
+#include "catalog/pg_operator_d.h"
+#include "executor/nodeAgg.h"
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "parser/parse_coerce.h"
@@ -56,6 +59,19 @@ typedef struct agtype_in_state
     agtype_parse_state *parse_state;
     agtype_value *res;
 } agtype_in_state;
+
+/* State structure for Percentile aggregate functions */
+typedef struct PercentileGroupAggState
+{
+    /* percentile value */
+    float8 percentile;
+    /* Sort object we're accumulating data in: */
+    Tuplesortstate *sortstate;
+    /* Number of normal rows inserted into sortstate: */
+    int64 number_of_rows;
+    /* Have we already done tuplesort_performsort? */
+    bool sort_done;
+} PercentileGroupAggState;
 
 typedef enum /* type categories for datum_to_agtype */
 {
@@ -121,7 +137,6 @@ static bool is_object_vertex(agtype_value *agtv);
 static bool is_object_edge(agtype_value *agtv);
 static bool is_array_path(agtype_value *agtv);
 /* helper functions */
-static bool is_agtype_null(agtype *agt);
 static uint64 get_edge_uniqueness_value(Datum d, Oid type, bool is_null,
                                         int index);
 /* graph entity retrieval */
@@ -136,7 +151,9 @@ static Numeric get_numeric_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null,
                                        enum agtype_value_type *ag_type);
 static agtype_value *string_to_agtype_value(char *s);
-
+static agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
+                                                 int variadic_offset,
+                                                 int expected_nargs);
 PG_FUNCTION_INFO_V1(agtype_in);
 
 /*
@@ -1862,7 +1879,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     if (fcinfo->argnull[0])
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_vertex() graphid cannot be NULL")));
+                 errmsg("agtype_build_edge() graphid cannot be NULL")));
 
     id = AG_GETARG_GRAPHID(0);
     add_agtype(id, false, &result, GRAPHIDOID, false);
@@ -1874,7 +1891,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     if (fcinfo->argnull[1])
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_vertex() startid cannot be NULL")));
+                 errmsg("agtype_build_edge() startid cannot be NULL")));
 
     start_id = AG_GETARG_GRAPHID(1);
     add_agtype(start_id, false, &result, GRAPHIDOID, false);
@@ -1886,7 +1903,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     if (fcinfo->argnull[2])
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_vertex() endoid cannot be NULL")));
+                 errmsg("agtype_build_edge() endid cannot be NULL")));
 
     end_id = AG_GETARG_GRAPHID(2);
     add_agtype(end_id, false, &result, GRAPHIDOID, false);
@@ -2128,6 +2145,9 @@ static void cannot_cast_agtype_value(enum agtype_value_type type,
         {AGTV_BOOL, gettext_noop("cannot cast agtype boolean to type %s")},
         {AGTV_ARRAY, gettext_noop("cannot cast agtype array to type %s")},
         {AGTV_OBJECT, gettext_noop("cannot cast agtype object to type %s")},
+        {AGTV_VERTEX, gettext_noop("cannot cast agtype vertex to type %s")},
+        {AGTV_EDGE, gettext_noop("cannot cast agtype edge to type %s")},
+        {AGTV_PATH, gettext_noop("cannot cast agtype path to type %s")},
         {AGTV_BINARY,
          gettext_noop("cannot cast agtype array or object to type %s")}};
     int i;
@@ -2162,6 +2182,136 @@ Datum agtype_to_bool(PG_FUNCTION_ARGS)
     PG_FREE_IF_COPY(agtype_in, 0);
 
     PG_RETURN_BOOL(agtv.val.boolean);
+}
+
+PG_FUNCTION_INFO_V1(agtype_to_int8);
+/*
+ * Cast agtype to int8.
+ */
+Datum agtype_to_int8(PG_FUNCTION_ARGS)
+{
+    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
+    agtype_value agtv;
+    int8 result = 0x0;
+    agtype *arg_agt;
+
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
+        PG_RETURN_NULL();
+
+    if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
+        (agtv.type != AGTV_FLOAT &&
+         agtv.type != AGTV_INTEGER &&
+         agtv.type != AGTV_NUMERIC &&
+         agtv.type != AGTV_STRING))
+        cannot_cast_agtype_value(agtv.type, "int");
+
+    PG_FREE_IF_COPY(agtype_in, 0);
+
+    if (agtv.type == AGTV_INTEGER)
+        result = agtv.val.int_value;        
+    else if (agtv.type == AGTV_FLOAT)
+        result = DatumGetInt64(DirectFunctionCall1(dtoi8,
+                                Float8GetDatum(agtv.val.float_value)));
+    else if (agtv.type == AGTV_NUMERIC)
+        result = DatumGetInt64(DirectFunctionCall1(numeric_int8,
+                     NumericGetDatum(agtv.val.numeric)));
+    else if (agtv.type == AGTV_STRING)
+        result = DatumGetInt64(DirectFunctionCall1(int8in,
+                           CStringGetDatum(agtv.val.string.val)));
+
+    PG_RETURN_INT64(result);
+}
+
+PG_FUNCTION_INFO_V1(agtype_to_int4);
+
+/*
+ * Cast agtype to int4.
+ */
+Datum agtype_to_int4(PG_FUNCTION_ARGS)
+{
+    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
+    agtype_value agtv;
+    int32 result = 0x0;
+    agtype *arg_agt;
+
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
+        PG_RETURN_NULL();
+
+    if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
+        (agtv.type != AGTV_FLOAT &&
+         agtv.type != AGTV_INTEGER &&
+         agtv.type != AGTV_NUMERIC &&
+         agtv.type != AGTV_STRING))
+        cannot_cast_agtype_value(agtv.type, "int");
+
+    PG_FREE_IF_COPY(agtype_in, 0);
+
+    if (agtv.type == AGTV_INTEGER)
+        result = DatumGetInt32(DirectFunctionCall1(int84,
+                    Int64GetDatum(agtv.val.int_value)));
+    else if (agtv.type == AGTV_FLOAT)
+        result = DatumGetInt32(DirectFunctionCall1(dtoi4,
+                                Float8GetDatum(agtv.val.float_value)));
+    else if (agtv.type == AGTV_NUMERIC)
+        result = DatumGetInt32(DirectFunctionCall1(numeric_int4,
+                     NumericGetDatum(agtv.val.numeric)));
+    else if (agtv.type == AGTV_STRING)
+        result = DatumGetInt32(DirectFunctionCall1(int4in,
+                           CStringGetDatum(agtv.val.string.val)));
+
+    PG_RETURN_INT32(result);
+}
+
+PG_FUNCTION_INFO_V1(agtype_to_int2);
+
+/*
+ * Cast agtype to int2.
+ */
+Datum agtype_to_int2(PG_FUNCTION_ARGS)
+{
+    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
+    agtype_value agtv;
+    int16 result = 0x0;
+    agtype *arg_agt;
+
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
+        PG_RETURN_NULL();
+
+    if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
+        (agtv.type != AGTV_FLOAT &&
+         agtv.type != AGTV_INTEGER &&
+         agtv.type != AGTV_NUMERIC &&
+         agtv.type != AGTV_STRING))
+        cannot_cast_agtype_value(agtv.type, "int");
+
+    PG_FREE_IF_COPY(agtype_in, 0);
+
+    if (agtv.type == AGTV_INTEGER)
+        result = DatumGetInt16(DirectFunctionCall1(int82,
+                    Int64GetDatum(agtv.val.int_value)));
+    else if (agtv.type == AGTV_FLOAT)
+        result = DatumGetInt32(DirectFunctionCall1(dtoi2,
+                                Float8GetDatum(agtv.val.float_value)));
+    else if (agtv.type == AGTV_NUMERIC)
+        result = DatumGetInt16(DirectFunctionCall1(numeric_int2,
+                     NumericGetDatum(agtv.val.numeric)));
+    else if (agtv.type == AGTV_STRING)
+        result = DatumGetInt16(DirectFunctionCall1(int2in,
+                           CStringGetDatum(agtv.val.string.val)));
+
+    PG_RETURN_INT16(result);
 }
 
 PG_FUNCTION_INFO_V1(agtype_to_float8);
@@ -2274,6 +2424,7 @@ static agtype *execute_map_access_operator(agtype *map, agtype *key)
 
     case AGTV_STRING:
         new_key_value.val.string = key_value->val.string;
+        new_key_value.val.string.len = key_value->val.string.len;
         break;
 
     default:
@@ -2677,21 +2828,6 @@ Datum agtype_string_match_contains(PG_FUNCTION_ARGS)
                     errmsg("agtype string values expected")));
 }
 
-static bool is_agtype_null(agtype *agt)
-{
-    if (AGT_ROOT_IS_ARRAY(agt) && AGT_ROOT_IS_SCALAR(agt))
-    {
-        agtype_value *agtv_element;
-
-        agtv_element = get_ith_agtype_value_from_container(&agt->root, 0);
-
-        if (agtv_element->type == AGTV_NULL)
-            return true;
-    }
-
-    return false;
-}
-
 #define LEFT_ROTATE(n, i) ((n << i) | (n >> (64 - i)))
 #define RIGHT_ROTATE(n, i)  ((n >> i) | (n << (64 - i)))
 
@@ -2769,12 +2905,14 @@ Datum agtype_typecast_numeric(PG_FUNCTION_ARGS)
     Datum numd;
     char *string = NULL;
 
-    /* return null if arg is null */
-    if (PG_ARGISNULL(0))
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
         PG_RETURN_NULL();
 
     /* check that we have a scalar value */
-    arg_agt = AG_GET_ARG_AGTYPE_P(0);
     if (!AGT_ROOT_IS_SCALAR(arg_agt))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2832,6 +2970,80 @@ Datum agtype_typecast_numeric(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&result_value));
 }
 
+PG_FUNCTION_INFO_V1(agtype_typecast_int);
+/*
+ * Execute function to typecast an agtype to an agtype int
+ */
+Datum agtype_typecast_int(PG_FUNCTION_ARGS)
+{
+    agtype *arg_agt;
+    agtype_value *arg_value;
+    agtype_value result_value;
+    Datum d;
+    char *string = NULL;
+
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
+        PG_RETURN_NULL();
+
+    /* check that we have a scalar value */
+    if (!AGT_ROOT_IS_SCALAR(arg_agt))
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("typecast argument must be a scalar value")));
+
+    /* get the arg parameter */
+    arg_value = get_ith_agtype_value_from_container(&arg_agt->root, 0);
+
+    /* check for agtype null */
+    if (arg_value->type == AGTV_NULL)
+        PG_RETURN_NULL();
+
+    /* the input type drives the casting */
+    switch(arg_value->type)
+    {
+    case AGTV_INTEGER:
+        PG_RETURN_POINTER(agtype_value_to_agtype(arg_value));
+        break;
+    case AGTV_FLOAT:
+        d = DirectFunctionCall1(dtoi8,
+                                Float8GetDatum(arg_value->val.float_value));
+        break;
+    case AGTV_NUMERIC:
+        d = DirectFunctionCall1(numeric_int8,
+                                NumericGetDatum(arg_value->val.numeric));
+        break;
+    case AGTV_STRING:
+        /* we need a null terminated string */
+        string = (char *) palloc(sizeof(char)*arg_value->val.string.len + 1);
+        string = strncpy(string, arg_value->val.string.val,
+                         arg_value->val.string.len);
+        string[arg_value->val.string.len] = '\0';
+
+        d = DirectFunctionCall1(int8in, CStringGetDatum(string));
+        /* free the string */
+        pfree(string);
+        string = NULL;
+        break;
+    /* what was given doesn't cast to an int */
+    default:
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("typecast expression must be a number or a string")));
+        break;
+    }
+
+    /* set the result type and return our result */
+    result_value.type = AGTV_INTEGER;
+    result_value.val.int_value = DatumGetInt64(d);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&result_value));
+}
+
+
 PG_FUNCTION_INFO_V1(agtype_typecast_float);
 /*
  * Execute function to typecast an agtype to an agtype float
@@ -2844,12 +3056,14 @@ Datum agtype_typecast_float(PG_FUNCTION_ARGS)
     Datum d;
     char *string = NULL;
 
-    /* return null if arg is null */
-    if (PG_ARGISNULL(0))
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
+
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
         PG_RETURN_NULL();
 
     /* check that we have a scalar value */
-    arg_agt = AG_GET_ARG_AGTYPE_P(0);
     if (!AGT_ROOT_IS_SCALAR(arg_agt))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2917,14 +3131,11 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
     Datum result;
     int count;
 
-    /* Return null if arg is null */
-    if (PG_ARGISNULL(0))
-        PG_RETURN_NULL();
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
 
-    arg_agt = AG_GET_ARG_AGTYPE_P(0);
-
-    /* Return null if arg is agtype null */
-    if (is_agtype_null(arg_agt))
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
         PG_RETURN_NULL();
 
     /* A vertex is an object so the arg needs to be one too */
@@ -2995,14 +3206,11 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
     Datum result;
     int count;
 
-    /* Return null if arg is null */
-    if (PG_ARGISNULL(0))
-        PG_RETURN_NULL();
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
 
-    arg_agt = AG_GET_ARG_AGTYPE_P(0);
-
-    /* Return null if arg is agtype null */
-    if (is_agtype_null(arg_agt))
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
         PG_RETURN_NULL();
 
     /* An edge is an object, so the arg needs to be one too */
@@ -3056,7 +3264,7 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
     agtv_key.val.string.len = 8;
     agtv_startid = find_agtype_value_from_container(&arg_agt->root,
                                                     AGT_FOBJECT, &agtv_key);
-    if (agtv_graphid == NULL || agtv_graphid->type != AGTV_INTEGER)
+    if (agtv_startid == NULL || agtv_startid->type != AGTV_INTEGER)
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("edge typecast object has an invalid or missing start_id")));
@@ -3065,7 +3273,7 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
     agtv_key.val.string.len = 6;
     agtv_endid = find_agtype_value_from_container(&arg_agt->root,
                                                     AGT_FOBJECT, &agtv_key);
-    if (agtv_graphid == NULL || agtv_graphid->type != AGTV_INTEGER)
+    if (agtv_endid == NULL || agtv_endid->type != AGTV_INTEGER)
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("edge typecast object has an invalid or missing end_id")));
@@ -3092,14 +3300,11 @@ Datum agtype_typecast_path(PG_FUNCTION_ARGS)
     int count = 0;
     int i = 0;
 
-    /* return null if arg is null */
-    if (PG_ARGISNULL(0))
-        PG_RETURN_NULL();
+    /* get the agtype equivalence of any convertable input type */
+    arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
 
-    arg_agt = AG_GET_ARG_AGTYPE_P(0);
-
-    /* Return null if arg is agtype null */
-    if (is_agtype_null(arg_agt))
+    /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
+    if (arg_agt == NULL)
         PG_RETURN_NULL();
 
     /* path needs to be an array */
@@ -7107,6 +7312,75 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name, agt
     return parsed_agtype_value;
 }
 
+/*
+ * Helper function to extract 1 datum from a variadic "any" and convert, if
+ * possible, to an agtype, if it isn't already.
+ *
+ * If the value is a NULL or agtype NULL, the function returns NULL.
+ * If the datum cannot be converted, the function will error out in
+ * extract_variadic_args.
+ */
+static agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
+                                                 int variadic_offset,
+                                                 int expected_nargs)
+{
+    int nargs;
+    Datum *args = NULL;
+    bool *nulls = NULL;
+    Oid *types = NULL;
+    agtype *agtype_result = NULL;
+
+    nargs = extract_variadic_args(fcinfo, variadic_offset, false, &args, &types,
+                                  &nulls);
+    /* throw an error if the number of args is not the expected number */
+    if (nargs != expected_nargs)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("number of args %d does not match expected %d",
+                               nargs, expected_nargs)));
+    /* if null, return null */
+    if (nulls[0])
+        return NULL;
+
+    /* if type is AGTYPEOID, we don't need to convert it */
+    if (types[0] == AGTYPEOID)
+    {
+        agtype_result = DATUM_GET_AGTYPE_P(args[0]);
+        /*
+         * Is this a scalar (scalars are stored as one element arrays)? If so,
+         * test for agtype NULL.
+         */
+        if (AGTYPE_CONTAINER_IS_SCALAR(&agtype_result->root))
+        {
+            agtype_value *agtv_test;
+
+            /* get the scalar value */
+            agtv_test = get_ith_agtype_value_from_container(&agtype_result->root,
+                                                        0);
+            /* is it agtype NULL? */
+            if (agtv_test->type == AGTV_NULL)
+                return NULL;
+        }
+    }
+    /* otherwise, try to convert it to an agtype */
+    else
+    {
+        agtype_in_state state;
+        agt_type_category tcategory;
+        Oid outfuncoid;
+
+        /* we need an empty state */
+        state.parse_state = NULL;
+        state.res = NULL;
+        /* get the category for the datum */
+        agtype_categorize_type(types[0], &tcategory, &outfuncoid);
+        /* convert it to an agtype_value */
+        datum_to_agtype(args[0], false, &state, tcategory, outfuncoid, false);
+        /* convert it to an agtype */
+        agtype_result = agtype_value_to_agtype(state.res);
+    }
+    return agtype_result;
+}
+
 PG_FUNCTION_INFO_V1(age_float8_stddev_samp_aggfinalfn);
 
 Datum age_float8_stddev_samp_aggfinalfn(PG_FUNCTION_ARGS)
@@ -7163,40 +7437,22 @@ Datum age_agtype_larger_aggtransfn(PG_FUNCTION_ARGS)
 {
     agtype *agtype_arg1;
     agtype *agtype_arg2;
-    agtype_value *agtv_arg1;
-    agtype_value *agtv_arg2;
     agtype *agtype_larger;
     int test;
 
     /* for max we need to ignore NULL values */
-    /* if both are NULL return NULL */
-    if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+    /* extract the args as agtype */
+    agtype_arg1 = get_one_agtype_from_variadic_args(fcinfo, 0, 2);
+    agtype_arg2 = get_one_agtype_from_variadic_args(fcinfo, 1, 1);
+
+    /* return NULL if both are NULL */
+    if (agtype_arg1 == NULL && agtype_arg2 == NULL)
         PG_RETURN_NULL();
-
-    /* if either are NULL, return the other */
-    if (PG_ARGISNULL(0))
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(1));
-
-    if (PG_ARGISNULL(1))
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(0));
-
-    /* get the arguments */
-    agtype_arg1 = AG_GET_ARG_AGTYPE_P(0);
-    agtype_arg2 = AG_GET_ARG_AGTYPE_P(1);
-
-    /* get the values because we need to test for AGTV_NULL */
-    agtv_arg1 = get_ith_agtype_value_from_container(&agtype_arg1->root, 0);
-    agtv_arg2 = get_ith_agtype_value_from_container(&agtype_arg2->root, 0);
-
-    /* check for AGTV_NULL, same as NULL above */
-    if (agtv_arg1->type == AGTV_NULL && agtv_arg2->type == AGTV_NULL)
-        PG_RETURN_NULL();
-
-    if (agtv_arg1->type == AGTV_NULL)
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(1));
-
-    if (agtv_arg2->type == AGTV_NULL)
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(0));
+    /* if one is NULL, return the other */
+    if (agtype_arg1 != NULL && agtype_arg2 == NULL)
+        PG_RETURN_POINTER(agtype_arg1);
+    if (agtype_arg1 == NULL && agtype_arg2 != NULL)
+        PG_RETURN_POINTER(agtype_arg2);
 
     /* test for max value */
     test = compare_agtype_containers_orderability(&agtype_arg1->root,
@@ -7211,42 +7467,24 @@ PG_FUNCTION_INFO_V1(age_agtype_smaller_aggtransfn);
 
 Datum age_agtype_smaller_aggtransfn(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_arg1;
-    agtype *agtype_arg2;
-    agtype_value *agtv_arg1;
-    agtype_value *agtv_arg2;
+    agtype *agtype_arg1 = NULL;
+    agtype *agtype_arg2 = NULL;
     agtype *agtype_smaller;
     int test;
 
     /* for min we need to ignore NULL values */
-    /* if both are NULL return NULL */
-    if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+    /* extract the args as agtype */
+    agtype_arg1 = get_one_agtype_from_variadic_args(fcinfo, 0, 2);
+    agtype_arg2 = get_one_agtype_from_variadic_args(fcinfo, 1, 1);
+
+    /* return NULL if both are NULL */
+    if (agtype_arg1 == NULL && agtype_arg2 == NULL)
         PG_RETURN_NULL();
-
-    /* if either are NULL, return the other */
-    if (PG_ARGISNULL(0))
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(1));
-
-    if (PG_ARGISNULL(1))
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(0));
-
-    /* get the arguments */
-    agtype_arg1 = AG_GET_ARG_AGTYPE_P(0);
-    agtype_arg2 = AG_GET_ARG_AGTYPE_P(1);
-
-    /* get the values because we need to test for AGTV_NULL */
-    agtv_arg1 = get_ith_agtype_value_from_container(&agtype_arg1->root, 0);
-    agtv_arg2 = get_ith_agtype_value_from_container(&agtype_arg2->root, 0);
-
-    /* check for AGTV_NULL, same as NULL above */
-    if (agtv_arg1->type == AGTV_NULL && agtv_arg2->type == AGTV_NULL)
-        PG_RETURN_NULL();
-
-    if (agtv_arg1->type == AGTV_NULL)
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(1));
-
-    if (agtv_arg2->type == AGTV_NULL)
-        PG_RETURN_POINTER(AG_GET_ARG_AGTYPE_P(0));
+    /* if one is NULL, return the other */
+    if (agtype_arg1 != NULL && agtype_arg2 == NULL)
+        PG_RETURN_POINTER(agtype_arg1);
+    if (agtype_arg1 == NULL && agtype_arg2 != NULL)
+        PG_RETURN_POINTER(agtype_arg2);
 
     /* test for min value */
     test = compare_agtype_containers_orderability(&agtype_arg1->root,
@@ -7255,4 +7493,306 @@ Datum age_agtype_smaller_aggtransfn(PG_FUNCTION_ARGS)
     agtype_smaller = (test <= 0) ? agtype_arg1 : agtype_arg2;
 
     PG_RETURN_POINTER(agtype_smaller);
+}
+
+/* borrowed from PGs float8 routines for percentile_cont */
+static Datum float8_lerp(Datum lo, Datum hi, double pct)
+{
+    double loval = DatumGetFloat8(lo);
+    double hival = DatumGetFloat8(hi);
+
+    return Float8GetDatum(loval + (pct * (hival - loval)));
+}
+
+/* Code borrowed and adjusted from PG's ordered_set_transition function */
+PG_FUNCTION_INFO_V1(age_percentile_aggtransfn);
+
+Datum age_percentile_aggtransfn(PG_FUNCTION_ARGS)
+{
+    PercentileGroupAggState *pgastate;
+
+    /* verify we are in an aggregate context */
+    Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+
+    /* if this is the first invocation, create the state */
+    if (PG_ARGISNULL(0))
+    {
+        MemoryContext old_mcxt;
+        float8 percentile;
+
+        /* validate the percentile */
+        if (PG_ARGISNULL(2))
+            ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                errmsg("percentile value NULL is not a valid numeric value")));
+
+        percentile = PG_GETARG_FLOAT8(2);
+        if (percentile < 0 || percentile > 1 || isnan(percentile))
+        ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                        errmsg("percentile value %g is not between 0 and 1",
+                               percentile)));
+
+        /* switch to the correct aggregate context */
+        old_mcxt = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+        /* create and initialize the state */
+        pgastate = palloc(sizeof(PercentileGroupAggState));
+        pgastate->percentile = percentile;
+        /*
+         * Percentiles need to be calculated from a sorted set. We are only
+         * using float8 values, using the less than operator, and flagging
+         * randomAccess to true - as we can potentially be reusing this
+         * sort multiple times in the same query.
+         */
+        pgastate->sortstate = tuplesort_begin_datum(FLOAT8OID,
+                                                    Float8LessOperator,
+                                                    InvalidOid, false, work_mem,
+                                                    NULL, true);
+        pgastate->number_of_rows = 0;
+        pgastate->sort_done = false;
+
+        /* restore the old context */
+        MemoryContextSwitchTo(old_mcxt);
+    }
+    /* otherwise, retrieve the state */
+    else
+        pgastate = (PercentileGroupAggState *) PG_GETARG_POINTER(0);
+
+    /* Load the datum into the tuplesort object, but only if it's not null */
+    if (!PG_ARGISNULL(1))
+    {
+        tuplesort_putdatum(pgastate->sortstate, PG_GETARG_DATUM(1), false);
+        pgastate->number_of_rows++;
+    }
+    /* return the state */
+    PG_RETURN_POINTER(pgastate);
+}
+
+/* Code borrowed and adjusted from PG's percentile_cont_final function */
+PG_FUNCTION_INFO_V1(age_percentile_cont_aggfinalfn);
+
+Datum age_percentile_cont_aggfinalfn(PG_FUNCTION_ARGS)
+{
+    PercentileGroupAggState *pgastate;
+    float8 percentile;
+    int64 first_row = 0;
+    int64 second_row = 0;
+    Datum val;
+    Datum first_val;
+    Datum second_val;
+    double proportion;
+    bool isnull;
+
+    /* verify we are in an aggregate context */
+    Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+
+    /* If there were no regular rows, the result is NULL */
+    if (PG_ARGISNULL(0))
+        PG_RETURN_NULL();
+
+    /* retrieve the state and percentile */
+    pgastate = (PercentileGroupAggState *) PG_GETARG_POINTER(0);
+    percentile = pgastate->percentile;
+
+    /* number_of_rows could be zero if we only saw NULL input values */
+    if (pgastate->number_of_rows == 0)
+        PG_RETURN_NULL();
+
+    /* Finish the sort, or rescan if we already did */
+    if (!pgastate->sort_done)
+    {
+        tuplesort_performsort(pgastate->sortstate);
+        pgastate->sort_done = true;
+    }
+    else
+        tuplesort_rescan(pgastate->sortstate);
+
+    /* calculate the percentile cont*/
+    first_row = floor(percentile * (pgastate->number_of_rows - 1));
+    second_row = ceil(percentile * (pgastate->number_of_rows - 1));
+
+    Assert(first_row < pgastate->number_of_rows);
+
+    if (!tuplesort_skiptuples(pgastate->sortstate, first_row, true))
+        elog(ERROR, "missing row in percentile_cont");
+
+    if (!tuplesort_getdatum(pgastate->sortstate, true, &first_val, &isnull, NULL))
+        elog(ERROR, "missing row in percentile_cont");
+    if (isnull)
+        PG_RETURN_NULL();
+
+    if (first_row == second_row)
+    {
+        val = first_val;
+    }
+    else
+    {
+        if (!tuplesort_getdatum(pgastate->sortstate, true, &second_val, &isnull, NULL))
+            elog(ERROR, "missing row in percentile_cont");
+
+        if (isnull)
+            PG_RETURN_NULL();
+
+        proportion = (percentile * (pgastate->number_of_rows - 1)) - first_row;
+        val = float8_lerp(first_val, second_val, proportion);
+    }
+
+    PG_RETURN_DATUM(val);
+}
+
+/* Code borrowed and adjusted from PG's percentile_disc_final function */
+PG_FUNCTION_INFO_V1(age_percentile_disc_aggfinalfn);
+
+Datum age_percentile_disc_aggfinalfn(PG_FUNCTION_ARGS)
+{
+    PercentileGroupAggState *pgastate;
+    double percentile;
+    Datum val;
+    bool isnull;
+    int64 rownum;
+
+    Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+
+    /* If there were no regular rows, the result is NULL */
+    if (PG_ARGISNULL(0))
+        PG_RETURN_NULL();
+
+    pgastate = (PercentileGroupAggState *) PG_GETARG_POINTER(0);
+    percentile = pgastate->percentile;
+
+    /* number_of_rows could be zero if we only saw NULL input values */
+    if (pgastate->number_of_rows == 0)
+        PG_RETURN_NULL();
+
+    /* Finish the sort, or rescan if we already did */
+    if (!pgastate->sort_done)
+    {
+        tuplesort_performsort(pgastate->sortstate);
+        pgastate->sort_done = true;
+    }
+    else
+        tuplesort_rescan(pgastate->sortstate);
+
+    /*----------
+     * We need the smallest K such that (K/N) >= percentile.
+     * N>0, therefore K >= N*percentile, therefore K = ceil(N*percentile).
+     * So we skip K-1 rows (if K>0) and return the next row fetched.
+     *----------
+     */
+    rownum = (int64) ceil(percentile * pgastate->number_of_rows);
+    Assert(rownum <= pgastate->number_of_rows);
+
+    if (rownum > 1)
+    {
+        if (!tuplesort_skiptuples(pgastate->sortstate, rownum - 1, true))
+            elog(ERROR, "missing row in percentile_disc");
+    }
+
+    if (!tuplesort_getdatum(pgastate->sortstate, true, &val, &isnull, NULL))
+        elog(ERROR, "missing row in percentile_disc");
+
+    /* We shouldn't have stored any nulls, but do the right thing anyway */
+    if (isnull)
+        PG_RETURN_NULL();
+    else
+        PG_RETURN_DATUM(val);
+}
+
+/* functions to support the aggregate function COLLECT() */
+PG_FUNCTION_INFO_V1(age_collect_aggtransfn);
+
+Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
+{
+    agtype_in_state *castate;
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    MemoryContext old_mcxt;
+
+    /* verify we are in an aggregate context */
+    Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+
+    /*
+     * Switch to the correct aggregate context. Otherwise, the data added to the
+     * array will be lost.
+     */
+    old_mcxt = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+
+    /* if this is the first invocation, create the state */
+    if (PG_ARGISNULL(0))
+    {
+        /* create and initialize the state */
+        castate = palloc(sizeof(agtype_in_state));
+        memset(castate, 0, sizeof(agtype_in_state));
+        /* start the array */
+        castate->res = push_agtype_value(&castate->parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+    }
+    /* otherwise, retrieve the state */
+    else
+        castate = (agtype_in_state *) PG_GETARG_POINTER(0);
+
+    /*
+     * Extract the variadic args, of which there should only be one.
+     * Insert the arg into the array, unless it is null. Nulls are
+     * skipped over.
+     */
+    if (PG_ARGISNULL(1))
+        nargs = 0;
+    else
+        nargs = extract_variadic_args(fcinfo, 1, true, &args, &types, &nulls);
+
+    if (nargs == 1)
+    {
+        /* only add non null values */
+        if (nulls[0] == false)
+        {
+            /* we need to check for agtype null and skip it, if found */
+            if (types[0] == AGTYPEOID)
+            {
+                agtype *agt_arg;
+                agtype_value *agtv_value;
+
+                /* get the agtype argument */
+                agt_arg = DATUM_GET_AGTYPE_P(args[0]);
+                agtv_value = get_ith_agtype_value_from_container(&agt_arg->root,
+                                                                 0);
+                /* add the arg if not agtype null */
+                if (agtv_value->type != AGTV_NULL)
+                    add_agtype(args[0], nulls[0], castate, types[0], false);
+            }
+            else
+                add_agtype(args[0], nulls[0], castate, types[0], false);
+        }
+    }
+    else if (nargs > 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("collect() invalid number of arguments")));
+
+    /* restore the old context */
+    MemoryContextSwitchTo(old_mcxt);
+
+    /* return the state */
+    PG_RETURN_POINTER(castate);
+}
+
+PG_FUNCTION_INFO_V1(age_collect_aggfinalfn);
+
+Datum age_collect_aggfinalfn(PG_FUNCTION_ARGS)
+{
+    agtype_in_state *castate;
+    MemoryContext old_mcxt;
+
+    /* verify we are in an aggregate context */
+    Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+    /* get the state */
+    castate = (agtype_in_state *) PG_GETARG_POINTER(0);
+    /* switch to the correct aggregate context */
+    old_mcxt = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+    /* Finish/close the array */
+    castate->res = push_agtype_value(&castate->parse_state, WAGT_END_ARRAY,
+                                     NULL);
+    /* restore the old context */
+    MemoryContextSwitchTo(old_mcxt);
+    /* return the agtype array */
+    PG_RETURN_POINTER(agtype_value_to_agtype(castate->res));
 }

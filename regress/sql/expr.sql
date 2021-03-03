@@ -356,8 +356,143 @@ RETURN "abcdefghijklmnopqrstuvwxyz" CONTAINS "klmo"
 $$) AS r(result agtype);
 
 --
+--Coearce to Postgres 3 int types (smallint, int, bigint)
+--
+SELECT create_graph('type_coercion');
+SELECT * FROM cypher('type_coercion', $$
+	RETURN NULL
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 1
+$$) AS (i smallint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 1
+$$) AS (i int);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 1
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 1.0
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 1.0::numeric
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN '1'
+$$) AS (i bigint);
+
+--Invalid String Format
+SELECT * FROM cypher('type_coercion', $$
+	RETURN '1.0'
+$$) AS (i bigint);
+
+-- Casting to ints that will cause overflow
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 10000000000000000000
+$$) AS (i smallint);
+
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN 10000000000000000000
+$$) AS (i int);
+
+--Invalid types
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN {key: 1}
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN [1]
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$CREATE ()-[:edge]->()$$) AS (result agtype);
+SELECT * FROM cypher('type_coercion', $$
+	MATCH (v)
+	RETURN v
+$$) AS (i bigint);
+SELECT * FROM cypher('type_coercion', $$
+	MATCH ()-[e]-()
+	RETURN e
+$$) AS (i bigint);
+SELECT * FROM cypher('type_coercion', $$
+	MATCH p=()-[]-()
+	RETURN p
+$$) AS (i bigint);
+
+--
 -- Test typecasting '::' transform and execution logic
 --
+
+--
+-- Test from an agtype value to agtype int
+--
+SELECT * FROM cypher('expr', $$
+RETURN 0.0::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 0.0::integer
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '0'::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '0'::integer
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 0.0::numeric::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 2.71::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 2.71::numeric::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1.0, pie: 3.1415927, e: 2::numeric}, 2, null][1].one)::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1.0::int, pie: 3.1415927, e: 2.718281::numeric}, 2, null][1].one)
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1::float, pie: 3.1415927, e: 2.718281::numeric}, 2, null][1].one)::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1, pie: 3.1415927, e: 2.718281::numeric}, 2, null][3])::int
+$$) AS r(result agtype);
+-- should return SQL null
+SELECT agtype_typecast_int('null'::agtype);
+SELECT agtype_typecast_int(null);
+SELECT * FROM cypher('expr', $$
+RETURN null::int
+$$) AS r(result agtype);
+-- should return JSON null
+SELECT agtype_in('null::int');
+-- these should fail
+SELECT * FROM cypher('expr', $$
+RETURN '0.0'::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '1.5'::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('graph_name', $$
+RETURN "15555555555555555555555555555"::int
+$$) AS (string_result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'NaN'::float::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'infinity'::float::int
+$$) AS r(result agtype);
 
 -- Test from an agtype value to an agtype numeric
 --
@@ -505,6 +640,13 @@ RETURN {id:3, label:"edge 0", properties:{}, start_id:0, end_id:1}::edge
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN {edge_0:{id:3, label:"edge 0", properties:{}, start_id:0, end_id:1}::edge}
+$$) AS r(result agtype);
+--invalid edge typecast
+SELECT * FROM cypher('expr', $$
+RETURN {edge_0:{id:3, label:"edge 0", properties:{}, startid:0, end_id:1}::edge}
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN {edge_0:{id:3, label:"edge 0", properties:{}, start_id:0, endid:1}::edge}
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN {name:"container 1", edges:[{id:3, label:"edge 0", properties:{}, start_id:0, end_id:1}::edge, {id:4, label:"edge 1", properties:{}, start_id:1, end_id:0}::edge]}
@@ -1818,28 +1960,137 @@ AS (min agtype, max agtype, count agtype, count_star agtype);
 -- check that min() & max() can work against mixed types
 SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN min(u.zip), max(u.zip), count(u.zip), count(*) $$)
 AS (min agtype, max agtype, count agtype, count_star agtype);
+CREATE TABLE min_max_tbl (oid oid);
+insert into min_max_tbl VALUES (16), (17188), (1000), (869);
+
+SELECT age_min(oid::int), age_max(oid::int) FROM min_max_tbl;
+SELECT age_min(oid::int::float), age_max(oid::int::float) FROM min_max_tbl;
+SELECT age_min(oid::int::float::numeric), age_max(oid::int::float::numeric) FROM min_max_tbl;
+SELECT age_min(oid::text), age_max(oid::text) FROM min_max_tbl;
+
+DROP TABLE min_max_tbl;
 -- should return null
 SELECT * FROM cypher('UCSC', $$ RETURN min(NULL) $$) AS (min agtype);
 SELECT * FROM cypher('UCSC', $$ RETURN max(NULL) $$) AS (max agtype);
+SELECT age_min(NULL);
+SELECT age_min(agtype_in('null'));
+SELECT age_max(NULL);
+SELECT age_max(agtype_in('null'));
 -- should fail
 SELECT * FROM cypher('UCSC', $$ RETURN min() $$) AS (min agtype);
 SELECT * FROM cypher('UCSC', $$ RETURN max() $$) AS (max agtype);
+SELECT age_min();
+SELECT age_min();
+--
+-- aggregate functions stDev() & stDevP()
+--
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN stDev(u.gpa), stDevP(u.gpa) $$)
+AS (stDev agtype, stDevP agtype);
+-- should return 0
+SELECT * FROM cypher('UCSC', $$ RETURN stDev(NULL) $$) AS (stDev agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN stDevP(NULL) $$) AS (stDevP agtype);
+-- should fail
+SELECT * FROM cypher('UCSC', $$ RETURN stDev() $$) AS (stDev agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN stDevP() $$) AS (stDevP agtype);
 
 --
--- aggregate functions stdev() & stdevp()
+-- aggregate functions percentileCont() & percentileDisc()
 --
-SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN stdev(u.gpa), stdevp(u.gpa) $$)
-AS (stdev agtype, stdevp agtype);
--- should return 0
-SELECT * FROM cypher('UCSC', $$ RETURN stdev(NULL) $$) AS (stdev agtype);
-SELECT * FROM cypher('UCSC', $$ RETURN stdevp(NULL) $$) AS (stdevp agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN percentileCont(u.gpa, .55), percentileDisc(u.gpa, .55), percentileCont(u.gpa, .9), percentileDisc(u.gpa, .9) $$)
+AS (percentileCont1 agtype, percentileDisc1 agtype, percentileCont2 agtype, percentileDisc2 agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN percentileCont(u.gpa, .55) $$)
+AS (percentileCont agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN percentileDisc(u.gpa, .55) $$)
+AS (percentileDisc agtype);
+-- should return null
+SELECT * FROM cypher('UCSC', $$ RETURN percentileCont(NULL, .5) $$) AS (percentileCont agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN percentileDisc(NULL, .5) $$) AS (percentileDisc agtype);
 -- should fail
-SELECT * FROM cypher('UCSC', $$ RETURN stdev() $$) AS (stdev agtype);
-SELECT * FROM cypher('UCSC', $$ RETURN stdevp() $$) AS (stdevp agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN percentileCont(.5, NULL) $$) AS (percentileCont agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN percentileDisc(.5, NULL) $$) AS (percentileDisc agtype);
+
+--
+-- aggregate function collect()
+--
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN collect(u.name), collect(u.age), collect(u.gpa), collect(u.zip) $$)
+AS (name agtype, age agtype, gqa agtype, zip agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN collect(u.gpa), collect(u.gpa) $$)
+AS (gpa1 agtype, gpa2 agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN collect(u.zip), collect(u.zip) $$)
+AS (zip1 agtype, zip2 agtype);
+SELECT * FROM cypher('UCSC', $$ RETURN collect(5) $$) AS (result agtype);
+-- should return an empty aray
+SELECT * FROM cypher('UCSC', $$ RETURN collect(NULL) $$) AS (empty agtype);
+-- should fail
+SELECT * FROM cypher('UCSC', $$ RETURN collect() $$) AS (collect agtype);
+
+-- test DISTINCT inside aggregate functions
+SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Sven", gpa: 3.2, age: 27, zip: 94110})$$)
+AS (a agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN (u) $$) AS (vertex agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN count(u.zip), count(DISTINCT u.zip) $$)
+AS (zip agtype, distinct_zip agtype);
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN count(u.age), count(DISTINCT u.age) $$)
+AS (age agtype, distinct_age agtype);
+
+-- test AUTO GROUP BY for aggregate functions
+SELECT create_graph('group_by');
+SELECT * FROM cypher('group_by', $$CREATE (:row {i: 1, j: 2, k:3})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:row {i: 1, j: 2, k:4})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:row {i: 1, j: 3, k:5})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:row {i: 2, j: 3, k:6})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$MATCH (u:row) RETURN u.i, u.j, u.k$$) AS (i agtype, j agtype, k agtype);
+SELECT * FROM cypher('group_by', $$MATCH (u:row) RETURN u.i, u.j, sum(u.k)$$) AS (i agtype, j agtype, sumk agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:L {a: 1, b: 2, c:3})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:L {a: 2, b: 3, c:1})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$CREATE (:L {a: 3, b: 1, c:2})$$) AS (result agtype);
+SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a, x.b, x.c, x.a + count(*) + x.b + count(*) + x.c$$)
+AS (a agtype, b agtype, c agtype, result agtype);
+SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a + x.b + x.c, x.a + x.b + x.c + count(*) + count(*) $$)
+AS (a_b_c agtype,  result agtype);
+-- with WITH clause
+SELECT * FROM cypher('group_by', $$MATCH(x:L) WITH x, count(x) AS c RETURN x.a + x.b + x.c + c$$)
+AS (result agtype);
+SELECT * FROM cypher('group_by', $$MATCH(x:L) WITH x, count(x) AS c RETURN x.a + x.b + x.c + c + c$$)
+AS (result agtype);
+SELECT * FROM cypher('group_by', $$MATCH(x:L) WITH x.a + x.b + x.c AS v, count(x) as c RETURN v + c + c $$)
+AS (result agtype);
+-- should fail
+SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a, x.a + count(*) + x.b + count(*) + x.c$$)
+AS (a agtype, result agtype);
+SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a + count(*) + x.b + count(*) + x.c$$)
+AS (result agtype);
+
+--ORDER BY
+SELECT create_graph('order_by');
+SELECT * FROM cypher('order_by', $$CREATE ()$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: '1'})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: 1})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: 1.0})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: 1::numeric})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: true})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: false})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: {key: 'value'}})$$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$CREATE ({i: [1]})$$) AS (result agtype);
+
+SELECT * FROM cypher('order_by', $$
+	MATCH (u)
+	RETURN u.i
+	ORDER BY u.i
+$$) AS (i agtype);
+
+SELECT * FROM cypher('order_by', $$
+	MATCH (u)
+	RETURN u.i
+	ORDER BY u.i DESC
+$$) AS (i agtype);
 
 --
 -- Cleanup
 --
+SELECT * FROM drop_graph('type_coercion', true);
+SELECT * FROM drop_graph('order_by', true);
+SELECT * FROM drop_graph('group_by', true);
 SELECT * FROM drop_graph('UCSC', true);
 SELECT * FROM drop_graph('expr', true);
 

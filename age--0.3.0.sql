@@ -780,6 +780,42 @@ AS 'MODULE_PATHNAME';
 CREATE CAST (int8 AS agtype)
 WITH FUNCTION ag_catalog.int8_to_agtype(int8);
 
+-- agtype -> int8
+CREATE FUNCTION ag_catalog.agtype_to_int8(variadic "any")
+RETURNS bigint
+LANGUAGE c
+STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE CAST (agtype AS bigint)
+WITH FUNCTION ag_catalog.agtype_to_int8(variadic "any");
+
+-- agtype -> int4
+CREATE FUNCTION ag_catalog.agtype_to_int4(variadic "any")
+RETURNS int
+LANGUAGE c
+STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- agtype -> int2
+CREATE CAST (agtype AS int)
+WITH FUNCTION ag_catalog.agtype_to_int4(variadic "any");
+
+CREATE FUNCTION ag_catalog.agtype_to_int2(variadic "any")
+RETURNS smallint
+LANGUAGE c
+STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE CAST (agtype AS smallint)
+WITH FUNCTION ag_catalog.agtype_to_int2(variadic "any");
+
 --
 -- agtype - access operators
 --
@@ -1286,75 +1322,145 @@ CREATE AGGREGATE ag_catalog.age_stdevp (float8)
 );
 
 --
--- aggregate transfers function for min & max
+-- aggregate transfer functions for min & max
 --
 -- max
-CREATE FUNCTION ag_catalog.age_agtype_larger_aggtransfn(agtype, agtype)
+CREATE FUNCTION ag_catalog.age_agtype_larger_aggtransfn(agtype, variadic "any")
 RETURNS agtype
 LANGUAGE c
 IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 -- aggregate for max
-CREATE AGGREGATE ag_catalog.age_max (agtype)
+CREATE AGGREGATE ag_catalog.age_max(variadic "any")
 (
    stype = agtype,
    sfunc = ag_catalog.age_agtype_larger_aggtransfn,
    combinefunc = ag_catalog.age_agtype_larger_aggtransfn,
    finalfunc_modify = read_only,
-   sortop = >,
    parallel = safe
 );
 -- min
-CREATE FUNCTION ag_catalog.age_agtype_smaller_aggtransfn(agtype, agtype)
+CREATE FUNCTION ag_catalog.age_agtype_smaller_aggtransfn(agtype, variadic "any")
 RETURNS agtype
 LANGUAGE c
 IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 -- aggregate for min
-CREATE AGGREGATE ag_catalog.age_min (agtype)
+CREATE AGGREGATE ag_catalog.age_min(variadic "any")
 (
    stype = agtype,
    sfunc = ag_catalog.age_agtype_smaller_aggtransfn,
    combinefunc = ag_catalog.age_agtype_smaller_aggtransfn,
    finalfunc_modify = read_only,
-   sortop = <,
    parallel = safe
+);
+
+--
+-- aggregate transfer/final functions for percentileCont & percentileDisc
+--
+CREATE FUNCTION ag_catalog.age_percentile_aggtransfn(internal, float8, float8)
+RETURNS internal
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_percentile_cont_aggfinalfn(internal)
+RETURNS float8
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_percentile_disc_aggfinalfn(internal)
+RETURNS float8
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE AGGREGATE ag_catalog.age_percentilecont(float8, float8)
+(
+    stype = internal,
+    sfunc = ag_catalog.age_percentile_aggtransfn,
+    finalfunc = ag_catalog.age_percentile_cont_aggfinalfn,
+    parallel = safe
+);
+
+CREATE AGGREGATE ag_catalog.age_percentiledisc(float8, float8)
+(
+    stype = internal,
+    sfunc = ag_catalog.age_percentile_aggtransfn,
+    finalfunc = ag_catalog.age_percentile_disc_aggfinalfn,
+    parallel = safe
+);
+
+--
+-- aggregate transfer/final functions for collect
+--
+CREATE FUNCTION ag_catalog.age_collect_aggtransfn(internal, variadic "any")
+RETURNS internal
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_collect_aggfinalfn(internal)
+RETURNS agtype
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE AGGREGATE ag_catalog.age_collect(variadic "any")
+(
+    stype = internal,
+    sfunc = ag_catalog.age_collect_aggtransfn,
+    finalfunc = ag_catalog.age_collect_aggfinalfn,
+    parallel = safe
 );
 
 --
 -- function for typecasting an agtype value to another agtype value
 --
-CREATE FUNCTION ag_catalog.agtype_typecast_numeric(agtype)
+CREATE FUNCTION ag_catalog.agtype_typecast_int(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.agtype_typecast_float(agtype)
+CREATE FUNCTION ag_catalog.agtype_typecast_numeric(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.agtype_typecast_vertex(agtype)
+CREATE FUNCTION ag_catalog.agtype_typecast_float(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.agtype_typecast_edge(agtype)
+CREATE FUNCTION ag_catalog.agtype_typecast_vertex(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.agtype_typecast_path(agtype)
+CREATE FUNCTION ag_catalog.agtype_typecast_edge(variadic "any")
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.agtype_typecast_path(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
