@@ -1,0 +1,10 @@
+diff a/README.md b/README.md	(rejected hunks)
+@@ -16,7 +16,7 @@
+ 
+ Apache AGE Tweets: twitter.com/apache_age
+ 
+-News and Updates
++News and Updates      
+ ----------
+ - The next release, 0.3.0-incubating, will be out around mid January.
+ - Apache AGE at the Postgres Build 2020 (virtual) conference, Check out the [webinar](https://bitnine.net/blog-agens-solution/apache-age-postgres-build-2020-review/).
