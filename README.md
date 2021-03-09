@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # [Apache AGE (incubating)](https://age.apache.org/#)
 
 [![license badge](https://img.shields.io/badge/apache-license--v2.0-brightgreen)](https://github.com/apache/incubator-age/releases)
@@ -35,12 +36,15 @@ The documentation is divided into several sections:
 - [Installation](https://age.apache.org/docs/installation.html)
 
 ## Resources 
+
  - [Additional documentation](https://bitnine.net/blog-agens-solution/apache-age/grow-apache-age-contributors-welcome/)
  - [GitHub Issues](https://github.com/apache/incubator-age/issues)
  - [Apache AGE Jira](https://issues.apache.org/jira/projects/AGE/issues/AGE-5?filter=allopenissues) (Bugs, Features, Issues) 
  - [Releases & updates](https://github.com/apache/incubator-age/releases)
 
+
 ## Social Media
+
  - [Twitter](https://twitter.com/apache_age)
  - [LinkedIn page](https://www.linkedin.com/showcase/apache-age)
  - [YouTube](https://www.youtube.com/channel/UCBJNYamALEqrfxiOCgYyP2g)
