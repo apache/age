@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # [Apache AGE (incubating)](https://age.apache.org/#)
 
 [![license badge](https://img.shields.io/badge/apache-license--v2.0-brightgreen)](https://github.com/apache/incubator-age/releases)
