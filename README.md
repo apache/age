@@ -25,7 +25,7 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 ## Documentation
 
-You can find Apache AGE documentation [on the website](https://age.apache.org/docs/).
+You can find Apache AGE documentation [on the website](https://age.apache.org/docs/Apache_AGE_Guide.pdf).
 
 The documentation is divided into several sections:
 
@@ -33,6 +33,18 @@ The documentation is divided into several sections:
 - [Utility Functions](https://age.apache.org/docs/utility-functions.html)
 - [Tables](https://age.apache.org/docs/tables.html)
 - [Installation](https://age.apache.org/docs/installation.html)
+
+## Resources 
+ - [Additional documentation](https://bitnine.net/blog-agens-solution/apache-age/grow-apache-age-contributors-welcome/)
+ - [GitHub Issues](https://github.com/apache/incubator-age/issues)
+ - [Apache AGE Jira](https://issues.apache.org/jira/projects/AGE/issues/AGE-5?filter=allopenissues) (Bugs, Features, Issues) 
+ - [Releases & updates](https://github.com/apache/incubator-age/releases)
+
+## Social Media
+ - [Twitter](https://twitter.com/apache_age)
+ - [LinkedIn page](https://www.linkedin.com/showcase/apache-age)
+ - [YouTube](https://www.youtube.com/channel/UCBJNYamALEqrfxiOCgYyP2g)
+ - [Medium](https://apache-age.medium.com/)
 
 ## Contribution
 
