@@ -34,6 +34,13 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 Here is the link to the latest [Apache AGE documentation](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
 You can learn about how to install Apache AGE, its features and built-in functions and how to use various Cypher queries.  
 
+## Resources 
+
+ - [Additional documentation](https://bitnine.net/blog-agens-solution/apache-age/grow-apache-age-contributors-welcome/)
+ - [GitHub Issues](https://github.com/apache/incubator-age/issues)
+ - [Apache AGE Jira](https://issues.apache.org/jira/projects/AGE/issues/AGE-5?filter=allopenissues) (Bugs, Features, Issues)
+ - [Releases & updates](https://github.com/apache/incubator-age/releases) 
+
 ## Contribution
 
 You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/incubator-age).  
