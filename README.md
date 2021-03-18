@@ -19,29 +19,29 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 ## Latest happenings 
 
-- The first official Apache release has been released, [Apache AGE 0.3.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.3.0.rc0-incubating){:target="_blank"}.
-- The latest Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf){:target="_blank"}.
-- The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/){:target="_blank"}.
+- The first official Apache release has been released, [Apache AGE 0.3.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.3.0.rc0-incubating).
+- The latest Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
+- The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
 
 ## Installation
 
-- [Use a docker image - official ver.](https://hub.docker.com/r/sorrell/agensgraph-extension){:target="_blank"}
-- [Use a docker image - alpine ver.](https://hub.docker.com/r/sorrell/agensgraph-extension-alpine){:target="_blank"}
-- [Installing from source](https://age.apache.org/#){:target="_blank"}
+- [Use a docker image - official ver.](https://hub.docker.com/r/sorrell/agensgraph-extension)
+- [Use a docker image - alpine ver.](https://hub.docker.com/r/sorrell/agensgraph-extension-alpine)
+- [Installing from source](https://age.apache.org/#)
 
 ## Documentation
 
-Here is the link to the latest [Apache AGE documentation](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf){:target="_blank"}.
+Here is the link to the latest [Apache AGE documentation](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
 You can learn about how to install Apache AGE, its features and built-in functions and how to use various Cypher queries.
 
 ## Resources 
 
- - [Additional documentation](https://bitnine.net/blog-agens-solution/apache-age/grow-apache-age-contributors-welcome/){:target="_blank"}
- - [GitHub Issues](https://github.com/apache/incubator-age/issues){:target="_blank"}
- - [Apache AGE Jira](https://issues.apache.org/jira/projects/AGE/issues/AGE-5?filter=allopenissues) (Bugs, Features, Issues){:target="_blank"} 
- - [Releases & updates](https://github.com/apache/incubator-age/releases){:target="_blank"}
+ - [Additional documentation](https://bitnine.net/blog-agens-solution/apache-age/grow-apache-age-contributors-welcome/)
+ - [GitHub Issues](https://github.com/apache/incubator-age/issues)
+ - [Apache AGE Jira](https://issues.apache.org/jira/projects/AGE/issues/AGE-5?filter=allopenissues) (Bugs, Features, Issues) 
+ - [Releases & updates](https://github.com/apache/incubator-age/releases)
 
 ## Contribution
 
-You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/incubator-age){:target="_blank"}.  
+You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/incubator-age){: target="_blank"}.  
 Also, you can learn from the code review process, how to merge pull requests, and from code style compliance to documentation, by visiting the [Apache AGE official site - Developer Guidelines]
