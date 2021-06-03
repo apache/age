@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: "jdbc:postgresql://localhost:25432/"
+    username: "postgres"
+    password: "agensgraph"
+    graphname: "a"
+
+
+
+
