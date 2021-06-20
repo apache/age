@@ -2,13 +2,13 @@ import unittest
 import age 
 
 DSN = "host=172.17.0.3 port=5432 dbname=postgres user=postgres password=agens"
-
+TEST_GRAPH_NAME = "my_test_graph"
 class TestAgeBasic(unittest.TestCase):
     ag = None
 
     def __init__(self, methodName: str) -> None:
         super().__init__(methodName=methodName)
-        self.ag = age.connect(dsn=DSN, graph="test_graph")
+        self.ag = age.connect(dsn=DSN, graph=TEST_GRAPH_NAME)
 
     def __del__(self):
         # Clear test data
