@@ -1,4 +1,4 @@
-# apache-age-go
+# incubator-age Go driver support 
 
 Go driver support for [Apache AGE](https://age.apache.org/), graph extention for PostgreSQL.
 
