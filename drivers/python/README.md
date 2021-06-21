@@ -1,6 +1,10 @@
 # incubator-age Python driver support 
 Python driver support for [Apache AGE](https://age.apache.org/), graph extention for PostgreSQL.
 
+### Features
+* Unmarshal AGE result data to Vertex, Edge, Path
+* Cypher query support for Psycopg2 PostreSQL driver (enables to use cypher queries directly)
+
 ### Prerequisites
 * over Python 3.9
 * This module runs on [psycopg2](https://www.psycopg.org/) and [antlr4-python3](https://pypi.org/project/antlr4-python3-runtime/)
