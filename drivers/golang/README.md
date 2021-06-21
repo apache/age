@@ -1,9 +1,9 @@
-# incubator-age Go driver support 
+# incubator-age AGType parser and driver support for Golang 
 
-Go driver support for [Apache AGE](https://age.apache.org/), graph extention for PostgreSQL.
+AGType parser and driver support for [Apache AGE](https://age.apache.org/), graph extention for PostgreSQL.
 
 ### Features
-* Unmarshal AGE result data to Vertex, Edge, Path
+* Unmarshal AGE result data(AGType) to Vertex, Edge, Path
 * Cypher query support for 3rd. Party sql driver (enables to use cypher queries directly)
 
 ### Prerequisites
