@@ -114,6 +114,7 @@ func (v *UnmarshalVisitor) VisitVertex(ctx *parser.VertexContext) interface{} {
 
 	if !ok {
 		vertex = NewVertex(vid, props["label"].(string), props["properties"].(map[string]interface{}))
+		v.vcache[vid] = vertex
 	}
 
 	return vertex
