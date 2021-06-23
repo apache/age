@@ -31,12 +31,12 @@ func TestPathParsing(t *testing.T) {
 	p2 := entity2.(*Path)
 	p3 := entity3.(*Path)
 
-	assert.Equal(t, p1.end.props["name"], p2.start.props["name"])
-	assert.Equal(t, p2.start.props["name"], p3.start.props["name"])
+	assert.Equal(t, p1.GetAsVertex(0).props["name"], p2.GetAsVertex(2).props["name"])
+	assert.Equal(t, p2.GetAsVertex(0).props["name"], p3.GetAsVertex(0).props["name"])
 
-	// fmt.Println(entity1)
-	// fmt.Println(entity2)
-	// fmt.Println(entity3)
+	fmt.Println(entity1)
+	fmt.Println(entity2)
+	fmt.Println(entity3)
 }
 
 func TestVertexParsing(t *testing.T) {

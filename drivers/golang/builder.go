@@ -17,13 +17,14 @@ const MinInt = -MaxInt - 1
 
 type AGUnmarshaler struct {
 	ageParser   *parser.AgeParser
-	visitor     *UnmarshalVisitor
+	visitor     parser.AgeVisitor
 	errListener *AGErrorListener
-	vcache      map[int64]*Vertex
+	vcache      map[int64]interface{}
 }
 
 func NewAGUnmarshaler() *AGUnmarshaler {
-	vcache := make(map[int64]*Vertex)
+	vcache := make(map[int64]interface{})
+
 	m := &AGUnmarshaler{ageParser: parser.NewAgeParser(nil),
 		visitor:     &UnmarshalVisitor{vcache: vcache},
 		errListener: NewAGErrorListener(),
@@ -85,7 +86,7 @@ func (el *AGErrorListener) clearErrs() {
 
 type UnmarshalVisitor struct {
 	parser.AgeVisitor
-	vcache map[int64]*Vertex
+	vcache map[int64]interface{}
 }
 
 func (v *UnmarshalVisitor) Visit(tree antlr.ParseTree) interface{} { return nil }
@@ -135,14 +136,23 @@ func (v *UnmarshalVisitor) VisitEdge(ctx *parser.EdgeContext) interface{} {
 
 // Visit a parse tree produced by AgeParser#path.
 func (v *UnmarshalVisitor) VisitPath(ctx *parser.PathContext) interface{} {
-	vctxArr := ctx.AllVertex()
+	entities := []Entity{}
 
-	start := vctxArr[0].Accept(v)
-	rel := ctx.Edge().Accept(v)
-	end := vctxArr[1].Accept(v)
+	for _, child := range ctx.GetChildren() {
+		switch child.(type) {
+		case *parser.VertexContext:
+			v := child.(*parser.VertexContext).Accept(v)
+			// fmt.Println(v)
+			entities = append(entities, v.(Entity))
+		case *parser.EdgeContext:
+			e := child.(*parser.EdgeContext).Accept(v)
+			// fmt.Println(e)
+			entities = append(entities, e.(Entity))
+		default:
+		}
+	}
 
-	// fmt.Println("VisitPath:", reflect.TypeOf(start), reflect.TypeOf(rel), reflect.TypeOf(rel))
-	path := NewPath(start.(*Vertex), rel.(*Edge), end.(*Vertex))
+	path := NewPath(entities)
 	return path
 }
 

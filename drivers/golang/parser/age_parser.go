@@ -16,39 +16,42 @@ var _ = reflect.Copy
 var _ = strconv.Itoa
 
 var parserATN = []uint16{
-	3, 24715, 42794, 33075, 47597, 16764, 15335, 30598, 22884, 3, 16, 82, 4,
+	3, 24715, 42794, 33075, 47597, 16764, 15335, 30598, 22884, 3, 16, 88, 4,
 	2, 9, 2, 4, 3, 9, 3, 4, 4, 9, 4, 4, 5, 9, 5, 4, 6, 9, 6, 4, 7, 9, 7, 4,
 	8, 9, 8, 4, 9, 9, 9, 3, 2, 3, 2, 3, 2, 3, 2, 5, 2, 23, 10, 2, 3, 3, 3,
-	3, 3, 3, 3, 4, 3, 4, 3, 4, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 3,
-	5, 3, 5, 3, 6, 3, 6, 3, 6, 3, 6, 3, 6, 3, 6, 5, 6, 46, 10, 6, 3, 7, 3,
-	7, 3, 7, 3, 7, 7, 7, 52, 10, 7, 12, 7, 14, 7, 55, 11, 7, 3, 7, 3, 7, 3,
-	7, 3, 7, 5, 7, 61, 10, 7, 3, 8, 3, 8, 3, 8, 3, 8, 3, 9, 3, 9, 3, 9, 3,
-	9, 7, 9, 71, 10, 9, 12, 9, 14, 9, 74, 11, 9, 3, 9, 3, 9, 3, 9, 3, 9, 5,
-	9, 80, 10, 9, 3, 9, 2, 2, 10, 2, 4, 6, 8, 10, 12, 14, 16, 2, 2, 2, 85,
-	2, 22, 3, 2, 2, 2, 4, 24, 3, 2, 2, 2, 6, 27, 3, 2, 2, 2, 8, 30, 3, 2, 2,
-	2, 10, 45, 3, 2, 2, 2, 12, 60, 3, 2, 2, 2, 14, 62, 3, 2, 2, 2, 16, 79,
-	3, 2, 2, 2, 18, 23, 5, 10, 6, 2, 19, 23, 5, 4, 3, 2, 20, 23, 5, 6, 4, 2,
-	21, 23, 5, 8, 5, 2, 22, 18, 3, 2, 2, 2, 22, 19, 3, 2, 2, 2, 22, 20, 3,
-	2, 2, 2, 22, 21, 3, 2, 2, 2, 23, 3, 3, 2, 2, 2, 24, 25, 5, 12, 7, 2, 25,
-	26, 7, 9, 2, 2, 26, 5, 3, 2, 2, 2, 27, 28, 5, 12, 7, 2, 28, 29, 7, 10,
-	2, 2, 29, 7, 3, 2, 2, 2, 30, 31, 7, 3, 2, 2, 31, 32, 5, 4, 3, 2, 32, 33,
-	7, 4, 2, 2, 33, 34, 5, 6, 4, 2, 34, 35, 7, 4, 2, 2, 35, 36, 5, 4, 3, 2,
-	36, 37, 7, 5, 2, 2, 37, 38, 7, 11, 2, 2, 38, 9, 3, 2, 2, 2, 39, 46, 7,
-	12, 2, 2, 40, 46, 7, 15, 2, 2, 41, 46, 7, 13, 2, 2, 42, 46, 7, 14, 2, 2,
-	43, 46, 5, 12, 7, 2, 44, 46, 5, 16, 9, 2, 45, 39, 3, 2, 2, 2, 45, 40, 3,
-	2, 2, 2, 45, 41, 3, 2, 2, 2, 45, 42, 3, 2, 2, 2, 45, 43, 3, 2, 2, 2, 45,
-	44, 3, 2, 2, 2, 46, 11, 3, 2, 2, 2, 47, 48, 7, 6, 2, 2, 48, 53, 5, 14,
-	8, 2, 49, 50, 7, 4, 2, 2, 50, 52, 5, 14, 8, 2, 51, 49, 3, 2, 2, 2, 52,
-	55, 3, 2, 2, 2, 53, 51, 3, 2, 2, 2, 53, 54, 3, 2, 2, 2, 54, 56, 3, 2, 2,
-	2, 55, 53, 3, 2, 2, 2, 56, 57, 7, 7, 2, 2, 57, 61, 3, 2, 2, 2, 58, 59,
-	7, 6, 2, 2, 59, 61, 7, 7, 2, 2, 60, 47, 3, 2, 2, 2, 60, 58, 3, 2, 2, 2,
-	61, 13, 3, 2, 2, 2, 62, 63, 7, 12, 2, 2, 63, 64, 7, 8, 2, 2, 64, 65, 5,
-	10, 6, 2, 65, 15, 3, 2, 2, 2, 66, 67, 7, 3, 2, 2, 67, 72, 5, 10, 6, 2,
-	68, 69, 7, 4, 2, 2, 69, 71, 5, 10, 6, 2, 70, 68, 3, 2, 2, 2, 71, 74, 3,
-	2, 2, 2, 72, 70, 3, 2, 2, 2, 72, 73, 3, 2, 2, 2, 73, 75, 3, 2, 2, 2, 74,
-	72, 3, 2, 2, 2, 75, 76, 7, 5, 2, 2, 76, 80, 3, 2, 2, 2, 77, 78, 7, 3, 2,
-	2, 78, 80, 7, 5, 2, 2, 79, 66, 3, 2, 2, 2, 79, 77, 3, 2, 2, 2, 80, 17,
-	3, 2, 2, 2, 8, 22, 45, 53, 60, 72, 79,
+	3, 3, 3, 3, 4, 3, 4, 3, 4, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 3, 5, 7,
+	5, 38, 10, 5, 12, 5, 14, 5, 41, 11, 5, 3, 5, 3, 5, 3, 5, 3, 6, 3, 6, 3,
+	6, 3, 6, 3, 6, 3, 6, 5, 6, 52, 10, 6, 3, 7, 3, 7, 3, 7, 3, 7, 7, 7, 58,
+	10, 7, 12, 7, 14, 7, 61, 11, 7, 3, 7, 3, 7, 3, 7, 3, 7, 5, 7, 67, 10, 7,
+	3, 8, 3, 8, 3, 8, 3, 8, 3, 9, 3, 9, 3, 9, 3, 9, 7, 9, 77, 10, 9, 12, 9,
+	14, 9, 80, 11, 9, 3, 9, 3, 9, 3, 9, 3, 9, 5, 9, 86, 10, 9, 3, 9, 2, 2,
+	10, 2, 4, 6, 8, 10, 12, 14, 16, 2, 2, 2, 92, 2, 22, 3, 2, 2, 2, 4, 24,
+	3, 2, 2, 2, 6, 27, 3, 2, 2, 2, 8, 30, 3, 2, 2, 2, 10, 51, 3, 2, 2, 2, 12,
+	66, 3, 2, 2, 2, 14, 68, 3, 2, 2, 2, 16, 85, 3, 2, 2, 2, 18, 23, 5, 10,
+	6, 2, 19, 23, 5, 4, 3, 2, 20, 23, 5, 6, 4, 2, 21, 23, 5, 8, 5, 2, 22, 18,
+	3, 2, 2, 2, 22, 19, 3, 2, 2, 2, 22, 20, 3, 2, 2, 2, 22, 21, 3, 2, 2, 2,
+	23, 3, 3, 2, 2, 2, 24, 25, 5, 12, 7, 2, 25, 26, 7, 9, 2, 2, 26, 5, 3, 2,
+	2, 2, 27, 28, 5, 12, 7, 2, 28, 29, 7, 10, 2, 2, 29, 7, 3, 2, 2, 2, 30,
+	31, 7, 3, 2, 2, 31, 39, 5, 4, 3, 2, 32, 33, 7, 4, 2, 2, 33, 34, 5, 6, 4,
+	2, 34, 35, 7, 4, 2, 2, 35, 36, 5, 4, 3, 2, 36, 38, 3, 2, 2, 2, 37, 32,
+	3, 2, 2, 2, 38, 41, 3, 2, 2, 2, 39, 37, 3, 2, 2, 2, 39, 40, 3, 2, 2, 2,
+	40, 42, 3, 2, 2, 2, 41, 39, 3, 2, 2, 2, 42, 43, 7, 5, 2, 2, 43, 44, 7,
+	11, 2, 2, 44, 9, 3, 2, 2, 2, 45, 52, 7, 12, 2, 2, 46, 52, 7, 15, 2, 2,
+	47, 52, 7, 13, 2, 2, 48, 52, 7, 14, 2, 2, 49, 52, 5, 12, 7, 2, 50, 52,
+	5, 16, 9, 2, 51, 45, 3, 2, 2, 2, 51, 46, 3, 2, 2, 2, 51, 47, 3, 2, 2, 2,
+	51, 48, 3, 2, 2, 2, 51, 49, 3, 2, 2, 2, 51, 50, 3, 2, 2, 2, 52, 11, 3,
+	2, 2, 2, 53, 54, 7, 6, 2, 2, 54, 59, 5, 14, 8, 2, 55, 56, 7, 4, 2, 2, 56,
+	58, 5, 14, 8, 2, 57, 55, 3, 2, 2, 2, 58, 61, 3, 2, 2, 2, 59, 57, 3, 2,
+	2, 2, 59, 60, 3, 2, 2, 2, 60, 62, 3, 2, 2, 2, 61, 59, 3, 2, 2, 2, 62, 63,
+	7, 7, 2, 2, 63, 67, 3, 2, 2, 2, 64, 65, 7, 6, 2, 2, 65, 67, 7, 7, 2, 2,
+	66, 53, 3, 2, 2, 2, 66, 64, 3, 2, 2, 2, 67, 13, 3, 2, 2, 2, 68, 69, 7,
+	12, 2, 2, 69, 70, 7, 8, 2, 2, 70, 71, 5, 10, 6, 2, 71, 15, 3, 2, 2, 2,
+	72, 73, 7, 3, 2, 2, 73, 78, 5, 10, 6, 2, 74, 75, 7, 4, 2, 2, 75, 77, 5,
+	10, 6, 2, 76, 74, 3, 2, 2, 2, 77, 80, 3, 2, 2, 2, 78, 76, 3, 2, 2, 2, 78,
+	79, 3, 2, 2, 2, 79, 81, 3, 2, 2, 2, 80, 78, 3, 2, 2, 2, 81, 82, 7, 5, 2,
+	2, 82, 86, 3, 2, 2, 2, 83, 84, 7, 3, 2, 2, 84, 86, 7, 5, 2, 2, 85, 72,
+	3, 2, 2, 2, 85, 83, 3, 2, 2, 2, 86, 17, 3, 2, 2, 2, 9, 22, 39, 51, 59,
+	66, 78, 85,
 }
 var literalNames = []string{
 	"", "'['", "','", "']'", "'{'", "'}'", "':'", "'::vertex'", "'::edge'",
@@ -578,18 +581,31 @@ func (s *PathContext) Vertex(i int) IVertexContext {
 	return t.(IVertexContext)
 }
 
-func (s *PathContext) Edge() IEdgeContext {
-	var t = s.GetTypedRuleContext(reflect.TypeOf((*IEdgeContext)(nil)).Elem(), 0)
+func (s *PathContext) KW_PATH() antlr.TerminalNode {
+	return s.GetToken(AgeParserKW_PATH, 0)
+}
+
+func (s *PathContext) AllEdge() []IEdgeContext {
+	var ts = s.GetTypedRuleContexts(reflect.TypeOf((*IEdgeContext)(nil)).Elem())
+	var tst = make([]IEdgeContext, len(ts))
+
+	for i, t := range ts {
+		if t != nil {
+			tst[i] = t.(IEdgeContext)
+		}
+	}
+
+	return tst
+}
+
+func (s *PathContext) Edge(i int) IEdgeContext {
+	var t = s.GetTypedRuleContext(reflect.TypeOf((*IEdgeContext)(nil)).Elem(), i)
 
 	if t == nil {
 		return nil
 	}
 
 	return t.(IEdgeContext)
-}
-
-func (s *PathContext) KW_PATH() antlr.TerminalNode {
-	return s.GetToken(AgeParserKW_PATH, 0)
 }
 
 func (s *PathContext) GetRuleContext() antlr.RuleContext {
@@ -625,6 +641,7 @@ func (s *PathContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 func (p *AgeParser) Path() (localctx IPathContext) {
 	localctx = NewPathContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 6, AgeParserRULE_path)
+	var _la int
 
 	defer func() {
 		p.ExitRule()
@@ -651,28 +668,38 @@ func (p *AgeParser) Path() (localctx IPathContext) {
 		p.SetState(29)
 		p.Vertex()
 	}
-	{
-		p.SetState(30)
-		p.Match(AgeParserT__1)
+	p.SetState(37)
+	p.GetErrorHandler().Sync(p)
+	_la = p.GetTokenStream().LA(1)
+
+	for _la == AgeParserT__1 {
+		{
+			p.SetState(30)
+			p.Match(AgeParserT__1)
+		}
+		{
+			p.SetState(31)
+			p.Edge()
+		}
+		{
+			p.SetState(32)
+			p.Match(AgeParserT__1)
+		}
+		{
+			p.SetState(33)
+			p.Vertex()
+		}
+
+		p.SetState(39)
+		p.GetErrorHandler().Sync(p)
+		_la = p.GetTokenStream().LA(1)
 	}
 	{
-		p.SetState(31)
-		p.Edge()
-	}
-	{
-		p.SetState(32)
-		p.Match(AgeParserT__1)
-	}
-	{
-		p.SetState(33)
-		p.Vertex()
-	}
-	{
-		p.SetState(34)
+		p.SetState(40)
 		p.Match(AgeParserT__2)
 	}
 	{
-		p.SetState(35)
+		p.SetState(41)
 		p.Match(AgeParserKW_PATH)
 	}
 
@@ -803,49 +830,49 @@ func (p *AgeParser) Value() (localctx IValueContext) {
 		}
 	}()
 
-	p.SetState(43)
+	p.SetState(49)
 	p.GetErrorHandler().Sync(p)
 
 	switch p.GetTokenStream().LA(1) {
 	case AgeParserSTRING:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(37)
+			p.SetState(43)
 			p.Match(AgeParserSTRING)
 		}
 
 	case AgeParserNUMBER:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(38)
+			p.SetState(44)
 			p.Match(AgeParserNUMBER)
 		}
 
 	case AgeParserBOOL:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(39)
+			p.SetState(45)
 			p.Match(AgeParserBOOL)
 		}
 
 	case AgeParserNULL:
 		p.EnterOuterAlt(localctx, 4)
 		{
-			p.SetState(40)
+			p.SetState(46)
 			p.Match(AgeParserNULL)
 		}
 
 	case AgeParserT__3:
 		p.EnterOuterAlt(localctx, 5)
 		{
-			p.SetState(41)
+			p.SetState(47)
 			p.Properties()
 		}
 
 	case AgeParserT__0:
 		p.EnterOuterAlt(localctx, 6)
 		{
-			p.SetState(42)
+			p.SetState(48)
 			p.Arr()
 		}
 
@@ -968,50 +995,50 @@ func (p *AgeParser) Properties() (localctx IPropertiesContext) {
 		}
 	}()
 
-	p.SetState(58)
+	p.SetState(64)
 	p.GetErrorHandler().Sync(p)
-	switch p.GetInterpreter().AdaptivePredict(p.GetTokenStream(), 3, p.GetParserRuleContext()) {
+	switch p.GetInterpreter().AdaptivePredict(p.GetTokenStream(), 4, p.GetParserRuleContext()) {
 	case 1:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(45)
+			p.SetState(51)
 			p.Match(AgeParserT__3)
 		}
 		{
-			p.SetState(46)
+			p.SetState(52)
 			p.Pair()
 		}
-		p.SetState(51)
+		p.SetState(57)
 		p.GetErrorHandler().Sync(p)
 		_la = p.GetTokenStream().LA(1)
 
 		for _la == AgeParserT__1 {
 			{
-				p.SetState(47)
+				p.SetState(53)
 				p.Match(AgeParserT__1)
 			}
 			{
-				p.SetState(48)
+				p.SetState(54)
 				p.Pair()
 			}
 
-			p.SetState(53)
+			p.SetState(59)
 			p.GetErrorHandler().Sync(p)
 			_la = p.GetTokenStream().LA(1)
 		}
 		{
-			p.SetState(54)
+			p.SetState(60)
 			p.Match(AgeParserT__4)
 		}
 
 	case 2:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(56)
+			p.SetState(62)
 			p.Match(AgeParserT__3)
 		}
 		{
-			p.SetState(57)
+			p.SetState(63)
 			p.Match(AgeParserT__4)
 		}
 
@@ -1124,15 +1151,15 @@ func (p *AgeParser) Pair() (localctx IPairContext) {
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(60)
+		p.SetState(66)
 		p.Match(AgeParserSTRING)
 	}
 	{
-		p.SetState(61)
+		p.SetState(67)
 		p.Match(AgeParserT__5)
 	}
 	{
-		p.SetState(62)
+		p.SetState(68)
 		p.Value()
 	}
 
@@ -1251,50 +1278,50 @@ func (p *AgeParser) Arr() (localctx IArrContext) {
 		}
 	}()
 
-	p.SetState(77)
+	p.SetState(83)
 	p.GetErrorHandler().Sync(p)
-	switch p.GetInterpreter().AdaptivePredict(p.GetTokenStream(), 5, p.GetParserRuleContext()) {
+	switch p.GetInterpreter().AdaptivePredict(p.GetTokenStream(), 6, p.GetParserRuleContext()) {
 	case 1:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(64)
+			p.SetState(70)
 			p.Match(AgeParserT__0)
 		}
 		{
-			p.SetState(65)
+			p.SetState(71)
 			p.Value()
 		}
-		p.SetState(70)
+		p.SetState(76)
 		p.GetErrorHandler().Sync(p)
 		_la = p.GetTokenStream().LA(1)
 
 		for _la == AgeParserT__1 {
 			{
-				p.SetState(66)
+				p.SetState(72)
 				p.Match(AgeParserT__1)
 			}
 			{
-				p.SetState(67)
+				p.SetState(73)
 				p.Value()
 			}
 
-			p.SetState(72)
+			p.SetState(78)
 			p.GetErrorHandler().Sync(p)
 			_la = p.GetTokenStream().LA(1)
 		}
 		{
-			p.SetState(73)
+			p.SetState(79)
 			p.Match(AgeParserT__2)
 		}
 
 	case 2:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(75)
+			p.SetState(81)
 			p.Match(AgeParserT__0)
 		}
 		{
-			p.SetState(76)
+			p.SetState(82)
 			p.Match(AgeParserT__2)
 		}
 

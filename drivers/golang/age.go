@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 )
 
 func GetReady(db *sql.DB, graphName string) (bool, error) {
@@ -62,6 +63,21 @@ func QueryCypher(tx *sql.Tx, graphName string, cypher string, args ...interface{
 		return nil, err
 	} else {
 		return NewCypherCursor(rows), nil
+	}
+}
+
+/** MATCH .... RETURN .... */
+func QueryCypherMap(tx *sql.Tx, graphName string, cypher string,
+	args ...interface{}) (*CypherMapCursor, error) {
+	cypherStmt := fmt.Sprintf(cypher, args...)
+	stmt := fmt.Sprintf("SELECT * from cypher('%s', $$ %s $$) as (v agtype);",
+		graphName, cypherStmt)
+
+	rows, err := tx.Query(stmt)
+	if err != nil {
+		return nil, err
+	} else {
+		return NewCypherMapCursor(rows), nil
 	}
 }
 
@@ -231,5 +247,61 @@ func (c *CypherCursor) GetRow() (Entity, error) {
 }
 
 func (c *CypherCursor) Close() error {
+	return c.rows.Close()
+}
+
+//
+type CypherMapCursor struct {
+	rows     *sql.Rows
+	agMapper *AGMapper
+}
+
+func NewCypherMapCursor(rows *sql.Rows) *CypherMapCursor {
+	return &CypherMapCursor{rows: rows, agMapper: NewAGMapper(make(map[string]reflect.Type))}
+}
+
+func (c *CypherMapCursor) PutType(label string, tp reflect.Type) {
+	c.agMapper.PutType(label, tp)
+}
+
+func (c *CypherMapCursor) All() ([]interface{}, error) {
+	defer c.rows.Close()
+
+	ens := []interface{}{}
+
+	for c.rows.Next() {
+		entity, err := c.GetRow()
+		if err != nil {
+			return ens, err
+		}
+		ens = append(ens, entity)
+	}
+
+	return ens, nil
+}
+
+func (c *CypherMapCursor) Next() bool {
+	return c.rows.Next()
+}
+
+func (c *CypherMapCursor) GetRow() (interface{}, error) {
+	var gstr string
+	err := c.rows.Scan(&gstr)
+	if err != nil {
+		return nil, fmt.Errorf("CypherMapCursor.GetRow:: %s", err)
+	}
+	se, err := c.agMapper.unmarshal(gstr)
+	if err != nil {
+		return nil, err
+	}
+
+	if se.GType() == G_MAP_PATH {
+		return se, nil
+	}
+
+	return se.(*SimpleEntity).Value(), nil
+}
+
+func (c *CypherMapCursor) Close() error {
 	return c.rows.Close()
 }

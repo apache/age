@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -12,8 +13,9 @@ type GTYPE uint8
 const (
 	G_OTHER GTYPE = 1 + iota
 	G_VERTEX
-	G_EDEGE
+	G_EDGE
 	G_PATH
+	G_MAP_PATH
 	G_STR
 	G_INT
 	G_INTBIG
@@ -26,6 +28,7 @@ const (
 var _TpV = reflect.TypeOf(&Vertex{})
 var _TpE = reflect.TypeOf(&Edge{})
 var _TpP = reflect.TypeOf(&Path{})
+var _TpMP = reflect.TypeOf(&MapPath{})
 var _TpStr = reflect.TypeOf(string(""))
 var _TpInt = reflect.TypeOf(int(0))
 var _TpIntBig = reflect.TypeOf(big.NewInt(0))
@@ -37,6 +40,7 @@ var _TpArr = reflect.TypeOf([]interface{}{})
 // Entity object interface for parsed AGE result data : Vertex, Edge, Path and SimpleEntity
 type Entity interface {
 	GType() GTYPE
+	String() string
 }
 
 func IsEntity(v interface{}) bool {
@@ -111,35 +115,35 @@ func (e *SimpleEntity) AsArr() []interface{} {
 	return e.value.([]interface{})
 }
 
-type Node struct {
+type LabeledEntity struct {
 	Entity
 	id    int64
 	label string
 	props map[string]interface{}
 }
 
-func newNode(id int64, label string, props map[string]interface{}) *Node {
-	return &Node{id: id, label: label, props: props}
+func newLabeledEntity(id int64, label string, props map[string]interface{}) *LabeledEntity {
+	return &LabeledEntity{id: id, label: label, props: props}
 }
 
-func (n *Node) Id() int64 {
+func (n *LabeledEntity) Id() int64 {
 	return n.id
 }
 
-func (n *Node) Label() string {
+func (n *LabeledEntity) Label() string {
 	return n.label
 }
 
-func (n *Node) Prop(key string) interface{} {
+func (n *LabeledEntity) Prop(key string) interface{} {
 	return n.props[key]
 }
 
 type Vertex struct {
-	*Node
+	*LabeledEntity
 }
 
 func NewVertex(id int64, label string, props map[string]interface{}) *Vertex {
-	return &Vertex{newNode(id, label, props)}
+	return &Vertex{newLabeledEntity(id, label, props)}
 }
 
 func (v *Vertex) GType() GTYPE {
@@ -151,17 +155,17 @@ func (v *Vertex) String() string {
 }
 
 type Edge struct {
-	*Node
+	*LabeledEntity
 	start_id int64
 	end_id   int64
 }
 
 func NewEdge(id int64, label string, start int64, end int64, props map[string]interface{}) *Edge {
-	return &Edge{Node: newNode(id, label, props), start_id: start, end_id: end}
+	return &Edge{LabeledEntity: newLabeledEntity(id, label, props), start_id: start, end_id: end}
 }
 
 func (e *Edge) GType() GTYPE {
-	return G_EDEGE
+	return G_EDGE
 }
 
 func (e *Edge) StartId() int64 {
@@ -179,32 +183,87 @@ func (e *Edge) String() string {
 
 type Path struct {
 	Entity
-	start *Vertex
-	rel   *Edge
-	end   *Vertex
+	entities []Entity
 }
 
-func NewPath(start *Vertex, rel *Edge, end *Vertex) *Path {
-	return &Path{start: start, rel: rel, end: end}
+func NewPath(entities []Entity) *Path {
+	return &Path{entities: entities}
 }
 
 func (e *Path) GType() GTYPE {
 	return G_PATH
 }
 
-func (p *Path) Start() *Vertex {
-	return p.start
+func (e *Path) Size() int {
+	return len(e.entities)
 }
 
-func (p *Path) Rel() *Edge {
-	return p.rel
+func (e *Path) Get(index int) Entity {
+	if index < 0 && index >= len(e.entities) {
+		panic(fmt.Errorf("Entity index[%d] is out of range (%d) ", index, len(e.entities)))
+	}
+	return e.entities[index]
 }
 
-func (p *Path) End() *Vertex {
-	return p.end
+func (e *Path) GetAsVertex(index int) *Vertex {
+	v := e.Get(index)
+
+	if v.GType() != G_VERTEX {
+		panic(fmt.Errorf("Entity[%d] is not Vertex", index))
+	}
+	return v.(*Vertex)
+}
+
+func (e *Path) GetAsEdge(index int) *Edge {
+	v := e.Get(index)
+	if v.GType() != G_EDGE {
+		panic(fmt.Errorf("Entity[%d] is not Edge", index))
+	}
+	return v.(*Edge)
 }
 
 func (p *Path) String() string {
-	return fmt.Sprintf("P[%v, %v, %v]",
-		p.start, p.rel, p.end)
+	var buf bytes.Buffer
+	buf.WriteString("P[")
+	for _, e := range p.entities {
+		buf.WriteString(e.String())
+		buf.WriteString(",")
+	}
+	buf.WriteString("]")
+	return buf.String()
+}
+
+type MapPath struct {
+	Entity
+	entities []interface{}
+}
+
+func NewMapPath(entities []interface{}) *MapPath {
+	return &MapPath{entities: entities}
+}
+
+func (e *MapPath) GType() GTYPE {
+	return G_MAP_PATH
+}
+
+func (e *MapPath) Size() int {
+	return len(e.entities)
+}
+
+func (e *MapPath) Get(index int) interface{} {
+	if index < 0 && index >= len(e.entities) {
+		panic(fmt.Errorf("Entity index[%d] is out of range (%d) ", index, len(e.entities)))
+	}
+	return e.entities[index]
+}
+
+func (p *MapPath) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("P[")
+	for _, e := range p.entities {
+		buf.WriteString(fmt.Sprintf("%v", e))
+		buf.WriteString(",")
+	}
+	buf.WriteString("]")
+	return buf.String()
 }

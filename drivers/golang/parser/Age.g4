@@ -17,7 +17,7 @@ edge
    ;
 
 path
-   : '[' vertex ',' edge ',' vertex ']' KW_PATH
+   : '[' vertex (',' edge ',' vertex)* ']' KW_PATH
    ;
 
 //Keywords
