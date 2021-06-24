@@ -2,7 +2,7 @@ import unittest
 import age 
 
 DSN = "host=172.17.0.3 port=5432 dbname=postgres user=postgres password=agens"
-TEST_GRAPH_NAME = "my_test_graph"
+TEST_GRAPH_NAME = "testGraph"
 class TestAgeBasic(unittest.TestCase):
     ag = None
 

@@ -106,16 +106,19 @@ class ResultVisitor(ageVisitor):
     def visitPath(self, ctx:ageParser.PathContext):
         path = Path()
 
-        vctx1 = ctx.getTypedRuleContext(ageParser.VertexContext, 0)
-        ectx = ctx.getTypedRuleContext(ageParser.EdgeContext, 0)
-        vctx2 = ctx.getTypedRuleContext(ageParser.VertexContext, 1)
+        children = []
+        
+        for child in ctx.children :
+            if isinstance(child, ageParser.VertexContext):
+                children.append(child.accept(self))
+            if isinstance(child, ageParser.EdgeContext):
+                children.append(child.accept(self))
 
-        path.start = vctx1.accept(self)
-        path.rel = ectx.accept(self)
-        path.end = vctx2.accept(self)
+        path.start = children[0]
+        path.rel = children[1]
+        path.end = children[2]
         
         return path
-
 
     # Visit a parse tree produced by ageParser#value.
     def visitValue(self, ctx:ageParser.ValueContext):
