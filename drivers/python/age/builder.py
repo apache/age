@@ -3,37 +3,54 @@ from .gen.ageLexer import ageLexer
 from .gen.ageParser import ageParser
 from .gen.ageVisitor import ageVisitor
 from .models import *
+from .exceptions import *
 from antlr4 import *
+from antlr4.tree.Tree import *
+from decimal import Decimal
 
 class ResultHandler:
-    def handleRow(rawString):
+    def parse(ageData):
         pass
 
+def newResultHandler(query=""):
+    resultHandler = Antlr4ResultHandler(None, query)
+    return resultHandler
 
-def buildGraph(cursor, resultHandler:ResultHandler=None):
-    graph = Graph(cursor.query)
+# def buildGraph(cursor, resultHandler:ResultHandler=None):
+#     graph = Graph(cursor.query)
 
-    if resultHandler == None:
-        resultHandler = Antlr4ResultHandler(graph.getVertices(), cursor.query)
+#     if resultHandler == None:
+#         resultHandler = Antlr4ResultHandler(graph.getVertices(), cursor.query)
    
-    for record in cursor:
-        parsed = resultHandler.handleRow(record[0])
-        graph.append(parsed)
+#     for record in cursor:
+#         parsed = resultHandler.parse(record[0])
+#         graph.append(parsed)
 
-    return graph
+#     return graph
 
-def getRows(cursor):
-    vertexCache = dict()
-    resultHandler = Antlr4ResultHandler(vertexCache, cursor.query)
+# def getRows(cursor):
+#     vertexCache = dict()
+#     resultHandler = Antlr4ResultHandler(vertexCache, cursor.query)
     
-    for record in cursor:
-        yield resultHandler.handleRow(record[0])
+#     for record in cursor:
+#         yield resultHandler.parse(record[0])
     
-    vertexCache.clear()
+#     vertexCache.clear()
 
-def getSingle(cursor):
-    resultHandler = Antlr4ResultHandler(dict(), cursor.query)
-    return resultHandler.handleRow(cursor.fetchone()[0])
+
+# def getSingle(cursor):
+#     resultHandler = Antlr4ResultHandler(None, cursor.query)
+#     return resultHandler.parse(cursor.fetchone()[0])
+
+def parseAgeValue(value, cursor=None):
+    if value is None:
+        return None
+
+    resultHandler = Antlr4ResultHandler(None)
+    try:
+        return resultHandler.parse(value)
+    except Exception as ex:
+        raise AGTypeError(value)
 
 class Antlr4ResultHandler(ResultHandler):
     def __init__(self, vertexCache, query=None):
@@ -41,8 +58,8 @@ class Antlr4ResultHandler(ResultHandler):
         self.parser = ageParser(None)
         self.visitor = ResultVisitor(vertexCache)
 
-    def handleRow(self, rawString):
-        self.lexer.inputStream = InputStream(rawString)
+    def parse(self, ageData):
+        self.lexer.inputStream = InputStream(ageData)
         self.parser.setTokenStream(CommonTokenStream(self.lexer))
         self.parser.reset()
         tree = self.parser.ageout()
@@ -52,8 +69,8 @@ class Antlr4ResultHandler(ResultHandler):
 
 # print raw result String
 class DummyResultHandler(ResultHandler):
-    def handleRow(self, rawString):
-        print(rawString)
+    def parse(self, ageData):
+        print(ageData)
 
 # default ageout visitor
 class ResultVisitor(ageVisitor):
@@ -76,7 +93,7 @@ class ResultVisitor(ageVisitor):
         vid = dict["id"]
 
         vertex = None
-        if vid in self.vertexCache:
+        if self.vertexCache != None and vid in self.vertexCache :
             vertex = self.vertexCache[vid]
         else:
             vertex = Vertex()
@@ -84,6 +101,9 @@ class ResultVisitor(ageVisitor):
             vertex.label = dict["label"]
             vertex.properties = dict["properties"]
         
+        if self.vertexCache != None:
+            self.vertexCache[vid] = vertex
+
         return vertex
 
 
@@ -104,7 +124,6 @@ class ResultVisitor(ageVisitor):
 
     # Visit a parse tree produced by ageParser#path.
     def visitPath(self, ctx:ageParser.PathContext):
-        path = Path()
 
         children = []
         
@@ -114,9 +133,7 @@ class ResultVisitor(ageVisitor):
             if isinstance(child, ageParser.EdgeContext):
                 children.append(child.accept(self))
 
-        path.start = children[0]
-        path.rel = children[1]
-        path.end = children[2]
+        path = Path(children)
         
         return path
 
@@ -126,11 +143,10 @@ class ResultVisitor(ageVisitor):
         if isinstance(c, ageParser.PropertiesContext) or isinstance(c,ageParser.ArrContext):
             val = c.accept(self)
             return val
+        elif isinstance(c, TerminalNodeImpl):
+            return getScalar(c.symbol.type, c.getText())
         else:
-            val = c.getText().strip('"')
-            return val
-
-
+            return None
 
     # Visit a parse tree produced by ageParser#properties.
     def visitProperties(self, ctx:ageParser.PropertiesContext):
@@ -159,3 +175,28 @@ class ResultVisitor(ageVisitor):
                 li.append(val)
         return li
 
+
+def getScalar(agType, text):
+    if agType == ageParser.STRING:
+        return text.strip('"')
+    elif agType == ageParser.INTEGER:
+        return int(text)
+    elif agType == ageParser.FLOAT:
+        return float(text)
+    elif agType == ageParser.FLOAT_EXPR:
+        if text == 'NaN':
+            return float('nan')
+        elif text == '-Infinity':
+            return float('-inf')
+        elif text == 'Infinity':
+            return float('inf')
+        else:
+            return Exception("Unknown float expression:"+text)
+    elif agType == ageParser.BOOL:
+        return text == "true" or text=="True"
+    elif agType == ageParser.NUMERIC:
+        return Decimal(text[:len(text)-9])
+    elif agType == ageParser.NULL:
+        return None
+    else :
+        raise Exception("Unknown type:"+str(agType))

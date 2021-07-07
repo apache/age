@@ -15,6 +15,11 @@ pip install --no-binary :all: psycopg2
 pip install antlr4-python3-runtime
 
 ```
+### Test
+```
+python -m unittest -v test_age_py.py
+python -m unittest -v test_agtypes.py
+```
 
 ### Build from source
 ``` 
@@ -47,12 +52,10 @@ LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 ```
 
-### Test
-```
-python -m unittest -v test/test_age_py.py
-```
 ### Usage
-Go to [Jupyter Notebook](https://github.com/apache/incubator-age/drivers/python/blob/main/samples/apache-age-note.ipynb) in Samples.
+* If you are familiar with Psycopg2 driver : Go to [Jupyter Notebook : Basic Sample](samples/apache-age-basic.ipynb) 
+* Simpler way to access Apache AGE [AGE Sample](samples/apache-age-note.ipynb) in Samples.
+* Agtype converting samples: [Agtype Sample](samples/apache-age-agtypes.ipynb) in Samples.
 
 ### License
 Apache-2.0 License

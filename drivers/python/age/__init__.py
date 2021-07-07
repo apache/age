@@ -1,7 +1,7 @@
 from . import age
 from .age import *
 from .models import *
-from .builder import ResultHandler, DummyResultHandler, buildGraph, getRows, getSingle
+from .builder import ResultHandler, DummyResultHandler, parseAgeValue, newResultHandler
 from . import VERSION 
 
 def version():

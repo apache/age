@@ -1,3 +1,4 @@
+
 from setuptools import setup, find_packages
 from age import VERSION 
 
@@ -10,7 +11,7 @@ setup(
     description      = 'Python driver support for Apache AGE',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author           = 'Ikchan Kwon',
+    author           = 'rhizome',
     author_email     = 'rhizome.ai@gmail.com',
     url              = 'https://github.com/apache/incubator-age',
     license          = 'Apache2.0',

@@ -1,4 +1,4 @@
-# Generated from antlr/age.g4 by ANTLR 4.9.2
+# Generated from age.g4 by ANTLR 4.9
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
@@ -11,35 +11,37 @@ else:
 
 def serializedATN():
     with StringIO() as buf:
-        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\21")
-        buf.write("Y\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7\4\b")
+        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\24")
+        buf.write("[\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7\4\b")
         buf.write("\t\b\4\t\t\t\3\2\3\2\3\2\3\2\5\2\27\n\2\3\3\3\3\3\3\3")
         buf.write("\4\3\4\3\4\3\5\3\5\3\5\3\5\3\5\3\5\3\5\7\5&\n\5\f\5\16")
-        buf.write("\5)\13\5\3\5\3\5\3\5\3\6\3\6\3\6\3\6\3\6\3\6\3\6\5\6\65")
-        buf.write("\n\6\3\7\3\7\3\7\3\7\7\7;\n\7\f\7\16\7>\13\7\3\7\3\7\3")
-        buf.write("\7\3\7\5\7D\n\7\3\b\3\b\3\b\3\b\3\t\3\t\3\t\3\t\7\tN\n")
-        buf.write("\t\f\t\16\tQ\13\t\3\t\3\t\3\t\3\t\5\tW\n\t\3\t\2\2\n\2")
-        buf.write("\4\6\b\n\f\16\20\2\2\2^\2\26\3\2\2\2\4\30\3\2\2\2\6\33")
-        buf.write("\3\2\2\2\b\36\3\2\2\2\n\64\3\2\2\2\fC\3\2\2\2\16E\3\2")
-        buf.write("\2\2\20V\3\2\2\2\22\27\5\n\6\2\23\27\5\4\3\2\24\27\5\6")
-        buf.write("\4\2\25\27\5\b\5\2\26\22\3\2\2\2\26\23\3\2\2\2\26\24\3")
-        buf.write("\2\2\2\26\25\3\2\2\2\27\3\3\2\2\2\30\31\5\f\7\2\31\32")
-        buf.write("\7\f\2\2\32\5\3\2\2\2\33\34\5\f\7\2\34\35\7\r\2\2\35\7")
-        buf.write("\3\2\2\2\36\37\7\3\2\2\37\'\5\4\3\2 !\7\4\2\2!\"\5\6\4")
-        buf.write("\2\"#\7\4\2\2#$\5\4\3\2$&\3\2\2\2% \3\2\2\2&)\3\2\2\2")
-        buf.write("\'%\3\2\2\2\'(\3\2\2\2(*\3\2\2\2)\'\3\2\2\2*+\7\5\2\2")
-        buf.write("+,\7\16\2\2,\t\3\2\2\2-\65\7\17\2\2.\65\7\20\2\2/\65\5")
-        buf.write("\f\7\2\60\65\5\20\t\2\61\65\7\6\2\2\62\65\7\7\2\2\63\65")
-        buf.write("\7\b\2\2\64-\3\2\2\2\64.\3\2\2\2\64/\3\2\2\2\64\60\3\2")
-        buf.write("\2\2\64\61\3\2\2\2\64\62\3\2\2\2\64\63\3\2\2\2\65\13\3")
-        buf.write("\2\2\2\66\67\7\t\2\2\67<\5\16\b\289\7\4\2\29;\5\16\b\2")
-        buf.write(":8\3\2\2\2;>\3\2\2\2<:\3\2\2\2<=\3\2\2\2=?\3\2\2\2><\3")
-        buf.write("\2\2\2?@\7\n\2\2@D\3\2\2\2AB\7\t\2\2BD\7\n\2\2C\66\3\2")
-        buf.write("\2\2CA\3\2\2\2D\r\3\2\2\2EF\7\17\2\2FG\7\13\2\2GH\5\n")
-        buf.write("\6\2H\17\3\2\2\2IJ\7\3\2\2JO\5\n\6\2KL\7\4\2\2LN\5\n\6")
-        buf.write("\2MK\3\2\2\2NQ\3\2\2\2OM\3\2\2\2OP\3\2\2\2PR\3\2\2\2Q")
-        buf.write("O\3\2\2\2RS\7\5\2\2SW\3\2\2\2TU\7\3\2\2UW\7\5\2\2VI\3")
-        buf.write("\2\2\2VT\3\2\2\2W\21\3\2\2\2\t\26\'\64<COV")
+        buf.write("\5)\13\5\3\5\3\5\3\5\3\6\3\6\3\6\3\6\3\6\3\6\3\6\3\6\3")
+        buf.write("\6\5\6\67\n\6\3\7\3\7\3\7\3\7\7\7=\n\7\f\7\16\7@\13\7")
+        buf.write("\3\7\3\7\3\7\3\7\5\7F\n\7\3\b\3\b\3\b\3\b\3\t\3\t\3\t")
+        buf.write("\3\t\7\tP\n\t\f\t\16\tS\13\t\3\t\3\t\3\t\3\t\5\tY\n\t")
+        buf.write("\3\t\2\2\n\2\4\6\b\n\f\16\20\2\2\2b\2\26\3\2\2\2\4\30")
+        buf.write("\3\2\2\2\6\33\3\2\2\2\b\36\3\2\2\2\n\66\3\2\2\2\fE\3\2")
+        buf.write("\2\2\16G\3\2\2\2\20X\3\2\2\2\22\27\5\n\6\2\23\27\5\4\3")
+        buf.write("\2\24\27\5\6\4\2\25\27\5\b\5\2\26\22\3\2\2\2\26\23\3\2")
+        buf.write("\2\2\26\24\3\2\2\2\26\25\3\2\2\2\27\3\3\2\2\2\30\31\5")
+        buf.write("\f\7\2\31\32\7\t\2\2\32\5\3\2\2\2\33\34\5\f\7\2\34\35")
+        buf.write("\7\n\2\2\35\7\3\2\2\2\36\37\7\3\2\2\37\'\5\4\3\2 !\7\4")
+        buf.write("\2\2!\"\5\6\4\2\"#\7\4\2\2#$\5\4\3\2$&\3\2\2\2% \3\2\2")
+        buf.write("\2&)\3\2\2\2\'%\3\2\2\2\'(\3\2\2\2(*\3\2\2\2)\'\3\2\2")
+        buf.write("\2*+\7\5\2\2+,\7\13\2\2,\t\3\2\2\2-\67\7\r\2\2.\67\7\21")
+        buf.write("\2\2/\67\7\22\2\2\60\67\7\23\2\2\61\67\7\20\2\2\62\67")
+        buf.write("\7\16\2\2\63\67\7\17\2\2\64\67\5\f\7\2\65\67\5\20\t\2")
+        buf.write("\66-\3\2\2\2\66.\3\2\2\2\66/\3\2\2\2\66\60\3\2\2\2\66")
+        buf.write("\61\3\2\2\2\66\62\3\2\2\2\66\63\3\2\2\2\66\64\3\2\2\2")
+        buf.write("\66\65\3\2\2\2\67\13\3\2\2\289\7\6\2\29>\5\16\b\2:;\7")
+        buf.write("\4\2\2;=\5\16\b\2<:\3\2\2\2=@\3\2\2\2><\3\2\2\2>?\3\2")
+        buf.write("\2\2?A\3\2\2\2@>\3\2\2\2AB\7\7\2\2BF\3\2\2\2CD\7\6\2\2")
+        buf.write("DF\7\7\2\2E8\3\2\2\2EC\3\2\2\2F\r\3\2\2\2GH\7\r\2\2HI")
+        buf.write("\7\b\2\2IJ\5\n\6\2J\17\3\2\2\2KL\7\3\2\2LQ\5\n\6\2MN\7")
+        buf.write("\4\2\2NP\5\n\6\2OM\3\2\2\2PS\3\2\2\2QO\3\2\2\2QR\3\2\2")
+        buf.write("\2RT\3\2\2\2SQ\3\2\2\2TU\7\5\2\2UY\3\2\2\2VW\7\3\2\2W")
+        buf.write("Y\7\5\2\2XK\3\2\2\2XV\3\2\2\2Y\21\3\2\2\2\t\26\'\66>E")
+        buf.write("QX")
         return buf.getvalue()
 
 
@@ -53,14 +55,15 @@ class ageParser ( Parser ):
 
     sharedContextCache = PredictionContextCache()
 
-    literalNames = [ "<INVALID>", "'['", "','", "']'", "'true'", "'false'", 
-                     "'null'", "'{'", "'}'", "':'", "'::vertex'", "'::edge'", 
-                     "'::path'" ]
+    literalNames = [ "<INVALID>", "'['", "','", "']'", "'{'", "'}'", "':'", 
+                     "'::vertex'", "'::edge'", "'::path'", "'::numeric'", 
+                     "<INVALID>", "<INVALID>", "'null'" ]
 
     symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
-                      "<INVALID>", "<INVALID>", "KW_VERTEX", "KW_EDGE", 
-                      "KW_PATH", "STRING", "NUMBER", "WS" ]
+                      "<INVALID>", "<INVALID>", "<INVALID>", "ANNO_VERTEX", 
+                      "ANNO_EDGE", "ANNO_PATH", "ANNO_NUMERIC", "STRING", 
+                      "BOOL", "NULL", "NUMERIC", "INTEGER", "FLOAT", "FLOAT_EXPR", 
+                      "WS" ]
 
     RULE_ageout = 0
     RULE_vertex = 1
@@ -81,19 +84,22 @@ class ageParser ( Parser ):
     T__3=4
     T__4=5
     T__5=6
-    T__6=7
-    T__7=8
-    T__8=9
-    KW_VERTEX=10
-    KW_EDGE=11
-    KW_PATH=12
-    STRING=13
-    NUMBER=14
-    WS=15
+    ANNO_VERTEX=7
+    ANNO_EDGE=8
+    ANNO_PATH=9
+    ANNO_NUMERIC=10
+    STRING=11
+    BOOL=12
+    NULL=13
+    NUMERIC=14
+    INTEGER=15
+    FLOAT=16
+    FLOAT_EXPR=17
+    WS=18
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
-        self.checkVersion("4.9.2")
+        self.checkVersion("4.9")
         self._interp = ParserATNSimulator(self, self.atn, self.decisionsToDFA, self.sharedContextCache)
         self._predicates = None
 
@@ -101,7 +107,6 @@ class ageParser ( Parser ):
 
 
     class AgeoutContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -186,7 +191,6 @@ class ageParser ( Parser ):
 
 
     class VertexContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -196,8 +200,8 @@ class ageParser ( Parser ):
             return self.getTypedRuleContext(ageParser.PropertiesContext,0)
 
 
-        def KW_VERTEX(self):
-            return self.getToken(ageParser.KW_VERTEX, 0)
+        def ANNO_VERTEX(self):
+            return self.getToken(ageParser.ANNO_VERTEX, 0)
 
         def getRuleIndex(self):
             return ageParser.RULE_vertex
@@ -228,7 +232,7 @@ class ageParser ( Parser ):
             self.state = 22
             self.properties()
             self.state = 23
-            self.match(ageParser.KW_VERTEX)
+            self.match(ageParser.ANNO_VERTEX)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -239,7 +243,6 @@ class ageParser ( Parser ):
 
 
     class EdgeContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -249,8 +252,8 @@ class ageParser ( Parser ):
             return self.getTypedRuleContext(ageParser.PropertiesContext,0)
 
 
-        def KW_EDGE(self):
-            return self.getToken(ageParser.KW_EDGE, 0)
+        def ANNO_EDGE(self):
+            return self.getToken(ageParser.ANNO_EDGE, 0)
 
         def getRuleIndex(self):
             return ageParser.RULE_edge
@@ -281,7 +284,7 @@ class ageParser ( Parser ):
             self.state = 25
             self.properties()
             self.state = 26
-            self.match(ageParser.KW_EDGE)
+            self.match(ageParser.ANNO_EDGE)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -292,7 +295,6 @@ class ageParser ( Parser ):
 
 
     class PathContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -305,8 +307,8 @@ class ageParser ( Parser ):
                 return self.getTypedRuleContext(ageParser.VertexContext,i)
 
 
-        def KW_PATH(self):
-            return self.getToken(ageParser.KW_PATH, 0)
+        def ANNO_PATH(self):
+            return self.getToken(ageParser.ANNO_PATH, 0)
 
         def edge(self, i:int=None):
             if i is None:
@@ -365,7 +367,7 @@ class ageParser ( Parser ):
             self.state = 40
             self.match(ageParser.T__2)
             self.state = 41
-            self.match(ageParser.KW_PATH)
+            self.match(ageParser.ANNO_PATH)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -376,7 +378,6 @@ class ageParser ( Parser ):
 
 
     class ValueContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -385,8 +386,23 @@ class ageParser ( Parser ):
         def STRING(self):
             return self.getToken(ageParser.STRING, 0)
 
-        def NUMBER(self):
-            return self.getToken(ageParser.NUMBER, 0)
+        def INTEGER(self):
+            return self.getToken(ageParser.INTEGER, 0)
+
+        def FLOAT(self):
+            return self.getToken(ageParser.FLOAT, 0)
+
+        def FLOAT_EXPR(self):
+            return self.getToken(ageParser.FLOAT_EXPR, 0)
+
+        def NUMERIC(self):
+            return self.getToken(ageParser.NUMERIC, 0)
+
+        def BOOL(self):
+            return self.getToken(ageParser.BOOL, 0)
+
+        def NULL(self):
+            return self.getToken(ageParser.NULL, 0)
 
         def properties(self):
             return self.getTypedRuleContext(ageParser.PropertiesContext,0)
@@ -421,7 +437,7 @@ class ageParser ( Parser ):
         localctx = ageParser.ValueContext(self, self._ctx, self.state)
         self.enterRule(localctx, 8, self.RULE_value)
         try:
-            self.state = 50
+            self.state = 52
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [ageParser.STRING]:
@@ -429,35 +445,45 @@ class ageParser ( Parser ):
                 self.state = 43
                 self.match(ageParser.STRING)
                 pass
-            elif token in [ageParser.NUMBER]:
+            elif token in [ageParser.INTEGER]:
                 self.enterOuterAlt(localctx, 2)
                 self.state = 44
-                self.match(ageParser.NUMBER)
+                self.match(ageParser.INTEGER)
                 pass
-            elif token in [ageParser.T__6]:
+            elif token in [ageParser.FLOAT]:
                 self.enterOuterAlt(localctx, 3)
                 self.state = 45
+                self.match(ageParser.FLOAT)
+                pass
+            elif token in [ageParser.FLOAT_EXPR]:
+                self.enterOuterAlt(localctx, 4)
+                self.state = 46
+                self.match(ageParser.FLOAT_EXPR)
+                pass
+            elif token in [ageParser.NUMERIC]:
+                self.enterOuterAlt(localctx, 5)
+                self.state = 47
+                self.match(ageParser.NUMERIC)
+                pass
+            elif token in [ageParser.BOOL]:
+                self.enterOuterAlt(localctx, 6)
+                self.state = 48
+                self.match(ageParser.BOOL)
+                pass
+            elif token in [ageParser.NULL]:
+                self.enterOuterAlt(localctx, 7)
+                self.state = 49
+                self.match(ageParser.NULL)
+                pass
+            elif token in [ageParser.T__3]:
+                self.enterOuterAlt(localctx, 8)
+                self.state = 50
                 self.properties()
                 pass
             elif token in [ageParser.T__0]:
-                self.enterOuterAlt(localctx, 4)
-                self.state = 46
+                self.enterOuterAlt(localctx, 9)
+                self.state = 51
                 self.arr()
-                pass
-            elif token in [ageParser.T__3]:
-                self.enterOuterAlt(localctx, 5)
-                self.state = 47
-                self.match(ageParser.T__3)
-                pass
-            elif token in [ageParser.T__4]:
-                self.enterOuterAlt(localctx, 6)
-                self.state = 48
-                self.match(ageParser.T__4)
-                pass
-            elif token in [ageParser.T__5]:
-                self.enterOuterAlt(localctx, 7)
-                self.state = 49
-                self.match(ageParser.T__5)
                 pass
             else:
                 raise NoViableAltException(self)
@@ -472,7 +498,6 @@ class ageParser ( Parser ):
 
 
     class PropertiesContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -511,37 +536,37 @@ class ageParser ( Parser ):
         self.enterRule(localctx, 10, self.RULE_properties)
         self._la = 0 # Token type
         try:
-            self.state = 65
+            self.state = 67
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,4,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 52
-                self.match(ageParser.T__6)
-                self.state = 53
+                self.state = 54
+                self.match(ageParser.T__3)
+                self.state = 55
                 self.pair()
-                self.state = 58
+                self.state = 60
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 while _la==ageParser.T__1:
-                    self.state = 54
+                    self.state = 56
                     self.match(ageParser.T__1)
-                    self.state = 55
+                    self.state = 57
                     self.pair()
-                    self.state = 60
+                    self.state = 62
                     self._errHandler.sync(self)
                     _la = self._input.LA(1)
 
-                self.state = 61
-                self.match(ageParser.T__7)
+                self.state = 63
+                self.match(ageParser.T__4)
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 63
-                self.match(ageParser.T__6)
-                self.state = 64
-                self.match(ageParser.T__7)
+                self.state = 65
+                self.match(ageParser.T__3)
+                self.state = 66
+                self.match(ageParser.T__4)
                 pass
 
 
@@ -555,7 +580,6 @@ class ageParser ( Parser ):
 
 
     class PairContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -594,11 +618,11 @@ class ageParser ( Parser ):
         self.enterRule(localctx, 12, self.RULE_pair)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 67
-            self.match(ageParser.STRING)
-            self.state = 68
-            self.match(ageParser.T__8)
             self.state = 69
+            self.match(ageParser.STRING)
+            self.state = 70
+            self.match(ageParser.T__5)
+            self.state = 71
             self.value()
         except RecognitionException as re:
             localctx.exception = re
@@ -610,7 +634,6 @@ class ageParser ( Parser ):
 
 
     class ArrContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -649,36 +672,36 @@ class ageParser ( Parser ):
         self.enterRule(localctx, 14, self.RULE_arr)
         self._la = 0 # Token type
         try:
-            self.state = 84
+            self.state = 86
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,6,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 71
+                self.state = 73
                 self.match(ageParser.T__0)
-                self.state = 72
+                self.state = 74
                 self.value()
-                self.state = 77
+                self.state = 79
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 while _la==ageParser.T__1:
-                    self.state = 73
+                    self.state = 75
                     self.match(ageParser.T__1)
-                    self.state = 74
+                    self.state = 76
                     self.value()
-                    self.state = 79
+                    self.state = 81
                     self._errHandler.sync(self)
                     _la = self._input.LA(1)
 
-                self.state = 80
+                self.state = 82
                 self.match(ageParser.T__2)
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 82
+                self.state = 84
                 self.match(ageParser.T__0)
-                self.state = 83
+                self.state = 85
                 self.match(ageParser.T__2)
                 pass
 

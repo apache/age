@@ -10,31 +10,34 @@ ageout
    ;
 
 vertex
-   : properties KW_VERTEX
+   : properties ANNO_VERTEX
    ;
 
 edge
-   : properties KW_EDGE
+   : properties ANNO_EDGE
    ;
 
 path
-   : '[' vertex (',' edge ',' vertex)* ']' KW_PATH
+   : '[' vertex (',' edge ',' vertex)* ']' ANNO_PATH
    ;
 
-//Keywords
-KW_VERTEX : '::vertex';
-KW_EDGE : '::edge';
-KW_PATH : '::path';
+//ANNOTATIONS
+ANNO_VERTEX : '::vertex';
+ANNO_EDGE : '::edge';
+ANNO_PATH : '::path';
+ANNO_NUMERIC : '::numeric';
 
 // Common Values Rule
 value
    : STRING
-   | NUMBER
+   | INTEGER
+   | FLOAT
+   | FLOAT_EXPR
+   | NUMERIC
+   | BOOL
+   | NULL
    | properties
    | arr
-   | 'true'
-   | 'false'
-   | 'null'
    ;
 
 properties
@@ -55,6 +58,14 @@ STRING
    : '"' (ESC | SAFECODEPOINT)* '"'
    ;
 
+BOOL
+   : 'true'|'false'
+   ;
+
+NULL
+   : 'null' 
+   ;
+
 
 fragment ESC
    : '\\' (["\\/bfnrt] | UNICODE)
@@ -69,24 +80,42 @@ fragment SAFECODEPOINT
    : ~ ["\\\u0000-\u001F]
    ;
 
-
-NUMBER
-   : '-'? INT ('.' [0-9] +)? EXP?
+NUMERIC
+   : '-'? INT ('.' [0-9] +)? EXP? ANNO_NUMERIC
    ;
 
+INTEGER
+  : '-'? INT
+  ;
+
+FLOAT
+   : '-'? INT '.' DIGITS
+   | '-'? INT '.' DIGITS? EXP
+   ;
+
+FLOAT_EXPR
+   : '-'? 'Infinity'
+   | 'NaN'
+   ;
 
 fragment INT
-   : '0' | [1-9] [0-9]*
+   : '0' | [1-9] DIGITS
    ;
 
-// no leading zeros
-
+fragment DIGITS
+   : [0-9]*
+   ;
+   
 fragment EXP
-   : [Ee] [+\-]? INT
-   ;
+  : [Ee][+-]? [0-9]+
+  ;
+
 
 // \- since - means "range" inside [...]
 
 WS
    : [ \t\n\r] + -> skip
    ;
+
+// -----------------------------------
+

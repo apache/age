@@ -45,15 +45,29 @@ class AGObj:
 
 
 class Path(AGObj):
-    def __init__(self, start=None, rel=None, end=None) -> None:
-        self.start = start
-        self.rel = rel
-        self.end = end
+    entities = []
+    def __init__(self, entities=None) -> None:
+        self.entities = entities
 
     @property
     def gtype(self):
         return TP_PATH
 
+    def __iter__(self):
+        return self.entities.__iter__()
+
+    def __len__(self):
+        return self.entities.__len__()
+
+    def __getitem__(self,index):
+        return self.entities[index]
+        
+    def size(self):
+        return self.entities.__len__()
+
+    def append(self, agObj:AGObj ):
+        self.entities.append(agObj)
+    
     def __str__(self) -> str:
         return self.toString()
 
@@ -63,40 +77,29 @@ class Path(AGObj):
     def toString(self) -> str: 
         buf = StringIO()
         buf.write("[")
-        if self.start != None:
-            self.start._toString(buf)
-   
-        buf.write(",")
-        if self.rel != None:
-            self.rel._toString(buf)
-            
-        buf.write(",")
-
-        if self.end != None:
-            self.end._toString(buf)
-
+        max = len(self.entities)
+        idx = 0
+        while idx < max:
+            if idx > 0:
+                buf.write(",")
+            self.entities[idx]._toString(buf)
+            idx += 1
         buf.write("]::PATH")
 
         return buf.getvalue()
 
     def toJson(self) -> str:
         buf = StringIO()
-        buf.write("{\"gtype\": \"path\", ")
+        buf.write("{\"gtype\": \"path\", \"elements\": [")
         
-        buf.write("\"start\": ")
-        if self.start != None:
-            self.start._toJson(buf)
-
-        buf.write(", \"rel\": ")
-        if self.rel != None:
-            self.rel._toJson(buf)
-            
-        buf.write(", \"end\": ")
-
-        if self.end != None:
-            self.end._toJson(buf)
-
-        buf.write("}")
+        max = len(self.entities)
+        idx = 0
+        while idx < max:
+            if idx > 0:
+                buf.write(",")
+            self.entities[idx]._toJson(buf)
+            idx += 1
+        buf.write("]}")
 
         return buf.getvalue()
 
@@ -171,11 +174,11 @@ class Edge(AGObj):
     def extraStrFormat(node, buf):
         if node.start_id != None:
             buf.write(", start_id:")
-            buf.write(node.start_id)
+            buf.write(str(node.start_id))
 
         if node.end_id != None:
             buf.write(", end_id:")
-            buf.write(node.end_id)
+            buf.write(str(node.end_id))
 
 
     def toString(self) -> str: 
@@ -187,12 +190,12 @@ class Edge(AGObj):
     def extraJsonFormat(node, buf):
         if node.start_id != None:
             buf.write(", \"start_id\": \"")
-            buf.write(node.start_id)
+            buf.write(str(node.start_id))
             buf.write("\"")
 
         if node.end_id != None:
             buf.write(", \"end_id\": \"")
-            buf.write(node.end_id)
+            buf.write(str(node.end_id))
             buf.write("\"")
 
     def toJson(self) -> str:
@@ -216,15 +219,15 @@ def _nodeToString(node, buf, extraFormatter=None):
         
     if node.id != None:
         buf.write(", id:")
-        buf.write(node.id)
+        buf.write(str(node.id))
         
     if node.properties != None:
         buf.write(", properties:{")
         for k,v in node.properties.items():
             buf.write(k)
             buf.write(": ")
-            buf.write(v)
-            buf.write(",")
+            buf.write(str(v))
+            buf.write(", ")
         buf.write("}")
 
     if extraFormatter != None:
@@ -256,7 +259,7 @@ def _nodeToJson(node, buf, extraFormatter=None):
         
     if node.id != None:
         buf.write(", \"id\":")
-        buf.write(node.id)
+        buf.write(str(node.id))
         
     if extraFormatter != None:
         extraFormatter(node, buf)
@@ -267,8 +270,8 @@ def _nodeToJson(node, buf, extraFormatter=None):
             buf.write("\"")
             buf.write(k)
             buf.write("\": \"")
-            buf.write(v)
-            buf.write("\",")
+            buf.write(str(v))
+            buf.write("\", ")
         buf.write("}")
     buf.write("}")
     

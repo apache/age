@@ -1,6 +1,13 @@
 
 from psycopg2.errors import *
 
+class AgeNotSet(Exception):
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self) :
+        return 'AGE extension is not set.' 
+
 class GraphNotFound(Exception):
     def __init__(self, name):
         self.name = name
@@ -38,3 +45,11 @@ class SqlExcutionError(Exception):
     
     def __repr__(self) :
         return 'SqlExcution [' + self.msg + ']'  
+
+class AGTypeError(Exception):
+    def __init__(self, msg, cause):
+        self.msg = msg
+        self.cause = cause
+        super().__init__(msg, cause)
+
+
