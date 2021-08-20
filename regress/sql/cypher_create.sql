@@ -274,8 +274,35 @@ SELECT * FROM cypher('cypher_create', $$
 $$) as (a agtype);
 
 --
+-- check the cypher CREATE clause inside an INSERT INTO
+--
+CREATE TABLE simple_path (u agtype, e agtype, v agtype);
+
+INSERT INTO simple_path(SELECT * FROM cypher('cypher_create',
+    $$CREATE (u)-[e:knows]->(v) return u, e, v
+    $$) AS (u agtype, e agtype, v agtype));
+
+SELECT count(*) FROM simple_path;
+
+--
+-- check the cypher CREATE clause inside of a BEGIN/END/COMMIT block
+--
+BEGIN;
+SELECT * FROM cypher('cypher_create', $$ CREATE (a:Part {part_num: '670'}) $$) as (a agtype);
+SELECT * FROM cypher('cypher_create', $$ MATCH (a:Part) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_create', $$ CREATE (a:Part {part_num: '671'}) $$) as (a agtype);
+SELECT * FROM cypher('cypher_create', $$ CREATE (a:Part {part_num: '672'}) $$) as (a agtype);
+SELECT * FROM cypher('cypher_create', $$ MATCH (a:Part) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_create', $$ CREATE (a:Part {part_num: '673'}) $$) as (a agtype);
+SELECT * FROM cypher('cypher_create', $$ MATCH (a:Part) RETURN a $$) as (a agtype);
+END;
+
+--
 -- Clean up
 --
+DROP TABLE simple_path;
 DROP FUNCTION create_test;
 SELECT drop_graph('cypher_create', true);
 
