@@ -1,5 +1,5 @@
-# ANTLR4 Python3 Query Result data parser generation rules for apache-age-python
-Python driver for Apache AGE, graph extention for PostgreSQL.
+# ANTLR4 Go Query Result data parser generation rules for apache-age-go
+Go driver for Apache AGE, graph extention for PostgreSQL.
 
 
 ### Build

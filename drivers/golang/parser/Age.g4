@@ -24,11 +24,14 @@ path
 KW_VERTEX : '::vertex';
 KW_EDGE : '::edge';
 KW_PATH : '::path';
+KW_NUMERIC : '::numeric';
 
 // Common Values Rule
 value
    : STRING
    | NUMBER
+   | NUMERIC
+   | FLOAT_EXPR
    | BOOL
    | NULL
    | properties
@@ -80,6 +83,14 @@ NUMBER
    : '-'? INT ('.' [0-9] +)? EXP?
    ;
 
+FLOAT_EXPR
+   : 'NaN' | '-Infinity' | 'Infinity'
+   ;
+
+NUMERIC
+   : '-'? INT ('.' [0-9] +)? EXP? KW_NUMERIC
+   ;
+
 
 fragment INT
    : '0' | [1-9] [0-9]*
@@ -96,3 +107,4 @@ fragment EXP
 WS
    : [ \t\n\r] + -> skip
    ;
+   

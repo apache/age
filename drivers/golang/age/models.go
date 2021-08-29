@@ -1,4 +1,4 @@
-package main
+package age
 
 import (
 	"bytes"
@@ -20,7 +20,9 @@ const (
 	G_INT
 	G_INTBIG
 	G_FLOAT
+	G_FLOATBIG
 	G_BOOL
+	G_NULL
 	G_MAP
 	G_ARR
 )
@@ -30,9 +32,10 @@ var _TpE = reflect.TypeOf(&Edge{})
 var _TpP = reflect.TypeOf(&Path{})
 var _TpMP = reflect.TypeOf(&MapPath{})
 var _TpStr = reflect.TypeOf(string(""))
-var _TpInt = reflect.TypeOf(int(0))
+var _TpInt = reflect.TypeOf(int64(0))
 var _TpIntBig = reflect.TypeOf(big.NewInt(0))
 var _TpFloat = reflect.TypeOf(float64(0))
+var _TpFloatBig = reflect.TypeOf(big.NewFloat(0))
 var _TpBool = reflect.TypeOf(bool(false))
 var _TpMap = reflect.TypeOf(map[string]interface{}{})
 var _TpArr = reflect.TypeOf([]interface{}{})
@@ -55,15 +58,21 @@ type SimpleEntity struct {
 }
 
 func NewSimpleEntity(value interface{}) *SimpleEntity {
+	if value == nil {
+		return &SimpleEntity{typ: G_NULL, value: nil}
+	}
+
 	switch value.(type) {
 	case string:
 		return &SimpleEntity{typ: G_STR, value: value}
-	case int:
+	case int64:
 		return &SimpleEntity{typ: G_INT, value: value}
 	case *big.Int:
 		return &SimpleEntity{typ: G_INTBIG, value: value}
 	case float64:
 		return &SimpleEntity{typ: G_FLOAT, value: value}
+	case *big.Float:
+		return &SimpleEntity{typ: G_FLOATBIG, value: value}
 	case bool:
 		return &SimpleEntity{typ: G_BOOL, value: value}
 	case map[string]interface{}:
@@ -77,6 +86,10 @@ func NewSimpleEntity(value interface{}) *SimpleEntity {
 
 func (e *SimpleEntity) GType() GTYPE {
 	return e.typ
+}
+
+func (e *SimpleEntity) IsNull() bool {
+	return e.value == nil
 }
 
 func (e *SimpleEntity) Value() interface{} {
@@ -99,8 +112,16 @@ func (e *SimpleEntity) AsInt64() int64 {
 	return e.value.(int64)
 }
 
+func (e *SimpleEntity) AsBigInt() *big.Int {
+	return e.value.(*big.Int)
+}
+
 func (e *SimpleEntity) AsFloat() float64 {
 	return e.value.(float64)
+}
+
+func (e *SimpleEntity) AsBigFloat() *big.Float {
+	return e.value.(*big.Float)
 }
 
 func (e *SimpleEntity) AsBool() bool {
@@ -136,6 +157,11 @@ func (n *LabeledEntity) Label() string {
 
 func (n *LabeledEntity) Prop(key string) interface{} {
 	return n.props[key]
+}
+
+// return properties
+func (n *LabeledEntity) Props() map[string]interface{} {
+	return n.props
 }
 
 type Vertex struct {

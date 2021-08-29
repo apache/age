@@ -1,4 +1,4 @@
-package main
+package age
 
 import (
 	"fmt"
@@ -87,7 +87,7 @@ func (v *MapperVisitor) VisitPath(ctx *parser.PathContext) interface{} {
 func (v *MapperVisitor) VisitVertex(ctx *parser.VertexContext) interface{} {
 	propCtx := ctx.Properties()
 	props := propCtx.Accept(v).(map[string]interface{})
-	vid := int64(props["id"].(int))
+	vid := int64(props["id"].(int64))
 	vertex, ok := v.vcache[vid]
 
 	var err error
@@ -107,12 +107,12 @@ func (v *MapperVisitor) VisitVertex(ctx *parser.VertexContext) interface{} {
 func (v *MapperVisitor) VisitEdge(ctx *parser.EdgeContext) interface{} {
 	propCtx := ctx.Properties()
 	props := propCtx.Accept(v).(map[string]interface{})
-	vid := int64(props["id"].(int))
+	vid := props["id"].(int64)
 	edge, ok := v.vcache[vid]
 
 	var err error
 	if !ok {
-		edge, err = v.mapEdge(vid, props["label"].(string), int64(props["start_id"].(int)), int64(props["end_id"].(int)),
+		edge, err = v.mapEdge(vid, props["label"].(string), props["start_id"].(int64), props["end_id"].(int64),
 			props["properties"].(map[string]interface{}))
 		if err != nil {
 			panic(err)

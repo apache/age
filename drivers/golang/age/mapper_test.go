@@ -1,4 +1,4 @@
-package main
+package age
 
 import (
 	"fmt"
@@ -10,12 +10,12 @@ import (
 
 type VPerson struct {
 	Name   string
-	Age    int
+	Age    int64
 	Weight float64
 }
 
 type EWorkWith struct {
-	Weight int
+	Weight int64
 }
 
 func TestPathMapping(t *testing.T) {
@@ -51,7 +51,7 @@ func TestPathMapping(t *testing.T) {
 	assert.Equal(t, p1.Get(2).(VPerson).Name, p2.Get(0).(VPerson).Name)
 	assert.Equal(t, p2.Get(0).(VPerson).Name, p3.Get(0).(VPerson).Name)
 
-	assert.Equal(t, p1.Get(1).(EWorkWith).Weight, 3)
-	assert.Equal(t, p2.Get(1).(EWorkWith).Weight, 3)
-	assert.Equal(t, p3.Get(1).(EWorkWith).Weight, 5)
+	assert.Equal(t, p1.Get(1).(EWorkWith).Weight, int64(3))
+	assert.Equal(t, p2.Get(1).(EWorkWith).Weight, int64(3))
+	assert.Equal(t, p3.Get(1).(EWorkWith).Weight, int64(5))
 }
