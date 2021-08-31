@@ -19,9 +19,10 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 ## Latest happenings 
 
-- The first official Apache release has been released, [Apache AGE 0.3.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.3.0.rc0-incubating).
+- Latest Apache AGE release, [Apache AGE 0.5.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.5.0).
 - The latest Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
 - The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
+- Send all your comments and inquiries to the user mailing list, users@age.apache.org.
 
 ## Installation
 
@@ -29,9 +30,9 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 - [Use a docker image - alpine ver.](https://hub.docker.com/r/sorrell/agensgraph-extension-alpine)
 - [Installing from source](https://age.apache.org/#)
 
-## Viewer Tools in AGE
+## Graph visualization tool for AGE
 
-### AGViewer : https://github.com/bitnine-oss/AGViewer.git
+Apache AGE Viewer is a subproject of the Apache AGE incubating project:  https://github.com/apache/incubator-age-viewer
 
 - This is a visualization tool.
 After AGE Extension Installation
