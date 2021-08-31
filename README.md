@@ -13,8 +13,8 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 ## Overview
 
 - **Apache AGE is currently being developed for the PostgreSQL 11 release** and will support PostgreSQL 12 and 13 in 2021 and all the future releases of PostgreSQL.
-- Apache AGE supports the openCypher graph query language and label hierarchy.
-- Apache AGE enables querying multiple graphs at the same time. This will allow a user to query two or more graphs at once with cypher, decide how to merge them and get the desired query outputs.
+- Apache AGE supports the openCypher graph query language.
+- Apache AGE enables querying multiple graphs at the same time.
 - Apache AGE will be enhanced with an aim to support all of the key features of AgensGraph (PostgreSQL fork extended with graph DB functionality).
 
 ## Latest happenings 
