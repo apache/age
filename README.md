@@ -21,8 +21,8 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 - Please send all your comments and inquiries to the Apache AGE user mailing list, users@age.apache.org.
 - Latest Apache AGE release, [Apache AGE 0.5.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.5.0).
-- The latest Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
-- The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
+- Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
+- Please check out the [Apache AGE website](http://age.apache.org/) for the roadmap.
 
 ## Installation
 
