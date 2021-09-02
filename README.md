@@ -26,7 +26,7 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 ## Installation
 
-- [Installing from the Docker image - Apache AGE 0.5.0 incubating](https://hub.docker.com/r/joefagan/incubator-age)
+- [Installing from the Docker image for the latest Apache AGE 0.5.0](https://hub.docker.com/r/joefagan/incubator-age)
 - [Installing from the source](https://age.apache.org/#)
 
 ## Graph visualization tool for AGE
