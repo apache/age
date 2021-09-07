@@ -143,7 +143,6 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
     if (estate->es_output_cid == 0)
         estate->es_output_cid = estate->es_snapshot->curcid;
 
-    CommandCounterIncrement();
     Increment_Estate_CommandId(estate);
 }
 
@@ -197,55 +196,59 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *slot;
+    bool terminal = CYPHER_CLAUSE_IS_TERMINAL(css->flags);
+    bool used = false;
 
-    if (CYPHER_CLAUSE_IS_TERMINAL(css->flags))
+    /*
+     * If the CREATE clause was the final cypher clause written then we aren't
+     * returning anything from this result node. So the exec_cypher_create
+     * function will only be called once. Therefore we will process all tuples
+     * from the subtree at once.
+     */
+    do
     {
-        /*
-         * If the CREATE clause was the final cypher clause written
-         * then we aren't returning anything from this result node.
-         * So the exec_cypher_create function will only be called once.
-         * Therefore we will process all tuples from the subtree at once.
-         */
-        while(true)
-        {
-            //Process the subtree first
-            Decrement_Estate_CommandId(estate)
-            slot = ExecProcNode(node->ss.ps.lefttree);
-            Increment_Estate_CommandId(estate)
-
-            if (TupIsNull(slot))
-                break;
-
-            // setup the scantuple that the process_pattern needs
-            econtext->ecxt_scantuple =
-                node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
-
-            process_pattern(css);
-        }
-
-        return NULL;
-    }
-    else
-    {
-        //Process the subtree first
+        /*Process the subtree first */
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
         Increment_Estate_CommandId(estate)
-
+        /* break when there are no tuples */
         if (TupIsNull(slot))
-            return NULL;
-
-        // setup the scantuple that the process_delete_list needs
+        {
+            break;
+        }
+        /* setup the scantuple that the process_pattern needs */
         econtext->ecxt_scantuple =
             node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
-
         process_pattern(css);
-
-        econtext->ecxt_scantuple =
-            ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
-
-        return ExecProject(node->ss.ps.ps_ProjInfo);
+        /*
+         * This may not be necessary. If we have an empty pattern, nothing was
+         * inserted and the current command Id was not used. So, only flag it
+         * if there is a non empty pattern.
+         */
+        if (list_length(css->pattern) > 0)
+        {
+            /* the current command Id has been used */
+            used = true;
+        }
+    } while (terminal);
+    /*
+     * If the current command Id wasn't used, nothing was inserted and we're
+     * done.
+     */
+    if (!used)
+    {
+        return NULL;
     }
+    /* update the current command Id */
+    CommandCounterIncrement();
+    /* if this was a terminal CREATE just return NULL */
+    if (terminal)
+    {
+        return NULL;
+    }
+
+    econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
+    return ExecProject(node->ss.ps.ps_ProjInfo);
 }
 
 static void end_cypher_create(CustomScanState *node)
@@ -324,6 +327,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     ResultRelInfo *resultRelInfo = node->resultRelInfo;
+    ResultRelInfo *old_estate_es_result_relation_info = NULL;
     TupleTableSlot *elemTupleSlot = node->elemTupleSlot;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     Datum id;
@@ -368,6 +372,10 @@ static void create_edge(cypher_create_custom_scan_state *css,
      *
      * Note: This obliterates what was their previously
      */
+
+    /* save the old result relation info */
+    old_estate_es_result_relation_info = estate->es_result_relation_info;
+
     estate->es_result_relation_info = resultRelInfo;
 
     ExecClearTuple(elemTupleSlot);
@@ -393,6 +401,9 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
     // Insert the new edge
     insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+
+    /* restore the old result relation info */
+    estate->es_result_relation_info = old_estate_es_result_relation_info;
 
     /*
      * When the edge is used by clauses higher in the execution tree
@@ -447,12 +458,18 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
      */
     if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
     {
+        ResultRelInfo *old_estate_es_result_relation_info = NULL;
+
         /*
          * Set estate's result relation to the vertex's result
          * relation.
          *
          * Note: This obliterates what was their previously
          */
+
+        /* save the old result relation info */
+        old_estate_es_result_relation_info = estate->es_result_relation_info;
+
         estate->es_result_relation_info = resultRelInfo;
 
         ExecClearTuple(elemTupleSlot);
@@ -470,6 +487,9 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
         // Insert the new vertex
         insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+
+        /* restore the old result relation info */
+        estate->es_result_relation_info = old_estate_es_result_relation_info;
 
         /*
          * When the vertex is used by clauses higher in the execution tree
@@ -494,12 +514,13 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             // append to the path list
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
             {
-                css->path_values = lappend(css->path_values, DatumGetPointer(result));
+                css->path_values = lappend(css->path_values,
+                                           DatumGetPointer(result));
             }
 
             /*
-             * Put the vertex in the correct spot in the scantuple, so parent execution
-             * nodes can reference the newly created variable.
+             * Put the vertex in the correct spot in the scantuple, so parent
+             * execution nodes can reference the newly created variable.
              */
             if (CYPHER_TARGET_NODE_IS_VARIABLE(node->flags))
             {
@@ -537,27 +558,30 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         id = GRAPHID_GET_DATUM(id_value->val.int_value);
 
         /*
-         * Its possible the variable has already been deleted. There are two ways
-         * this can happen. One is the query explicitly deleted the variable, the
-         * is_deleted flag will catch that. However, it is possible the user deleted
-         * the vertex using another variable name. We need to scan the table to find
-         * the vertex's current status relative to this CREATE clause. If the variable
-         * was initially created in this clause, we can skip this check, because the
-         * transaction system guarantees that nothing can happen to that tuple, as
-         * far as we are concerned with at this time.
+         * Its possible the variable has already been deleted. There are two
+         * ways this can happen. One is the query explicitly deleted the
+         * variable, the is_deleted flag will catch that. However, it is
+         * possible the user deleted the vertex using another variable name. We
+         * need to scan the table to find the vertex's current status relative
+         * to this CREATE clause. If the variable was initially created in this
+         * clause, we can skip this check, because the transaction system
+         * guarantees that nothing can happen to that tuple, as far as we are
+         * concerned with at this time.
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
             if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-                     errmsg("vertex assigned to variable %s was deleted", node->variable_name)));
+                     errmsg("vertex assigned to variable %s was deleted",
+                            node->variable_name)));
         }
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
         {
             Datum vertex = scanTupleSlot->tts_values[node->tuple_position - 1];
-            css->path_values = lappend(css->path_values, DatumGetPointer(vertex));
+            css->path_values = lappend(css->path_values,
+                                       DatumGetPointer(vertex));
         }
     }
 
@@ -616,7 +640,8 @@ static bool entity_exists(EState *estate, Oid graph_oid, graphid id)
  * constraints have not been violated.
  */
 static HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
-                                      TupleTableSlot *elemTupleSlot, EState *estate)
+                                     TupleTableSlot *elemTupleSlot,
+                                     EState *estate)
 {
     HeapTuple tuple;
 
@@ -629,8 +654,8 @@ static HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
         ExecConstraints(resultRelInfo, elemTupleSlot, estate);
 
     // Insert the tuple normally
-    heap_insert(resultRelInfo->ri_RelationDesc, tuple, estate->es_output_cid,
-                0, NULL);
+    heap_insert(resultRelInfo->ri_RelationDesc, tuple,
+                GetCurrentCommandId(true), 0, NULL);
 
     // Insert index entries for the tuple
     if (resultRelInfo->ri_NumIndices > 0)

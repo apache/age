@@ -10,6 +10,14 @@
 
 Apache AGE is a PostgreSQL Extension that provides graph database functionality. AGE is an acronym for A Graph Extension, and is inspired by Bitnine's fork of PostgreSQL 10, AgensGraph, which is a multi-model database. The goal of the project is to create single storage that can handle both relational and graph model data so that users can use standard ANSI SQL along with openCypher, the Graph query language.
 
+A graph consists of a set of vertices (also called nodes) and edges, where each individual vertex and edge possesses a map of properties. A vertex is the basic object of a graph, that can exist independently of everything else in the graph. An edge creates a directed connection between two vertices. A graph database is simply composed of vertices and edges. This type of database is useful when the meaning is in the relationships between the data. Relational databases can easily handle direct relationships, but indirect relationships are more difficult to deal with in relational databases. A graph database stores relationship information as a first-class entity. Apache AGE gives you the best of both worlds, simultaneously.
+
+Apache AGE is:
+
+Powerful -- AGE adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
+Flexible -- AGE allows you to perform openCypher queries, which make complex queries much easier to write.
+Intelligent -- AGE allows you to perform graph queries that are the basis for many next level web services such as fraud & intrustion detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management and more.
+
 ## Overview
 
 - **Apache AGE is currently being developed for the PostgreSQL 11 release** and will support PostgreSQL 12 and 13 in 2021 and all the future releases of PostgreSQL.
@@ -19,7 +27,7 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 
 ## Latest happenings 
 
-- The first official Apache release has been released, [Apache AGE 0.3.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.3.0.rc0-incubating).
+- Latest Apache AGE release, [Apache AGE 0.5.0 (incubating)](https://github.com/apache/incubator-age/releases/tag/v0.5.0).
 - The latest Apache AGE documentation is now available at [here](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
 - The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
 - Send all your comments and inquiries to the user mailing list, users@age.apache.org.
@@ -30,9 +38,9 @@ Apache AGE is a PostgreSQL Extension that provides graph database functionality.
 - [Use a docker image - alpine ver.](https://hub.docker.com/r/sorrell/agensgraph-extension-alpine)
 - [Installing from source](https://age.apache.org/#)
 
-## Viewer Tools in AGE
+## Graph visualization tool for AGE
 
-### AGViewer : https://github.com/bitnine-oss/AGViewer.git
+Apache AGE Viewer is a subproject of the Apache AGE incubating project:  https://github.com/apache/incubator-age-viewer
 
 - This is a visualization tool.
 After AGE Extension Installation
@@ -44,6 +52,9 @@ Under Connect to Database , select database type as "Apache AGE"
 
 Here is the link to the latest [Apache AGE documentation](http://age.incubator.apache.org/docs/Apache_AGE_Guide.pdf).
 You can learn about how to install Apache AGE, its features and built-in functions and how to use various Cypher queries.  
+
+## Language Specific Drivers
+[Apache AGE Python Driver](https://github.com/rhizome-ai/apache-age-python)
 
 ## Contribution
 
