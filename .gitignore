@@ -4,3 +4,4 @@
 build.sh
 .idea
 .deps
+cmake-build-debug
