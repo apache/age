@@ -1,0 +1,1296 @@
+2021-10-01 11:14:57.913 CEST [26950] LOG:  listening on Unix socket "/tmp/pg_regress-y40G1I/.s.PGSQL.61958"
+2021-10-01 11:14:57.922 CEST [26953] LOG:  database system was shut down at 2021-10-01 11:14:57 CEST
+2021-10-01 11:14:57.923 CEST [26950] LOG:  database system is ready to accept connections
+2021-10-01 11:14:58.927 CEST [26954] LOG:  checkpoint starting: immediate force wait flush-all
+2021-10-01 11:14:58.928 CEST [26954] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=0, longest=0.000 s, average=0.000 s; distance=1 kB, estimate=1 kB
+2021-10-01 11:14:59.040 CEST [26954] LOG:  checkpoint starting: immediate force wait
+2021-10-01 11:14:59.041 CEST [26954] LOG:  checkpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.001 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=1 kB
+2021-10-01 11:14:59.315 CEST [26973] pg_regress/scan ERROR:  graph "scan" already exists
+2021-10-01 11:14:59.315 CEST [26973] pg_regress/scan STATEMENT:  SELECT create_graph('scan');
+2021-10-01 11:14:59.315 CEST [26973] pg_regress/scan ERROR:  unterminated /* comment at or near "/* unterminated /* comment
+	RETURN 0
+	" at character 33
+2021-10-01 11:14:59.315 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	/* unterminated /* comment
+	RETURN 0
+	$$) AS t(a int);
+2021-10-01 11:14:59.319 CEST [26973] pg_regress/scan ERROR:  invalid octal integer literal at or near "012345678" at character 40
+2021-10-01 11:14:59.319 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 012345678
+	$$) AS t(a int);
+2021-10-01 11:14:59.319 CEST [26973] pg_regress/scan ERROR:  invalid octal integer literal at or near "09" at character 40
+2021-10-01 11:14:59.319 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 09
+	$$) AS t(a int);
+2021-10-01 11:14:59.322 CEST [26973] pg_regress/scan ERROR:  unexpected character at or near "~" at character 43
+2021-10-01 11:14:59.322 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 0xF~
+	$$) AS t(a int);
+2021-10-01 11:14:59.323 CEST [26973] pg_regress/scan ERROR:  invalid hexadecimal integer literal at or near "0x" at character 40
+2021-10-01 11:14:59.323 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 0x~
+	$$) AS t(a int);
+2021-10-01 11:14:59.323 CEST [26973] pg_regress/scan ERROR:  invalid hexadecimal integer literal at or near "0x" at character 40
+2021-10-01 11:14:59.323 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 0x
+	$$) AS t(a int);
+2021-10-01 11:14:59.324 CEST [26973] pg_regress/scan ERROR:  syntax error at or near ".." at character 41
+2021-10-01 11:14:59.324 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 0..
+	$$) AS t(a text, b text, c text);
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan ERROR:  invalid scientific notation literal at or near "3141592e-" at character 40
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 3141592e-
+	$$) AS t(a text);
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan ERROR:  invalid scientific notation literal at or near "3.141592E" at character 40
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN 3.141592E
+	$$) AS t(a text);
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan ERROR:  invalid scientific notation literal at or near ".3141592e+" at character 40
+2021-10-01 11:14:59.325 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN .3141592e+
+	$$) AS t(a text);
+2021-10-01 11:14:59.328 CEST [26973] pg_regress/scan ERROR:  invalid escape sequence at or near "\a" at character 41
+2021-10-01 11:14:59.328 CEST [26973] pg_regress/scan DETAIL:  Valid escape sequences are \", \', \/, \\, \b, \f, \n, \r, \t, \uXXXX, and \UXXXXXXXX.
+2021-10-01 11:14:59.328 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\a"
+	$$) AS t(a text);
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan ERROR:  invalid Unicode surrogate pair at or near """ at character 47
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan DETAIL:  A low surrogate must follow a high surrogate.
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\uD835"
+	$$) AS t(a text);
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan ERROR:  invalid Unicode surrogate pair at or near "\u002E" at character 47
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan DETAIL:  A low surrogate must follow a high surrogate.
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\uD835\u002E"
+	$$) AS t(a text);
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan ERROR:  invalid Unicode surrogate pair at or near "\uDEF0" at character 41
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan DETAIL:  A low surrogate must follow a high surrogate.
+2021-10-01 11:14:59.330 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\uDEF0"
+	$$) AS t(a text);
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan ERROR:  invalid Unicode escape value at or near "\U00110000" at character 41
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan DETAIL:  Unicode escape values cannot be greater than 10FFFF, which is the maximum value of a code point.
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\U00110000"
+	$$) AS t(a text);
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan ERROR:  unsupported Unicode escape value at or near "\u0000" at character 41
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan DETAIL:  Unicode code point value 0000 is not allowed in quoted strings.
+2021-10-01 11:14:59.331 CEST [26973] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\u0000"
+	$$) AS t(a text);
+2021-10-01 11:14:59.331 CEST [26954] LOG:  checkpoint starting: immediate force wait flush-all
+2021-10-01 11:14:59.334 CEST [26954] LOG:  checkpoint complete: wrote 228 buffers (1.4%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.003 s, sync=0.001 s, total=0.003 s; sync files=0, longest=0.000 s, average=0.000 s; distance=1313 kB, estimate=1313 kB
+2021-10-01 11:14:59.445 CEST [26954] LOG:  checkpoint starting: immediate force wait
+2021-10-01 11:14:59.446 CEST [26954] LOG:  checkpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.001 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=1182 kB
+2021-10-01 11:14:59.704 CEST [26975] pg_regress/scan ERROR:  unsupported Unicode escape value at or near "\U0001D706" at character 41
+2021-10-01 11:14:59.704 CEST [26975] pg_regress/scan DETAIL:  Unicode escape values cannot be used for code point values above 007F when the server encoding is not UTF8.
+2021-10-01 11:14:59.704 CEST [26975] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\U0001D706"
+	$$) AS t(a text);
+2021-10-01 11:14:59.711 CEST [26954] LOG:  checkpoint starting: immediate force wait
+2021-10-01 11:14:59.712 CEST [26954] LOG:  checkpoint complete: wrote 1 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.001 s; sync files=0, longest=0.000 s, average=0.000 s; distance=1323 kB, estimate=1323 kB
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan ERROR:  invalid Unicode escape sequence at or near "\UD835" at character 41
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan HINT:  Unicode escape sequences must be \uXXXX or \UXXXXXXXX.
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\UD835"
+	$$) AS t(a text);
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan ERROR:  invalid Unicode escape sequence at or near "\uDEF" at character 47
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan HINT:  Unicode escape sequences must be \uXXXX or \UXXXXXXXX.
+2021-10-01 11:14:59.818 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN "\uD835\uDEF"
+	$$) AS t(a text);
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan ERROR:  unterminated quoted string at or near ""unterminated quoted string" at character 39
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$RETURN "unterminated quoted string$$) AS t(a text);
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan ERROR:  unterminated quoted string at or near "'unterminated quoted string" at character 39
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$RETURN 'unterminated quoted string$$) AS t(a text);
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan ERROR:  unterminated quoted string at or near ""escape \" at character 39
+2021-10-01 11:14:59.819 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$RETURN "escape \$$) AS t(a text);
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan ERROR:  unterminated quoted string at or near ""high surrogate \uD835" at character 39
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$RETURN "high surrogate \uD835$$) AS t(a text);
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan ERROR:  variable `_$09A_z` does not exist at character 40
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN _$09A_z
+	$$) AS t(id text);
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan ERROR:  variable `A` does not exist at character 40
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN A
+	$$) AS t(id text);
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan ERROR:  variable `z` does not exist at character 40
+2021-10-01 11:14:59.820 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN z
+	$$) AS t(id text);
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan ERROR:  variable `$` does not exist at character 40
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN `$`
+	$$) AS t(id text);
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan ERROR:  variable `0` does not exist at character 40
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN `0`
+	$$) AS t(id text);
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan ERROR:  variable ``` does not exist at character 40
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN ````
+	$$) AS t(id text);
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan ERROR:  zero-length quoted identifier at or near "``" at character 40
+2021-10-01 11:14:59.821 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN ``
+	$$) AS t(a text);
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan ERROR:  unterminated quoted identifier at or near "`unterminated quoted identifier
+	" at character 40
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN `unterminated quoted identifier
+	$$) AS t(a text);
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan ERROR:  unexpected character at or near "$" at character 46
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $cypher$
+	RETURN $$
+	$cypher$) AS t(a text);
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan ERROR:  unexpected character at or near "$" at character 40
+2021-10-01 11:14:59.822 CEST [26976] pg_regress/scan STATEMENT:  SELECT * FROM cypher('scan', $$
+	RETURN $0
+	$$) AS t(a text);
+2021-10-01 11:14:59.869 CEST [26984] pg_regress/agtype ERROR:  value "9223372036854775808" is out of range for type bigint at character 49
+2021-10-01 11:14:59.869 CEST [26984] pg_regress/agtype STATEMENT:  INSERT INTO agtype_table VALUES ('bad integer', '9223372036854775808');
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype ERROR:  value "-9223372036854775809" is out of range for type bigint at character 49
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype STATEMENT:  INSERT INTO agtype_table VALUES ('bad integer', '-9223372036854775809');
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype ERROR:  invalid input syntax for type agtype at character 47
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype DETAIL:  Token "-NaN" is invalid.
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype CONTEXT:  agtype data, line 1: -NaN
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype STATEMENT:  INSERT INTO agtype_table VALUES ('bad float', '-NaN');
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype ERROR:  invalid input syntax for type agtype at character 47
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype DETAIL:  Expected agtype value, but found "Infi".
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype CONTEXT:  agtype data, line 1: Infi
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype STATEMENT:  INSERT INTO agtype_table VALUES ('bad float', 'Infi');
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype ERROR:  invalid input syntax for type agtype at character 47
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype DETAIL:  Token "-Infi" is invalid.
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype CONTEXT:  agtype data, line 1: -Infi
+2021-10-01 11:14:59.870 CEST [26984] pg_regress/agtype STATEMENT:  INSERT INTO agtype_table VALUES ('bad float', '-Infi');
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1', '0');
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1', '0.0');
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.892 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1.0', '0');
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1.0', '0.0');
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1', '0::numeric');
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1.0', '0::numeric');
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1::numeric', '0');
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.893 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1::numeric', '0.0');
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_div('1::numeric', '0::numeric');
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_any_div('1', 0);
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_any_div('1.0', 0);
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.894 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_any_div('-1::numeric', 0);
+2021-10-01 11:14:59.895 CEST [26984] pg_regress/agtype ERROR:  division by zero
+2021-10-01 11:14:59.895 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_any_div('-1.0::numeric', 0);
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype ERROR:  zero raised to a negative power is undefined
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_pow('0', '-1::numeric');
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype ERROR:  zero raised to a negative power is undefined
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_pow('-0.0', '-1::numeric');
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype ERROR:  zero raised to a negative power is undefined
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_pow('0::numeric', '-1');
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype ERROR:  zero raised to a negative power is undefined
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_pow('-0.0::numeric', '-1');
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype ERROR:  zero raised to a negative power is undefined
+2021-10-01 11:14:59.896 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_pow('-0.0::numeric', '-1');
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype null to type boolean
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('null'));
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype integer to type boolean
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('1'));
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype float to type boolean
+2021-10-01 11:14:59.963 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('1.0'));
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype string to type boolean
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('"string"'));
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype array to type boolean
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('[1,2,3]'));
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype ERROR:  cannot cast agtype object to type boolean
+2021-10-01 11:14:59.964 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_to_bool(agtype_in('{"bool":true}'));
+2021-10-01 11:14:59.966 CEST [26984] pg_regress/agtype ERROR:  key value must be scalar, not array, composite, or json
+2021-10-01 11:14:59.966 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_build_map('[0]'::agtype, null);
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype ERROR:  AGTV_BOOL is not a valid key type
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_access_operator('{"bool":false, "int":3, "float":3.14}', 'true');
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype ERROR:  AGTV_INTEGER is not a valid key type
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_access_operator('{"bool":false, "int":3, "float":3.14}', '2');
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype ERROR:  AGTV_FLOAT is not a valid key type
+2021-10-01 11:14:59.968 CEST [26984] pg_regress/agtype STATEMENT:  SELECT agtype_access_operator('{"bool":false, "int":3, "float":3.14}', '2.0');
+2021-10-01 11:14:59.970 CEST [26984] pg_regress/agtype ERROR:  _agtype_build_vertex() properties argument must be an object
+2021-10-01 11:14:59.970 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_vertex('1'::graphid, $$label$$, agtype_build_list());
+2021-10-01 11:14:59.974 CEST [26984] pg_regress/agtype ERROR:  paths consist of alternating vertices and edges
+2021-10-01 11:14:59.974 CEST [26984] pg_regress/agtype HINT:  paths require at least 2 vertices and 1 edge
+2021-10-01 11:14:59.974 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_path(
+		_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2))
+	);
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype ERROR:  paths consist of alternating vertices and edges
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype HINT:  paths require an odd number of elements
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_path(
+	       _agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	       _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+	                         $$label$$, agtype_build_map('id', 2)),
+	       _agtype_build_vertex('3'::graphid, $$label_name$$, agtype_build_map()),
+	       _agtype_build_edge('1'::graphid, '4'::graphid, '5'::graphid,
+	                         $$label$$, agtype_build_map('id', 2))
+	);
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype ERROR:  argument 3 must not be null
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_path(
+		_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2)),
+		NULL
+	);
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype ERROR:  paths consist of alternating vertices and edges
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype HINT:  argument 3 must be an vertex
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_path(
+		_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2)),
+		1
+	);
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype ERROR:  paths consist of alternating vertices and edges
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype HINT:  argument 3 must be an vertex
+2021-10-01 11:14:59.975 CEST [26984] pg_regress/agtype STATEMENT:  SELECT _agtype_build_path(
+		_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2)),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2))
+	);
+2021-10-01 11:14:59.977 CEST [26984] pg_regress/agtype ERROR:  id() argument must be a vertex, an edge or null
+2021-10-01 11:14:59.977 CEST [26984] pg_regress/agtype STATEMENT:  SELECT age_id(_agtype_build_path(
+		_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				  $$label$$, agtype_build_map('id', 2)),
+		_agtype_build_vertex('3'::graphid, $$label$$, agtype_build_map('id', 2))
+	));
+2021-10-01 11:14:59.977 CEST [26984] pg_regress/agtype ERROR:  id() argument must be a vertex, an edge or null
+2021-10-01 11:14:59.977 CEST [26984] pg_regress/agtype STATEMENT:  SELECT age_id(agtype_in('1'));
+2021-10-01 11:15:00.028 CEST [26988] pg_regress/catalog ERROR:  table "v" is for label "v"
+2021-10-01 11:15:00.028 CEST [26988] pg_regress/catalog STATEMENT:  DROP SCHEMA g CASCADE;
+2021-10-01 11:15:00.029 CEST [26988] pg_regress/catalog ERROR:  table "v" is for label "v"
+2021-10-01 11:15:00.029 CEST [26988] pg_regress/catalog STATEMENT:  DROP TABLE g.v;
+2021-10-01 11:15:00.031 CEST [26988] pg_regress/catalog ERROR:  cannot drop schema g because other objects depend on it
+2021-10-01 11:15:00.031 CEST [26988] pg_regress/catalog DETAIL:  table g._ag_label_vertex depends on schema g
+	table g._ag_label_edge depends on schema g
+	table g.v depends on schema g
+2021-10-01 11:15:00.031 CEST [26988] pg_regress/catalog HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+2021-10-01 11:15:00.031 CEST [26988] pg_regress/catalog STATEMENT:  SELECT drop_graph('g');
+2021-10-01 11:15:00.038 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.038 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_graph(NULL);
+2021-10-01 11:15:00.038 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.038 CEST [26988] pg_regress/catalog STATEMENT:  SELECT drop_graph(NULL);
+2021-10-01 11:15:00.058 CEST [26988] pg_regress/catalog ERROR:  graph "graphx" does not exist
+2021-10-01 11:15:00.058 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('graphx', 'RENAME', 'GRAPHX');
+2021-10-01 11:15:00.058 CEST [26988] pg_regress/catalog ERROR:  schema "GraphB" already exists
+2021-10-01 11:15:00.058 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('GraphX', 'RENAME', 'GraphB');
+2021-10-01 11:15:00.067 CEST [26988] pg_regress/catalog ERROR:  graph "GraphB" does not exist
+2021-10-01 11:15:00.067 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('GraphB', 'RENAME', 'GraphA');
+2021-10-01 11:15:00.067 CEST [26988] pg_regress/catalog ERROR:  graph_name must not be NULL
+2021-10-01 11:15:00.067 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph(NULL, 'RENAME', 'GraphA');
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog ERROR:  operation must not be NULL
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('GraphB', NULL, 'GraphA');
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog ERROR:  new_value must not be NULL
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('GraphB', 'RENAME', NULL);
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog ERROR:  invalid operation "DUMMY"
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog HINT:  valid operations: RENAME
+2021-10-01 11:15:00.068 CEST [26988] pg_regress/catalog STATEMENT:  SELECT alter_graph('GraphB', 'DUMMY', 'GraphA');
+2021-10-01 11:15:00.115 CEST [26988] pg_regress/catalog ERROR:  label "n" already exists
+2021-10-01 11:15:00.115 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_vlabel('g', 'n');
+2021-10-01 11:15:00.116 CEST [26988] pg_regress/catalog ERROR:  label "r" already exists
+2021-10-01 11:15:00.116 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_elabel('g', 'r');
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog ERROR:  label "n" does not exist
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog STATEMENT:  SELECT drop_label('g', 'n');
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog ERROR:  label "r" does not exist
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog STATEMENT:  SELECT drop_label('g', 'r');
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog ERROR:  label name must not be NULL
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_vlabel('g', NULL);
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog ERROR:  label name must not be NULL
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_elabel('g', NULL);
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.120 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_vlabel(NULL, 'n');
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_elabel(NULL, 'r');
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_vlabel(NULL, NULL);
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog ERROR:  graph name must not be NULL
+2021-10-01 11:15:00.121 CEST [26988] pg_regress/catalog STATEMENT:  SELECT create_elabel(NULL, NULL);
+2021-10-01 11:15:00.142 CEST [26992] pg_regress/cypher ERROR:  graph "none" does not exist at character 22
+2021-10-01 11:15:00.142 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM cypher('none', $$RETURN 0$$) as q(c agtype);
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher ERROR:  a dollar-quoted string constant is expected at character 32
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM cypher('cypher', 'RETURN 0') AS r(c text);
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher ERROR:  a dollar-quoted string constant is expected at character 32
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM cypher('cypher', NULL) AS r(c text);
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher ERROR:  a dollar-quoted string constant is expected at character 85
+2021-10-01 11:15:00.144 CEST [26992] pg_regress/cypher STATEMENT:  WITH q(s) AS (
+	  VALUES (textout($$RETURN 0$$))
+	)
+	SELECT * FROM q, cypher('cypher', q.s) AS r(c text);
+2021-10-01 11:15:00.145 CEST [26992] pg_regress/cypher ERROR:  return row and column definition list do not match at character 15
+2021-10-01 11:15:00.145 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM cypher('cypher', $$RETURN 0$$) AS r(c text, x text);
+2021-10-01 11:15:00.145 CEST [26992] pg_regress/cypher ERROR:  cypher(...) in ROWS FROM is not supported at character 26
+2021-10-01 11:15:00.145 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM ROWS FROM (cypher('cypher', $$RETURN 0$$) AS (c text),
+	                         generate_series(1, 2));
+2021-10-01 11:15:00.146 CEST [26992] pg_regress/cypher ERROR:  WITH ORDINALITY is not supported at character 26
+2021-10-01 11:15:00.146 CEST [26992] pg_regress/cypher STATEMENT:  SELECT *
+	FROM ROWS FROM (cypher('cypher', $$RETURN 0$$) AS (c text)) WITH ORDINALITY;
+2021-10-01 11:15:00.146 CEST [26992] pg_regress/cypher ERROR:  cypher(...) in expressions is not supported at character 8
+2021-10-01 11:15:00.146 CEST [26992] pg_regress/cypher HINT:  Use subquery instead if possible.
+2021-10-01 11:15:00.146 CEST [26992] pg_regress/cypher STATEMENT:  SELECT cypher('cypher', $$RETURN 0$$);
+2021-10-01 11:15:00.147 CEST [26992] pg_regress/cypher ERROR:  cannot cast type agtype to oid for column "c" at character 15
+2021-10-01 11:15:00.147 CEST [26992] pg_regress/cypher STATEMENT:  SELECT * FROM cypher('cypher', $$RETURN 0$$) AS (c oid);
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr ERROR:  array index must resolve to an integer value
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr STATEMENT:  EXECUTE cypher_parameter_invalid_argument('[1]');
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr ERROR:  parameters argument is missing from cypher() function call at character 91
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr STATEMENT:  PREPARE cypher_missing_params_argument(int) AS
+	SELECT $1, * FROM cypher('expr', $$
+	RETURN $var
+	$$) AS t(i agtype);
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr ERROR:  parameters argument is missing from cypher() function call at character 40
+2021-10-01 11:15:00.174 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN $var
+	$$) AS t(i agtype);
+2021-10-01 11:15:00.182 CEST [26996] pg_regress/expr ERROR:  object of IN must be a list
+2021-10-01 11:15:00.182 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr',
+	$$RETURN null IN 'str' $$) AS r(c boolean);
+2021-10-01 11:15:00.183 CEST [26996] pg_regress/expr ERROR:  object of IN must be a list
+2021-10-01 11:15:00.183 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr',
+	$$RETURN 'str' IN 'str' $$) AS r(c boolean);
+2021-10-01 11:15:00.187 CEST [26996] pg_regress/expr ERROR:  slice must access a list
+2021-10-01 11:15:00.187 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr',
+	$$RETURN 0[0..1]$$) as r(a agtype);
+2021-10-01 11:15:00.187 CEST [26996] pg_regress/expr ERROR:  slice must access a list
+2021-10-01 11:15:00.187 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr',
+	$$RETURN 0[[0]..[1]]$$) as r(a agtype);
+2021-10-01 11:15:00.211 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for integer: "1.0"
+2021-10-01 11:15:00.211 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN '1.0'
+	$$) AS (i bigint);
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr ERROR:  smallint out of range
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN 10000000000000000000
+	$$) AS (i smallint);
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr ERROR:  integer out of range
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN 10000000000000000000
+	$$) AS (i int);
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype boolean to type int
+2021-10-01 11:15:00.212 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN true
+	$$) AS (i bigint);
+2021-10-01 11:15:00.213 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype object to type int
+2021-10-01 11:15:00.213 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN {key: 1}
+	$$) AS (i bigint);
+2021-10-01 11:15:00.213 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype array to type int
+2021-10-01 11:15:00.213 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		RETURN [1]
+	$$) AS (i bigint);
+2021-10-01 11:15:00.219 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype vertex to type int
+2021-10-01 11:15:00.219 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		MATCH (v)
+		RETURN v
+	$$) AS (i bigint);
+2021-10-01 11:15:00.220 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype edge to type int
+2021-10-01 11:15:00.220 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		MATCH ()-[e]-()
+		RETURN e
+	$$) AS (i bigint);
+2021-10-01 11:15:00.221 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype path to type int
+2021-10-01 11:15:00.221 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('type_coercion', $$
+		MATCH p=()-[]-()
+		RETURN p
+	$$) AS (i bigint);
+2021-10-01 11:15:00.221 CEST [26997] ERROR:  could not map dynamic shared memory segment
+2021-10-01 11:15:00.222 CEST [26998] ERROR:  could not map dynamic shared memory segment
+2021-10-01 11:15:00.222 CEST [26950] LOG:  background worker "parallel worker" (PID 26997) exited with exit code 1
+2021-10-01 11:15:00.222 CEST [26950] LOG:  background worker "parallel worker" (PID 26998) exited with exit code 1
+2021-10-01 11:15:00.229 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for integer: "0.0"
+2021-10-01 11:15:00.229 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN '0.0'::int
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.229 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for integer: "1.5"
+2021-10-01 11:15:00.229 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN '1.5'::int
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr ERROR:  graph "graph_name" does not exist at character 22
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('graph_name', $$
+	RETURN "15555555555555555555555555555"::int
+	$$) AS (string_result agtype);
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr ERROR:  bigint out of range
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN 'NaN'::float::int
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr ERROR:  bigint out of range
+2021-10-01 11:15:00.230 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN 'infinity'::float::int
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.236 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for type numeric: "2:71"
+2021-10-01 11:15:00.236 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN ('2:71'::numeric)::numeric
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.237 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for type numeric: "inf"
+2021-10-01 11:15:00.237 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN ('inf'::numeric)::numeric
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.237 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for type numeric: "infinity"
+2021-10-01 11:15:00.237 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN ('infinity'::numeric)::numeric
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.244 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for type double precision: "2:71"
+2021-10-01 11:15:00.244 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN '2:71'::float
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.244 CEST [26996] pg_regress/expr ERROR:  invalid input syntax for type double precision: "infi"
+2021-10-01 11:15:00.244 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN 'infi'::float
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.248 CEST [26996] pg_regress/expr ERROR:  edge typecast object has an invalid or missing start_id
+2021-10-01 11:15:00.248 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {edge_0:{id:3, label:"edge 0", properties:{}, startid:0, end_id:1}::edge}
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.248 CEST [26996] pg_regress/expr ERROR:  edge typecast object has an invalid or missing end_id
+2021-10-01 11:15:00.248 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {edge_0:{id:3, label:"edge 0", properties:{}, start_id:0, endid:1}::edge}
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.251 CEST [26996] pg_regress/expr ERROR:  vertex typecast object has invalid or missing label
+2021-10-01 11:15:00.251 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {id:0, labelz:"vertex 0", properties:{}}::vertex
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.251 CEST [26996] pg_regress/expr ERROR:  typecast object is not a vertex
+2021-10-01 11:15:00.251 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {id:0, label:"vertex 0"}::vertex
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr ERROR:  vertex typecast object has invalid or missing id
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {id:"0", label:"vertex 0", properties:{}}::vertex
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr ERROR:  typecast object is not a vertex
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {}::vertex
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr ERROR:  edge typecast object has an invalid or missing label
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {id:3, labelz:"edge 0", properties:{}, start_id:0, end_id:1}::edge
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr ERROR:  typecast object is not an edge
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {id:3, label:"edge 0", start_id:0, end_id:1}::edge
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr ERROR:  typecast object is not an edge
+2021-10-01 11:15:00.252 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	RETURN {}::edge
+	$$) AS r(result agtype);
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr ERROR:  array is not a valid path
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr STATEMENT:  SELECT agtype_in('[{"id": 0, "label": "vertex 0", "properties": {}}::vertex, {"id": 2, "label": "edge 0", "end_id": 1, "start_id": 0, "properties": {}}::edge]::path');
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr ERROR:  array is not a valid path
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr STATEMENT:  SELECT agtype_in('{"Path" : [{"id": 2, "label": "edge 0", "end_id": 1, "start_id": 0, "properties": {}}::edge, {"id": 0, "label": "vertex 0", "properties": {}}::vertex, {"id": 2, "label": "edge 0", "end_id": 1, "start_id": 0, "properties": {}}::edge, {"id": 1, "label": "vertex 1", "properties": {}}::vertex]::path}');
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr ERROR:  typecast argument is not a valid path
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$ RETURN [{id: 0, label: "vertex 0", properties: {}}::vertex]::path $$) AS r(result agtype);
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr ERROR:  typecast argument is not a valid path
+2021-10-01 11:15:00.256 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$ RETURN [{id: 2, label: "edge 0", end_id: 1, start_id: 0, properties: {}}::edge]::path $$) AS r(result agtype);
+2021-10-01 11:15:00.257 CEST [26996] pg_regress/expr ERROR:  typecast argument is not a valid path
+2021-10-01 11:15:00.257 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$ RETURN []::path $$) AS r(result agtype);
+2021-10-01 11:15:00.273 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_id() does not exist at character 44
+2021-10-01 11:15:00.273 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.273 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN id()
+	$$) AS (id agtype);
+2021-10-01 11:15:00.274 CEST [26996] pg_regress/expr ERROR:  start_id() argument must be an edge or null
+2021-10-01 11:15:00.274 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (v) RETURN start_id(v)
+	$$) AS (start_id agtype);
+2021-10-01 11:15:00.275 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_start_id() does not exist at character 44
+2021-10-01 11:15:00.275 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.275 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN start_id()
+	$$) AS (start_id agtype);
+2021-10-01 11:15:00.277 CEST [26996] pg_regress/expr ERROR:  end_id() argument must be an edge or null
+2021-10-01 11:15:00.277 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (v) RETURN end_id(v)
+	$$) AS (end_id agtype);
+2021-10-01 11:15:00.277 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_end_id() does not exist at character 44
+2021-10-01 11:15:00.277 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.277 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN end_id()
+	$$) AS (end_id agtype);
+2021-10-01 11:15:00.279 CEST [26996] pg_regress/expr ERROR:  startNode() argument must be an edge or null
+2021-10-01 11:15:00.279 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (v) RETURN startNode(v)
+	$$) AS (startNode agtype);
+2021-10-01 11:15:00.279 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_startnode() does not exist at character 44
+2021-10-01 11:15:00.279 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.279 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN startNode()
+	$$) AS (startNode agtype);
+2021-10-01 11:15:00.281 CEST [26996] pg_regress/expr ERROR:  endNode() argument must be an edge or null
+2021-10-01 11:15:00.281 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (v) RETURN endNode(v)
+	$$) AS (endNode agtype);
+2021-10-01 11:15:00.282 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_endnode() does not exist at character 44
+2021-10-01 11:15:00.282 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.282 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN endNode()
+	$$) AS (endNode agtype);
+2021-10-01 11:15:00.283 CEST [26996] pg_regress/expr ERROR:  type() argument must be an edge or null
+2021-10-01 11:15:00.283 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (v) RETURN type(v)
+	$$) AS (type agtype);
+2021-10-01 11:15:00.284 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_type() does not exist at character 44
+2021-10-01 11:15:00.284 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.284 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN type()
+	$$) AS (type agtype);
+2021-10-01 11:15:00.288 CEST [26996] pg_regress/expr ERROR:  label() argument must resolve to an edge or vertex
+2021-10-01 11:15:00.288 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH p=()-[]->() RETURN label(p)
+	$$) AS (label agtype);
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr ERROR:  label() argument must resolve to an edge or vertex
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN label(1)
+	$$) AS (label agtype);
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr ERROR:  label() argument must resolve to an edge or vertex
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    MATCH (n) RETURN label([n])
+	$$) AS (label agtype);
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr ERROR:  label() argument must resolve to an edge or vertex
+2021-10-01 11:15:00.289 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN label({id: 0, label: 'failed', properties: {}})
+	$$) AS (label agtype);
+2021-10-01 11:15:00.292 CEST [26996] pg_regress/expr ERROR:  size() unsupported argument
+2021-10-01 11:15:00.292 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN size(1234567890)
+	$$) AS (size agtype);
+2021-10-01 11:15:00.293 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_size() does not exist at character 44
+2021-10-01 11:15:00.293 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.293 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN size()
+	$$) AS (size agtype);
+2021-10-01 11:15:00.295 CEST [26996] pg_regress/expr ERROR:  head() argument must resolve to a list or null
+2021-10-01 11:15:00.295 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN head(1234567890)
+	$$) AS (head agtype);
+2021-10-01 11:15:00.295 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_head() does not exist at character 44
+2021-10-01 11:15:00.295 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.295 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN head()
+	$$) AS (head agtype);
+2021-10-01 11:15:00.297 CEST [26996] pg_regress/expr ERROR:  last() argument must resolve to a list or null
+2021-10-01 11:15:00.297 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN last(1234567890)
+	$$) AS (last agtype);
+2021-10-01 11:15:00.298 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_last() does not exist at character 44
+2021-10-01 11:15:00.298 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.298 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN last()
+	$$) AS (last agtype);
+2021-10-01 11:15:00.300 CEST [26996] pg_regress/expr ERROR:  properties() argument must be a vertex, an edge or null
+2021-10-01 11:15:00.300 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN properties(1234)
+	$$) AS (properties agtype);
+2021-10-01 11:15:00.300 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_properties() does not exist at character 44
+2021-10-01 11:15:00.300 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.300 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN properties()
+	$$) AS (properties agtype);
+2021-10-01 11:15:00.303 CEST [26996] pg_regress/expr ERROR:  syntax error at or near ")" at character 53
+2021-10-01 11:15:00.303 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN coalesce()
+	$$) AS (coalesce agtype);
+2021-10-01 11:15:00.306 CEST [26996] pg_regress/expr ERROR:  toBoolean() unsupported argument agtype 3
+2021-10-01 11:15:00.306 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toBoolean(1)
+	$$) AS (toBoolean agtype);
+2021-10-01 11:15:00.307 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_toboolean() does not exist at character 44
+2021-10-01 11:15:00.307 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.307 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toBoolean()
+	$$) AS (toBoolean agtype);
+2021-10-01 11:15:00.309 CEST [26996] pg_regress/expr ERROR:  toFloat() unsupported argument agtype 5
+2021-10-01 11:15:00.309 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toFloat(true)
+	$$) AS (toFloat agtype);
+2021-10-01 11:15:00.309 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_tofloat() does not exist at character 44
+2021-10-01 11:15:00.309 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.309 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toFloat()
+	$$) AS (toFloat agtype);
+2021-10-01 11:15:00.313 CEST [26996] pg_regress/expr ERROR:  toInteger() unsupported argument agtype 5
+2021-10-01 11:15:00.313 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toInteger(true)
+	$$) AS (toInteger agtype);
+2021-10-01 11:15:00.313 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_tointeger() does not exist at character 44
+2021-10-01 11:15:00.313 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.313 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toInteger()
+	$$) AS (toInteger agtype);
+2021-10-01 11:15:00.315 CEST [26996] pg_regress/expr ERROR:  length() argument must resolve to a path or null
+2021-10-01 11:15:00.315 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN length(true)
+	$$) AS (length agtype);
+2021-10-01 11:15:00.315 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_length() does not exist at character 44
+2021-10-01 11:15:00.315 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.315 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN length()
+	$$) AS (length agtype);
+2021-10-01 11:15:00.323 CEST [26996] pg_regress/expr ERROR:  function age_tostring() does not exist at character 15
+2021-10-01 11:15:00.323 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.323 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_toString();
+2021-10-01 11:15:00.324 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_tostring() does not exist at character 40
+2021-10-01 11:15:00.324 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.324 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$ RETURN toString() $$) AS (results agtype);
+2021-10-01 11:15:00.327 CEST [26996] pg_regress/expr ERROR:  reverse() unsupported argument agtype 5
+2021-10-01 11:15:00.327 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN reverse(true)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.327 CEST [26996] pg_regress/expr ERROR:  reverse() unsupported argument type 16
+2021-10-01 11:15:00.327 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_reverse(true);
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr ERROR:  reverse() unsupported argument agtype 4
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN reverse(3.14)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr ERROR:  reverse() unsupported argument type 1700
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_reverse(3.14);
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_reverse() does not exist at character 44
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN reverse()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr ERROR:  function age_reverse() does not exist at character 15
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.328 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_reverse();
+2021-10-01 11:15:00.332 CEST [26996] pg_regress/expr ERROR:  toUpper() unsupported argument agtype 5
+2021-10-01 11:15:00.332 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toUpper(true)
+	$$) AS (toUpper agtype);
+2021-10-01 11:15:00.332 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_toupper() does not exist at character 44
+2021-10-01 11:15:00.332 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.332 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toUpper()
+	$$) AS (toUpper agtype);
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr ERROR:  toLower() unsupported argument agtype 5
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toLower(true)
+	$$) AS (toLower agtype);
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_tolower() does not exist at character 44
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN toLower()
+	$$) AS (toLower agtype);
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr ERROR:  function age_toupper() does not exist at character 15
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_toupper();
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr ERROR:  function age_tolower() does not exist at character 15
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.333 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_tolower();
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr ERROR:  lTrim() unsupported argument agtype 5
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN lTrim(true)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr ERROR:  rTrim() unsupported argument agtype 5
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN rTrim(true)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr ERROR:  trim() unsupported argument agtype 5
+2021-10-01 11:15:00.337 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN trim(true)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_ltrim() does not exist at character 44
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN lTrim()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_rtrim() does not exist at character 44
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN rTrim()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_trim() does not exist at character 44
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN trim()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function age_ltrim() does not exist at character 15
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_ltrim();
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function age_rtrim() does not exist at character 15
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_rtrim();
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr ERROR:  function age_trim() does not exist at character 15
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.338 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_trim();
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  left() length parameter cannot be null
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN left("123456789", null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  left() negative values are not supported for length
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN left("123456789", -1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_left() does not exist at character 44
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN left()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  left() length parameter cannot be null
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_left('123456789', null);
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  left() negative values are not supported for length
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_left('123456789', -1);
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr ERROR:  function age_left() does not exist at character 15
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.341 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_left();
+2021-10-01 11:15:00.343 CEST [26996] pg_regress/expr ERROR:  right() length parameter cannot be null
+2021-10-01 11:15:00.343 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN right("123456789", null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr ERROR:  right() negative values are not supported for length
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN right("123456789", -1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_right() does not exist at character 44
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN right()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr ERROR:  right() length parameter cannot be null
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_right('123456789', null);
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr ERROR:  right() negative values are not supported for length
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_right('123456789', -1);
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr ERROR:  function age_right() does not exist at character 15
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.344 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_right();
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr ERROR:  substring() offset or length cannot be null
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN substring("123456789", null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr ERROR:  substring() negative values are not supported for offset or length
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN substring("123456789", 0, -1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr ERROR:  substring() negative values are not supported for offset or length
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN substring("123456789", -1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr ERROR:  substring() invalid number of arguments
+2021-10-01 11:15:00.348 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN substring("123456789")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr ERROR:  substring() offset or length cannot be null
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_substring('123456789', null);
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr ERROR:  substring() negative values are not supported for offset or length
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_substring('123456789', 0, -1);
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr ERROR:  substring() negative values are not supported for offset or length
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_substring('123456789', -1);
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr ERROR:  function age_substring() does not exist at character 15
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.349 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_substring();
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr ERROR:  split() unsupported argument agtype 3
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN split(123456789, ",")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr ERROR:  split() unsupported argument agtype 3
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN split("a,b,c,d,e,f", -1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr ERROR:  split() invalid number of arguments
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN split("a,b,c,d,e,f")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_split() does not exist at character 44
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN split()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr ERROR:  split() unsupported argument type 23
+2021-10-01 11:15:00.353 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_split(123456789, ',');
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr ERROR:  split() unsupported argument type 23
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_split('a,b,c,d,e,f', -1);
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr ERROR:  split() invalid number of arguments
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_split('a,b,c,d,e,f');
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr ERROR:  function age_split() does not exist at character 15
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.354 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_split();
+2021-10-01 11:15:00.358 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_replace() does not exist at character 44
+2021-10-01 11:15:00.358 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.358 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN replace()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr ERROR:  replace() invalid number of arguments
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN replace("Hello")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr ERROR:  replace() invalid number of arguments
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN replace("Hello", null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr ERROR:  replace() unsupported argument agtype 3
+2021-10-01 11:15:00.359 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN replace("Hello", "e", 1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  replace() unsupported argument agtype 3
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN replace("Hello", 1, "e")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  function age_replace() does not exist at character 15
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_replace();
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  replace() invalid number of arguments
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_replace(null);
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  replace() invalid number of arguments
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_replace(null, null);
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  replace() unsupported argument type 23
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_replace('Hello', 'e', 1);
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr ERROR:  replace() unsupported argument type 23
+2021-10-01 11:15:00.360 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_replace('Hello', 1, 'E');
+2021-10-01 11:15:00.375 CEST [26996] pg_regress/expr ERROR:  sin() unsupported argument agtype 1
+2021-10-01 11:15:00.375 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN sin("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.375 CEST [26996] pg_regress/expr ERROR:  cos() unsupported argument agtype 1
+2021-10-01 11:15:00.375 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN cos("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr ERROR:  tan() unsupported argument agtype 1
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN tan("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr ERROR:  cot() unsupported argument agtype 1
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN cot("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_sin() does not exist at character 44
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN sin()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_cos() does not exist at character 44
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.376 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN cos()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_tan() does not exist at character 44
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN tan()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_cot() does not exist at character 44
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN cot()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr ERROR:  sin() unsupported argument type 25
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_sin('0');
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr ERROR:  cos() unsupported argument type 25
+2021-10-01 11:15:00.377 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_cos('0');
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr ERROR:  tan() unsupported argument type 25
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_tan('0');
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr ERROR:  cot() unsupported argument type 25
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_cot('0');
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr ERROR:  function age_sin() does not exist at character 15
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_sin();
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr ERROR:  function age_cos() does not exist at character 15
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.378 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_cos();
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr ERROR:  function age_tan() does not exist at character 15
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_tan();
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr ERROR:  function age_cot() does not exist at character 15
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.379 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_cot();
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr ERROR:  asin() unsupported argument agtype 1
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN asin("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr ERROR:  acos() unsupported argument agtype 1
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN acos("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr ERROR:  atan() unsupported argument agtype 1
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan("0")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr ERROR:  atan2() unsupported argument agtype 1
+2021-10-01 11:15:00.389 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan2("0", 1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr ERROR:  atan2() unsupported argument agtype 1
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan2(0, "1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_asin() does not exist at character 44
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN asin()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_acos() does not exist at character 44
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN acos()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_atan() does not exist at character 44
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_atan2() does not exist at character 44
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.390 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan2()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr ERROR:  atan2() invalid number of arguments
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN atan2(null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr ERROR:  asin() unsupported argument type 25
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_asin('0');
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr ERROR:  acos() unsupported argument type 25
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_acos('0');
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr ERROR:  atan() unsupported argument type 25
+2021-10-01 11:15:00.391 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan('0');
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  atan2() unsupported argument type 25
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan2('0', 1);
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  atan2() unsupported argument type 25
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan2(1, '0');
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  function age_asin() does not exist at character 15
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_asin();
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  function age_acos() does not exist at character 15
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_acos();
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  function age_atan() does not exist at character 15
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan();
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr ERROR:  function age_atan2() does not exist at character 15
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.392 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan2();
+2021-10-01 11:15:00.393 CEST [26996] pg_regress/expr ERROR:  atan2() invalid number of arguments
+2021-10-01 11:15:00.393 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM age_atan2(1);
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr ERROR:  function pg_catalog.pi(agtype) does not exist at character 46
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN pi(null)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr ERROR:  function pg_catalog.pi(agtype) does not exist at character 46
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.395 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN pi(1)
+	$$) AS (results agtype);
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_radians() does not exist at character 44
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN radians()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_degrees() does not exist at character 44
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN degrees()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr ERROR:  radians() unsupported argument agtype 1
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN radians("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr ERROR:  degrees() unsupported argument agtype 1
+2021-10-01 11:15:00.399 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN degrees("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_abs() does not exist at character 44
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN abs()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_ceil() does not exist at character 44
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN ceil()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_floor() does not exist at character 44
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.408 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN floor()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_round() does not exist at character 44
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN round()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_sign() does not exist at character 44
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN sign()
+	$$) AS (results agtype);
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr ERROR:  abs() unsupported argument agtype 1
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN abs("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr ERROR:  ceil() unsupported argument agtype 1
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN ceil("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr ERROR:  floor() unsupported argument agtype 1
+2021-10-01 11:15:00.409 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN floor("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.410 CEST [26996] pg_regress/expr ERROR:  round() unsupported argument agtype 1
+2021-10-01 11:15:00.410 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN round("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.410 CEST [26996] pg_regress/expr ERROR:  sign() unsupported argument agtype 1
+2021-10-01 11:15:00.410 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('expr', $$
+	    RETURN sign("1")
+	$$) AS (results agtype);
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_log() does not exist at character 44
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN log()
+	$$) as (result agtype);
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_log10() does not exist at character 44
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.414 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN log10()
+	$$) as (result agtype);
+2021-10-01 11:15:00.416 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_exp() does not exist at character 44
+2021-10-01 11:15:00.416 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.416 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN exp()
+	$$) as (result agtype);
+2021-10-01 11:15:00.416 CEST [26996] pg_regress/expr ERROR:  exp() unsupported argument agtype 1
+2021-10-01 11:15:00.416 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN exp("1")
+	$$) as (result agtype);
+2021-10-01 11:15:00.419 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_sqrt() does not exist at character 44
+2021-10-01 11:15:00.419 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.419 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN sqrt()
+	$$) as (result agtype);
+2021-10-01 11:15:00.419 CEST [26996] pg_regress/expr ERROR:  sqrt() unsupported argument agtype 1
+2021-10-01 11:15:00.419 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN sqrt("1")
+	$$) as (result agtype);
+2021-10-01 11:15:00.420 CEST [26996] pg_regress/expr ERROR:  function pg_catalog.sqrt() does not exist at character 55
+2021-10-01 11:15:00.420 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.420 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN pg_catalog.sqrt()
+	$$) as (result agtype);
+2021-10-01 11:15:00.420 CEST [26996] pg_regress/expr ERROR:  cannot cast agtype string to type float
+2021-10-01 11:15:00.420 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN pg_catalog.sqrt("1"::pg_float8)
+	$$) as (result agtype);
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr ERROR:  cannot take square root of a negative number
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN pg_catalog.sqrt(-1::pg_float8)
+	$$) as (result agtype);
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr ERROR:  invalid indirection syntax at character 44
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN something.pg_catalog.sqrt("1"::pg_float8)
+	$$) as (result agtype);
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr ERROR:  schema "distinct" does not exist at character 61
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN distinct.age_sqrt(25)
+	$$) as (result agtype);
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr ERROR:  schema "contains" does not exist at character 61
+2021-10-01 11:15:00.421 CEST [26996] pg_regress/expr STATEMENT:  SELECT * from cypher('expr', $$
+	    RETURN contains.age_sqrt(25)
+	$$) as (result agtype);
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_avg() does not exist at character 40
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN avg() $$) AS (avg agtype);
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_sum() does not exist at character 40
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN sum() $$) AS (sum agtype);
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr ERROR:  pg_catalog.count(*) must be used to call a parameterless aggregate function at character 40
+2021-10-01 11:15:00.441 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN count() $$) AS (count agtype);
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_min() does not exist at character 40
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN min() $$) AS (min agtype);
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_max() does not exist at character 40
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN max() $$) AS (max agtype);
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr ERROR:  function age_min() does not exist at character 8
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr STATEMENT:  SELECT age_min();
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr ERROR:  function age_min() does not exist at character 8
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.452 CEST [26996] pg_regress/expr STATEMENT:  SELECT age_min();
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_stdev() does not exist at character 40
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN stDev() $$) AS (stDev agtype);
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_stdevp() does not exist at character 40
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.454 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN stDevP() $$) AS (stDevP agtype);
+2021-10-01 11:15:00.457 CEST [26996] pg_regress/expr ERROR:  percentile value NULL is not a valid numeric value
+2021-10-01 11:15:00.457 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN percentileCont(.5, NULL) $$) AS (percentileCont agtype);
+2021-10-01 11:15:00.458 CEST [26996] pg_regress/expr ERROR:  percentile value NULL is not a valid numeric value
+2021-10-01 11:15:00.458 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN percentileDisc(.5, NULL) $$) AS (percentileDisc agtype);
+2021-10-01 11:15:00.461 CEST [26996] pg_regress/expr ERROR:  function ag_catalog.age_collect() does not exist at character 40
+2021-10-01 11:15:00.461 CEST [26996] pg_regress/expr HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2021-10-01 11:15:00.461 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('UCSC', $$ RETURN collect() $$) AS (collect agtype);
+2021-10-01 11:15:00.496 CEST [26996] pg_regress/expr ERROR:  "x" must be either part of an explicitly listed key or used inside an aggregate function at character 77
+2021-10-01 11:15:00.496 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a, x.a + count(*) + x.b + count(*) + x.c$$)
+	AS (a agtype, result agtype);
+2021-10-01 11:15:00.496 CEST [26996] pg_regress/expr ERROR:  "x" must be either part of an explicitly listed key or used inside an aggregate function at character 55
+2021-10-01 11:15:00.496 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a + count(*) + x.b + count(*) + x.c$$)
+	AS (result agtype);
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr ERROR:  variable length relationships are not supported at character 41
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('VLE', $$MATCH (u)-[*]-(v) RETURN u, v$$) AS (u agtype, v agtype);
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr ERROR:  variable length relationships are not supported at character 41
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr ERROR:  variable length relationships are not supported at character 41
+2021-10-01 11:15:00.565 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
+2021-10-01 11:15:00.566 CEST [26996] pg_regress/expr ERROR:  variable length relationships are not supported at character 41
+2021-10-01 11:15:00.566 CEST [26996] pg_regress/expr STATEMENT:  SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u, v$$) AS (u agtype, v agtype);
+2021-10-01 11:15:00.642 CEST [27004] pg_regress/cypher_create ERROR:  syntax error at or near ">" at character 59
+2021-10-01 11:15:00.642 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$CREATE (:v)<-[:e]->()$$) AS (a agtype);
+2021-10-01 11:15:00.642 CEST [27004] pg_regress/cypher_create ERROR:  only directed relationships are allowed in CREATE at character 53
+2021-10-01 11:15:00.642 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[:e]-()$$) AS (a agtype);
+2021-10-01 11:15:00.643 CEST [27004] pg_regress/cypher_create ERROR:  relationships must be specify a label in CREATE. at character 53
+2021-10-01 11:15:00.643 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[]->(:v)$$) AS (a agtype);
+2021-10-01 11:15:00.687 CEST [27004] pg_regress/cypher_create ERROR:  previously declared nodes in a create clause cannot have properties at character 40
+2021-10-01 11:15:00.687 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		MATCH (a:n_var)
+		WHERE a.name = 'Node A'
+		CREATE (a {test:1})-[:e_var]->()
+	$$) as (a agtype);
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create ERROR:  previously declared variables cannot have a label at character 40
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		MATCH (a:n_var)
+		WHERE a.name = 'Node A'
+		CREATE (a:new_label)-[:e_var]->()
+	$$) as (a agtype);
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create ERROR:  variable b already exists at character 40
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		MATCH (a:n_var)-[b]-()
+		WHERE a.name = 'Node A'
+		CREATE (a)-[b:e_var]->()
+	$$) as (a agtype);
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create ERROR:  paths consist of alternating vertices and edges. at character 52
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create HINT:  paths require at least 2 vertices and 1 edge
+2021-10-01 11:15:00.688 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		CREATE p=(a)
+		RETURN p
+	$$) as (a agtype);
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create ERROR:  cypher create clause cannot be rescaned
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create HINT:  its unsafe to use joins in a query with a Cypher CREATE clause
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT *
+	FROM cypher('cypher_create', $$
+		CREATE (a)
+		RETURN a
+	$$) as q(a agtype),
+	cypher('cypher_create', $$
+		CREATE (b)
+		RETURN b
+	$$) as t(b agtype);
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create ERROR:  column definition list for CREATE clause must contain a single agtype attribute at character 15
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create HINT:  ... cypher($$ ... CREATE ... $$) AS t(c agtype) ...
+2021-10-01 11:15:00.689 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$CREATE ()$$) AS (a int);
+2021-10-01 11:15:00.690 CEST [27004] pg_regress/cypher_create ERROR:  column definition list for CREATE clause must contain a single agtype attribute at character 15
+2021-10-01 11:15:00.690 CEST [27004] pg_regress/cypher_create HINT:  ... cypher($$ ... CREATE ... $$) AS t(c agtype) ...
+2021-10-01 11:15:00.690 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$CREATE ()$$) AS (a agtype, b int);
+2021-10-01 11:15:00.697 CEST [27004] pg_regress/cypher_create ERROR:  label existing_vlabel is for vertices, not edges at character 99
+2021-10-01 11:15:00.697 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		MATCH(a), (b)
+			WHERE a.id = 1 AND b.id = 2
+		CREATE (a)-[c:existing_vlabel { id: 4}]->(b)
+		RETURN c.id
+	$$) as (c agtype);
+2021-10-01 11:15:00.697 CEST [27004] pg_regress/cypher_create ERROR:  label existing_elabel is for edges, not vertices at character 50
+2021-10-01 11:15:00.697 CEST [27004] pg_regress/cypher_create STATEMENT:  SELECT * FROM cypher('cypher_create', $$
+		CREATE (a:existing_elabel { id: 5})
+		RETURN a.id
+	$$) as (a agtype);
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match ERROR:  syntax error at end of input at character 51
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$MATCH (n:v)$$) AS (a agtype);
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match ERROR:  variable a already exists at character 61
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$
+		MATCH (a)-[]-()-[]-(a:v1) RETURN a
+	$$) AS (a agtype);
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match ERROR:  variable a already exists at character 61
+2021-10-01 11:15:01.020 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$
+		MATCH (a:v1)-[]-()-[a]-() RETURN a
+	$$) AS (a agtype);
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match ERROR:  variable a already exists at character 64
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$
+		MATCH (a:v1)-[]-()-[]-(a {id:'will_fail'}) RETURN a
+	$$) AS (a agtype);
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match ERROR:  label v is for vertices, not edges at character 50
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$MATCH (n)-[:v]-() RETURN n$$) AS (n agtype);
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match ERROR:  label emissing does not exists at character 50
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$MATCH (n)-[:emissing]-() RETURN n$$) AS (n agtype);
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match ERROR:  label e1 is for edges, not vertices at character 46
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$MATCH (n:e1)-[]-() RETURN n$$) AS (n agtype);
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match ERROR:  label vmissing does not exists at character 46
+2021-10-01 11:15:01.021 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$MATCH (n:vmissing)-[]-() RETURN n$$) AS (n agtype);
+2021-10-01 11:15:01.022 CEST [27008] pg_regress/cypher_match ERROR:  paths consist of alternating vertices and edges. at character 56
+2021-10-01 11:15:01.022 CEST [27008] pg_regress/cypher_match HINT:  paths require at least 2 vertices and 1 edge
+2021-10-01 11:15:01.022 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match', $$
+	       MATCH p=() RETURN p
+	$$) AS (p agtype);
+2021-10-01 11:15:01.069 CEST [27008] pg_regress/cypher_match ERROR:  syntax error at or near "[" at character 89
+2021-10-01 11:15:01.069 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match',
+	 $$MATCH (u)-[e]->(v) WHERE EXISTS((u)) AND EXISTS([e]) AND EXISTS((v)) RETURN u, e, v $$)
+	AS (u agtype, e agtype, v agtype);
+2021-10-01 11:15:01.069 CEST [27008] pg_regress/cypher_match ERROR:  variable `x` does not exist at character 82
+2021-10-01 11:15:01.069 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match',
+	 $$MATCH (u)-[e]->(v) WHERE EXISTS((u)-[e]->(x)) RETURN u, e, v $$)
+	AS (u agtype, e agtype, v agtype);
+2021-10-01 11:15:01.084 CEST [27008] pg_regress/cypher_match ERROR:  syntax error at or near ")" at character 65
+2021-10-01 11:15:01.084 CEST [27008] pg_regress/cypher_match STATEMENT:  SELECT * FROM cypher('cypher_match',
+	 $$MATCH (u) WHERE EXISTS(u) RETURN u$$)
+	AS (u agtype);
+2021-10-01 11:15:01.205 CEST [27072] pg_regress/cypher_set ERROR:  SET cannot be the first clause in a Cypher query at character 38
+2021-10-01 11:15:01.205 CEST [27072] pg_regress/cypher_set STATEMENT:  SELECT * FROM cypher('cypher_set', $$SET n.i = NULL$$) AS (a agtype);
+2021-10-01 11:15:01.205 CEST [27072] pg_regress/cypher_set ERROR:  undefined reference to variable wrong_var in SET clause at character 52
+2021-10-01 11:15:01.205 CEST [27072] pg_regress/cypher_set STATEMENT:  SELECT * FROM cypher('cypher_set', $$MATCH (n) SET wrong_var.i = 3$$) AS (a agtype);
+2021-10-01 11:15:01.350 CEST [27076] pg_regress/cypher_remove ERROR:  REMOVE cannot be the first clause in a Cypher query at character 41
+2021-10-01 11:15:01.350 CEST [27076] pg_regress/cypher_remove STATEMENT:  SELECT * FROM cypher('cypher_remove', $$REMOVE n.i$$) AS (a agtype);
+2021-10-01 11:15:01.351 CEST [27076] pg_regress/cypher_remove ERROR:  REMOVE clause must be in the format: REMOVE variable.property_name at character 41
+2021-10-01 11:15:01.351 CEST [27076] pg_regress/cypher_remove STATEMENT:  SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE n.i = NULL$$) AS (a agtype);
+2021-10-01 11:15:01.351 CEST [27076] pg_regress/cypher_remove ERROR:  undefined reference to variable wrong_var in REMOVE clause at character 41
+2021-10-01 11:15:01.351 CEST [27076] pg_regress/cypher_remove STATEMENT:  SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE wrong_var.i$$) AS (a agtype);
+2021-10-01 11:15:01.396 CEST [27080] pg_regress/cypher_delete ERROR:  Cannot delete vertex n1, because it still has edges attached. To delete this vertex, you must first delete the attached edges.
+2021-10-01 11:15:01.396 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n1)-[e]->(n2) DELETE n1 RETURN n1$$) AS (a agtype);
+2021-10-01 11:15:01.397 CEST [27080] pg_regress/cypher_delete ERROR:  Cannot delete vertex n2, because it still has edges attached. To delete this vertex, you must first delete the attached edges.
+2021-10-01 11:15:01.397 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n1)-[e]->(n2) DELETE n2 RETURN n2$$) AS (a agtype);
+2021-10-01 11:15:01.413 CEST [27080] pg_regress/cypher_delete ERROR:  Cannot delete vertex n1, because it still has edges attached. To delete this vertex, you must first delete the attached edges.
+2021-10-01 11:15:01.413 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n1)-[]->() DELETE n1 RETURN n1$$) AS (a agtype);
+2021-10-01 11:15:01.418 CEST [27080] pg_regress/cypher_delete ERROR:  Cannot delete vertex n1, because it still has edges attached. To delete this vertex, you must first delete the attached edges.
+2021-10-01 11:15:01.418 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n1)-[e]->() DELETE n1, e RETURN n1$$) AS (a agtype);
+2021-10-01 11:15:01.427 CEST [27080] pg_regress/cypher_delete ERROR:  vertex assigned to variable n was deleted
+2021-10-01 11:15:01.427 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n)-[e]->() DETACH DELETE n CREATE (n)-[:e2]->(:v) RETURN e$$) AS (a agtype);
+2021-10-01 11:15:01.434 CEST [27080] pg_regress/cypher_delete ERROR:  vertex assigned to variable m was deleted
+2021-10-01 11:15:01.434 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n)-[e]->(m) DETACH DELETE n CREATE (m)-[:e2]->(:v) RETURN e$$) AS (a agtype);
+2021-10-01 11:15:01.441 CEST [27080] pg_regress/cypher_delete ERROR:  vertex assigned to variable m was deleted
+2021-10-01 11:15:01.441 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH(n)-[e]->(m) DETACH DELETE n CREATE (m)-[:e2]->(:v) RETURN e$$) AS (a agtype);
+2021-10-01 11:15:01.452 CEST [27080] pg_regress/cypher_delete ERROR:  vertex assigned to variable n was deleted
+2021-10-01 11:15:01.452 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH (n) DELETE n CREATE (n)-[:e]->(:v) RETURN n$$) AS (a agtype);
+2021-10-01 11:15:01.453 CEST [27080] pg_regress/cypher_delete ERROR:  undefined reference to variable m in DELETE clause at character 58
+2021-10-01 11:15:01.453 CEST [27080] pg_regress/cypher_delete STATEMENT:  SELECT * FROM cypher('cypher_delete', $$MATCH (n) DELETE m RETURN n$$) AS (a agtype);
+2021-10-01 11:15:01.518 CEST [27085] pg_regress/cypher_with ERROR:  expression item must be aliased at character 45
+2021-10-01 11:15:01.518 CEST [27085] pg_regress/cypher_with HINT:  Items can be aliased by using AS.
+2021-10-01 11:15:01.518 CEST [27085] pg_regress/cypher_with STATEMENT:  SELECT * FROM cypher('cypher_with', $$
+	WITH 1 + 1
+	RETURN i
+	$$) AS (i int);
+2021-10-01 11:15:02.024 CEST [27089] pg_regress/cypher_vle LOG:  temporary file: path "base/pgsql_tmp/pgsql_tmp27089.1", size 16637952
+2021-10-01 11:15:02.024 CEST [27089] pg_regress/cypher_vle STATEMENT:  SELECT count(edges) FROM start_and_end_points, age_vle( '"cypher_vle"'::agtype, start_vertex, end_vertex, '{"id": 1111111111111111, "label": "", "end_id": 2222222222222222, "start_id": 333333333333333, "properties": {}}::edge'::agtype, '1'::agtype, 'null'::agtype, '0'::agtype) group by ctid;
+2021-10-01 11:15:02.027 CEST [27089] pg_regress/cypher_vle LOG:  temporary file: path "base/pgsql_tmp/pgsql_tmp27089.0", size 16517952
+2021-10-01 11:15:02.027 CEST [27089] pg_regress/cypher_vle STATEMENT:  SELECT count(edges) FROM start_and_end_points, age_vle( '"cypher_vle"'::agtype, start_vertex, end_vertex, '{"id": 1111111111111111, "label": "", "end_id": 2222222222222222, "start_id": 333333333333333, "properties": {}}::edge'::agtype, '1'::agtype, 'null'::agtype, '0'::agtype) group by ctid;
+2021-10-01 11:15:02.275 CEST [27093] pg_regress/drop ERROR:  cannot drop extension age because other objects depend on it
+2021-10-01 11:15:02.275 CEST [27093] pg_regress/drop DETAIL:  column id of table other_schema.tbl depends on type agtype
+2021-10-01 11:15:02.275 CEST [27093] pg_regress/drop HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+2021-10-01 11:15:02.275 CEST [27093] pg_regress/drop STATEMENT:  DROP EXTENSION age;
+2021-10-01 11:15:02.319 CEST [26950] LOG:  received fast shutdown request
+2021-10-01 11:15:02.319 CEST [26950] LOG:  aborting any active transactions
+2021-10-01 11:15:02.320 CEST [26950] LOG:  background worker "logical replication launcher" (PID 26959) exited with exit code 1
+2021-10-01 11:15:02.321 CEST [26954] LOG:  shutting down
+2021-10-01 11:15:02.321 CEST [26954] LOG:  checkpoint starting: shutdown immediate
+2021-10-01 11:15:02.332 CEST [26954] LOG:  checkpoint complete: wrote 447 buffers (2.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.004 s, sync=0.001 s, total=0.012 s; sync files=0, longest=0.000 s, average=0.000 s; distance=6125 kB, estimate=6125 kB
+2021-10-01 11:15:02.335 CEST [26950] LOG:  database system is shut down
