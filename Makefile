@@ -17,6 +17,8 @@
 
 MODULE_big = age
 
+
+
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \
@@ -76,6 +78,8 @@ REGRESS = scan \
           cypher_with \
           cypher_vle \
           drop
+
+srcdir=`pwd`
 
 ag_regress_dir = $(srcdir)/regress
 REGRESS_OPTS = --load-extension=age --inputdir=$(ag_regress_dir) --outputdir=$(ag_regress_dir) --temp-instance=$(ag_regress_dir)/instance --port=61958 --encoding=UTF-8
