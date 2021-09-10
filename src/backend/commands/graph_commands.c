@@ -259,8 +259,6 @@ static Oid create_schema_for_graph(const Name graph_name)
 
 PG_FUNCTION_INFO_V1(drop_graph);
 
-// SELECT create_vlabel("Person'):
-
 Datum drop_graph(PG_FUNCTION_ARGS)
 {
     Name graph_name;
