@@ -103,3 +103,13 @@ src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
 
+<<<<<<< HEAD
+=======
+
+$(CC) = gcc
+
+CPPFLAGS = -I/usr/include/postgresql
+
+ag_load_labels: src/backend/utils/load/ag_load_labels.o
+	$(CC) $(CPPFLAGS) -o ag_load_labels src/backend/utils/load/ag_load_labels.o -lcsv -lpq
+>>>>>>> rebase with origin master
