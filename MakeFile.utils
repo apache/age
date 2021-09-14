@@ -1,0 +1,6 @@
+$(CC) = gcc
+
+CPPFLAGS = -I/usr/include/postgresql
+
+ag_load_labels: src/backend/utils/load/ag_load_labels.o
+	$(CC) $(CPPFLAGS) -o ag_load_labels src/backend/utils/load/ag_load_labels.o -lcsv -lpq
