@@ -99,6 +99,16 @@ Datum create_graph(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(create_vlabel);
 
+/*
+ * This is call callback function
+ * This function will be called when user will call SELECT create_vlabel.
+ * The function takes two parameters
+ * 1. Graph name
+ * 2. Label Name
+ * Function will create a vertex label
+ * Function returns error if graph or label names or not provided
+*/
+
 Datum create_vlabel(PG_FUNCTION_ARGS)
 {
     char *graph;
@@ -109,12 +119,14 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
 
+    // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("graph name must not be NULL")));
     }
 
+    // checking if user has not provided the label name
     if (PG_ARGISNULL(1))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -127,6 +139,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
+    // Check if graph does not exists
     if (!graph_exists(graph_name_str))
     {
         ereport(ERROR,
@@ -134,6 +147,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exists", graph_name_str)));
     }
 
+    // Check if label with the input name already exists
     if (label_exists(label_name_str, get_graph_oid(graph_name_str)))
     {
         ereport(ERROR,
@@ -154,6 +168,16 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(create_elabel);
 
+/*
+ * This is call callback function
+ * This function will be called when user will call SELECT create_elabel.
+ * The function takes two parameters
+ * 1. Graph name
+ * 2. Label Name
+ * Function will create a edge label
+ * Function returns error if graph or label names or not provided
+*/
+
 Datum create_elabel(PG_FUNCTION_ARGS)
 {
     char *graph;
@@ -164,12 +188,14 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
 
+    // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("graph name must not be NULL")));
     }
 
+    // checking if user has not provided the label name
     if (PG_ARGISNULL(1))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -182,6 +208,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
+    // Check if graph does not exists
     if (!graph_exists(graph_name_str))
     {
         ereport(ERROR,
@@ -189,6 +216,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exists", graph_name_str)));
     }
 
+    // Check if label with the input name already exists
     if (label_exists(label_name_str, get_graph_oid(graph_name_str)))
     {
         ereport(ERROR,

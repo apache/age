@@ -129,3 +129,13 @@ SELECT * FROM cypher('g', $$CREATE (:v2)$$) as r(a agtype);
 SELECT name, id, kind, relation FROM ag_label;
 
 SELECT drop_graph('g', true);
+
+
+-- create lables
+SELECT create_graph('g');
+SELECT create_vlabel('g', 'n');
+SELECT create_elabel('g', 'r');
+
+SELECT drop_graph('g', true);
+
+

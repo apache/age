@@ -311,3 +311,37 @@ NOTICE:  graph "g" has been dropped
  
 (1 row)
 
+-- create lables
+SELECT create_graph('g');
+NOTICE:  graph "g" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_vlabel('g', 'n');
+NOTICE:  VLabel "n" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('g', 'r');
+NOTICE:  ELabel "r" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT drop_graph('g', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table g._ag_label_vertex
+drop cascades to table g._ag_label_edge
+drop cascades to table g.n
+drop cascades to table g.r
+NOTICE:  graph "g" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
