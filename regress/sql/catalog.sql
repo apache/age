@@ -136,6 +136,13 @@ SELECT create_graph('g');
 SELECT create_vlabel('g', 'n');
 SELECT create_elabel('g', 'r');
 
+SELECT * FROM ag_label;
+
+SELECT drop_label('g', 'n');
+SELECT drop_label('g', 'r');
+
+SELECT * FROM ag_label;
+
 SELECT drop_graph('g', true);
 
 

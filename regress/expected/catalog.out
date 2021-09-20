@@ -333,12 +333,40 @@ NOTICE:  ELabel "r" has been created
  
 (1 row)
 
+SELECT * FROM ag_label;
+       name       | graph | id | kind |      relation      
+------------------+-------+----+------+--------------------
+ _ag_label_vertex | 17621 |  1 | v    | g._ag_label_vertex
+ _ag_label_edge   | 17621 |  2 | e    | g._ag_label_edge
+ n                | 17621 |  3 | v    | g.n
+ r                | 17621 |  4 | e    | g.r
+(4 rows)
+
+SELECT drop_label('g', 'n');
+NOTICE:  label "g"."n" has been dropped
+ drop_label 
+------------
+ 
+(1 row)
+
+SELECT drop_label('g', 'r');
+NOTICE:  label "g"."r" has been dropped
+ drop_label 
+------------
+ 
+(1 row)
+
+SELECT * FROM ag_label;
+       name       | graph | id | kind |      relation      
+------------------+-------+----+------+--------------------
+ _ag_label_vertex | 17621 |  1 | v    | g._ag_label_vertex
+ _ag_label_edge   | 17621 |  2 | e    | g._ag_label_edge
+(2 rows)
+
 SELECT drop_graph('g', true);
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table g._ag_label_vertex
 drop cascades to table g._ag_label_edge
-drop cascades to table g.n
-drop cascades to table g.r
 NOTICE:  graph "g" has been dropped
  drop_graph 
 ------------
