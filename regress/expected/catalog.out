@@ -333,6 +333,7 @@ NOTICE:  ELabel "r" has been created
  
 (1 row)
 
+-- check if labels have been created or not
 SELECT * FROM ag_label;
        name       | graph | id | kind |      relation      
 ------------------+-------+----+------+--------------------
@@ -342,6 +343,12 @@ SELECT * FROM ag_label;
  r                | 17621 |  4 | e    | g.r
 (4 rows)
 
+-- try to create duplicates labels
+SELECT create_vlabel('g', 'n');
+ERROR:  label "n" already exists
+SELECT create_elabel('g', 'r');
+ERROR:  label "r" already exists
+-- remove the labels that have been created
 SELECT drop_label('g', 'n');
 NOTICE:  label "g"."n" has been dropped
  drop_label 
@@ -356,6 +363,7 @@ NOTICE:  label "g"."r" has been dropped
  
 (1 row)
 
+-- check if labels have been deleted or not
 SELECT * FROM ag_label;
        name       | graph | id | kind |      relation      
 ------------------+-------+----+------+--------------------
@@ -363,6 +371,11 @@ SELECT * FROM ag_label;
  _ag_label_edge   | 17621 |  2 | e    | g._ag_label_edge
 (2 rows)
 
+-- try to remove nodes that is not there
+SELECT drop_label('g', 'n');
+ERROR:  label "n" does not exist
+SELECT drop_label('g', 'r');
+ERROR:  label "r" does not exist
 SELECT drop_graph('g', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table g._ag_label_vertex

@@ -136,12 +136,23 @@ SELECT create_graph('g');
 SELECT create_vlabel('g', 'n');
 SELECT create_elabel('g', 'r');
 
+-- check if labels have been created or not
 SELECT * FROM ag_label;
 
+-- try to create duplicates labels
+SELECT create_vlabel('g', 'n');
+SELECT create_elabel('g', 'r');
+
+-- remove the labels that have been created
 SELECT drop_label('g', 'n');
 SELECT drop_label('g', 'r');
 
+-- check if labels have been deleted or not
 SELECT * FROM ag_label;
+
+-- try to remove nodes that is not there
+SELECT drop_label('g', 'n');
+SELECT drop_label('g', 'r');
 
 SELECT drop_graph('g', true);
 
