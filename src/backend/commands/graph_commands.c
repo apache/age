@@ -97,7 +97,6 @@ Datum create_graph(PG_FUNCTION_ARGS)
     PG_RETURN_VOID();
 }
 
-
 static Oid create_schema_for_graph(const Name graph_name)
 {
     char *graph_name_str = NameStr(*graph_name);
