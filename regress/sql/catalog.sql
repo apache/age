@@ -144,8 +144,8 @@ SELECT create_vlabel('g', 'n');
 SELECT create_elabel('g', 'r');
 
 -- remove the labels that have been created
-SELECT drop_label('g', 'n');
-SELECT drop_label('g', 'r');
+SELECT drop_label('g', 'n', false);
+SELECT drop_label('g', 'r', false);
 
 -- check if labels have been deleted or not
 SELECT * FROM ag_label;
@@ -154,6 +154,19 @@ SELECT * FROM ag_label;
 SELECT drop_label('g', 'n');
 SELECT drop_label('g', 'r');
 
+-- Trying to call the function with label null
+SELECT create_vlabel('g', NULL);
+SELECT create_elabel('g', NULL);
+
+-- Trying to call the function with graph null
+SELECT create_vlabel(NULL, 'n');
+SELECT create_elabel(NULL, 'r');
+
+-- Trying to call the function with both null
+SELECT create_vlabel(NULL, NULL);
+SELECT create_elabel(NULL, NULL);
+
+-- dropping the graph
 SELECT drop_graph('g', true);
 
 

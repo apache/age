@@ -349,14 +349,14 @@ ERROR:  label "n" already exists
 SELECT create_elabel('g', 'r');
 ERROR:  label "r" already exists
 -- remove the labels that have been created
-SELECT drop_label('g', 'n');
+SELECT drop_label('g', 'n', false);
 NOTICE:  label "g"."n" has been dropped
  drop_label 
 ------------
  
 (1 row)
 
-SELECT drop_label('g', 'r');
+SELECT drop_label('g', 'r', false);
 NOTICE:  label "g"."r" has been dropped
  drop_label 
 ------------
@@ -376,6 +376,22 @@ SELECT drop_label('g', 'n');
 ERROR:  label "n" does not exist
 SELECT drop_label('g', 'r');
 ERROR:  label "r" does not exist
+-- Trying to call the function with label null
+SELECT create_vlabel('g', NULL);
+ERROR:  label name must not be NULL
+SELECT create_elabel('g', NULL);
+ERROR:  label name must not be NULL
+-- Trying to call the function with graph null
+SELECT create_vlabel(NULL, 'n');
+ERROR:  graph name must not be NULL
+SELECT create_elabel(NULL, 'r');
+ERROR:  graph name must not be NULL
+-- Trying to call the function with both null
+SELECT create_vlabel(NULL, NULL);
+ERROR:  graph name must not be NULL
+SELECT create_elabel(NULL, NULL);
+ERROR:  graph name must not be NULL
+-- dropping the graph
 SELECT drop_graph('g', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table g._ag_label_vertex
