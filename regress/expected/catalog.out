@@ -311,7 +311,7 @@ NOTICE:  graph "g" has been dropped
  
 (1 row)
 
--- create lables
+-- create labels
 SELECT create_graph('g');
 NOTICE:  graph "g" has been created
  create_graph 
@@ -343,7 +343,7 @@ SELECT * FROM ag_label;
  r                | 17621 |  4 | e    | g.r
 (4 rows)
 
--- try to create duplicates labels
+-- try to create duplicate labels
 SELECT create_vlabel('g', 'n');
 ERROR:  label "n" already exists
 SELECT create_elabel('g', 'r');
@@ -371,22 +371,22 @@ SELECT * FROM ag_label;
  _ag_label_edge   | 17621 |  2 | e    | g._ag_label_edge
 (2 rows)
 
--- try to remove nodes that is not there
+-- try to remove labels that is not there
 SELECT drop_label('g', 'n');
 ERROR:  label "n" does not exist
 SELECT drop_label('g', 'r');
 ERROR:  label "r" does not exist
--- Trying to call the function with label null
+-- Trying to call the functions with label null
 SELECT create_vlabel('g', NULL);
 ERROR:  label name must not be NULL
 SELECT create_elabel('g', NULL);
 ERROR:  label name must not be NULL
--- Trying to call the function with graph null
+-- Trying to call the functions with graph null
 SELECT create_vlabel(NULL, 'n');
 ERROR:  graph name must not be NULL
 SELECT create_elabel(NULL, 'r');
 ERROR:  graph name must not be NULL
--- Trying to call the function with both null
+-- Trying to call the functions with both null
 SELECT create_vlabel(NULL, NULL);
 ERROR:  graph name must not be NULL
 SELECT create_elabel(NULL, NULL);
