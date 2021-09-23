@@ -98,13 +98,13 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
 PG_FUNCTION_INFO_V1(create_vlabel);
 
 /*
- * This is call callback function
- * This function will be called when user will call SELECT create_vlabel.
+ * This is a callback function
+ * This function will be called when the user will call SELECT create_vlabel.
  * The function takes two parameters
  * 1. Graph name
  * 2. Label Name
  * Function will create a vertex label
- * Function returns error if graph or label names or not provided
+ * Function returns an error if graph or label names or not provided
 */
 
 Datum create_vlabel(PG_FUNCTION_ARGS)
@@ -137,7 +137,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
-    // Check if graph does not exists
+    // Check if graph does not exist
     if (!graph_exists(graph_name_str))
     {
         ereport(ERROR,
@@ -167,13 +167,13 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(create_elabel);
 
 /*
- * This is call callback function
- * This function will be called when user will call SELECT create_elabel.
+ * This is a callback function
+ * This function will be called when the user will call SELECT create_elabel.
  * The function takes two parameters
  * 1. Graph name
  * 2. Label Name
- * Function will create a edge label
- * Function returns error if graph or label names or not provided
+ * Function will create an edge label
+ * Function returns an error if graph or label names or not provided
 */
 
 Datum create_elabel(PG_FUNCTION_ARGS)
@@ -206,7 +206,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
-    // Check if graph does not exists
+    // Check if graph does not exist
     if (!graph_exists(graph_name_str))
     {
         ereport(ERROR,
