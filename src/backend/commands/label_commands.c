@@ -142,7 +142,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("graph \"%s\" does not exists", graph_name_str)));
+                        errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
     // Check if label with the input name already exists
@@ -211,7 +211,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("graph \"%s\" does not exists", graph_name_str)));
+                        errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
     // Check if label with the input name already exists
