@@ -7,11 +7,15 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <libpq-fe.h>
+#include <unistd.h>
+#include "postgresql/libpq-fe.h"
 
 
 // include <csv.h>
 #include <csv.h>
+
+#define AGE_VERTIX 1
+#define AGE_EDGE 2
 
 
 struct counts {
@@ -38,16 +42,19 @@ typedef struct {
 } csv_reader;
 
 
-void cb1 (void *field, size_t len, void *data) {
+void init_cypher(PGconn *conn);
+void create_label(PGconn *conn, char* label_name, int label_type);
+void start_transaction(PGconn *conn);
+void commit_transaction(PGconn *conn);
+void rollback_transaction(PGconn *conn);
+void field_cb(void *field, size_t field_len, void *data);
+void row_cb(int delim __attribute__((unused)), void *data);
 
-    char *ptr;
-    ptr = strndup((char*)field, len);
+void execute_cypher(PGconn *conn, char* cypher_str,
+                    char* graph_name, size_t cypher_size);
 
-    if (((struct counts *)data)->rows == (unsigned)0) {
-        printf("%s, %d\n", ptr, (int)len);
-    }
-    ((struct counts *)data)->fields++;
-}
+int parse_csv_file(char *file_path, char *graph_name,
+                   char *object_name, PGconn *conn );
 
 void init_cypher(PGconn *conn) {
     PGresult *res;
@@ -83,6 +90,36 @@ void start_transaction(PGconn *conn) {
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
     {
         fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+
+
+void create_label(PGconn *conn, char* label_name, int label_type) {
+
+    PGresult *res;
+
+    char *query = (char *) malloc(sizeof (char) * 100);
+
+    strcpy(query, "SELECT ");
+
+    if (label_type == AGE_VERTIX)
+        strcat(query, "create_vlabel('");
+    if(label_type == AGE_EDGE)
+        strcat(query, "create_elabel('");
+    strcat(query, label_name);
+    strcat(query, "'); ");
+
+    res = PQexec(conn, "SE");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "SET failed: %s", PQerrorMessage(conn));
         PQclear(res);
         PQfinish(conn);
         exit(EXIT_FAILURE);
@@ -232,7 +269,6 @@ void row_cb(int delim __attribute__((unused)), void *data) {
     //printf("\n");
 
     strcat(json_row_str, "}");
-    printf("%s \n", json_row_str);
 
     size_t cypher_length = json_row_length + 60;
     char *cypher = (char *) malloc(sizeof (char) * cypher_length);
@@ -240,8 +276,6 @@ void row_cb(int delim __attribute__((unused)), void *data) {
     strcat(cypher, cr->object_name);
     strcat(cypher, json_row_str);
     strcat(cypher, ")");
-
-    printf("%s \n", cypher);
 
     if (cr->row == 0) {
         free(json_row_str);
@@ -344,30 +378,92 @@ int parse_csv_file(char *file_path,
 
 int main(int argc, char** argv) {
 
-    const char *user_id;
-    const char *user_pwd;
-    const char *graph_name;
-    const char *node_label;
-    const char *file_path;
+    char *host_name = NULL;
+    char *port_number = NULL;
+    char *user_id = NULL;
+    char *user_pwd = NULL;
+    char *db_name = NULL;
+    char *graph_name = NULL;
+    char *node_label = NULL;
+    char *file_path = NULL;
+    int node_edge_flag = 0;
 
-    const char *conn_info = "hostname=localhost port=54321 user=postgres";
     PGconn     *conn;
     PGresult   *res;
-    int         nFields;
-    int         i,
-            j;
+    int        nFields;
 
-    printf("Hello, World!\n");
-    printf("total number of arguments are: %d\n", argc);
+    int opt;
 
-    if (argc < 3) {
-        printf("Please provide file path and graph name");
+    while((opt = getopt(argc, argv, "h:p:u:w:Wd:g:ven:f:")) != -1)
+    {
+        switch(opt)
+        {
+            case 'h':
+                host_name = optarg;
+                break;
+            case 'p':
+                port_number = optarg;
+                break;
+            case 'u':
+                user_id = optarg;
+                break;
+            case 'w':
+                user_pwd = optarg;
+                break;
+            case 'd':
+                db_name = optarg;
+                break;
+            case 'g':
+                graph_name = optarg;
+                break;
+            case 'v':
+                node_edge_flag = AGE_VERTIX;
+                break;
+            case 'e':
+                node_edge_flag = AGE_EDGE;
+                break;
+            case 'n':
+                node_label = optarg;
+                break;
+            case 'f':
+                file_path = optarg;
+                break;
+            default:
+                exit(EXIT_FAILURE);
+        }
+    }
+
+    if (host_name == NULL) {
+        host_name = "localhost";
+    }
+
+    if (port_number == NULL) {
+        port_number = "5432";
+    }
+
+    if (db_name == NULL) {
+        db_name = "postgres";
+    }
+
+    if (graph_name == NULL) {
+        printf("Please provide graph name\n");
         exit(EXIT_FAILURE);
     }
 
-    graph_name = argv[1];
-    file_path = argv[2];
+    if (file_path == NULL) {
+        printf("Please provide file path\n");
+        exit(EXIT_FAILURE);
+    }
 
+    if (node_label == NULL) {
+        printf("Please provide node label\n");
+        exit(EXIT_FAILURE);
+    }
+
+
+
+    printf("Hello, World!\n");
+    printf("total number of arguments are: %d\n", argc);
 
     printf("Graph: %s\n", graph_name);
     printf("File Path: %s\n", file_path);
@@ -376,13 +472,13 @@ int main(int argc, char** argv) {
     int lib_ver = PQlibVersion();
     printf("Using LIBPQ Version: %d\n", lib_ver);
 
-    conn = PQsetdbLogin("localhost",
-                        "54321",
+    conn = PQsetdbLogin(host_name,
+                        port_number,
                         NULL,
                         NULL,
-                        NULL,
-                        "postgres",
-                        NULL);
+                        db_name,
+                        user_id,
+                        user_pwd);
 
     if (PQstatus(conn) != CONNECTION_OK)
     {
@@ -393,16 +489,17 @@ int main(int argc, char** argv) {
     }
 
     init_cypher(conn);
+
+    /*
     start_transaction(conn);
     char* cypher = "CREATE (:Person {name: 'Shoaib', title: 'Developer'})";
-    execute_cypher(conn, cypher, "test_graph_abc", 100);
+    execute_cypher(conn, cypher, "graph", 100);
     rollback_transaction(conn);
-
+    */
     start_transaction(conn);
-    char* file_name = "/mnt/d/Bitnine/Apache Age/libcsv_test/countries.csv";
-    int status = parse_csv_file(file_name,
-                                "test_graph_abc",
-                                "Country",
+    int status = parse_csv_file(file_path,
+                                graph_name,
+                                node_label,
                                 conn);
     commit_transaction(conn);
     PQfinish(conn);
