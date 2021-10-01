@@ -1,7 +1,0 @@
-*.o
-*.so
-.gitignore
-*.sh
-.idea
-.deps
-bin
