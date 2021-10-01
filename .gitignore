@@ -1,9 +1,7 @@
 *.o
 *.so
 .gitignore
-build.sh
+*.sh
 .idea
 .deps
-cmake-build-debug
-CMakeLists.txt
-*.patch
+bin

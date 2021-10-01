@@ -219,6 +219,11 @@ void row_cb(int delim __attribute__((unused)), void *data) {
 
     csv_reader *cr = (csv_reader*)data;
 
+    size_t json_row_length = 0;
+    char *json_row_str = NULL;
+    char *cypher = NULL;
+    size_t i, n_fields, cypher_length;
+
     printf("Row %zu:\n", cr->row);
 
     if (cr->row == 0) {
@@ -233,19 +238,19 @@ void row_cb(int delim __attribute__((unused)), void *data) {
         }
     }
 
-    size_t json_row_length = 0;
+
     json_row_length += cr->header_row_length + (6 * cr->header_num);
     json_row_length += cr->curr_row_length + (6 * cr->cur_field);
     json_row_length += 2;
 
     printf("%zu \n", json_row_length);
 
-    char *json_row_str = malloc(sizeof (char ) * json_row_length);
+    json_row_str = malloc(sizeof (char ) * json_row_length);
     //cr->json_str = realloc(cr->json_str, sizeof(char) * cr->json_length);
 
     strcpy(json_row_str, "{");
 
-    size_t i, n_fields;
+
     n_fields = cr->cur_field - 1;
 
     for (i = 0; i < n_fields; ++i) {
@@ -270,8 +275,8 @@ void row_cb(int delim __attribute__((unused)), void *data) {
 
     strcat(json_row_str, "}");
 
-    size_t cypher_length = json_row_length + 60;
-    char *cypher = (char *) malloc(sizeof (char) * cypher_length);
+    cypher_length = json_row_length + 60;
+    cypher = (char *) malloc(sizeof (char) * cypher_length);
     strcpy(cypher, "CREATE (:");
     strcat(cypher, cr->object_name);
     strcat(cypher, json_row_str);
@@ -307,10 +312,12 @@ static int is_space(unsigned char c) {
     return 0;
 }
 
+/*
 static int is_comma(unsigned char c) {
     if (c == '\t') return 1;
     return 0;
 }
+ */
 
 static int is_term(unsigned char c) {
     if (c == CSV_CR || c == CSV_LF) return 1;
@@ -327,6 +334,7 @@ int parse_csv_file(char *file_path,
     char buf[1024];
     size_t bytes_read;
     unsigned char options = 0;
+    csv_reader cr;
 
     if (csv_init(&p, options) != 0) {
         fprintf(stderr, "Failed to initialize csv parser\n");
@@ -342,7 +350,7 @@ int parse_csv_file(char *file_path,
         exit(EXIT_FAILURE);;
     }
 
-    csv_reader cr;
+
     memset((void*)&cr, 0, sizeof(csv_reader));
     cr.alloc = 128;
     cr.fields = malloc(sizeof(char *) * cr.alloc);
@@ -389,10 +397,10 @@ int main(int argc, char** argv) {
     int node_edge_flag = 0;
 
     PGconn     *conn;
-    PGresult   *res;
-    int        nFields;
 
     int opt;
+    int lib_ver;
+    int status;
 
     while((opt = getopt(argc, argv, "h:p:u:w:Wd:g:ven:f:")) != -1)
     {
@@ -469,7 +477,7 @@ int main(int argc, char** argv) {
     printf("File Path: %s\n", file_path);
 
 
-    int lib_ver = PQlibVersion();
+    lib_ver = PQlibVersion();
     printf("Using LIBPQ Version: %d\n", lib_ver);
 
     conn = PQsetdbLogin(host_name,
@@ -497,7 +505,7 @@ int main(int argc, char** argv) {
     rollback_transaction(conn);
     */
     start_transaction(conn);
-    int status = parse_csv_file(file_path,
+    status = parse_csv_file(file_path,
                                 graph_name,
                                 node_label,
                                 conn);
