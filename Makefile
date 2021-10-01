@@ -122,6 +122,7 @@ AGLOAD_OBJ = src/utils/load/ag_load_labels.o
 
 ag_load: $(AGLOAD_OBJ)
 	$(CC) -o $@ $< $(CPPFLAGS)  $(LDFLAGS)
+	mkdir -p bin
 	cp ag_load bin
 	rm -f ag_load
 >>>>>>> rebased with master
