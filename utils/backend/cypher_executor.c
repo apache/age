@@ -3,3 +3,106 @@
 //
 
 #include "cypher_executor.h"
+
+void init_cypher(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "LOAD 'age';");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "LOAD failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+
+    res = PQexec(conn, "SET search_path = ag_catalog, \"$user\", public;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "SET failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void start_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "BEGIN;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void commit_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "COMMIT;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void rollback_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "ROLLBACK;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void execute_cypher(PGconn *conn,
+                    char* cypher_str,
+                    char* graph_name,
+                    size_t cypher_size) {
+
+    PGresult *res;
+
+    char *cypher = (char *) malloc(sizeof (char) * (cypher_size + 60));
+    strcpy(cypher, "SELECT * FROM cypher( ");
+    strcat(cypher, "'");
+    strcat(cypher, graph_name);
+    strcat(cypher, "', $$ ");
+    strcat(cypher, cypher_str);
+    strcat(cypher, " $$) as (n agtype);");
+
+    res = PQexec(conn, cypher);
+
+    printf("%s \n", cypher);
+
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        rollback_transaction(conn);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}

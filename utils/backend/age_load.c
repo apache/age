@@ -136,10 +136,15 @@ int main(int argc, char** argv) {
     rollback_transaction(conn);
     */
     start_transaction(conn);
-    status = parse_csv_file(file_path,
-                                graph_name,
-                                node_label,
-                                conn);
+    if (node_edge_flag == AGE_VERTIX) {
+        status = create_labels_from_csv_file(file_path,
+                                             graph_name,
+                                             node_label,
+                                             conn);
+    }
+    else if (node_edge_flag == AGE_EDGE) {
+        printf("Edge is not implemented yet")
+    }
     commit_transaction(conn);
     PQfinish(conn);
     exit(EXIT_SUCCESS);
