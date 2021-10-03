@@ -8,6 +8,9 @@
 #endif //AG_LOAD_LABELS_H
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> code refactered
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -20,8 +23,11 @@
 
 #include "cypher_executor.h"
 
+<<<<<<< HEAD
 
 =======
+=======
+>>>>>>> code refactered
 #define AGE_VERTIX 1
 #define AGE_EDGE 2
 >>>>>>> code refactered
@@ -49,6 +55,7 @@ typedef struct {
     char *graph_name;
     char *object_name;
 <<<<<<< HEAD
+<<<<<<< HEAD
 } csv_vertex_reader;
 
 
@@ -60,19 +67,22 @@ int create_labels_from_csv_file(char *file_path, char *graph_name,
 
 =======
 } csv_reader;
+=======
+} csv_vertex_reader;
+
+>>>>>>> code refactered
 
 
-void init_cypher(PGconn *conn);
 void create_label(PGconn *conn, char* label_name, int label_type);
-void start_transaction(PGconn *conn);
-void commit_transaction(PGconn *conn);
-void rollback_transaction(PGconn *conn);
-void field_cb(void *field, size_t field_len, void *data);
-void row_cb(int delim __attribute__((unused)), void *data);
 
-void execute_cypher(PGconn *conn, char* cypher_str,
-                    char* graph_name, size_t cypher_size);
 
-int parse_csv_file(char *file_path, char *graph_name,
+void vertex_field_cb(void *field, size_t field_len, void *data);
+void vertex_row_cb(int delim __attribute__((unused)), void *data);
+
+int create_labels_from_csv_file(char *file_path, char *graph_name,
                    char *object_name, PGconn *conn );
+<<<<<<< HEAD
+>>>>>>> code refactered
+=======
+
 >>>>>>> code refactered

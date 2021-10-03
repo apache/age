@@ -3,6 +3,7 @@
 //
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include "load/ag_load_labels.h"
 
 
@@ -66,6 +67,9 @@ void start_transaction(PGconn *conn) {
     PQclear(res);
 }
 
+=======
+#include "load/ag_load_labels.h"
+>>>>>>> code refactered
 
 
 void create_label(PGconn *conn, char* label_name, int label_type) {
@@ -96,26 +100,9 @@ void create_label(PGconn *conn, char* label_name, int label_type) {
     PQclear(res);
 }
 
-void commit_transaction(PGconn *conn) {
-    PGresult *res;
-    res = PQexec(conn, "COMMIT;");
-    printf("Executed %s\n", PQcmdStatus(res));
+void vertex_field_cb(void *field, size_t field_len, void *data) {
 
-    if (PQresultStatus(res) != PGRES_COMMAND_OK)
-    {
-        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
-        PQclear(res);
-        PQfinish(conn);
-        exit(EXIT_FAILURE);
-    }
-    PQclear(res);
-}
-
-void rollback_transaction(PGconn *conn) {
-    PGresult *res;
-    res = PQexec(conn, "ROLLBACK;");
-    printf("Executed %s\n", PQcmdStatus(res));
-
+<<<<<<< HEAD
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
     {
         fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
@@ -162,6 +149,9 @@ void field_cb(void *field, size_t field_len, void *data) {
 
     csv_reader *cr = (csv_reader*)data;
 >>>>>>> code refactered
+=======
+    csv_vertex_reader *cr = (csv_vertex_reader*)data;
+>>>>>>> code refactered
     if (cr->error)
         return;
 
@@ -186,6 +176,7 @@ void field_cb(void *field, size_t field_len, void *data) {
 
 // Parser calls this function when it detects end of a row
 <<<<<<< HEAD
+<<<<<<< HEAD
 void vertex_row_cb(int delim __attribute__((unused)), void *data) {
 
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
@@ -193,6 +184,11 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data) {
 void row_cb(int delim __attribute__((unused)), void *data) {
 
     csv_reader *cr = (csv_reader*)data;
+>>>>>>> code refactered
+=======
+void vertex_row_cb(int delim __attribute__((unused)), void *data) {
+
+    csv_vertex_reader *cr = (csv_vertex_reader*)data;
 >>>>>>> code refactered
 
     size_t json_row_length = 0;
@@ -301,15 +297,21 @@ static int is_term(unsigned char c) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> code refactered
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
                                 char *object_name,
                                 PGconn *conn ) {
+<<<<<<< HEAD
 =======
 int parse_csv_file(char *file_path,
                    char *graph_name,
                    char *object_name,
                    PGconn *conn ) {
+>>>>>>> code refactered
+=======
 >>>>>>> code refactered
 
     FILE *fp;
@@ -318,9 +320,13 @@ int parse_csv_file(char *file_path,
     size_t bytes_read;
     unsigned char options = 0;
 <<<<<<< HEAD
+<<<<<<< HEAD
     csv_vertex_reader cr;
 =======
     csv_reader cr;
+>>>>>>> code refactered
+=======
+    csv_vertex_reader cr;
 >>>>>>> code refactered
 
     if (csv_init(&p, options) != 0) {
@@ -339,9 +345,13 @@ int parse_csv_file(char *file_path,
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     memset((void*)&cr, 0, sizeof(csv_vertex_reader));
 =======
     memset((void*)&cr, 0, sizeof(csv_reader));
+>>>>>>> code refactered
+=======
+    memset((void*)&cr, 0, sizeof(csv_vertex_reader));
 >>>>>>> code refactered
     cr.alloc = 128;
     cr.fields = malloc(sizeof(char *) * cr.alloc);
@@ -354,18 +364,26 @@ int parse_csv_file(char *file_path,
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
 <<<<<<< HEAD
+<<<<<<< HEAD
         if (csv_parse(&p, buf, bytes_read, vertex_field_cb, vertex_row_cb, &cr) != bytes_read) {
 =======
         if (csv_parse(&p, buf, bytes_read, field_cb, row_cb, &cr) != bytes_read) {
+>>>>>>> code refactered
+=======
+        if (csv_parse(&p, buf, bytes_read, vertex_field_cb, vertex_row_cb, &cr) != bytes_read) {
 >>>>>>> code refactered
             fprintf(stderr, "Error while parsing file: %s\n", csv_strerror(csv_error(&p)));
         }
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
 =======
     csv_fini(&p, field_cb, row_cb, &cr);
+>>>>>>> code refactered
+=======
+    csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
 >>>>>>> code refactered
 
     if (ferror(fp)) {
@@ -383,6 +401,7 @@ int parse_csv_file(char *file_path,
     return EXIT_SUCCESS;
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 int main(int argc, char** argv) {
@@ -517,4 +536,6 @@ int main(int argc, char** argv) {
 
 }
 
+>>>>>>> code refactered
+=======
 >>>>>>> code refactered
