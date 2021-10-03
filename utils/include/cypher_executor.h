@@ -6,6 +6,7 @@
 #define CYPHER_EXECUTOR_H
 
 #endif //CYPHER_EXECUTOR_H
+<<<<<<< HEAD
 
 #include <stdio.h>
 #include <string.h>
@@ -25,3 +26,5 @@ void execute_cypher(PGconn *conn, char* cypher_str,
                     char* graph_name, size_t cypher_size);
 
 void create_label(PGconn *conn, char* label_name, int label_type);
+=======
+>>>>>>> code refactered

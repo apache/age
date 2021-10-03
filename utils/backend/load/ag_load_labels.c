@@ -2,6 +2,7 @@
 // Created by Shoaib on 9/14/2021.
 //
 
+<<<<<<< HEAD
 #include "load/ag_load_labels.h"
 
 
@@ -10,6 +11,157 @@
 void vertex_field_cb(void *field, size_t field_len, void *data) {
 
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
+=======
+
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include "postgresql/libpq-fe.h"
+
+// include <csv.h>
+#include <csv.h>
+
+
+
+void init_cypher(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "LOAD 'age';");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "LOAD failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+
+    res = PQexec(conn, "SET search_path = ag_catalog, \"$user\", public;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "SET failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void start_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "BEGIN;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+
+
+void create_label(PGconn *conn, char* label_name, int label_type) {
+
+    PGresult *res;
+
+    char *query = (char *) malloc(sizeof (char) * 100);
+
+    strcpy(query, "SELECT ");
+
+    if (label_type == AGE_VERTIX)
+        strcat(query, "create_vlabel('");
+    if(label_type == AGE_EDGE)
+        strcat(query, "create_elabel('");
+    strcat(query, label_name);
+    strcat(query, "'); ");
+
+    res = PQexec(conn, "SE");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "SET failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void commit_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "COMMIT;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void rollback_transaction(PGconn *conn) {
+    PGresult *res;
+    res = PQexec(conn, "ROLLBACK;");
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "BEGIN failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void execute_cypher(PGconn *conn,
+                    char* cypher_str,
+                    char* graph_name,
+                    size_t cypher_size) {
+
+    PGresult *res;
+
+    char *cypher = (char *) malloc(sizeof (char) * (cypher_size + 60));
+    strcpy(cypher, "SELECT * FROM cypher( ");
+    strcat(cypher, "'");
+    strcat(cypher, graph_name);
+    strcat(cypher, "', $$ ");
+    strcat(cypher, cypher_str);
+    strcat(cypher, " $$) as (n agtype);");
+
+    res = PQexec(conn, cypher);
+
+    printf("%s \n", cypher);
+
+    printf("Executed %s\n", PQcmdStatus(res));
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        rollback_transaction(conn);
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+    PQclear(res);
+}
+
+void field_cb(void *field, size_t field_len, void *data) {
+
+    csv_reader *cr = (csv_reader*)data;
+>>>>>>> code refactered
     if (cr->error)
         return;
 
@@ -33,9 +185,15 @@ void vertex_field_cb(void *field, size_t field_len, void *data) {
 }
 
 // Parser calls this function when it detects end of a row
+<<<<<<< HEAD
 void vertex_row_cb(int delim __attribute__((unused)), void *data) {
 
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
+=======
+void row_cb(int delim __attribute__((unused)), void *data) {
+
+    csv_reader *cr = (csv_reader*)data;
+>>>>>>> code refactered
 
     size_t json_row_length = 0;
     char *json_row_str = NULL;
@@ -142,17 +300,28 @@ static int is_term(unsigned char c) {
     return 0;
 }
 
+<<<<<<< HEAD
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
                                 char *object_name,
                                 PGconn *conn ) {
+=======
+int parse_csv_file(char *file_path,
+                   char *graph_name,
+                   char *object_name,
+                   PGconn *conn ) {
+>>>>>>> code refactered
 
     FILE *fp;
     struct csv_parser p;
     char buf[1024];
     size_t bytes_read;
     unsigned char options = 0;
+<<<<<<< HEAD
     csv_vertex_reader cr;
+=======
+    csv_reader cr;
+>>>>>>> code refactered
 
     if (csv_init(&p, options) != 0) {
         fprintf(stderr, "Failed to initialize csv parser\n");
@@ -169,7 +338,11 @@ int create_labels_from_csv_file(char *file_path,
     }
 
 
+<<<<<<< HEAD
     memset((void*)&cr, 0, sizeof(csv_vertex_reader));
+=======
+    memset((void*)&cr, 0, sizeof(csv_reader));
+>>>>>>> code refactered
     cr.alloc = 128;
     cr.fields = malloc(sizeof(char *) * cr.alloc);
     cr.fields_len = malloc(sizeof(size_t *) * cr.alloc);
@@ -180,12 +353,20 @@ int create_labels_from_csv_file(char *file_path,
     cr.object_name = object_name;
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
+<<<<<<< HEAD
         if (csv_parse(&p, buf, bytes_read, vertex_field_cb, vertex_row_cb, &cr) != bytes_read) {
+=======
+        if (csv_parse(&p, buf, bytes_read, field_cb, row_cb, &cr) != bytes_read) {
+>>>>>>> code refactered
             fprintf(stderr, "Error while parsing file: %s\n", csv_strerror(csv_error(&p)));
         }
     }
 
+<<<<<<< HEAD
     csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
+=======
+    csv_fini(&p, field_cb, row_cb, &cr);
+>>>>>>> code refactered
 
     if (ferror(fp)) {
         fprintf(stderr, "Error while reading file %s\n", file_path);
@@ -202,3 +383,138 @@ int create_labels_from_csv_file(char *file_path,
     return EXIT_SUCCESS;
 }
 
+<<<<<<< HEAD
+=======
+int main(int argc, char** argv) {
+
+    char *host_name = NULL;
+    char *port_number = NULL;
+    char *user_id = NULL;
+    char *user_pwd = NULL;
+    char *db_name = NULL;
+    char *graph_name = NULL;
+    char *node_label = NULL;
+    char *file_path = NULL;
+    int node_edge_flag = 0;
+
+    PGconn     *conn;
+
+    int opt;
+    int lib_ver;
+    int status;
+
+    while((opt = getopt(argc, argv, "h:p:u:w:Wd:g:ven:f:")) != -1)
+    {
+        switch(opt)
+        {
+            case 'h':
+                host_name = optarg;
+                break;
+            case 'p':
+                port_number = optarg;
+                break;
+            case 'u':
+                user_id = optarg;
+                break;
+            case 'w':
+                user_pwd = optarg;
+                break;
+            case 'd':
+                db_name = optarg;
+                break;
+            case 'g':
+                graph_name = optarg;
+                break;
+            case 'v':
+                node_edge_flag = AGE_VERTIX;
+                break;
+            case 'e':
+                node_edge_flag = AGE_EDGE;
+                break;
+            case 'n':
+                node_label = optarg;
+                break;
+            case 'f':
+                file_path = optarg;
+                break;
+            default:
+                exit(EXIT_FAILURE);
+        }
+    }
+
+    if (host_name == NULL) {
+        host_name = "localhost";
+    }
+
+    if (port_number == NULL) {
+        port_number = "5432";
+    }
+
+    if (db_name == NULL) {
+        db_name = "postgres";
+    }
+
+    if (graph_name == NULL) {
+        printf("Please provide graph name\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (file_path == NULL) {
+        printf("Please provide file path\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (node_label == NULL) {
+        printf("Please provide node label\n");
+        exit(EXIT_FAILURE);
+    }
+
+
+
+    printf("Hello, World!\n");
+    printf("total number of arguments are: %d\n", argc);
+
+    printf("Graph: %s\n", graph_name);
+    printf("File Path: %s\n", file_path);
+
+
+    lib_ver = PQlibVersion();
+    printf("Using LIBPQ Version: %d\n", lib_ver);
+
+    conn = PQsetdbLogin(host_name,
+                        port_number,
+                        NULL,
+                        NULL,
+                        db_name,
+                        user_id,
+                        user_pwd);
+
+    if (PQstatus(conn) != CONNECTION_OK)
+    {
+        fprintf(stderr, "Connection to database failed: %s",
+                PQerrorMessage(conn));
+        PQfinish(conn);
+        exit(EXIT_FAILURE);
+    }
+
+    init_cypher(conn);
+
+    /*
+    start_transaction(conn);
+    char* cypher = "CREATE (:Person {name: 'Shoaib', title: 'Developer'})";
+    execute_cypher(conn, cypher, "graph", 100);
+    rollback_transaction(conn);
+    */
+    start_transaction(conn);
+    status = parse_csv_file(file_path,
+                                graph_name,
+                                node_label,
+                                conn);
+    commit_transaction(conn);
+    PQfinish(conn);
+    exit(EXIT_SUCCESS);
+
+
+}
+
+>>>>>>> code refactered

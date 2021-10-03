@@ -13,7 +13,10 @@
 #include <csv.h>
 
 #include "load/ag_load_labels.h"
+<<<<<<< HEAD
 #include "load/ag_load_edges.h"
+=======
+>>>>>>> code refactered
 
 
 int main(int argc, char** argv) {
@@ -137,6 +140,7 @@ int main(int argc, char** argv) {
     rollback_transaction(conn);
     */
     start_transaction(conn);
+<<<<<<< HEAD
     if (node_edge_flag == AGE_VERTIX) {
         status = create_labels_from_csv_file(file_path,
                                              graph_name,
@@ -149,6 +153,12 @@ int main(int argc, char** argv) {
                                              node_label,
                                              conn);
     }
+=======
+    status = parse_csv_file(file_path,
+                                graph_name,
+                                node_label,
+                                conn);
+>>>>>>> code refactered
     commit_transaction(conn);
     PQfinish(conn);
     exit(EXIT_SUCCESS);

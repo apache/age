@@ -3,6 +3,7 @@
 //
 
 #include "cypher_executor.h"
+<<<<<<< HEAD
 
 void init_cypher(PGconn *conn) {
     PGresult *res;
@@ -134,3 +135,5 @@ void create_label(PGconn *conn, char* label_name, int label_type) {
     }
     PQclear(res);
 }
+=======
+>>>>>>> code refactered

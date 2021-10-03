@@ -15,15 +15,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
+<<<<<<< HEAD
 TARGET_EXEC := final_program
 
 BUILD_DIR := ./build
 
+=======
+>>>>>>> code refactered
 CC = gcc
 
 CPPFLAGS = -I/usr/include/postgresql -Iinclude
 LDFLAGS = -lcsv -lpq
 
+<<<<<<< HEAD
 AGLOAD_OBJ = backend/load/ag_load_labels.o \
 			 backend/load/ag_load_edges.o \
 			 backend/cypher_executor.o \
@@ -33,6 +37,14 @@ all: ag_load
 
 ag_load: $(AGLOAD_OBJ)
 	$(CC) -g -o $@ $^ $(CPPFLAGS)  $(LDFLAGS)
+=======
+AGLOAD_OBJ = backend/load/ag_load_labels.o
+
+# utils:  ag_load
+
+ag_load: $(AGLOAD_OBJ)
+	$(CC) -o $@ $< $(CPPFLAGS)  $(LDFLAGS)
+>>>>>>> code refactered
 	mkdir -p bin
 	cp ag_load bin
 	rm -f ag_load
