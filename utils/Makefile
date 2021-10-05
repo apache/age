@@ -25,13 +25,14 @@ CPPFLAGS = -I/usr/include/postgresql -Iinclude
 LDFLAGS = -lcsv -lpq
 
 AGLOAD_OBJ = backend/load/ag_load_labels.o \
+			 backend/load/ag_load_edges.o \
 			 backend/cypher_executor.o \
 			 backend/age_load.o
 
-# utils:  ag_load
+all: ag_load
 
 ag_load: $(AGLOAD_OBJ)
-	$(CC) -o $@ $^ $(CPPFLAGS)  $(LDFLAGS)
+	$(CC) -g -o $@ $^ $(CPPFLAGS)  $(LDFLAGS)
 	mkdir -p bin
 	cp ag_load bin
 	rm -f ag_load

@@ -19,8 +19,7 @@
 
 #include "cypher_executor.h"
 
-#define AGE_VERTIX 1
-#define AGE_EDGE 2
+
 
 
 struct counts {
@@ -45,10 +44,6 @@ typedef struct {
     char *graph_name;
     char *object_name;
 } csv_vertex_reader;
-
-
-
-void create_label(PGconn *conn, char* label_name, int label_type);
 
 
 void vertex_field_cb(void *field, size_t field_len, void *data);

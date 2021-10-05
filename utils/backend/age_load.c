@@ -13,6 +13,7 @@
 #include <csv.h>
 
 #include "load/ag_load_labels.h"
+#include "load/ag_load_edges.h"
 
 
 int main(int argc, char** argv) {
@@ -143,7 +144,10 @@ int main(int argc, char** argv) {
                                              conn);
     }
     else if (node_edge_flag == AGE_EDGE) {
-        printf("Edge is not implemented yet")
+        status = create_edges_from_csv_file(file_path,
+                                             graph_name,
+                                             node_label,
+                                             conn);
     }
     commit_transaction(conn);
     PQfinish(conn);

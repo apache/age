@@ -5,33 +5,7 @@
 #include "load/ag_load_labels.h"
 
 
-void create_label(PGconn *conn, char* label_name, int label_type) {
 
-    PGresult *res;
-
-    char *query = (char *) malloc(sizeof (char) * 100);
-
-    strcpy(query, "SELECT ");
-
-    if (label_type == AGE_VERTIX)
-        strcat(query, "create_vlabel('");
-    if(label_type == AGE_EDGE)
-        strcat(query, "create_elabel('");
-    strcat(query, label_name);
-    strcat(query, "'); ");
-
-    res = PQexec(conn, "SE");
-    printf("Executed %s\n", PQcmdStatus(res));
-
-    if (PQresultStatus(res) != PGRES_COMMAND_OK)
-    {
-        fprintf(stderr, "SET failed: %s", PQerrorMessage(conn));
-        PQclear(res);
-        PQfinish(conn);
-        exit(EXIT_FAILURE);
-    }
-    PQclear(res);
-}
 
 void vertex_field_cb(void *field, size_t field_len, void *data) {
 
