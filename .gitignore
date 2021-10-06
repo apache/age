@@ -1,0 +1,6 @@
+*.o
+*.so
+build.sh
+.idea
+.deps
+bin
