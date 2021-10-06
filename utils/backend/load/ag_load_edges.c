@@ -2,7 +2,6 @@
 // Created by Shoaib on 10/5/2021.
 //
 
-<<<<<<< HEAD
 #include "load/ag_load_edges.h"
 
 
@@ -217,6 +216,3 @@ int create_edges_from_csv_file(char *file_path,
     csv_free(&p);
     return EXIT_SUCCESS;
 }
-=======
-#include "ag_load_edges.h"
->>>>>>> added code for edges

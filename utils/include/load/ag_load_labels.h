@@ -5,12 +5,7 @@
 #ifndef AG_LOAD_LABELS_H
 #define AG_LOAD_LABELS_H
 
-#endif //AG_LOAD_LABELS_H
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> code refactered
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -23,14 +18,8 @@
 
 #include "cypher_executor.h"
 
-<<<<<<< HEAD
-
-=======
-=======
->>>>>>> code refactered
 #define AGE_VERTIX 1
 #define AGE_EDGE 2
->>>>>>> code refactered
 
 
 struct counts {
@@ -54,8 +43,6 @@ typedef struct {
     PGconn *conn;
     char *graph_name;
     char *object_name;
-<<<<<<< HEAD
-<<<<<<< HEAD
 } csv_vertex_reader;
 
 
@@ -64,13 +51,6 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data);
 
 int create_labels_from_csv_file(char *file_path, char *graph_name,
                    char *object_name, PGconn *conn );
-
-=======
-} csv_reader;
-=======
-} csv_vertex_reader;
-
->>>>>>> code refactered
 
 
 void create_label(PGconn *conn, char* label_name, int label_type);
@@ -81,8 +61,4 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data);
 
 int create_labels_from_csv_file(char *file_path, char *graph_name,
                    char *object_name, PGconn *conn );
-<<<<<<< HEAD
->>>>>>> code refactered
-=======
-
->>>>>>> code refactered
+#endif //AG_LOAD_LABELS_H

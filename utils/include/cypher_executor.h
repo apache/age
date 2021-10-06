@@ -6,10 +6,6 @@
 #define CYPHER_EXECUTOR_H
 
 #endif //CYPHER_EXECUTOR_H
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> code refactered
 
 #include <stdio.h>
 #include <string.h>
@@ -18,22 +14,14 @@
 #include <unistd.h>
 #include "postgresql/libpq-fe.h"
 
-<<<<<<< HEAD
 #define AGE_VERTIX 1
 #define AGE_EDGE 2
 
-=======
->>>>>>> code refactered
 void init_cypher(PGconn *conn);
 void start_transaction(PGconn *conn);
 void commit_transaction(PGconn *conn);
 void rollback_transaction(PGconn *conn);
 void execute_cypher(PGconn *conn, char* cypher_str,
                     char* graph_name, size_t cypher_size);
-<<<<<<< HEAD
-
 void create_label(PGconn *conn, char* label_name, int label_type);
-=======
->>>>>>> code refactered
-=======
->>>>>>> code refactered
+
