@@ -102,27 +102,3 @@ src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c
 src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
-
-<<<<<<< HEAD
-=======
-
-CC = gcc
-
-CPPFLAGS = -I/usr/include/postgresql
-LDFLAGS = -lcsv -lpq
-
-<<<<<<< HEAD
-ag_load_labels: src/backend/utils/load/ag_load_labels.o
-	$(CC) $(CPPFLAGS) -o ag_load_labels src/backend/utils/load/ag_load_labels.o -lcsv -lpq
->>>>>>> rebase with origin master
-=======
-AGLOAD_OBJ = src/utils/load/ag_load_labels.o
-
-# utils:  ag_load
-
-ag_load: $(AGLOAD_OBJ)
-	$(CC) -o $@ $< $(CPPFLAGS)  $(LDFLAGS)
-	mkdir -p bin
-	cp ag_load bin
-	rm -f ag_load
->>>>>>> rebased with master
