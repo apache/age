@@ -44,3 +44,4 @@ bin/ag_load: $(OBJS)
 clean:
 	find . -type f -name '*\.o' -exec rm {} \;
 	rm -rf bin
+
