@@ -139,6 +139,7 @@ int main(int argc, char** argv) {
     start_transaction(conn);
 
     if (node_edge_flag == AGE_VERTIX) {
+        printf("\n Creating Verticies\n");
         status = create_labels_from_csv_file(file_path,
                                              graph_name,
                                              node_label,

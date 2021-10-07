@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "postgresql/libpq-fe.h"
-
-// include <csv.h>
 #include <csv.h>
 
 
@@ -69,7 +67,7 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data) {
     json_row_length += cr->curr_row_length + (6 * cr->cur_field);
     json_row_length += 2;
 
-    printf("%zu \n", json_row_length);
+    // printf("%zu \n", json_row_length);
 
     json_row_str = malloc(sizeof (char ) * json_row_length);
     //cr->json_str = realloc(cr->json_str, sizeof(char) * cr->json_length);
@@ -80,8 +78,8 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data) {
     n_fields = cr->cur_field - 1;
 
     for (i = 0; i < n_fields; ++i) {
-        printf("%s:", cr->header[i]);
-        printf("%s\n", cr->fields[i]);
+        //printf("%s:", cr->header[i]);
+        //printf("%s\n", cr->fields[i]);
         strncat(json_row_str, cr->header[i], cr->header_len[i]);
         strcat(json_row_str, ":");
         strcat(json_row_str, "'");

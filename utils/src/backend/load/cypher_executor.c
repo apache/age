@@ -2,7 +2,7 @@
 // Created by Shoaib on 10/3/2021.
 //
 
-#include "cypher_executor.h"
+#include "load/cypher_executor.h"
 
 void init_cypher(PGconn *conn) {
     PGresult *res;
@@ -17,7 +17,7 @@ void init_cypher(PGconn *conn) {
         exit(EXIT_FAILURE);
     }
 
-    res = PQexec(conn, "SET search_path = ag_catalog, \"$user\", public;");
+    res = PQexec(conn, "SET search_path TO ag_catalog;");
     printf("Executed %s\n", PQcmdStatus(res));
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -83,7 +83,7 @@ void execute_cypher(PGconn *conn,
     PGresult *res;
 
     char *cypher = (char *) malloc(sizeof (char) * (cypher_size + 60));
-    strcpy(cypher, "SELECT * FROM cypher( ");
+    strcpy(cypher, "SELECT * FROM ag_catalog.cypher( ");
     strcat(cypher, "'");
     strcat(cypher, graph_name);
     strcat(cypher, "', $$ ");
@@ -122,7 +122,7 @@ void create_label(PGconn *conn, char* label_name, int label_type) {
     strcat(query, label_name);
     strcat(query, "'); ");
 
-    res = PQexec(conn, "SE");
+    res = PQexec(conn, query);
     printf("Executed %s\n", PQcmdStatus(res));
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK)

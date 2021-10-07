@@ -20,18 +20,33 @@ TARGET_EXEC := final_program
 BUILD_DIR := ./build
 CC = gcc
 
-CPPFLAGS = -I/usr/include/postgresql -Iinclude
+CPPFLAGS = -I/usr/include/postgresql -Isrc/include
 LDFLAGS = -lcsv -lpq
 
-AGLOAD_OBJ = backend/load/ag_load_labels.o \
-			 backend/load/ag_load_edges.o \
-			 backend/cypher_executor.o \
-			 backend/age_load.o
 
-all: ag_load
 
-ag_load: $(AGLOAD_OBJ)
+#AGLOAD_SRC = src/backend/load/ag_load_labels.c \
+#			 src/backend/load/ag_load_edges.c \
+#			 src/backend/load/cypher_executor.c \
+#			 src/backend/load/age_load.c
+
+SRC_DIR = ./src/backend/load
+
+SRCS = $(shell find $(SRC_DIR) -name '*.c')
+OBJS = $(SRCS:.c=.o)
+
+
+all: bin/ag_load
+
+bin/ag_load: $(OBJS)
+	@mkdir -p $(@D)
 	$(CC) -g -o $@ $^ $(CPPFLAGS)  $(LDFLAGS)
-	mkdir -p bin
-	cp ag_load bin
-	rm -f ag_load
+
+
+%.o: %.c
+	$(CC) -g -c $(CFLAGS) $(CPPFLAGS) $< -o $@ $(LDFLAGS)
+
+
+clean:
+	find . -type f -name '*\.o' -exec rm {} \;
+	rm -rf bin

@@ -2,6 +2,14 @@
 // Created by Shoaib on 10/5/2021.
 //
 
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include "postgresql/libpq-fe.h"
+#include <csv.h>
+
 #include "load/ag_load_edges.h"
 
 
@@ -52,7 +60,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data) {
         cr->header_len = (size_t* )malloc(sizeof(size_t *) * cr->cur_field);
         cr->header = malloc((sizeof (char*) * cr->cur_field));
 
-        for ( i = 4; i<cr->cur_field; i++) {
+        for ( i = 0; i<cr->cur_field; i++) {
             cr->header_len[i] = cr->fields_len[i];
             cr->header[i] = strndup(cr->fields[i], cr->header_len[i]);
         }
@@ -63,20 +71,14 @@ void edge_row_cb(int delim __attribute__((unused)), void *data) {
     json_row_length += cr->curr_row_length + (6 * cr->cur_field);
     json_row_length += 2;
 
-    printf("%zu \n", json_row_length);
-
-    json_row_str = malloc(sizeof (char ) * json_row_length);
-    //cr->json_str = realloc(cr->json_str, sizeof(char) * cr->json_length);
-
+    json_row_str = malloc(sizeof(char) * json_row_length);
     strcpy(json_row_str, "{");
 
-
     n_fields = cr->cur_field - 1;
-
     start_id = strdup(cr->fields[0]);
     start_vertex_type = strdup(cr->fields[1]);
     end_id = strdup(cr->fields[2]);
-    end_vertex_type = strdup(cr->fields[4]);
+    end_vertex_type = strdup(cr->fields[3]);
 
     for (i = 4; i < n_fields; ++i) {
         printf("%s:", cr->header[i]);
@@ -89,14 +91,13 @@ void edge_row_cb(int delim __attribute__((unused)), void *data) {
         strcat(json_row_str, ",");
         free(cr->fields[i]);
     }
-
-    strncat(json_row_str, cr->header[i], cr->header_len[i]);
-    strcat(json_row_str, ":");
-    strcat(json_row_str, "'");
-    strncat(json_row_str, cr->fields[i], cr->fields_len[i]);
-    strcat(json_row_str, "'");
-
-    //printf("\n");
+    if (i == n_fields) {
+        strncat(json_row_str, cr->header[i], cr->header_len[i]);
+        strcat(json_row_str, ":");
+        strcat(json_row_str, "'");
+        strncat(json_row_str, cr->fields[i], cr->fields_len[i]);
+        strcat(json_row_str, "'");
+    }
 
     strcat(json_row_str, "}");
 
@@ -109,7 +110,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data) {
     strcat(cypher, "\" })-[:");
     strcat(cypher, cr->edge_type);
     strcat(cypher, json_row_str);
-    strcat(cypher, "]-(:");
+    strcat(cypher, "]->(:");
     strcat(cypher, end_vertex_type);
     strcat(cypher, " { id : \"");
     strcat(cypher, end_id);
@@ -158,9 +159,9 @@ static int is_term(unsigned char c) {
 }
 
 int create_edges_from_csv_file(char *file_path,
-                                char *graph_name,
-                                char *edge_type,
-                                PGconn *conn ) {
+                               char *graph_name,
+                               char *edge_type,
+                               PGconn *conn ) {
 
     FILE *fp;
     struct csv_parser p;
