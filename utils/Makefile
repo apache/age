@@ -15,20 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
-TARGET_EXEC := final_program
+TARGET_EXEC = final_program
 
-BUILD_DIR := ./build
+BUILD_DIR = ./build
 CC = gcc
 
 CPPFLAGS = -I/usr/include/postgresql -Isrc/include
 LDFLAGS = -lcsv -lpq
 
-
-
-#AGLOAD_SRC = src/backend/load/ag_load_labels.c \
-#			 src/backend/load/ag_load_edges.c \
-#			 src/backend/load/cypher_executor.c \
-#			 src/backend/load/age_load.c
 
 SRC_DIR = ./src/backend/load
 
