@@ -29,6 +29,8 @@ CREATE TABLE ag_graph (
   namespace regnamespace NOT NULL
 ) WITH (OIDS);
 
+SELECT pg_catalog.pg_extension_config_dump('ag_graph', '');
+
 CREATE UNIQUE INDEX ag_graph_oid_index ON ag_graph USING btree (oid);
 
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
@@ -49,6 +51,8 @@ CREATE TABLE ag_label (
   kind label_kind,
   relation regclass NOT NULL
 ) WITH (OIDS);
+
+SELECT pg_catalog.pg_extension_config_dump('ag_label', '');
 
 CREATE UNIQUE INDEX ag_label_oid_index ON ag_label USING btree (oid);
 
