@@ -890,7 +890,7 @@ $$) AS (i agtype);
 (3 rows)
 
 --
--- 140
+-- JIRA: AGE2-544
 --
 -- Clean up
 SELECT DISTINCT * FROM cypher('cypher_match', $$
