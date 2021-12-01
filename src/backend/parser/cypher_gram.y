@@ -87,7 +87,7 @@
                  LIMIT
                  MATCH
                  NOT NULL_P
-                 OR ORDER
+                 OPTIONAL OR ORDER
                  REMOVE RETURN
                  SET SKIP STARTS
                  THEN TRUE_P
@@ -118,7 +118,7 @@
 
 /* DELETE clause */
 %type <node> delete
-%type <boolean> detach_opt
+%type <boolean> optional_opt detach_opt
 
 /* common */
 %type <node> where_opt
@@ -666,17 +666,30 @@ with:
  */
 
 match:
-    MATCH pattern where_opt
+    optional_opt MATCH pattern where_opt
         {
             cypher_match *n;
 
             n = make_ag_node(cypher_match);
-            n->pattern = $2;
-            n->where = $3;
+            n->optional = $1;
+            n->pattern = $3;
+            n->where = $4;
 
             $$ = (Node *)n;
         }
     ;
+
+optional_opt:
+    OPTIONAL
+        {
+            $$ = true;
+        }
+    | /* EMPTY */
+        {
+            $$ = false;
+        }
+    ;
+
 
 /*
  * CREATE clause
@@ -1602,6 +1615,7 @@ safe_keywords:
     | LIMIT      { $$ = pnstrdup($1, 6); }
     | MATCH      { $$ = pnstrdup($1, 6); }
     | NOT        { $$ = pnstrdup($1, 3); }
+    | OPTIONAL   { $$ = pnstrdup($1, 6); }
     | OR         { $$ = pnstrdup($1, 2); }
     | ORDER      { $$ = pnstrdup($1, 5); }
     | REMOVE     { $$ = pnstrdup($1, 6); }

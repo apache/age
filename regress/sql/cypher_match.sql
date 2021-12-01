@@ -456,6 +456,16 @@ SELECT * FROM cypher('cypher_match', $$
 	RETURN u SKIP 7 LIMIT 3
 $$) AS (i agtype);
 
+
+-- 
+-- Optional Match
+-- 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (u)
+    OPTIONAL MATCH (u)-[m]-(l)
+    RETURN id(u), type(m), l
+$$) AS (u agtype, m agtype, l agtype);
+
 --
 -- JIRA: AGE2-544
 --
