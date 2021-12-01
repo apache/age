@@ -463,7 +463,8 @@ $$) AS (i agtype);
 SELECT * FROM cypher('cypher_match', $$
     MATCH (u)
     OPTIONAL MATCH (u)-[m]-(l)
-    RETURN id(u), type(m), l
+    RETURN id(u) as u, type(m), id(l) as l
+    ORDER BY u, m, l
 $$) AS (u agtype, m agtype, l agtype);
 
 --
