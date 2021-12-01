@@ -93,6 +93,7 @@
                  THEN TRUE_P
                  VERBOSE
                  WHEN WHERE WITH
+                 XOR
 
 /* query */
 %type <list> single_query query_part_init query_part_last
@@ -148,6 +149,7 @@
 /* precedence: lowest to highest */
 %left OR
 %left AND
+%left XOR
 %right NOT
 %nonassoc '=' NOT_EQ '<' LT_EQ '>' GT_EQ
 %left '+' '-'
@@ -155,7 +157,7 @@
 %left '^'
 %nonassoc IN IS
 %right UNARY_MINUS
-%nonassoc STARTS ENDS CONTAINS
+%nonassoc CONTAINS ENDS EQ_TILDE STARTS
 %left '[' ']' '(' ')'
 %left '.'
 %left TYPECAST
@@ -164,6 +166,7 @@
 // logical operators
 static Node *make_or_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_and_expr(Node *lexpr, Node *rexpr, int location);
+static Node *make_xor_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_not_expr(Node *expr, int location);
 
 // arithmetic operators
@@ -1010,6 +1013,10 @@ expr:
         {
             $$ = make_and_expr($1, $3, @2);
         }
+    | expr XOR expr
+        {
+            $$ = make_xor_expr($1, $3, @2);
+        }
     | NOT expr
         {
             $$ = make_not_expr($2, @1);
@@ -1127,6 +1134,11 @@ expr:
             n->location = @2;
 
             $$ = (Node *)n;
+        }
+    | expr EQ_TILDE expr
+        {
+            $$ = make_function_expr(list_make1(makeString("eq_tilde")),
+                                    list_make2($1, $3), @2);
         }
     | expr '[' expr ']'
         {
@@ -1566,7 +1578,8 @@ reserved_keyword:
  */
 
 safe_keywords:
-    AND
+    AND          { $$ = pnstrdup($1, 3); }
+    | ANALYZE    { $$ = pnstrdup($1, 7); }
     | AS         { $$ = pnstrdup($1, 2); }
     | ASC        { $$ = pnstrdup($1, 3); }
     | ASCENDING  { $$ = pnstrdup($1, 9); }
@@ -1583,6 +1596,7 @@ safe_keywords:
     | ELSE       { $$ = pnstrdup($1, 4); }
     | ENDS       { $$ = pnstrdup($1, 4); }
     | EXISTS     { $$ = pnstrdup($1, 6); }
+    | EXPLAIN    { $$ = pnstrdup($1, 7); }
     | IN         { $$ = pnstrdup($1, 2); }
     | IS         { $$ = pnstrdup($1, 2); }
     | LIMIT      { $$ = pnstrdup($1, 6); }
@@ -1597,8 +1611,10 @@ safe_keywords:
     | STARTS     { $$ = pnstrdup($1, 6); }
     | THEN       { $$ = pnstrdup($1, 4); }
     | WHEN       { $$ = pnstrdup($1, 4); }
+    | VERBOSE    { $$ = pnstrdup($1, 7); }
     | WHERE      { $$ = pnstrdup($1, 5); }
     | WITH       { $$ = pnstrdup($1, 4); }
+    | XOR        { $$ = pnstrdup($1, 3); }
     ;
 
 conflicted_keywords:
@@ -1648,6 +1664,20 @@ static Node *make_and_expr(Node *lexpr, Node *rexpr, int location)
     }
 
     return (Node *)makeBoolExpr(AND_EXPR, list_make2(lexpr, rexpr), location);
+}
+
+static Node *make_xor_expr(Node *lexpr, Node *rexpr, int location)
+{
+    Expr *aorb;
+    Expr *notaandb;
+
+    // XOR is (A OR B) AND (NOT (A AND B))
+    aorb = makeBoolExpr(OR_EXPR, list_make2(lexpr, rexpr), location);
+
+    notaandb = makeBoolExpr(AND_EXPR, list_make2(lexpr, rexpr), location);
+    notaandb = makeBoolExpr(NOT_EXPR, list_make1(notaandb), location);
+
+    return (Node *)makeBoolExpr(AND_EXPR, list_make2(aorb, notaandb), location);
 }
 
 static Node *make_not_expr(Node *expr, int location)

@@ -17,6 +17,8 @@
 
 MODULE_big = age
 
+
+
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \
@@ -50,6 +52,7 @@ OBJS = src/backend/age.o \
        src/backend/utils/adt/agtype_ops.o \
        src/backend/utils/adt/agtype_parser.o \
        src/backend/utils/adt/agtype_util.o \
+       src/backend/utils/adt/agtype_vle.o \
        src/backend/utils/adt/cypher_funcs.o \
        src/backend/utils/adt/ag_float8_supp.o \
        src/backend/utils/adt/graphid.o \
@@ -58,7 +61,7 @@ OBJS = src/backend/age.o \
 
 EXTENSION = age
 
-DATA = age--0.5.0.sql
+DATA = age--0.6.0.sql
 
 # sorted in dependency order
 REGRESS = scan \
@@ -73,10 +76,13 @@ REGRESS = scan \
           cypher_remove \
           cypher_delete \
           cypher_with \
+          cypher_vle \
           drop
 
+srcdir=`pwd`
+
 ag_regress_dir = $(srcdir)/regress
-REGRESS_OPTS = --load-extension=age --inputdir=$(ag_regress_dir) --outputdir=$(ag_regress_dir) --temp-instance=$(ag_regress_dir)/instance --port=61958
+REGRESS_OPTS = --load-extension=age --inputdir=$(ag_regress_dir) --outputdir=$(ag_regress_dir) --temp-instance=$(ag_regress_dir)/instance --port=61958 --encoding=UTF-8
 
 ag_regress_out = instance/ log/ results/ regression.*
 EXTRA_CLEAN = $(addprefix $(ag_regress_dir)/, $(ag_regress_out)) src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h

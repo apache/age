@@ -17,7 +17,9 @@
  * under the License.
  */
 
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node'
-}
+#ifndef AG_AGTYPE_VLE_H
+#define AG_AGTYPE_VLE_H
+
+#include "postgres.h"
+
+#endif
