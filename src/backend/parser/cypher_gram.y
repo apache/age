@@ -109,6 +109,8 @@
 %type <node> match cypher_varlen_opt cypher_range_opt cypher_range_idx
              cypher_range_idx_opt
 %type <integer> Iconst
+%type <boolean> optional_opt
+
 /* CREATE clause */
 %type <node> create
 
@@ -118,7 +120,7 @@
 
 /* DELETE clause */
 %type <node> delete
-%type <boolean> optional_opt detach_opt
+%type <boolean> detach_opt
 
 /* common */
 %type <node> where_opt
