@@ -509,21 +509,15 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
 
     func_set_oid = get_ag_func_oid("_cypher_set_clause", 1, INTERNALOID);
 
-    if (list_length(self->items) != 1)
+    /*if (list_length(self->items) != 1)
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
             errmsg("%s clause does not yet support updating more than one property", clause_name),
             parser_errposition(pstate, self->location)));
-
+*/
     if (self->is_remove == true)
         set_items_target_list = transform_cypher_remove_item_list(cpstate, self->items, query);
     else
         set_items_target_list = transform_cypher_set_item_list(cpstate, self->items, query);
-
-    if (list_length(self->items) != 1)
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-            errmsg("%s clause does not yet support updating more than one property",
-                    set_items_target_list->clause_name),
-            parser_errposition(pstate, self->location)));
 
     set_items_target_list->clause_name = clause_name;
     set_items_target_list->graph_name = cpstate->graph_name;
@@ -1285,6 +1279,10 @@ static Query *transform_cypher_sub_pattern(cypher_parsestate *cpstate,
     ParseState *pstate = (ParseState *)cpstate;
     cypher_sub_pattern *subpat = (cypher_sub_pattern*)clause->self;
 
+    cypher_parsestate *child_parse_state = make_cypher_parsestate(cpstate);
+    ParseState *p_child_parse_state = (ParseState *) child_parse_state;
+    p_child_parse_state->p_expr_kind = pstate->p_expr_kind;
+
     /* create a cypher match node and assign it the sub pattern */
     match = make_ag_node(cypher_match);
     match->pattern = subpat->pattern;
@@ -1299,25 +1297,27 @@ static Query *transform_cypher_sub_pattern(cypher_parsestate *cpstate,
     qry = makeNode(Query);
     qry->commandType = CMD_SELECT;
 
-    rte = transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause,
+    rte = transform_cypher_clause_as_subquery(child_parse_state, transform_cypher_clause,
                                               c);
 
-    qry->targetList = makeTargetListFromRTE(pstate, rte);
+    qry->targetList = makeTargetListFromRTE(p_child_parse_state, rte);
 
-    markTargetListOrigins(pstate, qry->targetList);
+    markTargetListOrigins(p_child_parse_state, qry->targetList);
 
-    qry->rtable = pstate->p_rtable;
-    qry->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+    qry->rtable = p_child_parse_state->p_rtable;
+    qry->jointree = makeFromExpr(p_child_parse_state->p_joinlist, NULL);
 
     /* the state will be destroyed so copy the data we need */
-    qry->hasSubLinks = pstate->p_hasSubLinks;
-    qry->hasTargetSRFs = pstate->p_hasTargetSRFs;
-    qry->hasAggs = pstate->p_hasAggs;
+    qry->hasSubLinks = p_child_parse_state->p_hasSubLinks;
+    qry->hasTargetSRFs = p_child_parse_state->p_hasTargetSRFs;
+    qry->hasAggs = p_child_parse_state->p_hasAggs;
 
     if (qry->hasAggs)
-        parse_check_aggregates(pstate, qry);
+        parse_check_aggregates(p_child_parse_state, qry);
 
-    assign_query_collations(pstate, qry);
+    assign_query_collations(p_child_parse_state, qry);
+
+    free_cypher_parsestate(child_parse_state);
 
     return qry;
 }

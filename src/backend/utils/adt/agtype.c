@@ -141,9 +141,7 @@ static uint64 get_edge_uniqueness_value(Datum d, Oid type, bool is_null,
                                         int index);
 /* graph entity retrieval */
 static Datum get_vertex(const char *graph, const char *vertex_label,
-                         int64 graphid);
-static Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
-                        const char *attname, Oid typid, bool isnull);
+                        int64 graphid);
 static char *get_label_name(const char *graph_name, int64 graph_id);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null);
@@ -154,6 +152,17 @@ static agtype_value *string_to_agtype_value(char *s);
 agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
                                                  int variadic_offset,
                                                  int expected_nargs);
+static agtype_value *integer_to_agtype_value(int64 int_value);
+static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
+                                       bool *is_agnull);
+
+static agtype_iterator *get_next_object_key(agtype_iterator *it,
+                                             agtype_container *agtc,
+                                             agtype_value *key);
+static agtype_iterator *get_next_list_element(agtype_iterator *it,
+                                             agtype_container *agtc,
+                                             agtype_value *elem);
+
 PG_FUNCTION_INFO_V1(agtype_in);
 
 /*
@@ -173,8 +182,10 @@ PG_FUNCTION_INFO_V1(agtype_out);
  */
 Datum agtype_out(PG_FUNCTION_ARGS)
 {
-    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
-    char *out;
+    agtype *agt = NULL;
+    char *out = NULL;
+
+    agt = AG_GET_ARG_AGTYPE_P(0);
 
     out = agtype_to_cstring(NULL, &agt->root, VARSIZE(agt));
 
@@ -314,8 +325,8 @@ static void agtype_in_agtype_annotation(void *pstate, char *annotation)
 /* function to handle object typecasts */
 static void agtype_typecast_object(agtype_in_state *state, char *annotation)
 {
-    agtype_value *agtv;
-    agtype_value *last_updated_value;
+    agtype_value *agtv = NULL;
+    agtype_value *last_updated_value = NULL;
     int len;
     bool top = true;
 
@@ -384,8 +395,8 @@ static void agtype_typecast_object(agtype_in_state *state, char *annotation)
 /* function to handle array typecasts */
 static void agtype_typecast_array(agtype_in_state *state, char *annotation)
 {
-    agtype_value *agtv;
-    agtype_value *last_updated_value;
+    agtype_value *agtv = NULL;
+    agtype_value *last_updated_value = NULL;
     int len;
     bool top = true;
 
@@ -1646,6 +1657,18 @@ static agtype_value *string_to_agtype_value(char *s)
     return agtv;
 }
 
+/* helper function to create an agtype_value integer from an integer */
+static agtype_value *integer_to_agtype_value(int64 int_value)
+{
+    agtype_value *agtv = palloc(sizeof(agtype_value));
+
+    agtv->type = AGTV_INTEGER;
+    agtv->val.int_value = int_value;
+
+    return agtv;
+}
+
+
 PG_FUNCTION_INFO_V1(_agtype_build_path);
 
 /*
@@ -1798,10 +1821,11 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     if (fcinfo->argnull[0])
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_vertex() graphid cannot be NULL")));
+                 errmsg("_agtype_build_vertex() graphid cannot be NULL")));
 
     id = AG_GETARG_GRAPHID(0);
-    add_agtype(id, false, &result, GRAPHIDOID, false);
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(id));
 
     /* process label */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
@@ -1809,7 +1833,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 
     if (fcinfo->argnull[1])
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("agtype_build_vertex() label cannot be NULL")));
+                        errmsg("_agtype_build_vertex() label cannot be NULL")));
 
     result.res =
         push_agtype_value(&result.parse_state, WAGT_VALUE,
@@ -1836,7 +1860,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
                 ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg(
-                     "agtype_build_vertex() properties argument must be an object")));
+                     "_agtype_build_vertex() properties argument must be an object")));
 
         add_agtype((Datum)properties, false, &result, AGTYPEOID, false);
     }
@@ -1872,41 +1896,18 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
                                    NULL);
 
-    /* process graphid */
+    /* process graph id */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("id"));
 
     if (fcinfo->argnull[0])
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_edge() graphid cannot be NULL")));
+                 errmsg("_agtype_build_edge() graphid cannot be NULL")));
 
     id = AG_GETARG_GRAPHID(0);
-    add_agtype(id, false, &result, GRAPHIDOID, false);
-
-    /* process startid */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("start_id"));
-
-    if (fcinfo->argnull[1])
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_edge() startid cannot be NULL")));
-
-    start_id = AG_GETARG_GRAPHID(1);
-    add_agtype(start_id, false, &result, GRAPHIDOID, false);
-
-    /* process endid */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("end_id"));
-
-    if (fcinfo->argnull[2])
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("agtype_build_edge() endid cannot be NULL")));
-
-    end_id = AG_GETARG_GRAPHID(2);
-    add_agtype(end_id, false, &result, GRAPHIDOID, false);
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(id));
 
     /* process label */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
@@ -1914,17 +1915,43 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
 
     if (fcinfo->argnull[3])
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("agtype_build_vertex() label cannot be NULL")));
+                        errmsg("_agtype_build_vertex() label cannot be NULL")));
 
     result.res =
         push_agtype_value(&result.parse_state, WAGT_VALUE,
                           string_to_agtype_value(PG_GETARG_CSTRING(3)));
 
+    /* process end_id */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("end_id"));
+
+    if (fcinfo->argnull[2])
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_edge() endid cannot be NULL")));
+
+    end_id = AG_GETARG_GRAPHID(2);
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(end_id));
+
+    /* process start_id */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("start_id"));
+
+    if (fcinfo->argnull[1])
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_edge() startid cannot be NULL")));
+
+    start_id = AG_GETARG_GRAPHID(1);
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(start_id));
+
     /* process properties */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("properties"));
 
-    //if the properties object is null, push an empty object
+    /* if the properties object is null, push an empty object */
     if (fcinfo->argnull[4])
     {
         result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
@@ -1941,7 +1968,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
                 ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg(
-                     "agtype_build_vertex() properties argument must be an object")));
+                     "_agtype_build_edge() properties argument must be an object")));
 
         add_agtype((Datum)properties, false, &result, AGTYPEOID, false);
     }
@@ -1954,15 +1981,11 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
 }
 
 Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
-                   Datum properties)
+                Datum properties)
 {
-    return DirectFunctionCall5(_agtype_build_edge,
-                     id, startid, endid,
-                     label,
-                     properties);
-
+    return DirectFunctionCall5(_agtype_build_edge, id, startid, endid, label,
+                               properties);
 }
-
 
 PG_FUNCTION_INFO_V1(agtype_build_map);
 
@@ -1990,8 +2013,7 @@ Datum agtype_build_map(PG_FUNCTION_ARGS)
             ERROR,
             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
              errmsg("argument list must have been even number of elements"),
-             errhint(
-                 "The arguments of agtype_build_map() must consist of alternating keys and values.")));
+             errhint("The arguments of agtype_build_map() must consist of alternating keys and values.")));
     }
 
     memset(&result, 0, sizeof(agtype_in_state));
@@ -2222,6 +2244,8 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_STRING)
         result = DatumGetInt64(DirectFunctionCall1(int8in,
                            CStringGetDatum(agtv.val.string.val)));
+    else
+        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
     PG_RETURN_INT64(result);
 }
@@ -2266,6 +2290,8 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_STRING)
         result = DatumGetInt32(DirectFunctionCall1(int4in,
                            CStringGetDatum(agtv.val.string.val)));
+    else
+        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
     PG_RETURN_INT32(result);
 }
@@ -2310,6 +2336,8 @@ Datum agtype_to_int2(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_STRING)
         result = DatumGetInt16(DirectFunctionCall1(int2in,
                            CStringGetDatum(agtv.val.string.val)));
+    else
+        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
     PG_RETURN_INT16(result);
 }
@@ -2357,6 +2385,8 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_NUMERIC)
         result = DatumGetFloat8(DirectFunctionCall1(numeric_float8,
                      NumericGetDatum(agtv.val.numeric)));
+    else
+        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
     PG_RETURN_FLOAT8(result);
 }
@@ -3708,8 +3738,8 @@ Datum age_end_id(PG_FUNCTION_ARGS)
  * that the data (attribute) is what is expected. The function will error on any
  * issues.
  */
-static Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
-                        const char *attname, Oid typid, bool isnull)
+Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
+                       const char *attname, Oid typid, bool isnull)
 {
     Form_pg_attribute att;
     HeapTupleHeader hth;
@@ -3771,7 +3801,7 @@ static char *get_label_name(const char *graph_name, int64 graphid)
     ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
                 F_INT4EQ, Int32GetDatum(get_graphid_label_id(graphid)));
 
-    ag_label = heap_open(ag_relation_id("ag_label", "table"), RowExclusiveLock);
+    ag_label = heap_open(ag_relation_id("ag_label", "table"), ShareLock);
     scan_desc = systable_beginscan(ag_label,
                                    ag_relation_id("ag_label_graph_id_index",
                                                   "index"), true, NULL, 2,
@@ -3802,13 +3832,13 @@ static char *get_label_name(const char *graph_name, int64 graphid)
 
     /* end the scan and close the relation */
     systable_endscan(scan_desc);
-    heap_close(ag_label, RowExclusiveLock);
+    heap_close(ag_label, ShareLock);
 
     return result;
 }
 
 static Datum get_vertex(const char *graph, const char *vertex_label,
-                         int64 graphid)
+                        int64 graphid)
 {
     ScanKeyData scan_keys[1];
     Relation graph_vertex_label;
@@ -3830,7 +3860,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
                 Int64GetDatum(graphid));
 
     /* open the relation (table), begin the scan, and get the tuple  */
-    graph_vertex_label = heap_open(vertex_label_table_oid, RowExclusiveLock);
+    graph_vertex_label = heap_open(vertex_label_table_oid, ShareLock);
     scan_desc = heap_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
     tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
@@ -3861,7 +3891,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
                                  CStringGetDatum(vertex_label), properties);
     /* end the scan and close the relation */
     heap_endscan(scan_desc);
-    heap_close(graph_vertex_label, RowExclusiveLock);
+    heap_close(graph_vertex_label, ShareLock);
     /* return the vertex datum */
     return result;
 }
@@ -4882,6 +4912,50 @@ Datum age_tostring(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+static agtype_iterator *get_next_list_element(agtype_iterator *it,
+                           agtype_container *agtc, agtype_value *elem)
+{
+    agtype_iterator_token itok;
+    agtype_value tmp;
+
+    /* verify input params */
+    Assert(agtc != NULL);
+    Assert(elem != NULL);
+
+    /* check to see if the container is empty */
+    if (AGTYPE_CONTAINER_SIZE(agtc) == 0)
+    {
+       return NULL;
+    }
+
+    /* if the passed iterator is NULL, this is the first time, create it */
+    if (it == NULL)
+    {
+        /* initial the iterator */
+        it = agtype_iterator_init(agtc);
+        /* get the first token */
+        itok = agtype_iterator_next(&it, &tmp, true);
+        /* it should be WAGT_BEGIN_ARRAY */
+        Assert(itok == WAGT_BEGIN_ARRAY);
+    }
+
+    /* the next token should be an element or the end of the array */
+    itok = agtype_iterator_next(&it, &tmp, true);
+    Assert(itok == WAGT_ELEM || WAGT_END_ARRAY);
+
+    /* if this is the end of the array return NULL */
+    if (itok == WAGT_END_ARRAY) {
+        return NULL;
+    }
+
+    /* this should be the element, copy it */
+    if (itok == WAGT_ELEM) {
+        memcpy(elem, &tmp, sizeof(agtype_value));
+    }
+
+    return it;
+}
+
 PG_FUNCTION_INFO_V1(age_reverse);
 
 Datum age_reverse(PG_FUNCTION_ARGS)
@@ -4926,15 +5000,50 @@ Datum age_reverse(PG_FUNCTION_ARGS)
     }
     else
     {
-        agtype *agt_arg;
-        agtype_value *agtv_value;
+        agtype *agt_arg = NULL;
+        agtype_value *agtv_value = NULL;
+        agtype_parse_state *parse_state = NULL;
+        agtype_value elem = {0};
+        agtype_iterator *it = NULL;
+        agtype_value tmp;
+        agtype_value *elems = NULL;
+        int num_elems;
+        int i;
 
         /* get the agtype argument */
         agt_arg = DATUM_GET_AGTYPE_P(arg);
 
         if (!AGT_ROOT_IS_SCALAR(agt_arg))
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                            errmsg("reverse() only supports scalar arguments")));
+        {
+            agtv_value = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY, NULL);
+
+            while ((it = get_next_list_element(it, &agt_arg->root, &elem)))
+            {
+                agtv_value = push_agtype_value(&parse_state, WAGT_ELEM, &elem);
+            }
+
+            /* now reverse the list */
+            elems = parse_state->cont_val.val.array.elems;
+            num_elems = parse_state->cont_val.val.array.num_elems;
+
+            for(i = 0; i < num_elems/2; i++)
+            {
+                tmp = elems[i];
+                elems[i] = elems[num_elems - 1 - i];
+                elems[num_elems - 1 - i] = tmp;
+            }
+            /* reverse done*/
+
+            elems = NULL;
+
+            agtv_value = push_agtype_value(&parse_state, WAGT_END_ARRAY, NULL);
+
+            Assert(agtv_value != NULL);
+            Assert(agtv_value->type = AGTV_ARRAY);
+
+            PG_RETURN_POINTER(agtype_value_to_agtype(agtv_value));
+
+        }
 
         agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
 
@@ -7477,31 +7586,33 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
                                   &nulls);
     /* throw an error if the number of args is not the expected number */
     if (nargs != expected_nargs)
+    {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("number of args %d does not match expected %d",
                                nargs, expected_nargs)));
+    }
     /* if null, return null */
     if (nulls[0])
+    {
         return NULL;
+    }
 
     /* if type is AGTYPEOID, we don't need to convert it */
     if (types[0] == AGTYPEOID)
     {
+        agtype_container *agtc;
+
         agtype_result = DATUM_GET_AGTYPE_P(args[0]);
+        agtc = &agtype_result->root;
+
         /*
          * Is this a scalar (scalars are stored as one element arrays)? If so,
          * test for agtype NULL.
          */
-        if (AGTYPE_CONTAINER_IS_SCALAR(&agtype_result->root))
+        if (AGTYPE_CONTAINER_IS_SCALAR(agtc) &&
+            AGTE_IS_NULL(agtc->children[0]))
         {
-            agtype_value *agtv_test;
-
-            /* get the scalar value */
-            agtv_test = get_ith_agtype_value_from_container(&agtype_result->root,
-                                                        0);
-            /* is it agtype NULL? */
-            if (agtv_test->type == AGTV_NULL)
-                return NULL;
+            return NULL;
         }
     }
     /* otherwise, try to convert it to an agtype */
@@ -8152,4 +8263,661 @@ Datum age_collect_aggfinalfn(PG_FUNCTION_ARGS)
     MemoryContextSwitchTo(old_mcxt);
     /* return the agtype array */
     PG_RETURN_POINTER(agtype_value_to_agtype(castate->res));
+}
+
+/*
+ * Helper function to return a datum for an agtype_value array built from
+ * agtype_value edges. It is essentially building and then serializing an
+ * agtype_value array of agtype_value edges.
+ */
+Datum build_agtype_value_array_of_agtype_value_edges(agtype_value **ava,
+                                                     int size)
+{
+    Datum result;
+    agtype_in_state agis_result;
+    int i = 0;
+
+    /* the array cannot be NULL */
+    Assert(ava != NULL);
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+    /* push in each element */
+    for (i = 0; i < size; i++)
+    {
+        agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                            ava[i]);
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    /* convert the agtype_value to a datum to return to the caller */
+    result = PointerGetDatum(agtype_value_to_agtype(agis_result.res));
+
+    return result;
+}
+
+/* helper function to quickly build an agtype_value edge */
+agtype_value *agtype_value_build_edge(graphid id, char *label, graphid end_id,
+                                      graphid start_id, Datum properties)
+{
+    agtype_in_state result;
+
+    /* the label can't be NULL */
+    Assert(label != NULL);
+
+    memset(&result, 0, sizeof(agtype_in_state));
+
+    /* push in the object beginning */
+    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
+                                   NULL);
+    /* push the graph id key/value pair */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("id"));
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(id));
+
+    /* push the label key/value pair */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("label"));
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   string_to_agtype_value(label));
+
+    /* push the end_id key/value pair */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("end_id"));
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(end_id));
+
+    /* push the start_id key/value pair */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("start_id"));
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   integer_to_agtype_value(start_id));
+
+    /* push the properties key/value pair */
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
+                                   string_to_agtype_value("properties"));
+    add_agtype((Datum)properties, false, &result, AGTYPEOID, false);
+
+    /* push in the object end */
+    result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT, NULL);
+
+    /* set it as an edge */
+    result.res->type = AGTV_EDGE;
+
+    /* return the result that was build (allocated) inside the result */
+    return result.res;
+}
+
+PG_FUNCTION_INFO_V1(age_eq_tilde);
+/*
+ * Execution function for =~ aka regular expression comparisons
+ *
+ * Note: Everything must resolve to 2 agtype strings. All others types are
+ * errors.
+ */
+Datum age_eq_tilde(PG_FUNCTION_ARGS)
+{
+    agtype *agt_string = NULL;
+    agtype *agt_pattern = NULL;
+
+    /* if either are NULL return NULL */
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    /* extract the input */
+    agt_string = AG_GET_ARG_AGTYPE_P(0);
+    agt_pattern = AG_GET_ARG_AGTYPE_P(1);
+
+    /* they both need to scalars */
+    if (AGT_ROOT_IS_SCALAR(agt_string) && AGT_ROOT_IS_SCALAR(agt_pattern))
+    {
+        agtype_value *agtv_string;
+        agtype_value *agtv_pattern;
+
+        /* get the contents of each container */
+        agtv_string = get_ith_agtype_value_from_container(&agt_string->root, 0);
+        agtv_pattern = get_ith_agtype_value_from_container(&agt_pattern->root,
+                                                           0);
+        /* if either are agtype null, return NULL */
+        if (agtv_string->type == AGTV_NULL ||
+            agtv_pattern->type == AGTV_NULL)
+        {
+            PG_RETURN_NULL();
+        }
+
+        /* only strings can be compared, all others are errors */
+        if (agtv_string->type == AGTV_STRING &&
+            agtv_pattern->type == AGTV_STRING)
+        {
+            text *string = NULL;
+            text *pattern = NULL;
+            Datum result;
+
+            string = cstring_to_text_with_len(agtv_string->val.string.val,
+                                              agtv_string->val.string.len);
+            pattern = cstring_to_text_with_len(agtv_pattern->val.string.val,
+                                               agtv_pattern->val.string.len);
+
+            result = (DirectFunctionCall2Coll(textregexeq, C_COLLATION_OID,
+                                              PointerGetDatum(string),
+                                              PointerGetDatum(pattern)));
+            return boolean_to_agtype(DatumGetBool(result));
+        }
+    }
+    /* if we got here we have values that are invalid */
+    ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("agtype string values expected")));
+}
+
+/*
+ * Helper function to step through and retrieve keys from an object.
+ * borrowed and modified from get_next_object_pair() in agtype_vle.c
+ */
+static agtype_iterator *get_next_object_key(agtype_iterator *it,
+                                             agtype_container *agtc,
+                                             agtype_value *key)
+{
+    agtype_iterator_token itok;
+    agtype_value tmp;
+
+    /* verify input params */
+    Assert(agtc != NULL);
+    Assert(key != NULL);
+
+    /* check to see if the container is empty */
+    if (AGTYPE_CONTAINER_SIZE(agtc) == 0)
+    {
+        return NULL;
+    }
+
+    /* if the passed iterator is NULL, this is the first time, create it */
+    if (it == NULL)
+    {
+        /* initial the iterator */
+        it = agtype_iterator_init(agtc);
+        /* get the first token */
+        itok = agtype_iterator_next(&it, &tmp, false);
+        /* it should be WAGT_BEGIN_OBJECT */
+        Assert(itok == WAGT_BEGIN_OBJECT);
+    }
+
+    /* the next token should be a key or the end of the object */
+    itok = agtype_iterator_next(&it, &tmp, false);
+    Assert(itok == WAGT_KEY || WAGT_END_OBJECT);
+    /* if this is the end of the object return NULL */
+    if (itok == WAGT_END_OBJECT)
+    {
+        return NULL;
+    }
+
+    /* this should be the key, copy it */
+    if (itok == WAGT_KEY)
+    {
+        memcpy(key, &tmp, sizeof(agtype_value));
+    }
+
+    /*
+     * The next token should be a value but, it could be a begin tokens for
+     * arrays or objects. For those we just return NULL to ignore them.
+     */
+    itok = agtype_iterator_next(&it, &tmp, true);
+    Assert(itok == WAGT_VALUE);
+
+    /* return the iterator */
+    return it;
+}
+
+PG_FUNCTION_INFO_V1(age_keys);
+/*
+ * Execution function to implement openCypher keys() function
+ */
+Datum age_keys(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_value *agtv_result = NULL;
+    agtype_value obj_key = {0};
+    agtype_iterator *it = NULL;
+    agtype_parse_state *parse_state = NULL;
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    //needs to be a map, node, or relationship
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+
+    /*
+     * check for a scalar object. edges and vertexes are scalar, objects are not
+     * scalar and will be handled separately
+     */
+    if (AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        agtv_result = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
+        /* is it an agtype null, return null if it is */
+        if (agtv_result->type == AGTV_NULL)
+            PG_RETURN_NULL();
+
+        /* check for proper agtype and extract the properties field */
+        if (agtv_result->type == AGTV_EDGE ||
+            agtv_result->type == AGTV_VERTEX)
+        {
+            agtv_result = get_agtype_value_object_value(agtv_result, "properties");
+
+            Assert(agtv_result != NULL);
+            Assert(agtv_result->type = AGTV_OBJECT);
+        }
+        else
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("keys() argument must be a vertex, edge, object or null")));
+        }
+
+        agt_arg = agtype_value_to_agtype(agtv_result);
+        agtv_result = NULL;
+    }
+    else if (!AGT_ROOT_IS_OBJECT(agt_arg))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("keys() argument must be a vertex, edge, object or null")));
+    }
+
+    /* push the beginning of the array */
+    agtv_result = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY, NULL);
+
+    /* populate the array with keys */
+    while ((it = get_next_object_key(it, &agt_arg->root, &obj_key)))
+    {
+        agtv_result = push_agtype_value(&parse_state, WAGT_ELEM, &obj_key);
+    }
+
+    /* push the end of the array*/
+    agtv_result = push_agtype_value(&parse_state, WAGT_END_ARRAY, NULL);
+
+    Assert(agtv_result != NULL);
+    Assert(agtv_result->type = AGTV_ARRAY);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_nodes);
+/*
+ * Execution function to implement openCypher nodes() function
+ */
+Datum age_nodes(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_value *agtv_path = NULL;
+    agtype_in_state agis_result;
+    int i = 0;
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for a scalar object */
+    if (!AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("nodes() argument must resolve to a scalar value")));
+    }
+
+    /* get the potential path out of the array */
+    agtv_path = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
+    /* is it an agtype null? */
+    if (agtv_path->type == AGTV_NULL)
+    {
+            PG_RETURN_NULL();
+    }
+
+    /* verify that it is an agtype path */
+    if (agtv_path->type != AGTV_PATH)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("nodes() argument must be a path")));
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+    /* push in each vertex (every other entry) from the path */
+    for (i = 0; i < agtv_path->val.array.num_elems; i += 2)
+    {
+        agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                            &agtv_path->val.array.elems[i]);
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    /* convert the agtype_value to a datum to return to the caller */
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
+PG_FUNCTION_INFO_V1(age_labels);
+/*
+ * Execution function to implement openCypher labels() function
+ *
+ * NOTE:
+ *
+ * This function is defined to return NULL on NULL input. So, no need to check
+ * for SQL NULL input.
+ */
+Datum age_labels(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_value *agtv_temp = NULL;
+    agtype_value *agtv_label = NULL;
+    agtype_in_state agis_result;
+
+    /* get the vertex argument */
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+
+    /* verify it is a scalar */
+    if (!AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("labels() argument must resolve to a scalar value")));
+    }
+
+    /* is it an agtype null? */
+    if (AGTYPE_CONTAINER_IS_SCALAR(&agt_arg->root) &&
+        AGTE_IS_NULL((&agt_arg->root)->children[0]))
+    {
+        PG_RETURN_NULL();
+    }
+
+    /* get the potential vertex */
+    agtv_temp = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
+    /* verify that it is an agtype vertex */
+    if (agtv_temp->type != AGTV_VERTEX)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("labels() argument must be a vertex")));
+    }
+
+    /* get the label from the vertex */
+    agtv_label = get_agtype_value_object_value(agtv_temp, "label");
+    /* it cannot be NULL */
+    Assert(agtv_label != NULL);
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* push in the label */
+    agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                        agtv_label);
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    /* convert the agtype_value to a datum to return to the caller */
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
+PG_FUNCTION_INFO_V1(age_relationships);
+/*
+ * Execution function to implement openCypher relationships() function
+ */
+Datum age_relationships(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_value *agtv_path = NULL;
+    agtype_in_state agis_result;
+    int i = 0;
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for a scalar object */
+    if (!AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("relationships() argument must resolve to a scalar value")));
+    }
+
+    /* get the potential path out of the array */
+    agtv_path = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
+    /* is it an agtype null? */
+    if (agtv_path->type == AGTV_NULL)
+    {
+            PG_RETURN_NULL();
+    }
+
+    /* verify that it is an agtype path */
+    if (agtv_path->type != AGTV_PATH)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("relationships() argument must be a path")));
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+    /* push in each edge (every other entry) from the path */
+    for (i = 1; i < agtv_path->val.array.num_elems; i += 2)
+    {
+        agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                            &agtv_path->val.array.elems[i]);
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    /* convert the agtype_value to a datum to return to the caller */
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
+/*
+ * Helper function to convert an integer type (PostgreSQL or agtype) datum into
+ * an int64. The function will flag if an agtype null was found. The function
+ * will error out on invalid information, printing out the funcname passed.
+ */
+static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
+                                       bool *is_agnull)
+{
+    int64 result = 0;
+
+    /* test for PG integer types */
+    if (type == INT2OID)
+    {
+        result = (int64) DatumGetInt16(d);
+    }
+    else if (type == INT4OID)
+    {
+        result = (int64) DatumGetInt32(d);
+    }
+    else if (type == INT8OID)
+    {
+        result = (int64) DatumGetInt64(d);
+    }
+    /* test for agtype integer */
+    else if (type == AGTYPEOID)
+    {
+        agtype *agt_arg = NULL;
+        agtype_value *agtv_value = NULL;
+        agtype_container *agtc = NULL;
+
+        /* get the agtype argument */
+        agt_arg = DATUM_GET_AGTYPE_P(d);
+
+        if (!AGT_ROOT_IS_SCALAR(agt_arg))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("%s() only supports scalar arguments", funcname)));
+        }
+        /* check for agtype null*/
+        agtc = &agt_arg->root;
+        if (AGTE_IS_NULL(agtc->children[0]))
+        {
+            *is_agnull = true;
+            return 0;
+        }
+
+        /* extract it from the scalar array */
+        agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
+        /* check for agtype integer */
+        if (agtv_value->type == AGTV_INTEGER)
+        {
+            result = agtv_value->val.int_value;
+        }
+        else
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("%s() unsupported argument type", funcname)));
+        }
+    }
+    else
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s() unsupported argument type", funcname)));
+    }
+
+    /* return the result */
+    *is_agnull = false;
+    return result;
+}
+
+PG_FUNCTION_INFO_V1(age_range);
+/*
+ * Execution function to implement openCypher range() function
+ */
+Datum age_range(PG_FUNCTION_ARGS)
+{
+    Datum *args = NULL;
+    bool *nulls = NULL;
+    Oid *types = NULL;
+    int nargs;
+    int64 start_idx = 0;
+    int64 end_idx = 0;
+    /* step defaults to 1 */
+    int64 step = 1;
+    bool is_agnull = false;
+    agtype_in_state agis_result;
+    int64 i = 0;
+
+    /* get the arguments */
+    nargs = extract_variadic_args(fcinfo, 0, false, &args, &types, &nulls);
+
+    /* throw an error if the number of args is not the expected number */
+    if (nargs != 2 && nargs != 3)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("range(): invalid number of input parameters")));
+    }
+
+    /* check for NULL start and end input */
+    if (nulls[0] || nulls[1])
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("range(): neither start or end can be NULL")));
+    }
+
+    /* get the start index */
+    start_idx = get_int64_from_int_datums(args[0], types[0], "range",
+                                          &is_agnull);
+    if (is_agnull)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("range(): start cannot be NULL")));
+    }
+
+    /* get the end index */
+    end_idx = get_int64_from_int_datums(args[1], types[1], "range", &is_agnull);
+    if (is_agnull)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("range(): end cannot be NULL")));
+    }
+
+    /* get the step */
+    if (nargs == 3 && !nulls[2])
+    {
+        step = get_int64_from_int_datums(args[2], types[2], "range",
+                                         &is_agnull);
+        if (is_agnull)
+        {
+            step = 1;
+        }
+    }
+
+    /* the step cannot be zero */
+    if (step == 0)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("range(): step cannot be zero")));
+    }
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* push in each agtype integer in the range */
+    for (i = start_idx;
+         (step > 0 && i <= end_idx) || (step < 0 && i >= end_idx);
+         i += step)
+    {
+        agtype_value agtv;
+
+        /* build the integer */
+        agtv.type = AGTV_INTEGER;
+        agtv.val.int_value = i;
+        /* add the value to the array */
+        agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                            &agtv);
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    /* convert the agtype_value to a datum to return to the caller */
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
 }

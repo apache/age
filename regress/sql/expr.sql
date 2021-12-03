@@ -256,7 +256,7 @@ RETURN null IS NOT NULL
 $$) AS r(result boolean);
 
 --
--- Test transform logic for AND, OR, and NOT
+-- Test transform logic for AND, OR, NOT and XOR
 --
 
 SELECT * FROM cypher('expr', $$
@@ -303,6 +303,22 @@ SELECT * FROM cypher('expr', $$
 RETURN NOT ((true OR false) AND (false OR true))
 $$) AS r(result boolean);
 
+SELECT * FROM cypher('expr', $$
+RETURN true XOR true
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN true XOR false
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN false XOR true
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN false XOR false
+$$) AS r(result boolean);
+
 --
 -- Test indirection transform logic for object.property, object["property"],
 -- and array[element]
@@ -344,7 +360,7 @@ SELECT * FROM cypher('expr', $$
 RETURN "abcdefghijklmnopqrstuvwxyz" CONTAINS "klmn"
 $$) AS r(result agtype);
 
--- these should fail
+-- these should return false
 SELECT * FROM cypher('expr', $$
 RETURN "abcdefghijklmnopqrstuvwxyz" STARTS WITH "bcde"
 $$) AS r(result agtype);
@@ -353,6 +369,43 @@ RETURN "abcdefghijklmnopqrstuvwxyz" ENDS WITH "vwxy"
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN "abcdefghijklmnopqrstuvwxyz" CONTAINS "klmo"
+$$) AS r(result agtype);
+-- these should return SQL NULL
+SELECT * FROM cypher('expr', $$
+RETURN "abcdefghijklmnopqrstuvwxyz" STARTS WITH NULL
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN "abcdefghijklmnopqrstuvwxyz" ENDS WITH NULL
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN "abcdefghijklmnopqrstuvwxyz" CONTAINS NULL
+$$) AS r(result agtype);
+
+--
+-- Test =~ aka regular expression comparisons
+--
+SELECT create_graph('regex');
+SELECT * FROM cypher('regex', $$
+CREATE (n:Person {name: 'John'}) RETURN n
+$$) AS r(result agtype);
+SELECT * FROM cypher('regex', $$
+CREATE (n:Person {name: 'Jeff'}) RETURN n
+$$) AS r(result agtype);
+SELECT * FROM cypher('regex', $$
+CREATE (n:Person {name: 'Joan'}) RETURN n
+$$) AS r(result agtype);
+
+SELECT * FROM cypher('regex', $$
+MATCH (n:Person) WHERE n.name =~ 'JoHn' RETURN n
+$$) AS r(result agtype);
+SELECT * FROM cypher('regex', $$
+MATCH (n:Person) WHERE n.name =~ '(?i)JoHn' RETURN n
+$$) AS r(result agtype);
+SELECT * FROM cypher('regex', $$
+MATCH (n:Person) WHERE n.name =~ 'Jo.n' RETURN n
+$$) AS r(result agtype);
+SELECT * FROM cypher('regex', $$
+MATCH (n:Person) WHERE n.name =~ 'J.*' RETURN n
 $$) AS r(result agtype);
 
 --
@@ -396,7 +449,6 @@ $$) AS (i bigint);
 SELECT * FROM cypher('type_coercion', $$
 	RETURN 10000000000000000000
 $$) AS (i smallint);
-
 
 SELECT * FROM cypher('type_coercion', $$
 	RETURN 10000000000000000000
@@ -1108,6 +1160,40 @@ SELECT * FROM cypher('expr', $$
     RETURN reverse(null)
 $$) AS (results agtype);
 SELECT * FROM age_reverse(null);
+-- should return error
+SELECT * FROM age_reverse([4923, 'abc', 521, NULL, 487]);
+-- Should return the reversed list
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 'abc', 521, NULL, 487])
+$$) AS (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923])
+$$) AS (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 257])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 257, null])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 257, 'tea'])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([[1, 4, 7], 4923, [1, 2, 3], 'abc', 521, NULL, 487, ['fgt', 7, 10]])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 257, {test1: "key"}])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN reverse([4923, 257, {test2: [1, 2, 3]}])
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    CREATE ({test: [1, 2, 3]})
+$$) as (u agtype);
+SELECT * FROM cypher('expr', $$
+    MATCH (v) WHERE exists(v.test) RETURN reverse(v.test)
+$$) as (u agtype);
+
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN reverse(true)
@@ -2177,6 +2263,81 @@ SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u, v$$) AS (u agtype,
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 
+-- list functions relationships(), range(), keys()
+SELECT create_graph('keys');
+-- keys()
+SELECT * FROM cypher('keys', $$CREATE ({name: 'hikaru utada', age: 38, job: 'singer'})-[:collaborated_with {song:"face my fears"}]->( {name: 'sonny moore', age: 33, stage_name: 'skrillex', job: 'producer'})$$) AS (result agtype);
+SELECT * FROM cypher('keys', $$CREATE ({name: 'alexander guy cook', age: 31, stage_name:"a. g. cook", job: 'producer'})$$) AS (result agtype);
+SELECT * FROM cypher('keys', $$CREATE ({name: 'keiko fuji', age: 62, job: 'singer'})$$) AS (result agtype);
+SELECT * FROM cypher('keys', $$MATCH (a),(b) WHERE a.name = 'hikaru utada' AND b.name = 'alexander guy cook' CREATE (a)-[:collaborated_with {song:"one last kiss"}]->(b)$$) AS (result agtype);
+SELECT * FROM cypher('keys', $$MATCH (a),(b) WHERE a.name = 'hikaru utada' AND b.name = 'keiko fuji' CREATE (a)-[:knows]->(b)$$) AS (result agtype);
+SELECT * FROM cypher('keys', $$MATCH (v) RETURN keys(v)$$) AS (vertex_keys agtype);
+SELECT * FROM cypher('keys', $$MATCH ()-[e]-() RETURN keys(e)$$) AS (edge_keys agtype);
+SELECT * FROM cypher('keys', $$RETURN keys({a:1,b:'two',c:[1,2,3]})$$) AS (keys agtype);
+
+--should return empty list
+SELECT * FROM cypher('keys', $$RETURN keys({})$$) AS (keys agtype);
+--should return sql null
+SELECT * FROM cypher('keys', $$RETURN keys(null)$$) AS (keys agtype);
+--should return error
+SELECT * from cypher('keys', $$RETURN keys([1,2,3])$$) as (keys agtype);
+SELECT * from cypher('keys', $$RETURN keys("string")$$) as (keys agtype);
+SELECT * from cypher('keys', $$MATCH u=()-[]-() RETURN keys(u)$$) as (keys agtype);
+
+SELECT create_graph('list');
+SELECT * from cypher('list', $$CREATE p=({name:"rick"})-[:knows]->({name:"morty"}) RETURN p$$) as (path agtype);
+SELECT * from cypher('list', $$CREATE p=({name:'rachael'})-[:knows]->({name:'monica'})-[:knows]->({name:'phoebe'}) RETURN p$$) as (path agtype);
+-- nodes()
+SELECT * from cypher('list', $$MATCH p=()-[]->() RETURN nodes(p)$$) as (nodes agtype);
+SELECT * from cypher('list', $$MATCH p=()-[]->()-[]->() RETURN nodes(p)$$) as (nodes agtype);
+-- should return nothing
+SELECT * from cypher('list', $$MATCH p=()-[]->()-[]->()-[]->() RETURN nodes(p)$$) as (nodes agtype);
+-- should return SQL NULL
+SELECT * from cypher('list', $$RETURN nodes(NULL)$$) as (nodes agtype);
+-- should return an error
+SELECT * from cypher('list', $$MATCH (u) RETURN nodes([1,2,3])$$) as (nodes agtype);
+SELECT * from cypher('list', $$MATCH (u) RETURN nodes("string")$$) as (nodes agtype);
+SELECT * from cypher('list', $$MATCH (u) RETURN nodes(u)$$) as (nodes agtype);
+SELECT * from cypher('list', $$MATCH (u)-[]->() RETURN nodes(u)$$) as (nodes agtype);
+-- relationships()
+SELECT * from cypher('list', $$MATCH p=()-[]->() RETURN relationships(p)$$) as (relationships agtype);
+SELECT * from cypher('list', $$MATCH p=()-[]->()-[]->() RETURN relationships(p)$$) as (relationships agtype);
+-- should return nothing
+SELECT * from cypher('list', $$MATCH p=()-[]->()-[]->()-[]->() RETURN relationships(p)$$) as (relationships agtype);
+-- should return SQL NULL
+SELECT * from cypher('list', $$RETURN relationships(NULL)$$) as (relationships agtype);
+-- should return an error
+SELECT * from cypher('list', $$MATCH (u) RETURN relationships([1,2,3])$$) as (relationships agtype);
+SELECT * from cypher('list', $$MATCH (u) RETURN relationships("string")$$) as (relationships agtype);
+SELECT * from cypher('list', $$MATCH (u) RETURN relationships(u)$$) as (relationships agtype);
+SELECT * from cypher('list', $$MATCH ()-[e]->() RETURN relationships(e)$$) as (relationships agtype);
+-- range()
+SELECT * from cypher('list', $$RETURN range(0, 10)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, 10, null)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, 10, 1)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, 10, 3)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, -10, -1)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, -10, -3)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, 10, 11)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(-20, 10, 5)$$) as (range agtype);
+-- should return an empty list []
+SELECT * from cypher('list', $$RETURN range(0, -10)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, 10, -1)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(-10, 10, -1)$$) as (range agtype);
+-- should return an error
+SELECT * from cypher('list', $$RETURN range(null, -10, -3)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, null, -3)$$) as (range agtype);
+SELECT * from cypher('list', $$RETURN range(0, -10.0, -3.0)$$) as (range agtype);
+-- labels()
+SELECT * from cypher('list', $$CREATE (u:People {name: "John"}) RETURN u$$) as (Vertices agtype);
+SELECT * from cypher('list', $$CREATE (u:People {name: "Larry"}) RETURN u$$) as (Vertices agtype);
+SELECT * from cypher('list', $$CREATE (u:Cars {name: "G35"}) RETURN u$$) as (Vertices agtype);
+SELECT * from cypher('list', $$CREATE (u:Cars {name: "MR2"}) RETURN u$$) as (Vertices agtype);
+SELECT * from cypher('list', $$MATCH (u) RETURN labels(u), u$$) as (Labels agtype, Vertices agtype);
+-- should return SQL NULL
+SELECT * from cypher('list', $$RETURN labels(NULL)$$) as (Labels agtype);
+-- should return an error
+SELECT * from cypher('list', $$RETURN labels("string")$$) as (Labels agtype);
 --
 -- Cleanup
 --
@@ -2188,6 +2349,9 @@ SELECT * FROM drop_graph('order_by', true);
 SELECT * FROM drop_graph('group_by', true);
 SELECT * FROM drop_graph('UCSC', true);
 SELECT * FROM drop_graph('expr', true);
+SELECT * FROM drop_graph('regex', true);
+SELECT * FROM drop_graph('keys', true);
+SELECT * FROM drop_graph('list', true);
 
 --
 -- End of tests

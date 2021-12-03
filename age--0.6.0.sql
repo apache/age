@@ -87,6 +87,16 @@ RETURNS void
 LANGUAGE c
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.create_vlabel(graph_name name, label_name name)
+    RETURNS void
+    LANGUAGE c
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.create_elabel(graph_name name, label_name name)
+    RETURNS void
+    LANGUAGE c
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.alter_graph(graph_name name, operation cstring, new_value name)
 RETURNS void
 LANGUAGE c
@@ -3027,7 +3037,7 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 --
--- agtype - string matching (`STARTS WITH`, `ENDS WITH`, `CONTAINS`)
+-- agtype - string matching (`STARTS WITH`, `ENDS WITH`, `CONTAINS`, & =~)
 --
 
 CREATE FUNCTION ag_catalog.agtype_string_match_starts_with(agtype, agtype)
@@ -3051,6 +3061,13 @@ RETURNS agtype
 LANGUAGE c
 STABLE
 RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_eq_tilde(agtype, agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -3715,6 +3732,53 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_path(variadic "any")
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
+                                   IN agtype, IN agtype, IN agtype,
+                                   OUT edges agtype)
+RETURNS SETOF agtype
+LANGUAGE C
+IMMUTABLE
+STRICT
+AS 'MODULE_PATHNAME';
+
+-- list functions
+CREATE FUNCTION ag_catalog.age_keys(agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_labels(agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_nodes(agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_relationships(agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_range(variadic "any")
 RETURNS agtype
 LANGUAGE c
 STABLE
