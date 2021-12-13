@@ -27,7 +27,6 @@ Check [latest version](https://github.com/apache/incubator-age/releases)
 * Apache Incubator Age : https://age.apache.org/
 * Github : https://github.com/apache/incubator-age
 * Document : https://age.incubator.apache.org/docs/
-* apache-age-go GitHub : https://github.com/rhizome-ai/apache-age-go
 
 ### Check AGE loaded on your PostgreSQL
 Connect to your containerized Postgres instance and then run the following commands:
