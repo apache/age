@@ -2647,6 +2647,7 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     TargetEntry *te = NULL;
     RangeFunction *rf = NULL;
     RangeTblEntry *rte = NULL;
+    FuncCall *func = NULL;
     Alias *alias = NULL;
     Node *var = NULL;
     transform_entity *vle_entity = NULL;
@@ -2654,8 +2655,11 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     /* it better be a function call node */
     Assert(IsA(rel->varlen, FuncCall));
 
+    /* get the function */
+    func = (FuncCall*)rel->varlen;
+
     /* it better be one of our functions */
-    Assert(list_length(((FuncCall *)rel->varlen)->funcname) == 1);
+    Assert(list_length(func->funcname) == 1);
 
     /* set the pstate */
     pstate = &cpstate->pstate;
