@@ -31,3 +31,7 @@ RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
 
 RUN git clone https://github.com/apache/incubator-age /age 
 RUN cd /age && make install 
+
+COPY docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
+
+CMD ["postgres", "-c", "shared_preload_libraries=age"]
