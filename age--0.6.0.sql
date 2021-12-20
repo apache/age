@@ -349,9 +349,25 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.agtype_recv(internal)
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.agtype_send(agtype)
+RETURNS bytea
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE TYPE agtype (
   INPUT = ag_catalog.agtype_in,
   OUTPUT = ag_catalog.agtype_out,
+  RECEIVE = ag_catalog.agtype_recv,
+  SEND = ag_catalog.agtype_send,
   LIKE = jsonb
 );
 

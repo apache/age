@@ -60,6 +60,8 @@
 #include "utils/graphid.h"
 #include "utils/numeric.h"
 
+#include "libpq/pqformat.h"
+
 /* State structure for Percentile aggregate functions */
 typedef struct PercentileGroupAggState
 {
@@ -93,7 +95,7 @@ typedef enum /* type categories for datum_to_agtype */
     AGT_TYPE_OTHER /* all else */
 } agt_type_category;
 
-static inline Datum agtype_from_cstring(char *str, int len);
+static inline agtype* agtype_from_cstring(char *str, int len);
 size_t check_string_length(size_t len);
 static void agtype_in_agtype_annotation(void *pstate, char *annotation);
 static void agtype_in_object_start(void *pstate);
@@ -173,8 +175,38 @@ bool is_agtype_null(agtype *agt_arg)
     return false;
 }
 
-PG_FUNCTION_INFO_V1(agtype_in);
+PG_FUNCTION_INFO_V1(agtype_send);
 
+Datum agtype_send(PG_FUNCTION_ARGS)
+{
+    agtype *in = AG_GET_ARG_AGTYPE_P(0);
+    StringInfoData buf;
+    char *res = agtype_to_cstring(NULL, &in->root, VARSIZE(in));
+
+    pq_begintypsend(&buf);
+    pq_sendtext(&buf, res, strlen(res));
+    pfree(res);
+
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
+
+PG_FUNCTION_INFO_V1(agtype_recv);
+
+Datum agtype_recv(PG_FUNCTION_ARGS)
+{
+    StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
+    char *str;
+    int nbytes;
+    agtype *res;
+
+    str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
+    res = agtype_from_cstring(str, nbytes);
+    pfree(str);
+
+    PG_RETURN_POINTER(res);
+}
+
+PG_FUNCTION_INFO_V1(agtype_in);
 /*
  * agtype type input function
  */
@@ -182,7 +214,7 @@ Datum agtype_in(PG_FUNCTION_ARGS)
 {
     char *str = PG_GETARG_CSTRING(0);
 
-    return agtype_from_cstring(str, strlen(str));
+    PG_RETURN_POINTER(agtype_from_cstring(str, strlen(str)));
 }
 
 PG_FUNCTION_INFO_V1(agtype_out);
@@ -209,7 +241,7 @@ Datum agtype_out(PG_FUNCTION_ARGS)
  *
  * Uses the agtype parser (with hooks) to construct an agtype.
  */
-static inline Datum agtype_from_cstring(char *str, int len)
+static inline agtype* agtype_from_cstring(char *str, int len)
 {
     agtype_lex_context *lex;
     agtype_in_state state;
@@ -234,7 +266,7 @@ static inline Datum agtype_from_cstring(char *str, int len)
     parse_agtype(lex, &sem);
 
     /* after parsing, the item member has the composed agtype structure */
-    PG_RETURN_POINTER(agtype_value_to_agtype(state.res));
+    return agtype_value_to_agtype(state.res);
 }
 
 size_t check_string_length(size_t len)
