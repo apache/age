@@ -4286,6 +4286,62 @@ $$) AS (results agtype);
 (1 row)
 
 SELECT * FROM cypher('expr', $$
+    RETURN round(7.4163, 3)
+$$) AS (results agtype);
+ results 
+---------
+ 7.416
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, 8)
+$$) AS (results agtype);
+  results   
+------------
+ 7.41634348
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, NULL)
+$$) AS (results agtype);
+ results 
+---------
+ 7.0
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, 7)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7, 2)
+$$) AS (results agtype);
+ results 
+---------
+ 7.0
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.4342, 2.1123)
+$$) AS (results agtype);
+ results 
+---------
+ 7.43
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, NULL)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
     RETURN sign(10)
 $$) AS (results agtype);
  results 
@@ -5478,23 +5534,27 @@ NOTICE:  graph "VLE" has been created
  
 (1 row)
 
--- should fail
+-- should return 0 rows
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*]-(v) RETURN u, v$$) AS (u agtype, v agtype);
-ERROR:  variable length relationships are not supported
-LINE 1: SELECT * FROM cypher('VLE', $$MATCH (u)-[*]-(v) RETURN u, v$...
-                                                ^
+ u | v 
+---+---
+(0 rows)
+
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
-ERROR:  variable length relationships are not supported
-LINE 1: SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u...
-                                                ^
+ u | v 
+---+---
+(0 rows)
+
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
-ERROR:  variable length relationships are not supported
-LINE 1: SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u,...
-                                                ^
+ u | v 
+---+---
+(0 rows)
+
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u, v$$) AS (u agtype, v agtype);
-ERROR:  variable length relationships are not supported
-LINE 1: SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u,...
-                                                ^
+ u | v 
+---+---
+(0 rows)
+
 -- list functions relationships(), range(), keys()
 SELECT create_graph('keys');
 NOTICE:  graph "keys" has been created

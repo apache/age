@@ -1831,6 +1831,27 @@ SELECT * FROM cypher('expr', $$
     RETURN round(-4.5)
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
+    RETURN round(7.4163, 3)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, 8)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, NULL)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, 7)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(7, 2)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.4342, 2.1123)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, NULL)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
     RETURN sign(10)
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
@@ -2257,7 +2278,7 @@ $$) as (result agtype);
 
 -- VLE
 SELECT create_graph('VLE');
--- should fail
+-- should return 0 rows
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
