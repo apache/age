@@ -276,6 +276,12 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
 static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
                                                List *delete_item_list,
                                                Query *query);
+// unwind
+static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
+                                      cypher_clause *clause);
+
+static List *makeTargetListFromRTE(ParseState *pstate, RangeTblEntry *rte);
+
 // transform
 #define PREV_CYPHER_CLAUSE_ALIAS "_"
 #define transform_prev_cypher_clause(cpstate, prev_clause) \
@@ -359,6 +365,10 @@ Query *transform_cypher_clause(cypher_parsestate *cpstate,
     else if (is_ag_node(self, cypher_sub_pattern))
     {
         result = transform_cypher_sub_pattern(cpstate, clause);
+    }
+    else if (is_ag_node(self, cypher_unwind))
+    {
+        result = transform_cypher_unwind(cpstate, clause);
     }
     else
     {
@@ -454,6 +464,68 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
 
     query->rtable = pstate->p_rtable;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+
+    return query;
+}
+
+static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
+                                      cypher_clause *clause)
+{
+    ParseState *pstate = (ParseState *) cpstate;
+    cypher_unwind *self = (cypher_unwind *) clause->self;
+
+    int target_syntax_loc;
+
+    Query *query;
+    Node *expr;
+    FuncCall *unwind;
+
+    ParseExprKind old_expr_kind;
+    Node *funcexpr;
+    TargetEntry *te;
+
+    query = makeNode(Query);
+    query->commandType = CMD_SELECT;
+
+    if (clause->prev != NULL)
+    {
+        RangeTblEntry *rte;
+        rte = transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, clause->prev);
+        query->targetList = makeTargetListFromRTE((ParseState *) cpstate, rte);
+    }
+
+    target_syntax_loc = exprLocation((const Node *) self->target);
+
+    if (findTarget(query->targetList, self->target->name) != NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("duplicate variable \"%s\"", self->target->name),
+                        parser_errposition((ParseState *) cpstate, target_syntax_loc)));
+    }
+
+    expr = transform_cypher_expr(cpstate, self->target->val, EXPR_KIND_SELECT_TARGET);
+
+    unwind = makeFuncCall(list_make1(makeString("age_unnest")), NIL, -1);
+
+    old_expr_kind = pstate->p_expr_kind;
+    pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
+    funcexpr = ParseFuncOrColumn(pstate, unwind->funcname, list_make1(expr),
+                                 pstate->p_last_srf, unwind, false,
+                                 target_syntax_loc);
+
+    pstate->p_expr_kind = old_expr_kind;
+
+    te = makeTargetEntry((Expr *) funcexpr,
+                         (AttrNumber) pstate->p_next_resno++,
+                         self->target->name, false);
+
+    query->targetList = lappend(query->targetList, te);
+    query->rtable = pstate->p_rtable;
+    query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+    query->hasTargetSRFs = pstate->p_hasTargetSRFs;
+
+    assign_query_collations(pstate, query);
 
     return query;
 }

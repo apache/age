@@ -106,6 +106,12 @@ typedef struct cypher_delete
     int location;
 } cypher_delete;
 
+typedef struct cypher_unwind
+{
+    ExtensibleNode extensible;
+    ResTarget *target;
+} cypher_unwind;
+
 /*
  * pattern
  */
