@@ -317,7 +317,6 @@ static inline Datum agtype_from_cstring(char *str, int len)
     /* callback for annotation (typecasts) */
     sem.agtype_annotation = agtype_in_agtype_annotation;
 
-
     parse_agtype(lex, &sem);
 
     /* after parsing, the item member has the composed agtype structure */
@@ -328,13 +327,11 @@ size_t check_string_length(size_t len)
 {
     if (len > AGTENTRY_OFFLENMASK)
     {
-        ereport(
-            ERROR,
-            (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-             errmsg("string too long to represent as agtype string"),
-             errdetail(
-                 "Due to an implementation restriction, agtype strings cannot exceed %d bytes.",
-                 AGTENTRY_OFFLENMASK)));
+        ereport(ERROR,
+                (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                 errmsg("string too long to represent as agtype string"),
+                 errdetail("Due to an implementation restriction, agtype strings cannot exceed %d bytes.",
+                           AGTENTRY_OFFLENMASK)));
     }
 
     return len;
@@ -665,8 +662,8 @@ static bool is_array_path(agtype_value *agtv)
     Assert(agtv != NULL);
     Assert(agtv->type == AGTV_ARRAY);
 
-    /* the array needs to have an odd number of elements greater than 2 */
-    if (agtv->val.array.num_elems < 3 ||
+    /* the array needs to have an odd number of elements */
+    if (agtv->val.array.num_elems < 1 ||
         (agtv->val.array.num_elems - 1) % 2 != 0)
         return false;
 
@@ -1765,7 +1762,6 @@ agtype_value *integer_to_agtype_value(int64 int_value)
     return agtv;
 }
 
-
 PG_FUNCTION_INFO_V1(_agtype_build_path);
 
 /*
@@ -1779,6 +1775,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
     Oid *types = NULL;
     int nargs = 0;
     int i = 0;
+    bool is_zero_boundary_case = false;
 
     /* build argument values to build the object */
     nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
@@ -1862,6 +1859,18 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
             Assert(agtv_path->type == AGTV_PATH);
 
             /*
+             * If the VLE path is the zero boundary case, there isn't an edge to
+             * process. Additionally, the start and end vertices are the same.
+             * We need to flag this condition so that we can skip processing the
+             * following vertex.
+             */
+            if (agtv_path->val.array.num_elems == 1)
+            {
+                is_zero_boundary_case = true;
+                continue;
+            }
+
+            /*
              * Add in the interior path - excluding the start and end vertices.
              * The other iterations of the for loop has handled start and will
              * handle end.
@@ -1888,10 +1897,22 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
                      errmsg("paths consist of alternating vertices and edges"),
                      errhint("argument %d must be an vertex", i + 1)));
         }
-        else
+        /*
+         * This will always add in vertices or edges depending on the loop
+         * iteration. However, when it is a vertex, there is the possibility
+         * that the previous iteration flagged a zero boundary case. We can only
+         * add it if this is not the case. If this is an edge, it is not
+         * possible to be a zero boundary case.
+         */
+        else if (is_zero_boundary_case == false)
         {
             add_agtype(AGTYPE_P_GET_DATUM(agt), false, &result, types[i],
                        false);
+        }
+        /* If we got here, we had a zero boundary case. So, clear it */
+        else
+        {
+            is_zero_boundary_case = false;
         }
     }
 
@@ -3181,7 +3202,6 @@ Datum agtype_btree_cmp(PG_FUNCTION_ARGS)
                                                      &agtype_rhs->root));
 }
 
-
 PG_FUNCTION_INFO_V1(agtype_typecast_numeric);
 /*
  * Execute function to typecast an agtype to an agtype numeric
@@ -3328,7 +3348,6 @@ Datum agtype_typecast_int(PG_FUNCTION_ARGS)
 
     PG_RETURN_POINTER(agtype_value_to_agtype(&result_value));
 }
-
 
 PG_FUNCTION_INFO_V1(agtype_typecast_float);
 /*
@@ -3697,7 +3716,6 @@ Datum _property_constraint_check(PG_FUNCTION_ARGS)
 
     PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it));
 }
-
 
 PG_FUNCTION_INFO_V1(age_id);
 
