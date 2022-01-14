@@ -9166,7 +9166,8 @@ Datum age_unnest(PG_FUNCTION_ARGS)
             bool		nulls[1] = {false};
             agtype	   *val = agtype_value_to_agtype(&v);
 
-            if (block_types && (v.type == AGTV_VERTEX || v.type == AGTV_EDGE || v.type == AGTV_PATH))
+            if (block_types && (
+                    v.type == AGTV_VERTEX || v.type == AGTV_EDGE || v.type == AGTV_PATH))
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
