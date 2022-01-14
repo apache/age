@@ -76,7 +76,7 @@ SELECT * FROM cypher('cypher_unwind', $$
     SET a.i = 1
     RETURN a
 $$) as (i agtype);
-ERROR:  cannot use types are not available.
+ERROR:  UNWIND clause does not support agtype vertex
 SELECT drop_graph('cypher_unwind', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table cypher_unwind._ag_label_vertex

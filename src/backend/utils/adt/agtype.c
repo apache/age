@@ -9171,7 +9171,8 @@ Datum age_unnest(PG_FUNCTION_ARGS)
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                                errmsg("cannot use types are not available.")));
+                                errmsg("UNWIND clause does not support agtype %s",
+                                       agtype_value_type_to_string(v.type))));
             }
 
             /* use the tmp context so we can clean up after each tuple is done */
