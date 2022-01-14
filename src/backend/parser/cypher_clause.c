@@ -510,7 +510,8 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
 
     old_expr_kind = pstate->p_expr_kind;
     pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
-    funcexpr = ParseFuncOrColumn(pstate, unwind->funcname, list_make1(expr),
+    funcexpr = ParseFuncOrColumn(pstate, unwind->funcname,
+                                 list_make2(expr, makeBoolConst(true, false)),
                                  pstate->p_last_srf, unwind, false,
                                  target_syntax_loc);
 

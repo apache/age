@@ -9114,15 +9114,17 @@ PG_FUNCTION_INFO_V1(age_unnest);
  */
 Datum age_unnest(PG_FUNCTION_ARGS)
 {
-    agtype    *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
+    agtype *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
+    bool block_types = PG_GETARG_BOOL(1);
+
     ReturnSetInfo *rsi;
     Tuplestorestate *tuple_store;
-    TupleDesc	tupdesc;
-    TupleDesc	ret_tdesc;
+    TupleDesc tupdesc;
+    TupleDesc ret_tdesc;
     MemoryContext old_cxt, tmp_cxt;
-    bool		skipNested = false;
+    bool skipNested = false;
     agtype_iterator *it;
-    agtype_value	v;
+    agtype_value v;
     agtype_iterator_token r;
 
     if (!AGT_ROOT_IS_ARRAY(agtype_arg))
@@ -9163,6 +9165,13 @@ Datum age_unnest(PG_FUNCTION_ARGS)
             Datum		values[1];
             bool		nulls[1] = {false};
             agtype	   *val = agtype_value_to_agtype(&v);
+
+            if (block_types && (v.type == AGTV_VERTEX || v.type == AGTV_EDGE || v.type == AGTV_PATH))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                                errmsg("cannot use types are not available.")));
+            }
 
             /* use the tmp context so we can clean up after each tuple is done */
             old_cxt = MemoryContextSwitchTo(tmp_cxt);
