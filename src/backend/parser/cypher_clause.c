@@ -1,20 +1,25 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * For PostgreSQL Database Management System:
+ * (formerly known as Postgres, then as Postgres95)
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Portions Copyright (c) 1996-2010, The PostgreSQL Global Development Group
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Portions Copyright (c) 1994, The Regents of the University of California
+ *
+ * Permission to use, copy, modify, and distribute this software and its documentation for any purpose,
+ * without fee, and without a written agreement is hereby granted, provided that the above copyright notice
+ * and this paragraph and the following two paragraphs appear in all copies.
+ *
+ * IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR DIRECT,
+ * INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS,
+ * ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY
+ * OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES, INCLUDING,
+ * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * THE SOFTWARE PROVIDED HEREUNDER IS ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA
+ * HAS NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
 #include "postgres.h"
@@ -747,10 +752,20 @@ cypher_update_information *transform_cypher_set_item_list(
         TargetEntry *target_item;
         cypher_update_item *item;
         ColumnRef *ref;
-        A_Indirection *ind = (A_Indirection *)set_item->prop;
+        A_Indirection *ind;
         char *variable_name, *property_name;
         Value *property_node, *variable_node;
 
+        // ColumnRef may come according to the Parser rule.
+        if (!IsA(set_item->prop, A_Indirection))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                            errmsg("SET clause expects a variable name"),
+                            parser_errposition(pstate, set_item->location)));
+        }
+
+        ind = (A_Indirection *)set_item->prop;
         item = make_ag_node(cypher_update_item);
 
         if (!is_ag_node(lfirst(li), cypher_set_item))
@@ -1738,8 +1753,8 @@ static RangeTblEntry *append_VLE_Func_to_FromClause(cypher_parsestate *cpstate,
 {
     ParseState *pstate = &cpstate->pstate;
     RangeTblEntry *rte = NULL;
+    List *namespace = NULL;
     int rtindex;
-    List *namespace = NIL;
 
     /*
      * Following PG's FROM clause logic, just in case we need to expand it in
@@ -2658,8 +2673,13 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     /* get the function */
     func = (FuncCall*)rel->varlen;
 
-    /* it better be one of our functions */
-    Assert(list_length(func->funcname) == 1);
+    /* only our functions are supported here */
+    if (list_length(func->funcname) != 1)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("only AGE functions are supported here")));
+    }
 
     /* set the pstate */
     pstate = &cpstate->pstate;
@@ -4125,8 +4145,19 @@ transform_cypher_clause_as_subquery(cypher_parsestate *cpstate,
      */
     if (list_length(pstate->p_rtable) > 1)
     {
-        List *namespace;
-        Assert(rte == rt_fetch(list_length(pstate->p_rtable), pstate->p_rtable));
+        List *namespace = NULL;
+        int rtindex = 0;
+
+        /* get the index of the last entry */
+        rtindex = list_length(pstate->p_rtable);
+
+        /* the rte at the end should be the rte just added */
+        if (rte != rt_fetch(rtindex, pstate->p_rtable))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("rte must be last entry in p_rtable")));
+        }
 
         namespace = list_make1(makeNamespaceItem(rte, true, true, false, true));
 

@@ -131,9 +131,28 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- binary I/O functions
+CREATE FUNCTION ag_catalog.graphid_send(graphid)
+RETURNS bytea
+LANGUAGE c
+IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_recv(internal)
+RETURNS graphid
+LANGUAGE c
+IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE TYPE graphid (
   INPUT = ag_catalog.graphid_in,
   OUTPUT = ag_catalog.graphid_out,
+  SEND = ag_catalog.graphid_send,
+  RECEIVE = ag_catalog.graphid_recv,
   INTERNALLENGTH = 8,
   PASSEDBYVALUE,
   ALIGNMENT = float8,
@@ -349,9 +368,28 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- binary I/O functions
+CREATE FUNCTION ag_catalog.agtype_send(agtype)
+RETURNS bytea
+LANGUAGE c
+IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.agtype_recv(internal)
+RETURNS agtype
+LANGUAGE c
+IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE TYPE agtype (
   INPUT = ag_catalog.agtype_in,
   OUTPUT = ag_catalog.agtype_out,
+  SEND = ag_catalog.agtype_send,
+  RECEIVE = ag_catalog.agtype_recv,
   LIKE = jsonb
 );
 
@@ -2983,10 +3021,10 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
--- agtype -> int2
 CREATE CAST (agtype AS int)
 WITH FUNCTION ag_catalog.agtype_to_int4(variadic "any");
 
+-- agtype -> int2
 CREATE FUNCTION ag_catalog.agtype_to_int2(variadic "any")
 RETURNS smallint
 LANGUAGE c
@@ -2998,6 +3036,17 @@ AS 'MODULE_PATHNAME';
 CREATE CAST (agtype AS smallint)
 WITH FUNCTION ag_catalog.agtype_to_int2(variadic "any");
 
+-- agtype -> int4[]
+CREATE FUNCTION ag_catalog.agtype_to_int4_array(variadic "any")
+    RETURNS int[]
+    LANGUAGE c
+    STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE CAST (agtype AS int[])
+    WITH FUNCTION ag_catalog.agtype_to_int4_array(variadic "any");
 --
 -- agtype - access operators
 --
