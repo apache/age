@@ -1779,7 +1779,7 @@ safe_keywords:
     | LIMIT      { $$ = pnstrdup($1, 6); }
     | MATCH      { $$ = pnstrdup($1, 6); }
     | NOT        { $$ = pnstrdup($1, 3); }
-    | OPTIONAL   { $$ = pnstrdup($1, 6); }
+    | OPTIONAL   { $$ = pnstrdup($1, 8); }
     | OR         { $$ = pnstrdup($1, 2); }
     | ORDER      { $$ = pnstrdup($1, 5); }
     | REMOVE     { $$ = pnstrdup($1, 6); }
