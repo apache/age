@@ -1416,7 +1416,7 @@ static void get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
 }
 
 /*
- * transform_cypher_union_tree
+ * transform_cypher_optional_match_clause
  *      Transform the previous clauses and OPTIONAL MATCH clauses to be LATERAL LEFT JOIN
  *      to construct a result value.
  */
