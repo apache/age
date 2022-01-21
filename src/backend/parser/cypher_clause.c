@@ -1497,9 +1497,7 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
 
-    /*
-     * If there is no previous clause, transform to a general MATCH clause.
-     */
+    // If there is no previous clause, transform to a general MATCH clause.
     if (self->optional == true && clause->prev != NULL)
     {
         RangeTblEntry *rte = transform_cypher_optional_match_clause(cpstate, clause);
