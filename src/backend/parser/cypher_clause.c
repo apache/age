@@ -1415,7 +1415,11 @@ static void get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
     *res_colvars = list_concat(*res_colvars, colvars);
 }
 
-
+/*
+ * transform_cypher_union_tree
+ *      Transform the previous clauses and OPTIONAL MATCH clauses to be LATERAL LEFT JOIN
+ *      to construct a result value.
+ */
 static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *cpstate,
                                                              cypher_clause *clause)
 {
@@ -1428,11 +1432,9 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
     JoinExpr* j = makeNode(JoinExpr);
     List *res_colnames = NIL, *res_colvars = NIL;
     Alias *l_alias, *r_alias;
-
     ParseNamespaceItem *nsitem;
 
     j->jointype = JOIN_LEFT;
-
 
     l_alias = makeAlias(CYPHER_OPT_LEFT_ALIAS, NIL);
     r_alias = makeAlias(CYPHER_OPT_RIGHT_ALIAS, NIL);
@@ -1481,6 +1483,7 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
     nsitem->p_lateral_only = false;
     nsitem->p_lateral_ok = true;
     pstate->p_namespace = lappend(pstate->p_namespace, nsitem);
+
     return rte;
 }
 
@@ -1494,16 +1497,16 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
 
-
+    /*
+     * If there is no previous clause, transform to a general MATCH clause.
+     */
     if (self->optional == true && clause->prev != NULL)
     {
         RangeTblEntry *rte = transform_cypher_optional_match_clause(cpstate, clause);
 
         query->targetList = makeTargetListFromJoin(pstate, rte);
-
         query->rtable = pstate->p_rtable;
         query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
-
         query->hasSubLinks = pstate->p_hasSubLinks;
     }
     else
@@ -1538,8 +1541,7 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
 /*
  * Function to make a target list from an RTE. Borrowed from AgensGraph and PG
  */
-static List *makeTargetListFromJoin(ParseState *pstate,
-                                    RangeTblEntry *rte)
+static List *makeTargetListFromJoin(ParseState *pstate, RangeTblEntry *rte)
 {
     List *targetlist = NIL;
     ListCell *lt;
