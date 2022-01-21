@@ -457,9 +457,9 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (i agtype);
 
 
--- 
+--
 -- Optional Match
--- 
+--
 SELECT * FROM cypher('cypher_match', $$
     CREATE (:opt_match_v {name: 'someone'})-[:opt_match_e]->(:opt_match_v {name: 'somebody'}),
            (:opt_match_v {name: 'anybody'})-[:opt_match_e]->(:opt_match_v {name: 'nobody'})

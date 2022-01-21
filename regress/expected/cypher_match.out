@@ -889,9 +889,9 @@ $$) AS (i agtype);
  {"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex
 (3 rows)
 
--- 
+--
 -- Optional Match
--- 
+--
 SELECT * FROM cypher('cypher_match', $$
     CREATE (:opt_match_v {name: 'someone'})-[:opt_match_e]->(:opt_match_v {name: 'somebody'}),
            (:opt_match_v {name: 'anybody'})-[:opt_match_e]->(:opt_match_v {name: 'nobody'})

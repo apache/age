@@ -1340,10 +1340,11 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
         cpstate, transform_cypher_match_pattern, clause, self->where);
 }
 
-static Node *
-transform_clause_for_join(cypher_parsestate *cpstate, cypher_clause *clause,
-                         RangeTblEntry **rte, ParseNamespaceItem **nsitem,
-                         Alias* alias)
+static Node *transform_clause_for_join(cypher_parsestate *cpstate,
+                                       cypher_clause *clause,
+                                       RangeTblEntry **rte,
+                                       ParseNamespaceItem **nsitem,
+                                       Alias* alias)
 {
     ParseState *pstate = (ParseState *)cpstate;
     ParseNamespaceItem *tmp;
@@ -1421,19 +1422,14 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
 {
     cypher_clause *prevclause;
     cypher_match *self = (cypher_match *)clause->self;
-
     RangeTblEntry *rte;
     RangeTblEntry *l_rte, *r_rte;
     ParseNamespaceItem *l_nsitem, *r_nsitem;
     ParseState *pstate = (ParseState *) cpstate;
-
     JoinExpr* j = makeNode(JoinExpr);
-    
     List *res_colnames = NIL, *res_colvars = NIL;
-
     Alias *l_alias, *r_alias;
 
-    int i;
     ParseNamespaceItem *nsitem;
 
     j->jointype = JOIN_LEFT;
@@ -1472,7 +1468,7 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
 
     j->rtindex = RTERangeTablePosn(pstate, rte, NULL);
 
-    for (i = list_length(pstate->p_joinexprs) + 1; i < j->rtindex; i++)
+    for (int i = list_length(pstate->p_joinexprs) + 1; i < j->rtindex; i++)
         pstate->p_joinexprs = lappend(pstate->p_joinexprs, NULL);
     pstate->p_joinexprs = lappend(pstate->p_joinexprs, j);
     Assert(list_length(pstate->p_joinexprs) == j->rtindex);
