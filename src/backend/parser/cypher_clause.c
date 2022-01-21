@@ -1368,10 +1368,9 @@ static Node *transform_clause_for_join(cypher_parsestate *cpstate,
     return (Node *) rtr;
 }
 
-static void
-get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
-             RangeTblEntry *r_rte, List **res_colnames,
-             List **res_colvars)
+static void get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
+                         RangeTblEntry *r_rte, List **res_colnames,
+                         List **res_colvars)
 {
     List *l_colnames, *l_colvars;
     List *r_colnames, *r_colvars;
