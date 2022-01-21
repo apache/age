@@ -1417,8 +1417,8 @@ get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
 }
 
 
-static RangeTblEntry *
-transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause *clause)
+static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *cpstate,
+                                                             cypher_clause *clause)
 {
     cypher_clause *prevclause;
     cypher_match *self = (cypher_match *)clause->self;
@@ -1482,8 +1482,6 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
     nsitem->p_lateral_only = false;
     nsitem->p_lateral_ok = true;
     pstate->p_namespace = lappend(pstate->p_namespace, nsitem);
-
-
     return rte;
 }
 
