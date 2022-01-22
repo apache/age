@@ -599,7 +599,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     pstate->p_lateral_active = false;
     pstate->p_expr_kind = EXPR_KIND_NONE;
 
-    // skip resjunk
+    // ALIAS Syntax makes `RESJUNK`. So, It must be skipping.
     foreach(lt, subquery->targetList)
     {
         TargetEntry *te = lfirst(lt);

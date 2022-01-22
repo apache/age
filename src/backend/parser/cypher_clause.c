@@ -1366,10 +1366,9 @@ static Node *transform_clause_for_join(cypher_parsestate *cpstate,
     return (Node *) rtr;
 }
 
-static void
-get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
-             RangeTblEntry *r_rte, List **res_colnames,
-             List **res_colvars)
+static void get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
+                         RangeTblEntry *r_rte, List **res_colnames,
+                         List **res_colvars)
 {
     List *l_colnames, *l_colvars;
     List *r_colnames, *r_colvars;
@@ -1414,9 +1413,13 @@ get_res_cols(ParseState *pstate, RangeTblEntry *l_rte,
     *res_colvars = list_concat(*res_colvars, colvars);
 }
 
-
-static RangeTblEntry *
-transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause *clause)
+/*
+ * transform_cypher_optional_match_clause
+ *      Transform the previous clauses and OPTIONAL MATCH clauses to be LATERAL LEFT JOIN
+ *      to construct a result value.
+ */
+static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *cpstate,
+                                                             cypher_clause *clause)
 {
     cypher_clause *prevclause;
     cypher_match *self = (cypher_match *)clause->self;
@@ -1427,11 +1430,9 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
     JoinExpr* j = makeNode(JoinExpr);
     List *res_colnames = NIL, *res_colvars = NIL;
     Alias *l_alias, *r_alias;
-
     ParseNamespaceItem *nsitem;
 
     j->jointype = JOIN_LEFT;
-
 
     l_alias = makeAlias(PREV_CYPHER_CLAUSE_ALIAS, NIL);
     r_alias = makeAlias(CYPHER_OPT_RIGHT_ALIAS, NIL);
@@ -1478,7 +1479,6 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
     nsitem->p_lateral_ok = true;
     pstate->p_namespace = lappend(pstate->p_namespace, nsitem);
 
-
     return rte;
 }
 
@@ -1492,16 +1492,14 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
 
-
+    // If there is no previous clause, transform to a general MATCH clause.
     if (self->optional == true && clause->prev != NULL)
     {
         RangeTblEntry *rte = transform_cypher_optional_match_clause(cpstate, clause);
 
         query->targetList = make_target_list_from_join(pstate, rte);
-
         query->rtable = pstate->p_rtable;
         query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
-
         query->hasSubLinks = pstate->p_hasSubLinks;
     }
     else
