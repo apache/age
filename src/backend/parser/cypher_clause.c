@@ -1346,19 +1346,13 @@ static Node *transform_clause_for_join(cypher_parsestate *cpstate,
                                        Alias* alias)
 {
     ParseState *pstate = (ParseState *)cpstate;
-    ParseNamespaceItem *tmp;
     RangeTblRef *rtr;
 
     *rte = transform_cypher_clause_as_subquery(cpstate,
                                                transform_cypher_clause,
                                                clause, alias, false);
 
-    tmp = (ParseNamespaceItem *) palloc(sizeof(ParseNamespaceItem));
-    tmp->p_rte = *rte;
-    tmp->p_cols_visible = true;
-    tmp->p_lateral_only = false;
-    tmp->p_lateral_ok = true;
-    *nsitem = tmp;
+    *nsitem = makeNamespaceItem(*rte, false, true, false, true);
 
     rtr = makeNode(RangeTblRef);
     rtr->rtindex = RTERangeTablePosn(pstate, *rte, NULL);
@@ -1471,12 +1465,7 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
 
     pstate->p_joinlist = lappend(pstate->p_joinlist, j);
 
-    nsitem = palloc(sizeof(*nsitem));
-    nsitem->p_rte = rte;
-    nsitem->p_rel_visible = true;
-    nsitem->p_cols_visible = true;
-    nsitem->p_lateral_only = false;
-    nsitem->p_lateral_ok = true;
+    nsitem = makeNamespaceItem(rte, false, true, false, true);
     pstate->p_namespace = lappend(pstate->p_namespace, nsitem);
 
     return rte;
