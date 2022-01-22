@@ -278,7 +278,6 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
                                                Query *query);
 // transform
 #define PREV_CYPHER_CLAUSE_ALIAS    "_"
-#define CYPHER_OPT_LEFT_ALIAS       "_L"
 #define CYPHER_OPT_RIGHT_ALIAS      "_R"
 #define transform_prev_cypher_clause(cpstate, prev_clause, add_rte_to_query) \
     transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, \
@@ -314,7 +313,7 @@ static List *add_target_to_group_list(cypher_parsestate *cpstate,
                                       TargetEntry *tle, List *grouplist,
                                       List *targetlist, int location);
 static void advance_transform_entities_to_next_clause(List *entities);
-static List *makeTargetListFromJoin(ParseState *pstate, RangeTblEntry *rte);
+static List *make_target_list_from_join(ParseState *pstate, RangeTblEntry *rte);
 
 /* for VLE support */
 static RangeTblEntry *transform_RangeFunction(cypher_parsestate *cpstate,
@@ -1356,7 +1355,6 @@ static Node *transform_clause_for_join(cypher_parsestate *cpstate,
 
     tmp = (ParseNamespaceItem *) palloc(sizeof(ParseNamespaceItem));
     tmp->p_rte = *rte;
-    tmp->p_rel_visible = true;
     tmp->p_cols_visible = true;
     tmp->p_lateral_only = false;
     tmp->p_lateral_ok = true;
@@ -1435,7 +1433,7 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
     j->jointype = JOIN_LEFT;
 
 
-    l_alias = makeAlias(CYPHER_OPT_LEFT_ALIAS, NIL);
+    l_alias = makeAlias(PREV_CYPHER_CLAUSE_ALIAS, NIL);
     r_alias = makeAlias(CYPHER_OPT_RIGHT_ALIAS, NIL);
 
     j->larg = transform_clause_for_join(cpstate, clause->prev, &l_rte,
@@ -1457,9 +1455,6 @@ transform_cypher_optional_match_clause(cypher_parsestate *cpstate, cypher_clause
     clause->prev = prevclause;
 
     pstate->p_namespace = NIL;
-
-    j->quals = makeBoolConst(true, false);
-    j->alias = makeAlias(PREV_CYPHER_CLAUSE_ALIAS, NIL);
 
     get_res_cols(pstate, l_rte, r_rte, &res_colnames, &res_colvars);
 
@@ -1502,7 +1497,7 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     {
         RangeTblEntry *rte = transform_cypher_optional_match_clause(cpstate, clause);
 
-        query->targetList = makeTargetListFromJoin(pstate, rte);
+        query->targetList = make_target_list_from_join(pstate, rte);
 
         query->rtable = pstate->p_rtable;
         query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
@@ -1541,8 +1536,7 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
 /*
  * Function to make a target list from an RTE. Borrowed from AgensGraph and PG
  */
-static List *makeTargetListFromJoin(ParseState *pstate,
-                                    RangeTblEntry *rte)
+static List *make_target_list_from_join(ParseState *pstate, RangeTblEntry *rte)
 {
     List *targetlist = NIL;
     ListCell *lt;
