@@ -9110,13 +9110,15 @@ Datum age_range(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(age_unnest);
 /*
- * Agtype(Array) to SETOF agtype
+ * Function to convert the Array type of Agtype into each row. It is used for
+ * Cypher `UNWIND` clause, but considering the situation in which the user can
+ * directly use this function in vanilla PGSQL, put a second parameter related
+ * to this.
  */
 Datum age_unnest(PG_FUNCTION_ARGS)
 {
     agtype *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
     bool block_types = PG_GETARG_BOOL(1);
-
     ReturnSetInfo *rsi;
     Tuplestorestate *tuple_store;
     TupleDesc tupdesc;
