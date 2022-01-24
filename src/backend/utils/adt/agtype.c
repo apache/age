@@ -9128,9 +9128,11 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     agtype_iterator_token r;
 
     if (!AGT_ROOT_IS_ARRAY(agtype_arg))
+    {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("cannot extract elements from an object")));
+    }
 
     rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
@@ -9161,10 +9163,10 @@ Datum age_unnest(PG_FUNCTION_ARGS)
 
         if (r == WAGT_ELEM)
         {
-            HeapTuple	tuple;
-            Datum		values[1];
-            bool		nulls[1] = {false};
-            agtype	   *val = agtype_value_to_agtype(&v);
+            HeapTuple tuple;
+            Datum values[1];
+            bool nulls[1] = {false};
+            agtype *val = agtype_value_to_agtype(&v);
 
             if (block_types && (
                     v.type == AGTV_VERTEX || v.type == AGTV_EDGE || v.type == AGTV_PATH))

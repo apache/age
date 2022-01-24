@@ -279,9 +279,6 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
 // unwind
 static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                                       cypher_clause *clause);
-
-static List *makeTargetListFromRTE(ParseState *pstate, RangeTblEntry *rte);
-
 // transform
 #define PREV_CYPHER_CLAUSE_ALIAS "_"
 #define transform_prev_cypher_clause(cpstate, prev_clause) \
@@ -468,18 +465,21 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
     return query;
 }
 
+/*
+ * transform_cypher_unwind
+ *      It contains logic to convert the form of an array into a row. Here, we
+ *      are simply calling `age_unnest` function, and the actual transformation
+ *      is handled by `age_unnest` function.
+ */
 static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                                       cypher_clause *clause)
 {
     ParseState *pstate = (ParseState *) cpstate;
     cypher_unwind *self = (cypher_unwind *) clause->self;
-
     int target_syntax_loc;
-
     Query *query;
     Node *expr;
     FuncCall *unwind;
-
     ParseExprKind old_expr_kind;
     Node *funcexpr;
     TargetEntry *te;
@@ -487,11 +487,15 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
 
-    if (clause->prev != NULL)
+    if (clause->prev)
     {
         RangeTblEntry *rte;
-        rte = transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, clause->prev);
-        query->targetList = makeTargetListFromRTE((ParseState *) cpstate, rte);
+        int rtindex;
+
+        rte = transform_prev_cypher_clause(cpstate, clause->prev);
+        rtindex = list_length(pstate->p_rtable);
+        Assert(rtindex == 1); // rte is the first RangeTblEntry in pstate
+        query->targetList = expandRelAttrs(pstate, rte, rtindex, 0, -1);
     }
 
     target_syntax_loc = exprLocation((const Node *) self->target);
