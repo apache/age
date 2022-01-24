@@ -78,6 +78,7 @@ REGRESS = scan \
           cypher_delete \
           cypher_with \
           cypher_vle \
+          cypher_union \
           drop
 
 srcdir=`pwd`
