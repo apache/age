@@ -1085,7 +1085,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
         RangeTblEntry *rte;
         int rtindex;
 
-        rte = transform_prev_cypher_clause(cpstate, clause->prev);
+        rte = transform_prev_cypher_clause(cpstate, clause->prev, true);
         rtindex = list_length(pstate->p_rtable);
         Assert(rtindex == 1); // rte is the first RangeTblEntry in pstate
         query->targetList = expandRelAttrs(pstate, rte, rtindex, 0, -1);
