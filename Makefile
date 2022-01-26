@@ -72,11 +72,13 @@ REGRESS = scan \
           expr \
           cypher_create \
           cypher_match \
+          cypher_unwind \
           cypher_set \
           cypher_remove \
           cypher_delete \
           cypher_with \
           cypher_vle \
+          cypher_union \
           drop
 
 srcdir=`pwd`

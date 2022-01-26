@@ -168,6 +168,13 @@ void out_cypher_delete(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(exprs);
 }
 
+void out_cypher_unwind(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_unwind);
+
+    WRITE_NODE_FIELD(target);
+}
+
 // serialization function for the cypher_path ExtensibleNode.
 void out_cypher_path(StringInfo str, const ExtensibleNode *node)
 {
@@ -358,6 +365,16 @@ void out_cypher_delete_item(StringInfo str, const ExtensibleNode *node)
 
     WRITE_NODE_FIELD(entity_position);
     WRITE_STRING_FIELD(var_name);
+}
+
+void out_cypher_union(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_union);
+
+    WRITE_BOOL_FIELD(all_or_distinct);
+    WRITE_ENUM_FIELD(op, SetOperation);
+    WRITE_NODE_FIELD(larg);
+    WRITE_NODE_FIELD(rarg);
 }
 
 /*
