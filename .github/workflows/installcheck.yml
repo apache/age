@@ -1,0 +1,40 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get latest commit id of PostgreSQL 11
+        run: |
+          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_11_STABLE | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Cache PostgreSQL 11
+        uses: actions/cache@v2
+        id: pg11cache
+        with:
+          path: ~/pg11
+          key: ${{ runner.os }}-v1-pg11-${{ env.PG_COMMIT_HASH }}
+
+      - name: Install PostgreSQL 11
+        if: steps.pg11cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch REL_11_STABLE git://git.postgresql.org/git/postgresql.git ~/pg11source
+          cd ~/pg11source
+          ./configure --prefix=$HOME/pg11 CFLAGS="-std=gnu89"
+          make install -j$(nproc) > /dev/null
+
+      - uses: actions/checkout@v2
+      - name: Regression
+        run: |
+          export PG_CONFIG=$HOME/pg11/bin/pg_config 
+          make -j$(nproc)
+          make install
+          make installcheck
