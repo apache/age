@@ -20,6 +20,7 @@ MODULE_big = age
 
 
 OBJS = src/backend/age.o \
+       src/backend/guc.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \
        src/backend/catalog/ag_label.o \
@@ -83,6 +84,7 @@ REGRESS = scan \
           cypher_vle \
           cypher_union \
           cypher_merge \
+          auto_column_conversion \
           drop
 
 srcdir=`pwd`
@@ -96,7 +98,7 @@ EXTRA_CLEAN = $(addprefix $(ag_regress_dir)/, $(ag_regress_out)) src/backend/par
 ag_include_dir = $(srcdir)/src/include
 PG_CPPFLAGS = -I$(ag_include_dir) -I$(ag_include_dir)/parser
 
-PG_CONFIG = pg_config
+PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 

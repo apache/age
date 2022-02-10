@@ -17,36 +17,10 @@
  * under the License.
  */
 
-#include "postgres.h"
+#ifndef AG_GUC_H
+#define AG_GUC_H
 
-#include "fmgr.h"
+extern bool age_guc_enable_auto_column_conversion;
+void guc_init(void);
 
-#include "catalog/ag_catalog.h"
-#include "nodes/ag_nodes.h"
-#include "optimizer/cypher_paths.h"
-#include "parser/cypher_analyze.h"
-#include "guc.h"
-
-PG_MODULE_MAGIC;
-
-void _PG_init(void);
-
-void _PG_init(void)
-{
-    register_ag_nodes();
-    set_rel_pathlist_init();
-    object_access_hook_init();
-    process_utility_hook_init();
-    post_parse_analyze_init();
-    guc_init();
-}
-
-void _PG_fini(void);
-
-void _PG_fini(void)
-{
-    post_parse_analyze_fini();
-    process_utility_hook_fini();
-    object_access_hook_fini();
-    set_rel_pathlist_fini();
-}
+#endif

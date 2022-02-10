@@ -26,6 +26,12 @@
 #define AGE_DEFAULT_ALIAS_PREFIX "_age_default_alias_"
 #define AGE_DEFAULT_VARNAME_PREFIX "_age_varname_"
 
+typedef struct extends_parsestate
+{
+    ParseState pstate;
+    Query* root;
+} extends_parsestate;
+
 typedef struct cypher_parsestate
 {
     ParseState pstate;
@@ -53,6 +59,7 @@ typedef struct errpos_ecb_state
     int query_loc; // location of subquery starting from p_sourcetext
 } errpos_ecb_state;
 
+extends_parsestate *make_extends_parsestate(ParseState *parent_cpstate);
 cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate);
 void free_cypher_parsestate(cypher_parsestate *cpstate);
 #define get_parse_state(cpstate) ((ParseState *)(cpstate))
