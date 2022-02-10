@@ -19,7 +19,6 @@
 
 #include "postgres.h"
 
-#include "catalog/pg_type_d.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/nodes.h"
@@ -32,9 +31,9 @@
 #include "parser/parse_node.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
-#include "parser/parsetree.h"
 #include "utils/builtins.h"
 
+#include "guc.h"
 #include "catalog/ag_graph.h"
 #include "nodes/ag_nodes.h"
 #include "parser/cypher_analyze.h"
@@ -64,6 +63,9 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         const char *query_str, int query_loc,
                                         char *graph_name, Oid graph_oid,
                                         Param *params);
+void auto_column_conversion(extends_parsestate* pstate,
+                            RangeTblFunction *rtfunc, Query *subquery);
+Oid get_vartype_from_expr(TargetEntry *te);
 
 void post_parse_analyze_init(void)
 {
@@ -78,10 +80,17 @@ void post_parse_analyze_fini(void)
 
 static void post_parse_analyze(ParseState *pstate, Query *query)
 {
+    extends_parsestate *extends_pstate;
+
     if (prev_post_parse_analyze_hook)
         prev_post_parse_analyze_hook(pstate, query);
 
-    convert_cypher_walker((Node *)query, pstate);
+    extends_pstate = make_extends_parsestate(pstate);
+    extends_pstate->root = query;
+
+    convert_cypher_walker((Node *)query, (ParseState *) extends_pstate);
+
+    free_parsestate((ParseState *) extends_pstate);
 }
 
 // find cypher() calls in FROM clauses and convert them to SELECT subqueries
@@ -101,7 +110,9 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
             return convert_cypher_walker((Node *)rte->subquery, pstate);
         case RTE_FUNCTION:
             if (is_rte_cypher(rte))
+            {
                 convert_cypher_to_subquery(rte, pstate);
+            }
             return false;
         default:
             return false;
@@ -612,10 +623,18 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     // check the number of attributes first
     if (attr_count != rtfunc->funccolcount)
     {
-        ereport(ERROR,
-                (errcode(ERRCODE_DATATYPE_MISMATCH),
-                 errmsg("return row and column definition list do not match"),
-                 parser_errposition(pstate, exprLocation(rtfunc->funcexpr))));
+        if (age_guc_enable_auto_column_conversion)
+        {
+            auto_column_conversion((extends_parsestate *)parent_pstate, rtfunc,
+                                   subquery);
+        }
+        else
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DATATYPE_MISMATCH),
+                        errmsg("return row and column definition list do not match"),
+                        parser_errposition(pstate, exprLocation(rtfunc->funcexpr))));
+        }
     }
 
     rte = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
@@ -687,4 +706,72 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     free_parsestate(pstate);
 
     return query;
+}
+
+void auto_column_conversion(extends_parsestate* pstate,
+                            RangeTblFunction *rtfunc, Query *subquery)
+{
+    int varno;
+    Query *root_query = pstate->root;
+    ListCell *lc;
+    int i;
+
+    list_free(rtfunc->funccolnames);
+    list_free(rtfunc->funccoltypes);
+    list_free(rtfunc->funccoltypmods);
+    list_free(rtfunc->funccolcollations);
+
+    rtfunc->funccolnames = NIL;
+    rtfunc->funccoltypes = NIL;
+    rtfunc->funccoltypmods = NIL;
+    rtfunc->funccolcollations = NIL;
+
+    lc = list_head(root_query->rtable);
+    if (is_rte_cypher(lfirst(lc)))
+    {
+        varno = 1;
+    }
+    else
+    {
+        elog(ERROR, "auto_column_conversion cannot be used with other expressions.");
+    }
+
+    lc = list_nth_cell(subquery->targetList, 0);
+
+    for(i=0; i<list_length(subquery->targetList); i++)
+    {
+        TargetEntry *te = lfirst(lc);
+        if(!te->resjunk)
+        {
+            AttrNumber resno = (AttrNumber)(i + 1);
+            Oid vartype = get_vartype_from_expr(te);
+            char* resname = pstrdup(te->resname);
+            Expr *var = (Expr *) makeVar(varno, resno, vartype, -1, 0, 0);
+            TargetEntry *tle = makeTargetEntry(var,
+                                               resno,
+                                               resname, false);
+            root_query->targetList = lappend(root_query->targetList, tle);
+            rtfunc->funccolnames = lappend(rtfunc->funccolnames,
+                                           makeString(resname));
+            rtfunc->funccoltypes = lappend_oid(rtfunc->funccoltypes, vartype);
+            rtfunc->funccoltypmods = lappend_int(rtfunc->funccoltypmods, -1);
+            rtfunc->funccolcollations = lappend_oid(rtfunc->funccolcollations,
+                                                    0);
+        }
+        lc = lnext(lc);
+    }
+    rtfunc->funccolcount = list_length(root_query->targetList);
+}
+
+Oid get_vartype_from_expr(TargetEntry *te)
+{
+    switch (nodeTag(te->expr))
+    {
+        case T_FuncExpr:
+            return ((FuncExpr*)te->expr)->funcresulttype;
+        case T_Var:
+            return ((Var*)te->expr)->vartype;
+        default:
+            return AGTYPEOID;
+    }
 }
