@@ -716,11 +716,13 @@ void auto_column_conversion(extends_parsestate* pstate,
     ListCell *lc;
     int i;
 
+    list_free_deep(root_query->targetList);
     list_free(rtfunc->funccolnames);
     list_free(rtfunc->funccoltypes);
     list_free(rtfunc->funccoltypmods);
     list_free(rtfunc->funccolcollations);
 
+    root_query->targetList = NIL;
     rtfunc->funccolnames = NIL;
     rtfunc->funccoltypes = NIL;
     rtfunc->funccoltypmods = NIL;
@@ -736,9 +738,8 @@ void auto_column_conversion(extends_parsestate* pstate,
         elog(ERROR, "auto_column_conversion cannot be used with other expressions.");
     }
 
-    lc = list_nth_cell(subquery->targetList, 0);
-
-    for(i=0; i<list_length(subquery->targetList); i++)
+    lc = list_head(subquery->targetList);
+    for (i = 0; i < list_length(subquery->targetList); i++)
     {
         TargetEntry *te = lfirst(lc);
         if(!te->resjunk)
