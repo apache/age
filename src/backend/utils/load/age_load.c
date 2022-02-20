@@ -77,7 +77,7 @@ agtype* create_agtype_from_list(char **header, char **fields, size_t fields_len,
 
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT, NULL);
 
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY, string_to_agtype_value("id"));
+    result.res = push_agtype_value(&result.parse_state, WAGT_KEY, string_to_agtype_value("__id__"));
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, integer_to_agtype_value(vertex_id));
 
     for (i = 0; i<fields_len; i++) {
