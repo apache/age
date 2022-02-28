@@ -81,7 +81,8 @@ void vertex_field_cb(void *field, size_t field_len, void *data) {
         if (cr->fields == NULL) {
             cr->error = 1;
             ereport(ERROR,
-                    (errmsg("field_cb: failed to reallocate %zu bytes\n", sizeof(char *) * cr->alloc)));
+                    (errmsg("field_cb: failed to reallocate %zu bytes\n",
+                            sizeof(char *) * cr->alloc)));
         }
     }
     cr->fields_len[cr->cur_field] = field_len;
@@ -119,8 +120,10 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data) {
 
         object_graph_id = make_graphid(cr->object_id, label_id_int);
 
-        props = create_agtype_from_list(cr->header, cr->fields, n_fields, label_id_int);
-        insert_vertex_simple(cr->graph_id, cr->object_name, object_graph_id, props);
+        props = create_agtype_from_list(cr->header, cr->fields,
+                                        n_fields, label_id_int);
+        insert_vertex_simple(cr->graph_id, cr->object_name,
+                             object_graph_id, props);
     }
 
 
@@ -199,15 +202,18 @@ int create_labels_from_csv_file(char *file_path,
 
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
-        if (csv_parse(&p, buf, bytes_read, vertex_field_cb, vertex_row_cb, &cr) != bytes_read) {
-            ereport(ERROR, (errmsg("Error while parsing file: %s\n", csv_strerror(csv_error(&p)))));
+        if (csv_parse(&p, buf, bytes_read, vertex_field_cb,
+                      vertex_row_cb, &cr) != bytes_read) {
+            ereport(ERROR, (errmsg("Error while parsing file: %s\n",
+                                   csv_strerror(csv_error(&p)))));
         }
     }
 
     csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
 
     if (ferror(fp)) {
-        ereport(ERROR, (errmsg("Error while reading file %s\n", file_path)));
+        ereport(ERROR, (errmsg("Error while reading file %s\n",
+                               file_path)));
     }
 
     fclose(fp);
