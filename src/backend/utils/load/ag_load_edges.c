@@ -44,7 +44,8 @@ void edge_field_cb(void *field, size_t field_len, void *data) {
         if (cr->fields == NULL) {
             cr->error = 1;
             ereport(ERROR,
-                    (errmsg("field_cb: failed to reallocate %zu bytes\n", sizeof(char *) * cr->alloc)));
+                    (errmsg("field_cb: failed to reallocate %zu bytes\n",
+                            sizeof(char *) * cr->alloc)));
         }
     }
     cr->fields_len[cr->cur_field] = field_len;
@@ -94,10 +95,12 @@ void edge_row_cb(int delim __attribute__((unused)), void *data) {
         start_vertex_graph_id = make_graphid(start_vertex_type_id, start_id_int);
         end_vertex_graph_id = make_graphid(end_vertex_type_id, end_id_int);
 
-        props = create_agtype_from_list_i(cr->header, cr->fields, n_fields, 3);
+        props = create_agtype_from_list_i(cr->header, cr->fields,
+                                          n_fields, 3);
 
-        insert_edge_simple(cr->graph_id, cr->object_name, object_graph_id,
-                           start_vertex_graph_id, end_vertex_graph_id, props);
+        insert_edge_simple(cr->graph_id, cr->object_name,
+                           object_graph_id, start_vertex_graph_id,
+                           end_vertex_graph_id, props);
 
     }
 
@@ -171,8 +174,10 @@ int create_edges_from_csv_file(char *file_path,
     cr.object_id = object_id;
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
-        if (csv_parse(&p, buf, bytes_read, edge_field_cb, edge_row_cb, &cr) != bytes_read) {
-            ereport(ERROR, (errmsg("Error while parsing file: %s\n", csv_strerror(csv_error(&p)))));
+        if (csv_parse(&p, buf, bytes_read, edge_field_cb,
+                      edge_row_cb, &cr) != bytes_read) {
+            ereport(ERROR, (errmsg("Error while parsing file: %s\n",
+                                   csv_strerror(csv_error(&p)))));
         }
     }
 
