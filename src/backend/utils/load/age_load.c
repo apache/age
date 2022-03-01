@@ -58,7 +58,8 @@
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/ag_load_edges.h"
 
-static agtype* create_empty_agtype(void) {
+static agtype* create_empty_agtype(void)
+{
     agtype_in_state result;
 
     memset(&result, 0, sizeof(agtype_in_state));
@@ -72,7 +73,8 @@ static agtype* create_empty_agtype(void) {
 }
 
 agtype* create_agtype_from_list(char **header, char **fields,
-                                size_t fields_len, int64 vertex_id) {
+                                size_t fields_len, int64 vertex_id)
+{
     agtype_in_state result;
     int i;
 
@@ -88,7 +90,8 @@ agtype* create_agtype_from_list(char **header, char **fields,
                                    WAGT_VALUE,
                                    integer_to_agtype_value(vertex_id));
 
-    for (i = 0; i<fields_len; i++) {
+    for (i = 0; i<fields_len; i++)
+    {
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
                                        string_to_agtype_value(header[i]));
@@ -104,12 +107,14 @@ agtype* create_agtype_from_list(char **header, char **fields,
 }
 
 agtype* create_agtype_from_list_i(char **header, char **fields,
-                                  size_t fields_len, size_t start_index) {
+                                  size_t fields_len, size_t start_index)
+{
 
     agtype_in_state result;
     size_t i;
 
-    if (start_index + 1 == fields_len) {
+    if (start_index + 1 == fields_len)
+    {
         return create_empty_agtype();
     }
     memset(&result, 0, sizeof(agtype_in_state));
@@ -117,7 +122,8 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_BEGIN_OBJECT, NULL);
 
-    for (i = start_index; i<fields_len; i++) {
+    for (i = start_index; i<fields_len; i++)
+    {
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
                                        string_to_agtype_value(header[i]));
@@ -134,7 +140,8 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
 
 void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
-                        agtype* edge_properties) {
+                        agtype* edge_properties)
+{
 
     Datum values[6];
     bool nulls[4] = {false, false, false, false};
@@ -161,7 +168,8 @@ void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
 
 void insert_vertex_simple(Oid graph_id, char* label_name,
                           graphid vertex_id,
-                          agtype* vertex_properties) {
+                          agtype* vertex_properties)
+{
 
     Datum values[2];
     bool nulls[2] = {false, false};
@@ -184,7 +192,8 @@ void insert_vertex_simple(Oid graph_id, char* label_name,
 
 
 PG_FUNCTION_INFO_V1(load_labels_from_file);
-Datum load_labels_from_file(PG_FUNCTION_ARGS) {
+Datum load_labels_from_file(PG_FUNCTION_ARGS)
+{
 
     Name graph_name;
     Name label_name;
@@ -235,7 +244,8 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS) {
 }
 
 PG_FUNCTION_INFO_V1(load_edges_from_file);
-Datum load_edges_from_file(PG_FUNCTION_ARGS) {
+Datum load_edges_from_file(PG_FUNCTION_ARGS)
+{
 
     Name graph_name;
     Name label_name;
