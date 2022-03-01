@@ -279,7 +279,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("graph \"%s\" does not exist", graph_name)));
     }
-    graph_oid = cache_data->oid;
+    graph_oid = cache_data->graphid;
     nsp_id = cache_data->namespace;
 
     // create a sequence for the new label to generate unique IDs for vertices
@@ -732,7 +732,7 @@ Datum drop_label(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                  errmsg("graph \"%s\" does not exist", graph_name_str)));
     }
-    graph_oid = cache_data->oid;
+    graph_oid = cache_data->graphid;
     nsp_id = cache_data->namespace;
 
     label_name_str = NameStr(*label_name);

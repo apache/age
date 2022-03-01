@@ -50,6 +50,9 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
     AssertArg(graph_name);
     AssertArg(OidIsValid(nsp_id));
 
+    values[Anum_ag_graph_graphid - 1] = nsp_id;
+    nulls[Anum_ag_graph_graphid - 1] = false;
+
     values[Anum_ag_graph_name - 1] = NameGetDatum(graph_name);
     nulls[Anum_ag_graph_name - 1] = false;
 
@@ -155,7 +158,7 @@ Oid get_graph_oid(const char *graph_name)
 
     cache_data = search_graph_name_cache(graph_name);
     if (cache_data)
-        return cache_data->oid;
+        return cache_data->graphid;
     else
         return InvalidOid;
 }

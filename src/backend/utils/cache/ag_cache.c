@@ -452,9 +452,13 @@ static void fill_graph_cache_data(graph_cache_data *cache_data,
     Datum value;
 
     // ag_graph.oid
-    value = heap_getattr(tuple, ObjectIdAttributeNumber, tuple_desc, &is_null);
+    //value = heap_getattr(tuple, ObjectIdAttributeNumber, tuple_desc, &is_null);
+    //Assert(!is_null);
+    //cache_data->oid = DatumGetObjectId(value);
+
+    value = heap_getattr(tuple, Anum_ag_graph_graphid, tuple_desc, &is_null);
     Assert(!is_null);
-    cache_data->oid = DatumGetObjectId(value);
+    cache_data->graphid = DatumGetObjectId(value);
     // ag_graph.name
     value = heap_getattr(tuple, Anum_ag_graph_name, tuple_desc, &is_null);
     Assert(!is_null);

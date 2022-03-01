@@ -25,11 +25,14 @@
 --
 
 CREATE TABLE ag_graph (
+  graphid oid NOT NULL,
   name name NOT NULL,
   namespace regnamespace NOT NULL
-) WITH (OIDS);
+);
 
-CREATE UNIQUE INDEX ag_graph_oid_index ON ag_graph USING btree (oid);
+CREATE UNIQUE INDEX ag_graph_graphid_index ON ag_graph USING btree (graphid);
+
+--CREATE UNIQUE INDEX ag_graph_oid_index ON ag_graph USING btree (oid);
 
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
 

@@ -24,10 +24,11 @@
 
 #include "catalog/ag_catalog.h"
 
-#define Anum_ag_graph_name 1
-#define Anum_ag_graph_namespace 2
+#define Anum_ag_graph_graphid 1
+#define Anum_ag_graph_name 2
+#define Anum_ag_graph_namespace 3
 
-#define Natts_ag_graph 2
+#define Natts_ag_graph 3
 
 #define ag_graph_relation_id() ag_relation_id("ag_graph", "table")
 #define ag_graph_name_index_id() ag_relation_id("ag_graph_name_index", "index")

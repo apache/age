@@ -25,7 +25,7 @@
 // graph_cache_data contains the same fields that ag_graph catalog table has
 typedef struct graph_cache_data
 {
-    Oid oid;
+    Oid graphid;
     NameData name;
     Oid namespace;
 } graph_cache_data;

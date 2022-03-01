@@ -26,6 +26,7 @@ SET search_path TO ag_catalog;
 
 SELECT create_graph('g');
 SELECT * FROM ag_graph WHERE name = 'g';
+SELECT * FROM ag_label WHERE name = 'g';
 
 -- create a label to test drop_label()
 SELECT * FROM cypher('g', $$CREATE (:l)$$) AS r(a agtype);
