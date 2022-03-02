@@ -91,7 +91,9 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
             cr->header_len[i] = cr->fields_len[i];
             cr->header[i] = strndup(cr->fields[i], cr->header_len[i]);
         }
-    } else {
+    }
+    else
+    {
         object_graph_id = make_graphid(cr->object_id, (int64)cr->row);
 
         start_id_int = strtol(cr->fields[0], NULL, 10);
