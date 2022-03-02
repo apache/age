@@ -155,7 +155,7 @@ Oid get_graph_oid(const char *graph_name)
 
     cache_data = search_graph_name_cache(graph_name);
     if (cache_data)
-        return cache_data->namespace;
+        return cache_data->oid;
     else
         return InvalidOid;
 }
