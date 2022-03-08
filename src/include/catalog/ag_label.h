@@ -53,7 +53,6 @@
 #define Natts_ag_label 5
 
 #define ag_label_relation_id() ag_relation_id("ag_label", "table")
-#define ag_label_oid_index_id() ag_relation_id("ag_label_oid_index", "index")
 #define ag_label_name_graph_index_id() \
     ag_relation_id("ag_label_name_graph_index", "index")
 #define ag_label_graph_id_index_id() \
@@ -70,7 +69,6 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
                  char label_kind, Oid label_relation);
 void delete_label(Oid relation);
 
-Oid get_label_oid(const char *label_name, Oid label_graph);
 int32 get_label_id(const char *label_name, Oid label_graph);
 Oid get_label_relation(const char *label_name, Oid label_graph);
 char *get_label_relation_name(const char *label_name, Oid label_graph);
@@ -81,6 +79,6 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid, char *label_name)
 List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid);
 
 #define label_exists(label_name, label_graph) \
-    OidIsValid(get_label_oid(label_name, label_graph))
+    get_label_id(label_name, label_graph) != INVALID_LABEL_ID
 
 #endif

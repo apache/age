@@ -48,9 +48,7 @@ CREATE TABLE ag_label (
   id label_id,
   kind label_kind,
   relation regclass NOT NULL
-) WITH (OIDS);
-
-CREATE UNIQUE INDEX ag_label_oid_index ON ag_label USING btree (oid);
+);
 
 CREATE UNIQUE INDEX ag_label_name_graph_index
 ON ag_label
