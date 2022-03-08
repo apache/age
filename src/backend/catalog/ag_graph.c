@@ -51,7 +51,8 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
     AssertArg(graph_name);
     AssertArg(OidIsValid(nsp_id));
 
-    graph_id = DatumGetInt32(DirectFunctionCall1(nextval_oid, ag_graph_id_seq()));
+    graph_id =
+        DatumGetInt32(DirectFunctionCall1(nextval_oid, ag_graph_id_seq()));
 
     values[Anum_ag_graph_id - 1] = graph_id;
     nulls[Anum_ag_graph_id - 1] = false;

@@ -153,9 +153,9 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid);
 static label_cache_data *search_label_name_graph_cache_miss(Name name,
                                                             int32 graph_id);
 static void *label_name_graph_cache_hash_search(Name name, int32 graph,
-                                                HASHACTION action,
-                                                bool *found);
-static label_cache_data *search_label_graph_id_cache_miss(int32 graph, int32 id);
+                                                HASHACTION action, bool *found);
+static label_cache_data *search_label_graph_id_cache_miss(int32 graph,
+                                                          int32 id);
 static void *label_graph_id_cache_hash_search(int32 graph, int32 id,
                                               HASHACTION action, bool *found);
 static label_cache_data *search_label_relation_cache_miss(Oid relation);
@@ -861,13 +861,14 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     return entry;
 }
 
-label_cache_data *search_label_name_graph_cache(const char *name, int32 graph_id)
+label_cache_data *search_label_name_graph_cache(const char *name,
+                                                int32 graph_id)
 {
     NameData name_key;
     label_name_graph_cache_entry *entry;
 
     AssertArg(name);
-    AssertArg(graph != INVALID_AG_GRAPH_ID);
+    AssertArg(graph_id != INVALID_AG_GRAPH_ID);
 
     initialize_caches();
 

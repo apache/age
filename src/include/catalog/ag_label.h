@@ -76,7 +76,8 @@ Oid get_label_relation(const char *label_name, Oid label_graph);
 char *get_label_relation_name(const char *label_name, Oid label_graph);
 
 bool label_id_exists(Oid label_graph, int32 label_id);
-RangeVar *get_label_range_var(char *graph_name, int32 graph_id, char *label_name);
+RangeVar *get_label_range_var(char *graph_name, int32 graph_id,
+                              char *label_name);
 
 List *get_all_edge_labels_per_graph(EState *estate, int32 graph_id);
 

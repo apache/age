@@ -45,7 +45,8 @@ typedef struct label_cache_data
 graph_cache_data *search_graph_name_cache(const char *name);
 graph_cache_data *search_graph_namespace_cache(Oid namespace);
 label_cache_data *search_label_oid_cache(Oid oid);
-label_cache_data *search_label_name_graph_cache(const char *name, int32 graph_id);
+label_cache_data *search_label_name_graph_cache(const char *name,
+                                                int32 graph_id);
 label_cache_data *search_label_graph_id_cache(int32 graph, int32 id);
 label_cache_data *search_label_relation_cache(Oid relation);
 

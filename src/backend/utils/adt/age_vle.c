@@ -65,7 +65,7 @@ typedef enum
 typedef struct VLE_local_context
 {
     char *graph_name;              /* name of the graph */
-    int32 graph_id;                 /* graph oid for searching */
+    int32 graph_id;                /* graph oid for searching */
     GRAPH_global_context *ggctx;   /* global graph context pointer */
     graphid vsid;                  /* starting vertex id */
     graphid veid;                  /* ending vertex id */

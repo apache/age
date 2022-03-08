@@ -594,7 +594,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     pstate->p_lateral_active = lateral;
 
     subquery = analyze_cypher(stmt, pstate, query_str, query_loc, graph_name,
-                              graph_id, (Param *)params);
+                              graph_id, (Param *) params);
 
     pstate->p_lateral_active = false;
     pstate->p_expr_kind = EXPR_KIND_NONE;

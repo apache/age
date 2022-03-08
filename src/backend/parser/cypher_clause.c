@@ -4029,12 +4029,11 @@ static Node *make_edge_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
     end_id = scanRTEForColumn(pstate, rte, AG_EDGE_COLNAME_END_ID, -1, 0,
                               NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2,
-                                          INT4OID, GRAPHIDOID);
+    label_name_func_oid = get_ag_func_oid("_label_name", 2, INT4OID,
+                                          GRAPHIDOID);
 
     graph_id_const = makeConst(INT4OID, -1, INVALID_AG_GRAPH_ID, sizeof(int32),
-                               Int32GetDatum(cpstate->graph_id), false,
-                               true);
+                               Int32GetDatum(cpstate->graph_id), false, true);
 
     label_name_args = list_make2(graph_id_const, id);
 
@@ -4072,8 +4071,8 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
 
     id = scanRTEForColumn(pstate, rte, AG_VERTEX_COLNAME_ID, -1, 0, NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2,
-                                          INT4OID, GRAPHIDOID);
+    label_name_func_oid = get_ag_func_oid("_label_name", 2, INT4OID,
+                                          GRAPHIDOID);
 
     graph_id_const = makeConst(INT4OID, -1, INVALID_AG_GRAPH_ID, sizeof(int32),
                                ObjectIdGetDatum(cpstate->graph_id), false,

@@ -68,7 +68,7 @@ typedef struct edge_entry
 typedef struct GRAPH_global_context
 {
     char *graph_name;              /* graph name */
-    int32 graph_id;                 /* graph oid for searching */
+    int32 graph_id;                /* graph oid for searching */
     HTAB *vertex_hashtable;        /* hashtable to hold vertex edge lists */
     HTAB *edge_hashtable;          /* hashtable to hold edge to vertex map */
     TransactionId xmin;            /* transaction ids for this graph */
@@ -425,8 +425,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
     /* get the names of all of the edge label tables */
-    edge_label_names = get_ag_labels_names(snapshot, graph_id,
-                                           LABEL_TYPE_EDGE);
+    edge_label_names = get_ag_labels_names(snapshot, graph_id, LABEL_TYPE_EDGE);
     /* go through all edge label tables in list */
     foreach (lc, edge_label_names)
     {

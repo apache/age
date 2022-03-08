@@ -47,6 +47,7 @@ List *get_graphnames(void);
 void drop_graphs(List *graphnames);
 
 #define INVALID_AG_GRAPH_ID 0
-#define graph_exists(graph_name) (get_graph_id(graph_name) != INVALID_AG_GRAPH_ID)
+#define graph_exists(graph_name) \
+    (get_graph_id(graph_name) != INVALID_AG_GRAPH_ID)
 
 #endif

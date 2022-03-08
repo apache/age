@@ -138,11 +138,10 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
     return agtype_value_to_agtype(result.res);
 }
 
-void insert_edge_simple(int32 graph_id, char* label_name, graphid edge_id,
+void insert_edge_simple(int32 graph_id, char *label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
-                        agtype* edge_properties)
+                        agtype *edge_properties)
 {
-
     Datum values[4];
     bool nulls[4] = {false, false, false, false};
     Relation label_relation;
@@ -166,9 +165,8 @@ void insert_edge_simple(int32 graph_id, char* label_name, graphid edge_id,
     CommandCounterIncrement();
 }
 
-void insert_vertex_simple(int32 graph_id, char* label_name,
-                          graphid vertex_id,
-                          agtype* vertex_properties)
+void insert_vertex_simple(int32 graph_id, char *label_name, graphid vertex_id,
+                          agtype *vertex_properties)
 {
 
     Datum values[2];
