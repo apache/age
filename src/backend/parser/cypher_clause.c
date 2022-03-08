@@ -1057,7 +1057,7 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
                                                                   self->exprs,
                                                                   query);
     delete_data->graph_name = cpstate->graph_name;
-    delete_data->graph_oid = cpstate->graph_oid;
+    delete_data->graph_id = cpstate->graph_id;
     delete_data->detach = self->detach;
 
     if (!clause->next)
@@ -3122,7 +3122,7 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
                                            FuncCall *id_field, char *label)
 {
     label_cache_data *lcd = search_label_name_graph_cache(label,
-                                                          cpstate->graph_oid);
+                                                          cpstate->graph_id);
     A_Const *n;
     FuncCall *fc, *conversion_fc;
     Value *ag_catalog, *extract_label_id, *agtype_to_graphid;
@@ -3783,7 +3783,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
          *  segmentation faults, and other errors.
          */
         label_cache_data *lcd =
-            search_label_name_graph_cache(rel->label, cpstate->graph_oid);
+            search_label_name_graph_cache(rel->label, cpstate->graph_id);
 
         if (lcd == NULL)
         {
@@ -3853,7 +3853,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
     }
 
     schema_name = get_graph_namespace_name(cpstate->graph_name);
-    rel_name = get_label_relation_name(rel->label, cpstate->graph_oid);
+    rel_name = get_label_relation_name(rel->label, cpstate->graph_id);
     label_range_var = makeRangeVar(schema_name, rel_name, -1);
     alias = makeAlias(rel->name, NIL);
 
@@ -3905,7 +3905,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
          *  segmentation faults, and other errors.
          */
         label_cache_data *lcd =
-            search_label_name_graph_cache(node->label, cpstate->graph_oid);
+            search_label_name_graph_cache(node->label, cpstate->graph_id);
 
         if (lcd == NULL)
         {
@@ -3980,7 +3980,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     }
 
     schema_name = get_graph_namespace_name(cpstate->graph_name);
-    rel_name = get_label_relation_name(node->label, cpstate->graph_oid);
+    rel_name = get_label_relation_name(node->label, cpstate->graph_id);
     label_range_var = makeRangeVar(schema_name, rel_name, -1);
     alias = makeAlias(node->name, NIL);
 
@@ -4012,7 +4012,7 @@ static Node *make_edge_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
     Oid label_name_func_oid;
     Oid func_oid;
     Node *id, *start_id, *end_id;
-    Const *graph_oid_const;
+    Const *graph_id_const;
     Node *props;
     List *args, *label_name_args;
     FuncExpr *func_expr;
@@ -4029,14 +4029,14 @@ static Node *make_edge_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
     end_id = scanRTEForColumn(pstate, rte, AG_EDGE_COLNAME_END_ID, -1, 0,
                               NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
-                                          GRAPHIDOID);
+    label_name_func_oid = get_ag_func_oid("_label_name", 2,
+                                          INT4OID, GRAPHIDOID);
 
-    graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
-                                ObjectIdGetDatum(cpstate->graph_oid), false,
-                                true);
+    graph_id_const = makeConst(INT4OID, -1, INVALID_AG_GRAPH_ID, sizeof(int32),
+                               Int32GetDatum(cpstate->graph_id), false,
+                               true);
 
-    label_name_args = list_make2(graph_oid_const, id);
+    label_name_args = list_make2(graph_id_const, id);
 
     label_name_func_expr = makeFuncExpr(label_name_func_oid, CSTRINGOID,
                                         label_name_args, InvalidOid,
@@ -4061,7 +4061,7 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
     Oid label_name_func_oid;
     Oid func_oid;
     Node *id;
-    Const *graph_oid_const;
+    Const *graph_id_const;
     Node *props;
     List *args, *label_name_args;
     FuncExpr *func_expr;
@@ -4072,14 +4072,14 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
 
     id = scanRTEForColumn(pstate, rte, AG_VERTEX_COLNAME_ID, -1, 0, NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
-                                          GRAPHIDOID);
+    label_name_func_oid = get_ag_func_oid("_label_name", 2,
+                                          INT4OID, GRAPHIDOID);
 
-    graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
-                                ObjectIdGetDatum(cpstate->graph_oid), false,
-                                true);
+    graph_id_const = makeConst(INT4OID, -1, INVALID_AG_GRAPH_ID, sizeof(int32),
+                               ObjectIdGetDatum(cpstate->graph_id), false,
+                               true);
 
-    label_name_args = list_make2(graph_oid_const, id);
+    label_name_args = list_make2(graph_id_const, id);
 
     label_name_func_expr = makeFuncExpr(label_name_func_oid, CSTRINGOID,
                                         label_name_args, InvalidOid,
@@ -4112,7 +4112,7 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
 
     target_nodes = make_ag_node(cypher_create_target_nodes);
     target_nodes->flags = CYPHER_CLAUSE_FLAG_NONE;
-    target_nodes->graph_oid = cpstate->graph_oid;
+    target_nodes->graph_id = cpstate->graph_id;
 
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
@@ -4280,7 +4280,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     if (edge->label)
     {
         label_cache_data *lcd =
-            search_label_name_graph_cache(edge->label, cpstate->graph_oid);
+            search_label_name_graph_cache(edge->label, cpstate->graph_id);
 
         if (lcd && lcd->kind != LABEL_KIND_EDGE)
         {
@@ -4341,12 +4341,12 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     // create the label entry if it does not exist
-    if (!label_exists(edge->label, cpstate->graph_oid))
+    if (!label_exists(edge->label, cpstate->graph_id))
     {
         List *parent;
         RangeVar *rv;
 
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_id,
                                  AG_DEFAULT_LABEL_EDGE);
 
         parent = list_make1(rv);
@@ -4420,7 +4420,7 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
     if (node->label)
     {
         label_cache_data *lcd =
-            search_label_name_graph_cache(node->label, cpstate->graph_oid);
+            search_label_name_graph_cache(node->label, cpstate->graph_id);
 
         if (lcd && lcd->kind != LABEL_KIND_VERTEX)
         {
@@ -4566,12 +4566,12 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     }
 
     // create the label entry if it does not exist
-    if (!label_exists(node->label, cpstate->graph_oid))
+    if (!label_exists(node->label, cpstate->graph_id))
     {
         List *parent;
         RangeVar *rv;
 
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_id,
                                  AG_DEFAULT_LABEL_VERTEX);
 
         parent = list_make1(rv);
@@ -5027,7 +5027,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                                    merge_path);
     }
 
-    merge_information->graph_oid = cpstate->graph_oid;
+    merge_information->graph_id = cpstate->graph_id;
     merge_information->path = merge_path;
 
     if (!clause->next)
@@ -5350,7 +5350,7 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
 
     // check to see if the label exists, create the label entry if it does not.
-    if (edge->label && !label_exists(edge->label, cpstate->graph_oid))
+    if (edge->label && !label_exists(edge->label, cpstate->graph_id))
     {
         List *parent;
         RangeVar *rv;
@@ -5359,7 +5359,7 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
          * setup the default edge table as the parent table, that we
          * will inherit from.
          */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_id,
                                  AG_DEFAULT_LABEL_EDGE);
 
         parent = list_make1(rv);
@@ -5454,7 +5454,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     }
 
     // check to see if the label exists, create the label entry if it does not.
-    if (node->label && !label_exists(node->label, cpstate->graph_oid))
+    if (node->label && !label_exists(node->label, cpstate->graph_id))
     {
         List *parent;
         RangeVar *rv;
@@ -5463,7 +5463,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
          * setup the default vertex table as the parent table, that we
          * will inherit from.
          */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_id,
                                  AG_DEFAULT_LABEL_VERTEX);
 
         parent = list_make1(rv);

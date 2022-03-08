@@ -92,7 +92,7 @@ typedef struct {
 void edge_field_cb(void *field, size_t field_len, void *data);
 void edge_row_cb(int delim __attribute__((unused)), void *data);
 
-int create_edges_from_csv_file(char *file_path, char *graph_name, Oid graph_id,
+int create_edges_from_csv_file(char *file_path, char *graph_name, int32 graph_id,
                                 char *object_name, int object_id );
 
 #endif //AG_LOAD_EDGES_H

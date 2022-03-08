@@ -307,7 +307,7 @@ Node *create_cypher_create_plan_state(CustomScan *cscan)
     cypher_css->path_values = NIL;
     cypher_css->pattern = target_nodes->paths;
     cypher_css->flags = target_nodes->flags;
-    cypher_css->graph_oid = target_nodes->graph_oid;
+    cypher_css->graph_id = target_nodes->graph_id;
 
     cypher_css->css.ss.ps.type = T_CustomScanState;
     cypher_css->css.methods = &cypher_create_exec_methods;
@@ -569,7 +569,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
-            if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
+            if (!entity_exists(estate, css->graph_id, DATUM_GET_GRAPHID(id)))
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                      errmsg("vertex assigned to variable %s was deleted",

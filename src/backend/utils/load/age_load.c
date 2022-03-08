@@ -138,12 +138,12 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
     return agtype_value_to_agtype(result.res);
 }
 
-void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
+void insert_edge_simple(int32 graph_id, char* label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
                         agtype* edge_properties)
 {
 
-    Datum values[6];
+    Datum values[4];
     bool nulls[4] = {false, false, false, false};
     Relation label_relation;
     HeapTuple tuple;
@@ -166,7 +166,7 @@ void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
     CommandCounterIncrement();
 }
 
-void insert_vertex_simple(Oid graph_id, char* label_name,
+void insert_vertex_simple(int32 graph_id, char* label_name,
                           graphid vertex_id,
                           agtype* vertex_properties)
 {
@@ -201,7 +201,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     char* graph_name_str;
     char* label_name_str;
     char* file_path_str;
-    Oid graph_id;
+    int32 graph_id;
     int32 label_id;
     bool id_field_exists;
 
@@ -233,7 +233,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     label_name_str = NameStr(*label_name);
     file_path_str = text_to_cstring(file_path);
 
-    graph_id = get_graph_oid(graph_name_str);
+    graph_id = get_graph_id(graph_name_str);
     label_id = get_label_id(label_name_str, graph_id);
 
     create_labels_from_csv_file(file_path_str, graph_name_str,
@@ -253,7 +253,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     char* graph_name_str;
     char* label_name_str;
     char* file_path_str;
-    Oid graph_id;
+    int32 graph_id;
     int32 label_id;
 
     if (PG_ARGISNULL(0))
@@ -282,7 +282,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     label_name_str = NameStr(*label_name);
     file_path_str = text_to_cstring(file_path);
 
-    graph_id = get_graph_oid(graph_name_str);
+    graph_id = get_graph_id(graph_name_str);
     label_id = get_label_id(label_name_str, graph_id);
 
     create_edges_from_csv_file(file_path_str, graph_name_str,

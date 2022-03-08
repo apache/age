@@ -113,7 +113,7 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
      * in the transaction. To be used later when the delete clause finds
      * vertices.
      */
-    css->edge_labels = get_all_edge_labels_per_graph(estate, css->delete_data->graph_oid);
+    css->edge_labels = get_all_edge_labels_per_graph(estate, css->delete_data->graph_id);
 
     /*
      * Postgres does not assign the es_output_cid in queries that do

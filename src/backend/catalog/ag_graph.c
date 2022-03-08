@@ -26,6 +26,7 @@
 #include "access/skey.h"
 #include "access/stratnum.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "storage/lockdefs.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
@@ -45,10 +46,15 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
     bool nulls[Natts_ag_graph];
     Relation ag_graph;
     HeapTuple tuple;
-    Oid graph_oid;
+    int32 graph_id;
 
     AssertArg(graph_name);
     AssertArg(OidIsValid(nsp_id));
+
+    graph_id = DatumGetInt32(DirectFunctionCall1(nextval_oid, ag_graph_id_seq()));
+
+    values[Anum_ag_graph_id - 1] = graph_id;
+    nulls[Anum_ag_graph_id - 1] = false;
 
     values[Anum_ag_graph_name - 1] = NameGetDatum(graph_name);
     nulls[Anum_ag_graph_name - 1] = false;
@@ -64,11 +70,11 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
      * CatalogTupleInsert() is originally for PostgreSQL's catalog. However,
      * it is used at here for convenience.
      */
-    graph_oid = CatalogTupleInsert(ag_graph, tuple);
+    CatalogTupleInsert(ag_graph, tuple);
 
     heap_close(ag_graph, RowExclusiveLock);
 
-    return graph_oid;
+    return graph_id;
 }
 
 // DELETE FROM ag_catalog.ag_graph WHERE name = graph_name
@@ -149,15 +155,15 @@ void update_graph_name(const Name graph_name, const Name new_name)
     heap_close(ag_graph, RowExclusiveLock);
 }
 
-Oid get_graph_oid(const char *graph_name)
+int32 get_graph_id(const char *graph_name)
 {
     graph_cache_data *cache_data;
 
     cache_data = search_graph_name_cache(graph_name);
     if (cache_data)
-        return cache_data->oid;
+        return cache_data->id;
     else
-        return InvalidOid;
+        return INVALID_AG_GRAPH_ID;
 }
 
 static Oid get_graph_namespace(const char *graph_name)

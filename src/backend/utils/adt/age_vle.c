@@ -65,7 +65,7 @@ typedef enum
 typedef struct VLE_local_context
 {
     char *graph_name;              /* name of the graph */
-    Oid graph_oid;                 /* graph oid for searching */
+    int32 graph_id;                 /* graph oid for searching */
     GRAPH_global_context *ggctx;   /* global graph context pointer */
     graphid vsid;                  /* starting vertex id */
     graphid veid;                  /* ending vertex id */
@@ -93,7 +93,7 @@ typedef struct VLE_path_container
 {
     char vl_len_[4]; /* Do not touch this field! */
     uint32 header;
-    uint32 graph_oid;
+    int32 graph_id;
     int64 graphid_array_size;
     int64 container_size_bytes;
     graphid graphid_array_data;
@@ -467,7 +467,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo)
     VLE_local_context *vlelctx = NULL;
     agtype_value *agtv_temp = NULL;
     char *graph_name = NULL;
-    Oid graph_oid;
+    int32 graph_id;
 
     /* get the graph name - this is a required argument */
     agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(0),
@@ -475,20 +475,20 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo)
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
     /* get the graph oid */
-    graph_oid = get_graph_oid(graph_name);
+    graph_id = get_graph_id(graph_name);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
     */
-    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
+    ggctx = manage_GRAPH_global_contexts(graph_name, graph_id);
 
     /* allocate and initialize local VLE context */
     vlelctx = palloc0(sizeof(VLE_local_context));
 
     /* set the graph name and id */
     vlelctx->graph_name = graph_name;
-    vlelctx->graph_oid = graph_oid;
+    vlelctx->graph_id = graph_id;
 
     /* set the global context referenced by this local VLE context */
     vlelctx->ggctx = ggctx;
@@ -1189,8 +1189,8 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
      */
     vpc = create_VLE_path_container((ssize * 2) + 1);
 
-    /* set the graph_oid */
-    vpc->graph_oid = vlelctx->graph_oid;
+    /* set the graph_id */
+    vpc->graph_id = vlelctx->graph_id;
 
     /* get the graphid_array from the container */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
@@ -1256,8 +1256,8 @@ static VLE_path_container *build_VLE_zero_container(VLE_local_context *vlelctx)
      */
     vpc = create_VLE_path_container(1);
 
-    /* set the graph_oid */
-    vpc->graph_oid = vlelctx->graph_oid;
+    /* set the graph_id */
+    vpc->graph_id = vlelctx->graph_id;
 
     /* get the graphid_array from the container */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
@@ -1279,16 +1279,16 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state edges_result;
-    Oid graph_oid = InvalidOid;
+    int32 graph_id = INVALID_AG_GRAPH_ID;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
     int index = 0;
 
-    /* get the graph_oid */
-    graph_oid = vpc->graph_oid;
+    /* get the graph_id */
+    graph_id = vpc->graph_id;
 
     /* get the GRAPH global context for this graph */
-    ggctx = find_GRAPH_global_context(graph_oid);
+    ggctx = find_GRAPH_global_context(graph_id);
     /* verify we got a global context */
     Assert(ggctx != NULL);
 
@@ -1343,16 +1343,16 @@ static agtype_value *build_path(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state path_result;
-    Oid graph_oid = InvalidOid;
+    int32 graph_id = INVALID_AG_GRAPH_ID;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
     int index = 0;
 
-    /* get the graph_oid */
-    graph_oid = vpc->graph_oid;
+    /* get the graph_id */
+    graph_id = vpc->graph_id;
 
     /* get the GRAPH global context for this graph */
-    ggctx = find_GRAPH_global_context(graph_oid);
+    ggctx = find_GRAPH_global_context(graph_id);
     /* verify we got a global context */
     Assert(ggctx != NULL);
 

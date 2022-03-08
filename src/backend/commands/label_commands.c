@@ -81,7 +81,7 @@ static Constraint *build_not_null_constraint(void);
 static Constraint *build_properties_default(void);
 static void alter_sequence_owned_by_for_label(RangeVar *seq_range_var,
                                               char *rel_name);
-static int32 get_new_label_id(Oid graph_oid, Oid nsp_id);
+static int32 get_new_label_id(int32 graph_id, Oid nsp_id);
 static void change_label_id_default(char *graph_name, char *label_name,
                                     char *schema_name, char *seq_name,
                                     Oid relid);
@@ -112,7 +112,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     char *graph;
     Name graph_name;
     char *graph_name_str;
-    Oid graph_oid;
+    int32 graph_id;
     List *parent;
 
     RangeVar *rv;
@@ -149,10 +149,10 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
-    graph_oid = get_graph_oid(graph_name_str);
+    graph_id = get_graph_id(graph_name_str);
 
     // Check if label with the input name already exists
-    if (label_exists(label_name_str, graph_oid))
+    if (label_exists(label_name_str, graph_id))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -163,7 +163,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    rv = get_label_range_var(graph, graph_id, AG_DEFAULT_LABEL_VERTEX);
 
     parent = list_make1(rv);
 
@@ -192,7 +192,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     char *graph;
     Name graph_name;
     char *graph_name_str;
-    Oid graph_oid;
+    int32 graph_id;
     List *parent;
 
     RangeVar *rv;
@@ -229,10 +229,10 @@ Datum create_elabel(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
-    graph_oid = get_graph_oid(graph_name_str);
+    graph_id = get_graph_id(graph_name_str);
 
     // Check if label with the input name already exists
-    if (label_exists(label_name_str, graph_oid))
+    if (label_exists(label_name_str, graph_id))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -243,7 +243,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+    rv = get_label_range_var(graph, graph_id, AG_DEFAULT_LABEL_EDGE);
 
     parent = list_make1(rv);
     create_label(graph, label, LABEL_TYPE_EDGE, parent);
@@ -263,7 +263,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
                  List *parents)
 {
     graph_cache_data *cache_data;
-    Oid graph_oid;
+    int32 graph_id;
     Oid nsp_id;
     char *schema_name;
     char *rel_name;
@@ -279,7 +279,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("graph \"%s\" does not exist", graph_name)));
     }
-    graph_oid = cache_data->oid;
+    graph_id = cache_data->id;
     nsp_id = cache_data->namespace;
 
     // create a sequence for the new label to generate unique IDs for vertices
@@ -305,9 +305,9 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     alter_sequence_owned_by_for_label(seq_range_var, rel_name);
 
     // get a new "id" for the new label
-    label_id = get_new_label_id(graph_oid, nsp_id);
+    label_id = get_new_label_id(graph_id, nsp_id);
 
-    label_oid = insert_label(label_name, graph_oid, label_id, label_type,
+    label_oid = insert_label(label_name, graph_id, label_id, label_type,
                              relation_id);
 
     CommandCounterIncrement();
@@ -661,7 +661,7 @@ static void alter_sequence_owned_by_for_label(RangeVar *seq_range_var,
     CommandCounterIncrement();
 }
 
-static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
+static int32 get_new_label_id(int32 graph_id, Oid nsp_id)
 {
     Oid seq_id;
     int cnt;
@@ -682,8 +682,10 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
         // the data type of the sequence is integer (int4)
         label_id = nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
-        if (!label_id_exists(graph_oid, label_id))
-            return (int32)label_id;
+        if (!label_id_exists(graph_id, label_id))
+        {
+            return (int32) label_id;
+        }
     }
 
     ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
@@ -702,7 +704,7 @@ Datum drop_label(PG_FUNCTION_ARGS)
     bool force;
     char *graph_name_str;
     graph_cache_data *cache_data;
-    Oid graph_oid;
+    int32 graph_id;
     Oid nsp_id;
     char *label_name_str;
     Oid label_relation;
@@ -732,11 +734,11 @@ Datum drop_label(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                  errmsg("graph \"%s\" does not exist", graph_name_str)));
     }
-    graph_oid = cache_data->oid;
+    graph_id = cache_data->id;
     nsp_id = cache_data->namespace;
 
     label_name_str = NameStr(*label_name);
-    label_relation = get_label_relation(label_name_str, graph_oid);
+    label_relation = get_label_relation(label_name_str, graph_id);
     if (!OidIsValid(label_relation))
     {
         ereport(ERROR,

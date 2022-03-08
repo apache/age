@@ -60,7 +60,7 @@ typedef struct graph_namespace_cache_entry
 typedef struct label_name_graph_cache_key
 {
     NameData name;
-    Oid graph;
+    int32 graph;
 } label_name_graph_cache_key;
 
 typedef struct label_name_graph_cache_entry
@@ -71,7 +71,7 @@ typedef struct label_name_graph_cache_entry
 
 typedef struct label_graph_id_cache_key
 {
-    Oid graph;
+    int32 graph;
     int32 id;
 } label_graph_id_cache_key;
 
@@ -151,12 +151,12 @@ static void invalidate_label_relation_cache(Oid relid);
 static void flush_label_relation_cache(void);
 static label_cache_data *search_label_oid_cache_miss(Oid oid);
 static label_cache_data *search_label_name_graph_cache_miss(Name name,
-                                                            Oid graph);
-static void *label_name_graph_cache_hash_search(Name name, Oid graph,
+                                                            int32 graph_id);
+static void *label_name_graph_cache_hash_search(Name name, int32 graph,
                                                 HASHACTION action,
                                                 bool *found);
-static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id);
-static void *label_graph_id_cache_hash_search(Oid graph, int32 id,
+static label_cache_data *search_label_graph_id_cache_miss(int32 graph, int32 id);
+static void *label_graph_id_cache_hash_search(int32 graph, int32 id,
                                               HASHACTION action, bool *found);
 static label_cache_data *search_label_relation_cache_miss(Oid relation);
 static void fill_label_cache_data(label_cache_data *cache_data,
@@ -451,10 +451,10 @@ static void fill_graph_cache_data(graph_cache_data *cache_data,
     bool is_null;
     Datum value;
 
-    // ag_graph.oid
-    value = heap_getattr(tuple, ObjectIdAttributeNumber, tuple_desc, &is_null);
+    // ag_graph.id
+    value = heap_getattr(tuple, Anum_ag_graph_id, tuple_desc, &is_null);
     Assert(!is_null);
-    cache_data->oid = DatumGetObjectId(value);
+    cache_data->id = DatumGetInt32(value);
     // ag_graph.name
     value = heap_getattr(tuple, Anum_ag_graph_name, tuple_desc, &is_null);
     Assert(!is_null);
@@ -475,11 +475,11 @@ static void initialize_label_caches(void)
     ag_cache_scan_key_init(&label_name_graph_scan_keys[0], Anum_ag_label_name,
                            F_NAMEEQ);
     ag_cache_scan_key_init(&label_name_graph_scan_keys[1], Anum_ag_label_graph,
-                           F_OIDEQ);
+                           F_INT4EQ);
 
     // ag_label.graph, ag_label.id
     ag_cache_scan_key_init(&label_graph_id_scan_keys[0], Anum_ag_label_graph,
-                           F_OIDEQ);
+                           F_INT4EQ);
     ag_cache_scan_key_init(&label_graph_id_scan_keys[1], Anum_ag_label_id,
                            F_INT4EQ);
 
@@ -861,27 +861,27 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     return entry;
 }
 
-label_cache_data *search_label_name_graph_cache(const char *name, Oid graph)
+label_cache_data *search_label_name_graph_cache(const char *name, int32 graph_id)
 {
     NameData name_key;
     label_name_graph_cache_entry *entry;
 
     AssertArg(name);
-    AssertArg(OidIsValid(graph));
+    AssertArg(graph != INVALID_AG_GRAPH_ID);
 
     initialize_caches();
 
     namestrcpy(&name_key, name);
-    entry = label_name_graph_cache_hash_search(&name_key, graph, HASH_FIND,
+    entry = label_name_graph_cache_hash_search(&name_key, graph_id, HASH_FIND,
                                                NULL);
     if (entry)
         return &entry->data;
 
-    return search_label_name_graph_cache_miss(&name_key, graph);
+    return search_label_name_graph_cache_miss(&name_key, graph_id);
 }
 
 static label_cache_data *search_label_name_graph_cache_miss(Name name,
-                                                            Oid graph)
+                                                            int32 graph_id)
 {
     ScanKeyData scan_keys[2];
     Relation ag_label;
@@ -893,7 +893,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     memcpy(scan_keys, label_name_graph_scan_keys,
            sizeof(label_name_graph_scan_keys));
     scan_keys[0].sk_argument = NameGetDatum(name);
-    scan_keys[1].sk_argument = ObjectIdGetDatum(graph);
+    scan_keys[1].sk_argument = Int32GetDatum(graph_id);
 
     /*
      * Calling heap_open() might call AcceptInvalidationMessage() and that
@@ -918,7 +918,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     }
 
     // get a new entry
-    entry = label_name_graph_cache_hash_search(name, graph, HASH_ENTER,
+    entry = label_name_graph_cache_hash_search(name, graph_id, HASH_ENTER,
                                                &found);
     Assert(!found); // no concurrent update on label_name_graph_cache_hash
 
@@ -931,7 +931,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     return &entry->data;
 }
 
-static void *label_name_graph_cache_hash_search(Name name, Oid graph,
+static void *label_name_graph_cache_hash_search(Name name, int32 graph,
                                                 HASHACTION action, bool *found)
 {
     label_name_graph_cache_key key;
@@ -943,11 +943,11 @@ static void *label_name_graph_cache_hash_search(Name name, Oid graph,
     return hash_search(label_name_graph_cache_hash, &key, action, found);
 }
 
-label_cache_data *search_label_graph_id_cache(Oid graph, int32 id)
+label_cache_data *search_label_graph_id_cache(int32 graph, int32 id)
 {
     label_graph_id_cache_entry *entry;
 
-    AssertArg(OidIsValid(graph));
+    AssertArg(graph != INVALID_AG_GRAPH_ID);
     AssertArg(label_id_is_valid(id));
 
     initialize_caches();
@@ -959,7 +959,7 @@ label_cache_data *search_label_graph_id_cache(Oid graph, int32 id)
     return search_label_graph_id_cache_miss(graph, id);
 }
 
-static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
+static label_cache_data *search_label_graph_id_cache_miss(int32 graph, int32 id)
 {
     ScanKeyData scan_keys[2];
     Relation ag_label;
@@ -970,7 +970,7 @@ static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
 
     memcpy(scan_keys, label_graph_id_scan_keys,
            sizeof(label_graph_id_scan_keys));
-    scan_keys[0].sk_argument = ObjectIdGetDatum(graph);
+    scan_keys[0].sk_argument = Int32GetDatum(graph);
     scan_keys[1].sk_argument = Int32GetDatum(id);
 
     /*
@@ -1008,7 +1008,7 @@ static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
     return &entry->data;
 }
 
-static void *label_graph_id_cache_hash_search(Oid graph, int32 id,
+static void *label_graph_id_cache_hash_search(int32 graph, int32 id,
                                               HASHACTION action, bool *found)
 {
     label_graph_id_cache_key key;

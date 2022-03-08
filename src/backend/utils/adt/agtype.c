@@ -4228,11 +4228,11 @@ static char *get_label_name(const char *graph_name, int64 graphid)
     TupleDesc tupdesc;
     char *result = NULL;
 
-    Oid graphoid = get_graph_oid(graph_name);
+    int32 graph_id = get_graph_id(graph_name);
 
     /* scankey for first match in ag_label, column 2, graphoid, BTEQ, OidEQ */
     ScanKeyInit(&scan_keys[0], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graphoid));
+                F_INT4EQ, Int32GetDatum(graph_id));
     /* scankey for second match in ag_label, column 3, label id, BTEQ, Int4EQ */
     ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
                 F_INT4EQ, Int32GetDatum(get_graphid_label_id(graphid)));
@@ -4292,8 +4292,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     Snapshot snapshot = GetActiveSnapshot();
 
     /* initialize the scan key */
-    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
-                Int64GetDatum(graphid));
+    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_INT4EQ,
+                Int32GetDatum(graphid));
 
     /* open the relation (table), begin the scan, and get the tuple  */
     graph_vertex_label = heap_open(vertex_label_table_oid, ShareLock);

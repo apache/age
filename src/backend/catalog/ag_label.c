@@ -45,7 +45,7 @@
 
 // INSERT INTO ag_catalog.ag_label
 // VALUES (label_name, label_graph, label_id, label_kind, label_relation)
-Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
+Oid insert_label(const char *label_name, int32 label_graph, int32 label_id,
                  char label_kind, Oid label_relation)
 {
     NameData label_name_data;
@@ -60,7 +60,7 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
      *       than to use assert to check label_id and label_kind are valid?
      */
     AssertArg(label_name);
-    AssertArg(OidIsValid(label_graph));
+    AssertArg(label_graph != INVALID_AG_GRAPH_ID);
     AssertArg(label_id_is_valid(label_id));
     AssertArg(label_kind == LABEL_KIND_VERTEX ||
               label_kind == LABEL_KIND_EDGE);
@@ -174,14 +174,14 @@ Datum _label_name(PG_FUNCTION_ARGS)
 {
     char *label_name;
     label_cache_data *label_cache;
-    Oid graph;
+    int32 graph;
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-                        errmsg("graph_oid and label_id must not be null")));
+                        errmsg("graph_id and label_id must not be null")));
 
-    graph = PG_GETARG_OID(0);
+    graph = PG_GETARG_INT32(0);
 
     label_id = (int32)(((uint64)AG_GETARG_GRAPHID(1)) >> ENTRY_ID_BITS);
 
@@ -201,7 +201,7 @@ Datum _label_id(PG_FUNCTION_ARGS)
 {
     Name graph_name;
     Name label_name;
-    Oid graph;
+    int32 graph;
     int32 id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -212,7 +212,7 @@ Datum _label_id(PG_FUNCTION_ARGS)
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
 
-    graph = get_graph_oid(NameStr(*graph_name));
+    graph = get_graph_id(NameStr(*graph_name));
     id = get_label_id(NameStr(*label_name), graph);
 
     PG_RETURN_INT32(id);
@@ -248,13 +248,13 @@ bool label_id_exists(Oid label_graph, int32 label_id)
 /*
  * Creates A RangeVar for the given label.
  */
-RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
+RangeVar *get_label_range_var(char *graph_name, int32 graph_id,
                               char *label_name)
 {
     char *relname;
     label_cache_data *label_cache;
 
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache(label_name, graph_id);
 
     relname = get_rel_name(label_cache->relation);
 
@@ -268,7 +268,7 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
  * however the cache system currently requires us to know the
  * name of the label we want.
   */
-List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
+List *get_all_edge_labels_per_graph(EState *estate, int32 graph_id)
 {
     List *labels = NIL;
     ScanKeyData scan_keys[2];
@@ -280,7 +280,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
     // setup scan keys to get all edges for the given graph oid
     ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
+                F_INT4EQ, Int32GetDatum(graph_id));
     ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                 F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
 

@@ -77,7 +77,7 @@ void copy_cypher_create_target_nodes(ExtensibleNode *newnode, const ExtensibleNo
     COPY_LOCALS(cypher_create_target_nodes);
 
     COPY_SCALAR_FIELD(flags);
-    COPY_SCALAR_FIELD(graph_oid);
+    COPY_SCALAR_FIELD(graph_id);
 
     COPY_NODE_FIELD(paths);
 }
@@ -148,7 +148,7 @@ void copy_cypher_delete_information(ExtensibleNode *newnode, const ExtensibleNod
     COPY_NODE_FIELD(delete_items);
     COPY_SCALAR_FIELD(flags);
     COPY_STRING_FIELD(graph_name);
-    COPY_SCALAR_FIELD(graph_oid);
+    COPY_SCALAR_FIELD(graph_id);
     COPY_SCALAR_FIELD(detach);
 }
 
@@ -167,7 +167,7 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_LOCALS(cypher_merge_information);
 
     COPY_SCALAR_FIELD(flags);
-    COPY_SCALAR_FIELD(graph_oid);
+    COPY_SCALAR_FIELD(graph_id);
     COPY_SCALAR_FIELD(merge_function_attr);
     COPY_NODE_FIELD(path);
 }
