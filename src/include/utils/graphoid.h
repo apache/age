@@ -17,22 +17,22 @@
  * under the License.
  */
 
-#ifndef INCUBATOR_AGE_ENTITY_CREATOR_H
-#define INCUBATOR_AGE_ENTITY_CREATOR_H
+#ifndef AG_GRAPHOID_H
+#define AG_GRAPHOID_H
 
-#include "postgres.h"
+#define graphoid int32
 
-#include "utils/agtype.h"
-#include "utils/graphoid.h"
+#define INVALID_AG_GRAPH_OID 0
 
-agtype* create_agtype_from_list(char **header, char **fields,
-                                size_t fields_len, int64 vertex_id);
-agtype* create_agtype_from_list_i(char **header, char **fields,
-                                  size_t fields_len, size_t start_index);
-void insert_vertex_simple(graphoid graph_oid, char *label_name,
-                          graphid vertex_id, agtype *vertex_properties);
-void insert_edge_simple(graphoid graph_oid, char *label_name, graphid edge_id,
-                        graphid start_id, graphid end_id,
-                        agtype *end_properties);
+#define DatumGetGraphOid(X) ((graphoid) (X))
+#define GraphOidGetDatum(X) ((Datum) (X))
+#define AG_GETARG_GRAPHOID(n) PG_GETARG_INT32(n)
+#define F_GRAPHOIDEQ F_INT4EQ
+#define GRAPHOIDOID INT4OID
 
-#endif //INCUBATOR_AGE_ENTITY_CREATOR_H
+#define graph_oid_is_valid(graph_oid) (graph_oid != INVALID_AG_GRAPH_OID)
+
+#define get_next_graph_oid() \
+    (DatumGetGraphOid(DirectFunctionCall1(nextval_oid, ag_graph_id_seq())))
+
+#endif

@@ -58,11 +58,12 @@ static const char *expr_get_const_cstring(Node *expr, const char *source_str);
 static int get_query_location(const int location, const char *source_str);
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params);
+                             char *graph_name, graphoid graph_oid,
+                             Param *params);
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, graphoid graph_oid,
                                         Param *params);
 
 void post_parse_analyze_init(void)
@@ -271,7 +272,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     FuncExpr *funcexpr = (FuncExpr *)rtfunc->funcexpr;
     Node *arg;
     Name graph_name;
-    Oid graph_oid;
+    graphoid graph_oid;
     const char *query_str;
     int query_loc;
     Param *params;
@@ -305,7 +306,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     }
 
     graph_oid = get_graph_oid(NameStr(*graph_name));
-    if (!OidIsValid(graph_oid))
+    if (!graph_oid_is_valid(graph_oid))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -485,7 +486,8 @@ static int get_query_location(const int location, const char *source_str)
 
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params)
+                             char *graph_name, graphoid graph_oid,
+                             Param *params)
 {
     cypher_clause *clause;
     ListCell *lc;
@@ -564,7 +566,7 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, graphoid graph_oid,
                                         Param *params)
 {
     ParseState *pstate;
@@ -594,7 +596,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     pstate->p_lateral_active = lateral;
 
     subquery = analyze_cypher(stmt, pstate, query_str, query_loc, graph_name,
-                              graph_oid, (Param *)params);
+                              graph_oid, (Param *) params);
 
     pstate->p_lateral_active = false;
     pstate->p_expr_kind = EXPR_KIND_NONE;
