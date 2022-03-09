@@ -148,7 +148,7 @@ TupleTableSlot *populate_edge_tts(
  * Find out if the entity still exists. This is for 'implicit' deletion
  * of an entity.
  */
-bool entity_exists(EState *estate, int32 graph_id, graphid id)
+bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];
@@ -161,7 +161,7 @@ bool entity_exists(EState *estate, int32 graph_id, graphid id)
      * Extract the label id from the graph id and get the table name
      * the entity is part of.
      */
-    label = search_label_graph_id_cache(graph_id, GET_LABEL_ID(id));
+    label = search_label_graph_id_cache(graph_oid, GET_LABEL_ID(id));
 
     // Setup the scan key to be the graphid
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,

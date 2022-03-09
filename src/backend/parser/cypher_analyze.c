@@ -58,11 +58,11 @@ static const char *expr_get_const_cstring(Node *expr, const char *source_str);
 static int get_query_location(const int location, const char *source_str);
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, int32 graph_id, Param *params);
+                             char *graph_name, Oid graph_oid, Param *params);
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, int32 graph_id,
+                                        char *graph_name, Oid graph_oid,
                                         Param *params);
 
 void post_parse_analyze_init(void)
@@ -271,7 +271,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     FuncExpr *funcexpr = (FuncExpr *)rtfunc->funcexpr;
     Node *arg;
     Name graph_name;
-    int32 graph_id;
+    Oid graph_oid;
     const char *query_str;
     int query_loc;
     Param *params;
@@ -304,8 +304,8 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
                         parser_errposition(pstate, exprLocation(arg))));
     }
 
-    graph_id = get_graph_id(NameStr(*graph_name));
-    if (graph_id == INVALID_AG_GRAPH_ID)
+    graph_oid = get_graph_oid(NameStr(*graph_name));
+    if (!OidIsValid(graph_oid))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -417,13 +417,13 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
         }
 
         query = analyze_cypher(stmt, pstate, query_str, query_loc,
-                               NameStr(*graph_name), graph_id, params);
+                               NameStr(*graph_name), graph_oid, params);
     }
     else
     {
         query = analyze_cypher_and_coerce(stmt, rtfunc, pstate, query_str,
                                           query_loc, NameStr(*graph_name),
-                                          graph_id, params);
+                                          graph_oid, params);
     }
 
     pstate->p_lateral_active = false;
@@ -485,7 +485,7 @@ static int get_query_location(const int location, const char *source_str)
 
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, int32 graph_id, Param *params)
+                             char *graph_name, Oid graph_oid, Param *params)
 {
     cypher_clause *clause;
     ListCell *lc;
@@ -537,7 +537,7 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
     pstate->p_sourcetext = query_str;
 
     cpstate->graph_name = graph_name;
-    cpstate->graph_id = graph_id;
+    cpstate->graph_oid = graph_oid;
     cpstate->params = params;
     cpstate->default_alias_num = 0;
     cpstate->entities = NIL;
@@ -564,7 +564,7 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, int32 graph_id,
+                                        char *graph_name, Oid graph_oid,
                                         Param *params)
 {
     ParseState *pstate;
@@ -594,7 +594,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     pstate->p_lateral_active = lateral;
 
     subquery = analyze_cypher(stmt, pstate, query_str, query_loc, graph_name,
-                              graph_id, (Param *) params);
+                              graph_oid, (Param *)params);
 
     pstate->p_lateral_active = false;
     pstate->p_expr_kind = EXPR_KIND_NONE;

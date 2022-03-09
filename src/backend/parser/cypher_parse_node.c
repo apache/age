@@ -59,7 +59,7 @@ cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
         pstate->p_ref_hook_state = parent_pstate->p_ref_hook_state;
 
         cpstate->graph_name = parent_cpstate->graph_name;
-        cpstate->graph_id = parent_cpstate->graph_id;
+        cpstate->graph_oid = parent_cpstate->graph_oid;
         cpstate->params = parent_cpstate->params;
     }
 

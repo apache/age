@@ -25,10 +25,11 @@
 --
 
 CREATE TABLE ag_graph (
-  id serial PRIMARY KEY,
   name name NOT NULL,
   namespace regnamespace NOT NULL
-);
+) WITH (OIDS);
+
+CREATE UNIQUE INDEX ag_graph_oid_index ON ag_graph USING btree (oid);
 
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
 
@@ -43,7 +44,7 @@ CREATE DOMAIN label_kind AS "char" NOT NULL CHECK (VALUE = 'v' OR VALUE = 'e');
 
 CREATE TABLE ag_label (
   name name NOT NULL,
-  graph int NOT NULL,
+  graph oid NOT NULL,
   id label_id,
   kind label_kind,
   relation regclass NOT NULL
@@ -345,7 +346,7 @@ IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog._label_name(graph_id int, graphid)
+CREATE FUNCTION ag_catalog._label_name(graph_oid oid, graphid)
 RETURNS cstring
 LANGUAGE c
 STABLE

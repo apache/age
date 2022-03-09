@@ -166,9 +166,12 @@ static int is_term(unsigned char c)
     if (c == CSV_CR || c == CSV_LF) return 1;
     return 0;
 }
-int create_labels_from_csv_file(char *file_path, char *graph_name,
-                                int32 graph_id, char *object_name,
-                                int object_id, bool id_field_exists)
+int create_labels_from_csv_file(char *file_path,
+                                char *graph_name,
+                                Oid graph_id,
+                                char *object_name,
+                                int object_id,
+                                bool id_field_exists)
 {
 
     FILE *fp;

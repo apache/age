@@ -55,7 +55,7 @@ typedef struct cypher_create_custom_scan_state
     List *path_values;
     uint32 flags;
     TupleTableSlot *slot;
-    int32 graph_id;
+    Oid graph_oid;
 } cypher_create_custom_scan_state;
 
 typedef struct cypher_set_custom_scan_state
@@ -83,7 +83,7 @@ typedef struct cypher_merge_custom_scan_state
     int flags;
     cypher_create_path *path;
     List *path_values;
-    int32 graph_id;
+    Oid graph_oid;
     AttrNumber merge_function_attr;
     bool created_new_path;
     bool found_a_path;
@@ -96,7 +96,7 @@ TupleTableSlot *populate_edge_tts(
 
 ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name, char *label_name);
 
-bool entity_exists(EState *estate, int32 graph_id, graphid id);
+bool entity_exists(EState *estate, Oid graph_oid, graphid id);
 HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
                               TupleTableSlot *elemTupleSlot,
                               EState *estate);

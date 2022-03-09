@@ -68,7 +68,7 @@ typedef struct edge_entry
 typedef struct GRAPH_global_context
 {
     char *graph_name;              /* graph name */
-    int32 graph_id;                /* graph oid for searching */
+    Oid graph_oid;                 /* graph oid for searching */
     HTAB *vertex_hashtable;        /* hashtable to hold vertex edge lists */
     HTAB *edge_hashtable;          /* hashtable to hold edge to vertex map */
     TransactionId xmin;            /* transaction ids for this graph */
@@ -90,7 +90,7 @@ static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx);
 static void load_edge_hashtable(GRAPH_global_context *ggctx);
 static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
-static List *get_ag_labels_names(Snapshot snapshot, int32 graph_id,
+static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                                  char label_type);
 static bool insert_edge(GRAPH_global_context *ggctx, graphid edge_id,
                         Datum edge_properties, graphid start_vertex_id,
@@ -154,7 +154,7 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 }
 
 /* helper function to get a List of all label names for the specified graph */
-static List *get_ag_labels_names(Snapshot snapshot, int32 graph_id,
+static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                                  char label_type)
 {
     List *labels = NIL;
@@ -169,7 +169,7 @@ static List *get_ag_labels_names(Snapshot snapshot, int32 graph_id,
 
     /* setup scan keys to get all edges for the given graph oid */
     ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_INT4EQ, Int32GetDatum(graph_id));
+                F_OIDEQ, ObjectIdGetDatum(graph_oid));
     ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                 F_CHAREQ, CharGetDatum(label_type));
 
@@ -315,19 +315,19 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx, graphid vertex_id,
 /* helper routine to load all vertices into the GRAPH global vertex hashtable */
 static void load_vertex_hashtable(GRAPH_global_context *ggctx)
 {
-    int32 graph_id;
+    Oid graph_oid;
     Oid graph_namespace_oid;
     Snapshot snapshot;
     List *vertex_label_names = NIL;
     ListCell *lc;
 
     /* get the specific graph OID and namespace (schema) OID */
-    graph_id = ggctx->graph_id;
+    graph_oid = ggctx->graph_oid;
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
     /* get the names of all of the vertex label tables */
-    vertex_label_names = get_ag_labels_names(snapshot, graph_id,
+    vertex_label_names = get_ag_labels_names(snapshot, graph_oid,
                                              LABEL_TYPE_VERTEX);
     /* go through all vertex label tables in list */
     foreach (lc, vertex_label_names)
@@ -413,19 +413,20 @@ static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
  */
 static void load_edge_hashtable(GRAPH_global_context *ggctx)
 {
-    int32 graph_id;
+    Oid graph_oid;
     Oid graph_namespace_oid;
     Snapshot snapshot;
     List *edge_label_names = NIL;
     ListCell *lc;
 
     /* get the specific graph OID and namespace (schema) OID */
-    graph_id = ggctx->graph_id;
+    graph_oid = ggctx->graph_oid;
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
     /* get the names of all of the edge label tables */
-    edge_label_names = get_ag_labels_names(snapshot, graph_id, LABEL_TYPE_EDGE);
+    edge_label_names = get_ag_labels_names(snapshot, graph_oid,
+                                           LABEL_TYPE_EDGE);
     /* go through all edge label tables in list */
     foreach (lc, edge_label_names)
     {
@@ -600,7 +601,7 @@ static void free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
  * returns the GRAPH global context for the specified graph.
  */
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
-                                                   int32 graph_id)
+                                                   Oid graph_oid)
 {
     GRAPH_global_context *new_ggctx = NULL;
     GRAPH_global_context *curr_ggctx = NULL;
@@ -662,7 +663,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     curr_ggctx = global_graph_contexts;
     while (curr_ggctx != NULL)
     {
-        if (curr_ggctx->graph_id == graph_id)
+        if (curr_ggctx->graph_oid == graph_oid)
         {
             /* switch our context back */
             MemoryContextSwitchTo(oldctx);
@@ -689,7 +690,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
 
     /* set the graph name and oid */
     new_ggctx->graph_name = pstrdup(graph_name);
-    new_ggctx->graph_id = graph_id;
+    new_ggctx->graph_oid = graph_oid;
 
     /* set the transaction ids */
     new_ggctx->xmin = GetActiveSnapshot()->xmin;
@@ -742,9 +743,9 @@ edge_entry *get_edge_entry(GRAPH_global_context *ggctx, graphid edge_id)
 
 /*
  * Helper function to find the GRAPH_global_context used by the specified
- * graph_id. If not found, it returns NULL.
+ * graph_oid. If not found, it returns NULL.
  */
-GRAPH_global_context *find_GRAPH_global_context(int32 graph_id)
+GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid)
 {
     GRAPH_global_context *ggctx = NULL;
 
@@ -754,7 +755,7 @@ GRAPH_global_context *find_GRAPH_global_context(int32 graph_id)
     while(ggctx != NULL)
     {
         /* if we found it return it */
-        if (ggctx->graph_id == graph_id)
+        if (ggctx->graph_oid == graph_oid)
         {
             return ggctx;
         }

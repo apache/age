@@ -141,8 +141,11 @@ static int is_term(unsigned char c)
     return 0;
 }
 
-int create_edges_from_csv_file(char *file_path, char *graph_name,
-                               int32 graph_id, char *object_name, int object_id)
+int create_edges_from_csv_file(char *file_path,
+                               char *graph_name,
+                               Oid graph_id,
+                               char *object_name,
+                               int object_id )
 {
 
     FILE *fp;

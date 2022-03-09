@@ -39,8 +39,8 @@ typedef struct GRAPH_global_context GRAPH_global_context;
 
 /* GRAPH global context functions */
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
-                                                   int32 graph_id);
-GRAPH_global_context *find_GRAPH_global_context(int32 graph_id);
+                                                   Oid graph_oid);
+GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid);
 /* GRAPH retrieval functions */
 ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx);
 vertex_entry *get_vertex_entry(GRAPH_global_context *ggctx,

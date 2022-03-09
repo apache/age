@@ -30,7 +30,7 @@ typedef struct cypher_parsestate
 {
     ParseState pstate;
     char *graph_name;
-    int32 graph_id;
+    Oid graph_oid;
     Param *params;
     int default_alias_num;
     List *entities;

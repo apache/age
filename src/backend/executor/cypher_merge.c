@@ -607,7 +607,7 @@ Node *create_cypher_merge_plan_state(CustomScan *cscan)
     cypher_css->path = merge_information->path;
     cypher_css->created_new_path = false;
     cypher_css->found_a_path = false;
-    cypher_css->graph_id = merge_information->graph_id;
+    cypher_css->graph_oid = merge_information->graph_oid;
 
     cypher_css->css.ss.ps.type = T_CustomScanState;
     cypher_css->css.methods = &cypher_merge_exec_methods;
@@ -754,7 +754,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
-            if (!entity_exists(estate, css->graph_id, DATUM_GET_GRAPHID(id)))
+            if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
