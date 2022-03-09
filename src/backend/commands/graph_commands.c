@@ -362,7 +362,7 @@ List *get_graphnames(void)
 
         slot_getallattrs(slot);
 
-        str = DatumGetCString(slot->tts_values[0]);
+        str = DatumGetCString(slot->tts_values[Anum_ag_graph_name - 1]);
         graphnames = lappend(graphnames, str);
     }
 
