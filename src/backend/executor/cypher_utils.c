@@ -148,7 +148,7 @@ TupleTableSlot *populate_edge_tts(
  * Find out if the entity still exists. This is for 'implicit' deletion
  * of an entity.
  */
-bool entity_exists(EState *estate, Oid graph_oid, graphid id)
+bool entity_exists(EState *estate, graphoid graph_oid, graphid id)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];

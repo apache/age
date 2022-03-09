@@ -39,16 +39,21 @@
 static Oid get_graph_namespace(const char *graph_name);
 
 // INSERT INTO ag_catalog.ag_graph VALUES (graph_name, nsp_id)
-Oid insert_graph(const Name graph_name, const Oid nsp_id)
+graphoid insert_graph(const Name graph_name, const Oid nsp_id)
 {
     Datum values[Natts_ag_graph];
     bool nulls[Natts_ag_graph];
     Relation ag_graph;
     HeapTuple tuple;
-    Oid graph_oid;
+    graphoid graph_oid;
 
     AssertArg(graph_name);
     AssertArg(OidIsValid(nsp_id));
+
+    graph_oid = get_next_graph_oid();
+
+    values[Anum_ag_graph_oid - 1] = graph_oid;
+    nulls[Anum_ag_graph_oid - 1] = false;
 
     values[Anum_ag_graph_name - 1] = NameGetDatum(graph_name);
     nulls[Anum_ag_graph_name - 1] = false;
@@ -64,7 +69,7 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
      * CatalogTupleInsert() is originally for PostgreSQL's catalog. However,
      * it is used at here for convenience.
      */
-    graph_oid = CatalogTupleInsert(ag_graph, tuple);
+    CatalogTupleInsert(ag_graph, tuple);
 
     heap_close(ag_graph, RowExclusiveLock);
 
@@ -149,7 +154,7 @@ void update_graph_name(const Name graph_name, const Name new_name)
     heap_close(ag_graph, RowExclusiveLock);
 }
 
-Oid get_graph_oid(const char *graph_name)
+graphoid get_graph_oid(const char *graph_name)
 {
     graph_cache_data *cache_data;
 
@@ -157,7 +162,7 @@ Oid get_graph_oid(const char *graph_name)
     if (cache_data)
         return cache_data->oid;
     else
-        return InvalidOid;
+        return INVALID_AG_GRAPH_ID;
 }
 
 static Oid get_graph_namespace(const char *graph_name)

@@ -25,6 +25,7 @@
 #include "nodes/execnodes.h"
 
 #include "catalog/ag_catalog.h"
+#include "catalog/ag_graph.h"
 
 #define Anum_ag_label_vertex_table_id 1
 #define Anum_ag_label_vertex_table_properties 2
@@ -66,7 +67,7 @@
 #define LABEL_KIND_VERTEX 'v'
 #define LABEL_KIND_EDGE 'e'
 
-Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
+Oid insert_label(const char *label_name, graphoid label_graph, int32 label_id,
                  char label_kind, Oid label_relation);
 void delete_label(Oid relation);
 
@@ -76,9 +77,10 @@ Oid get_label_relation(const char *label_name, Oid label_graph);
 char *get_label_relation_name(const char *label_name, Oid label_graph);
 
 bool label_id_exists(Oid label_graph, int32 label_id);
-RangeVar *get_label_range_var(char *graph_name, Oid graph_oid, char *label_name);
+RangeVar *get_label_range_var(char *graph_name, graphoid graph_oid,
+                              char *label_name);
 
-List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid);
+List *get_all_edge_labels_per_graph(EState *estate, graphoid graph_oid);
 
 #define label_exists(label_name, label_graph) \
     OidIsValid(get_label_oid(label_name, label_graph))

@@ -20,8 +20,9 @@
 #ifndef AG_AGE_GLOBAL_GRAPH_H
 #define AG_AGE_GLOBAL_GRAPH_H
 
-#include "utils/graphid.h"
+#include "catalog/ag_graph.h"
 #include "utils/age_graphid_ds.h"
+#include "utils/graphid.h"
 
 /*
  * We declare the graph nodes and edges here, and in this way, so that it may be
@@ -39,8 +40,8 @@ typedef struct GRAPH_global_context GRAPH_global_context;
 
 /* GRAPH global context functions */
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
-                                                   Oid graph_oid);
-GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid);
+                                                   graphoid graph_oid);
+GRAPH_global_context *find_GRAPH_global_context(graphoid graph_oid);
 /* GRAPH retrieval functions */
 ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx);
 vertex_entry *get_vertex_entry(GRAPH_global_context *ggctx,

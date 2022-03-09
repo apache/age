@@ -22,10 +22,12 @@
 
 #include "postgres.h"
 
+#include "catalog/ag_graph.h"
+
 // graph_cache_data contains the same fields that ag_graph catalog table has
 typedef struct graph_cache_data
 {
-    Oid oid;
+    graphoid oid;
     NameData name;
     Oid namespace;
 } graph_cache_data;
@@ -45,8 +47,9 @@ typedef struct label_cache_data
 graph_cache_data *search_graph_name_cache(const char *name);
 graph_cache_data *search_graph_namespace_cache(Oid namespace);
 label_cache_data *search_label_oid_cache(Oid oid);
-label_cache_data *search_label_name_graph_cache(const char *name, Oid graph);
-label_cache_data *search_label_graph_id_cache(Oid graph, int32 id);
+label_cache_data *search_label_name_graph_cache(const char *name,
+                                                graphoid graph);
+label_cache_data *search_label_graph_id_cache(graphoid graph, int32 id);
 label_cache_data *search_label_relation_cache(Oid relation);
 
 #endif

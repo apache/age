@@ -27,6 +27,7 @@
 #include "nodes/pg_list.h"
 
 #include "nodes/ag_nodes.h"
+#include "utils/graphoid.h"
 
 /* cypher sub patterns */
 typedef enum csp_kind
@@ -229,7 +230,7 @@ typedef struct cypher_create_target_nodes
     ExtensibleNode extensible;
     List *paths;
     uint32 flags;
-    Oid graph_oid;
+    graphoid graph_oid;
 } cypher_create_target_nodes;
 
 typedef struct cypher_create_path
@@ -372,7 +373,7 @@ typedef struct cypher_delete_information
     List *delete_items;
     int flags;
     char *graph_name;
-    Oid graph_oid;
+    graphoid graph_oid;
     bool detach;
 } cypher_delete_information;
 
@@ -387,7 +388,7 @@ typedef struct cypher_merge_information
 {
     ExtensibleNode extensible;
     int flags;
-    Oid graph_oid;
+    graphoid graph_oid;
     AttrNumber merge_function_attr;
     cypher_create_path *path;
 } cypher_merge_information;

@@ -65,7 +65,7 @@ typedef enum
 typedef struct VLE_local_context
 {
     char *graph_name;              /* name of the graph */
-    Oid graph_oid;                 /* graph oid for searching */
+    graphoid graph_oid;            /* graph oid for searching */
     GRAPH_global_context *ggctx;   /* global graph context pointer */
     graphid vsid;                  /* starting vertex id */
     graphid veid;                  /* ending vertex id */
@@ -93,7 +93,7 @@ typedef struct VLE_path_container
 {
     char vl_len_[4]; /* Do not touch this field! */
     uint32 header;
-    uint32 graph_oid;
+    graphoid graph_oid;
     int64 graphid_array_size;
     int64 container_size_bytes;
     graphid graphid_array_data;
@@ -467,7 +467,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo)
     VLE_local_context *vlelctx = NULL;
     agtype_value *agtv_temp = NULL;
     char *graph_name = NULL;
-    Oid graph_oid;
+    graphoid graph_oid;
 
     /* get the graph name - this is a required argument */
     agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(0),
@@ -1279,7 +1279,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state edges_result;
-    Oid graph_oid = InvalidOid;
+    graphoid graph_oid = INVALID_AG_GRAPH_ID;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
     int index = 0;
@@ -1343,7 +1343,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state path_result;
-    Oid graph_oid = InvalidOid;
+    graphoid graph_oid = INVALID_AG_GRAPH_ID;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
     int index = 0;

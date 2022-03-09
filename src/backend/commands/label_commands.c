@@ -81,7 +81,7 @@ static Constraint *build_not_null_constraint(void);
 static Constraint *build_properties_default(void);
 static void alter_sequence_owned_by_for_label(RangeVar *seq_range_var,
                                               char *rel_name);
-static int32 get_new_label_id(Oid graph_oid, Oid nsp_id);
+static int32 get_new_label_id(graphoid graph_oid, Oid nsp_id);
 static void change_label_id_default(char *graph_name, char *label_name,
                                     char *schema_name, char *seq_name,
                                     Oid relid);
@@ -112,7 +112,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     char *graph;
     Name graph_name;
     char *graph_name_str;
-    Oid graph_oid;
+    graphoid graph_oid;
     List *parent;
 
     RangeVar *rv;
@@ -192,7 +192,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     char *graph;
     Name graph_name;
     char *graph_name_str;
-    Oid graph_oid;
+    graphoid graph_oid;
     List *parent;
 
     RangeVar *rv;
@@ -263,7 +263,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
                  List *parents)
 {
     graph_cache_data *cache_data;
-    Oid graph_oid;
+    graphoid graph_oid;
     Oid nsp_id;
     char *schema_name;
     char *rel_name;
@@ -661,7 +661,7 @@ static void alter_sequence_owned_by_for_label(RangeVar *seq_range_var,
     CommandCounterIncrement();
 }
 
-static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
+static int32 get_new_label_id(graphoid graph_oid, Oid nsp_id)
 {
     Oid seq_id;
     int cnt;
@@ -683,7 +683,9 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
         label_id = nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
         if (!label_id_exists(graph_oid, label_id))
-            return (int32)label_id;
+        {
+            return (int32) label_id;
+        }
     }
 
     ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
@@ -702,7 +704,7 @@ Datum drop_label(PG_FUNCTION_ARGS)
     bool force;
     char *graph_name_str;
     graph_cache_data *cache_data;
-    Oid graph_oid;
+    graphoid graph_oid;
     Oid nsp_id;
     char *label_name_str;
     Oid label_relation;
