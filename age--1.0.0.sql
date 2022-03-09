@@ -46,14 +46,15 @@ CREATE DOMAIN label_id AS int NOT NULL CHECK (VALUE > 0 AND VALUE <= 65535);
 CREATE DOMAIN label_kind AS "char" NOT NULL CHECK (VALUE = 'v' OR VALUE = 'e');
 
 CREATE TABLE ag_label (
+  labelid oid NOT NULL,
   name name NOT NULL,
   graph oid NOT NULL,
   id label_id,
   kind label_kind,
   relation regclass NOT NULL
-) WITH (OIDS);
+);
 
-CREATE UNIQUE INDEX ag_label_oid_index ON ag_label USING btree (oid);
+CREATE UNIQUE INDEX ag_label_labelid_index ON ag_label USING btree (labelid);
 
 CREATE UNIQUE INDEX ag_label_name_graph_index
 ON ag_label

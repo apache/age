@@ -33,7 +33,7 @@ typedef struct graph_cache_data
 // label_cache_data contains the same fields that ag_label catalog table has
 typedef struct label_cache_data
 {
-    Oid oid;
+    Oid labeloid;
     NameData name;
     Oid graph;
     int32 id;

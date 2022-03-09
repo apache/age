@@ -43,14 +43,14 @@
 #define edge_tuple_properties Anum_ag_label_edge_table_properties - 1
 
 
+#define Anum_ag_label_labeloid 1
+#define Anum_ag_label_name 2
+#define Anum_ag_label_graph 3
+#define Anum_ag_label_id 4
+#define Anum_ag_label_kind 5
+#define Anum_ag_label_relation 6
 
-#define Anum_ag_label_name 1
-#define Anum_ag_label_graph 2
-#define Anum_ag_label_id 3
-#define Anum_ag_label_kind 4
-#define Anum_ag_label_relation 5
-
-#define Natts_ag_label 5
+#define Natts_ag_label 6
 
 #define ag_label_relation_id() ag_relation_id("ag_label", "table")
 #define ag_label_oid_index_id() ag_relation_id("ag_label_oid_index", "index")

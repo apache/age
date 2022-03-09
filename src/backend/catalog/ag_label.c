@@ -66,6 +66,9 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
               label_kind == LABEL_KIND_EDGE);
     AssertArg(OidIsValid(label_relation));
 
+    values[Anum_ag_label_labeloid - 1] = ObjectIdGetDatum(label_relation);
+    nulls[Anum_ag_label_labeloid - 1] = false;
+
     namestrcpy(&label_name_data, label_name);
     values[Anum_ag_label_name - 1] = NameGetDatum(&label_name_data);
     nulls[Anum_ag_label_name - 1] = false;
@@ -132,7 +135,7 @@ Oid get_label_oid(const char *label_name, Oid label_graph)
 
     cache_data = search_label_name_graph_cache(label_name, label_graph);
     if (cache_data)
-        return cache_data->oid;
+        return cache_data->labeloid;
     else
         return InvalidOid;
 }

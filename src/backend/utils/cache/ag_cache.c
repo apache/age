@@ -619,7 +619,7 @@ static void invalidate_label_oid_cache(Oid relid)
         if (entry->relation != relid)
             continue;
 
-        removed = hash_search(label_oid_cache_hash, &entry->oid, HASH_REMOVE,
+        removed = hash_search(label_oid_cache_hash, &entry->labeloid, HASH_REMOVE,
                               NULL);
         hash_seq_term(&hash_seq);
 
@@ -647,7 +647,7 @@ static void flush_label_oid_cache(void)
         if (!entry)
             break;
 
-        removed = hash_search(label_oid_cache_hash, &entry->oid, HASH_REMOVE,
+        removed = hash_search(label_oid_cache_hash, &entry->labeloid, HASH_REMOVE,
                               NULL);
         if (!removed)
         {
@@ -857,7 +857,7 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     // fill the new entry with the retrieved tuple
     fill_label_cache_data(entry, tuple, RelationGetDescr(ag_label));
     // make sure that the oid field is the same with the hash key(oid)
-    Assert(entry->oid == oid);
+    Assert(entry->labeloid == oid);
 
     systable_endscan(scan_desc);
     heap_close(ag_label, AccessShareLock);
@@ -1091,9 +1091,9 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     Datum value;
 
     // ag_label.oid
-    value = heap_getattr(tuple, ObjectIdAttributeNumber, tuple_desc, &is_null);
+    value = heap_getattr(tuple, Anum_ag_label_labeloid, tuple_desc, &is_null);
     Assert(!is_null);
-    cache_data->oid = DatumGetObjectId(value);
+    cache_data->labeloid = DatumGetObjectId(value);
     // ag_label.name
     value = heap_getattr(tuple, Anum_ag_label_name, tuple_desc, &is_null);
     Assert(!is_null);

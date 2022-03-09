@@ -50,7 +50,7 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
     AssertArg(graph_name);
     AssertArg(OidIsValid(nsp_id));
 
-    values[Anum_ag_graph_graphid - 1] = nsp_id;
+    values[Anum_ag_graph_graphid - 1] = ObjectIdGetDatum(nsp_id);
     nulls[Anum_ag_graph_graphid - 1] = false;
 
     values[Anum_ag_graph_name - 1] = NameGetDatum(graph_name);
