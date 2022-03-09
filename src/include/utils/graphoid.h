@@ -32,6 +32,7 @@
 
 #define graph_oid_is_valid(graph_oid) (graph_oid != INVALID_AG_GRAPH_ID)
 
-#define get_next_graph_oid() (DatumGetInt32(DirectFunctionCall1(nextval_oid, ag_graph_id_seq())))
+#define get_next_graph_oid() \
+    (DatumGetInt32(DirectFunctionCall1(nextval_oid, ag_graph_id_seq())))
 
 #endif
