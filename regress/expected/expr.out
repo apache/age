@@ -1664,8 +1664,10 @@ SELECT * FROM cypher('expr', $$ MATCH ()-[e]-() RETURN e $$) AS (expression agty
                                                         expression                                                         
 ---------------------------------------------------------------------------------------------------------------------------
  {"id": 1407374883553281, "label": "e1", "end_id": 1125899906842627, "start_id": 1125899906842626, "properties": {}}::edge
+ {"id": 1407374883553281, "label": "e1", "end_id": 1125899906842627, "start_id": 1125899906842626, "properties": {}}::edge
  {"id": 1407374883553282, "label": "e1", "end_id": 1125899906842626, "start_id": 1125899906842625, "properties": {}}::edge
-(2 rows)
+ {"id": 1407374883553282, "label": "e1", "end_id": 1125899906842626, "start_id": 1125899906842625, "properties": {}}::edge
+(4 rows)
 
 -- id()
 SELECT * FROM cypher('expr', $$
@@ -1674,8 +1676,10 @@ $$) AS (id agtype);
         id        
 ------------------
  1407374883553281
+ 1407374883553281
  1407374883553282
-(2 rows)
+ 1407374883553282
+(4 rows)
 
 SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN id(v)
@@ -1714,8 +1718,10 @@ $$) AS (start_id agtype);
      start_id     
 ------------------
  1125899906842626
+ 1125899906842626
  1125899906842625
-(2 rows)
+ 1125899906842625
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -1745,8 +1751,10 @@ $$) AS (end_id agtype);
       end_id      
 ------------------
  1125899906842627
+ 1125899906842627
  1125899906842626
-(2 rows)
+ 1125899906842626
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -1776,8 +1784,10 @@ $$) AS (id agtype, start_id agtype, startNode agtype);
         id        |     start_id     |                                    startnode                                     
 ------------------+------------------+----------------------------------------------------------------------------------
  1407374883553281 | 1125899906842626 | {"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex
+ 1407374883553281 | 1125899906842626 | {"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex
  1407374883553282 | 1125899906842625 | {"id": 1125899906842625, "label": "v1", "properties": {"id": "initial"}}::vertex
-(2 rows)
+ 1407374883553282 | 1125899906842625 | {"id": 1125899906842625, "label": "v1", "properties": {"id": "initial"}}::vertex
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -1807,8 +1817,10 @@ $$) AS (id agtype, end_id agtype, endNode agtype);
         id        |      end_id      |                                     endnode                                     
 ------------------+------------------+---------------------------------------------------------------------------------
  1407374883553281 | 1125899906842627 | {"id": 1125899906842627, "label": "v1", "properties": {"id": "end"}}::vertex
+ 1407374883553281 | 1125899906842627 | {"id": 1125899906842627, "label": "v1", "properties": {"id": "end"}}::vertex
  1407374883553282 | 1125899906842626 | {"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex
-(2 rows)
+ 1407374883553282 | 1125899906842626 | {"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -1839,7 +1851,9 @@ $$) AS (type agtype);
 ------
  "e1"
  "e1"
-(2 rows)
+ "e1"
+ "e1"
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -2094,7 +2108,9 @@ $$) AS (properties agtype);
 ------------
  {}
  {}
-(2 rows)
+ {}
+ {}
+(4 rows)
 
 -- should return null
 SELECT * FROM cypher('expr', $$
@@ -4286,6 +4302,62 @@ $$) AS (results agtype);
 (1 row)
 
 SELECT * FROM cypher('expr', $$
+    RETURN round(7.4163, 3)
+$$) AS (results agtype);
+ results 
+---------
+ 7.416
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, 8)
+$$) AS (results agtype);
+  results   
+------------
+ 7.41634348
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.416343479, NULL)
+$$) AS (results agtype);
+ results 
+---------
+ 7.0
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, 7)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7, 2)
+$$) AS (results agtype);
+ results 
+---------
+ 7.0
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(7.4342, 2.1123)
+$$) AS (results agtype);
+ results 
+---------
+ 7.43
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN round(NULL, NULL)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
     RETURN sign(10)
 $$) AS (results agtype);
  results 
@@ -5348,7 +5420,7 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (i agtype, j agtype, case_statement agtype);
   i   |     j     | case_statement 
 ------+-----------+----------------
- 1    | null      | "i is 1"
+ 1    |           | "i is 1"
  "a"  | "b"       | "j is b"
  0    | 1         | "0 AND 1"
  true | false     | "i or j true"
@@ -5371,7 +5443,7 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (j agtype, case_statement agtype);
      j     | case_statement 
 -----------+----------------
- null      | "not a or b"
+           | "not a or b"
  "b"       | "b"
  1         | 1
  false     | false
@@ -5499,6 +5571,46 @@ SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u, v$$) AS (u agtype, 
 ---+---
 (0 rows)
 
+-- Create a graph to test
+SELECT * FROM cypher('VLE', $$CREATE (b:begin)-[:edge {name: 'main edge', number: 1, dangerous: {type: "all", level: "all"}}]->(u1:middle)-[:edge {name: 'main edge', number: 2, dangerous: {type: "all", level: "all"}, packages: [2,4,6]}]->(u2:middle)-[:edge {name: 'main edge', number: 3, dangerous: {type: "all", level: "all"}}]->(u3:middle)-[:edge {name: 'main edge', number: 4, dangerous: {type: "all", level: "all"}}]->(e:end), (u1)-[:self_loop {name: 'self loop', number: 1, dangerous: {type: "all", level: "all"}}]->(u1), (e)-[:self_loop {name: 'self loop', number: 2, dangerous: {type: "all", level: "all"}}]->(e), (b)-[:alternate_edge {name: 'alternate edge', number: 1, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(u1), (u2)-[:alternate_edge {name: 'alternate edge', number: 2, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(u3), (u3)-[:alternate_edge {name: 'alternate edge', number: 3, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(e), (u2)-[:bypass_edge {name: 'bypass edge', number: 1, packages: [1,3,5,7]}]->(e), (e)-[:alternate_edge {name: 'backup edge', number: 1, packages: [1,3,5,7]}]->(u3), (u3)-[:alternate_edge {name: 'backup edge', number: 2, packages: [1,3,5,7]}]->(u2), (u2)-[:bypass_edge {name: 'bypass edge', number: 2, packages: [1,3,5,7], dangerous: {type: "poisons", level: "all"}}]->(b) RETURN b, e $$) AS (b agtype, e agtype);
+                                  b                                  |                                 e                                  
+---------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 844424930131969, "label": "begin", "properties": {}}::vertex | {"id": 1688849860263937, "label": "end", "properties": {}}::vertex
+(1 row)
+
+-- test vertex_stats command
+SELECT * FROM cypher('VLE', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "begin", "in_degree": 1, "out_degree": 2, "self_loops": 0}
+ {"id": 1407374883553281, "label": "middle", "in_degree": 3, "out_degree": 2, "self_loops": 1}
+ {"id": 1407374883553282, "label": "middle", "in_degree": 2, "out_degree": 4, "self_loops": 0}
+ {"id": 1407374883553283, "label": "middle", "in_degree": 3, "out_degree": 3, "self_loops": 0}
+ {"id": 1688849860263937, "label": "end", "in_degree": 4, "out_degree": 2, "self_loops": 1}
+(5 rows)
+
+-- test indirection operator for a function
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).self_loops <> 0 RETURN vertex_stats(u) $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 1407374883553281, "label": "middle", "in_degree": 3, "out_degree": 2, "self_loops": 1}
+ {"id": 1688849860263937, "label": "end", "in_degree": 4, "out_degree": 2, "self_loops": 1}
+(2 rows)
+
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).in_degree < vertex_stats(u).out_degree RETURN vertex_stats(u) $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "begin", "in_degree": 1, "out_degree": 2, "self_loops": 0}
+ {"id": 1407374883553282, "label": "middle", "in_degree": 2, "out_degree": 4, "self_loops": 0}
+(2 rows)
+
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).out_degree < vertex_stats(u).in_degree RETURN vertex_stats(u) $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 1407374883553281, "label": "middle", "in_degree": 3, "out_degree": 2, "self_loops": 1}
+ {"id": 1688849860263937, "label": "end", "in_degree": 4, "out_degree": 2, "self_loops": 1}
+(2 rows)
+
 -- list functions relationships(), range(), keys()
 SELECT create_graph('keys');
 NOTICE:  graph "keys" has been created
@@ -5545,10 +5657,13 @@ SELECT * FROM cypher('keys', $$MATCH (v) RETURN keys(v)$$) AS (vertex_keys agtyp
 SELECT * FROM cypher('keys', $$MATCH ()-[e]-() RETURN keys(e)$$) AS (edge_keys agtype);
  edge_keys 
 -----------
- ["song"]
- ["song"]
  []
-(3 rows)
+ []
+ ["song"]
+ ["song"]
+ ["song"]
+ ["song"]
+(6 rows)
 
 SELECT * FROM cypher('keys', $$RETURN keys({a:1,b:'two',c:[1,2,3]})$$) AS (keys agtype);
       keys       
@@ -5798,9 +5913,16 @@ ERROR:  labels() argument must be a vertex
 -- Cleanup
 --
 SELECT * FROM drop_graph('VLE', true);
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 9 other objects
 DETAIL:  drop cascades to table "VLE"._ag_label_vertex
 drop cascades to table "VLE"._ag_label_edge
+drop cascades to table "VLE".begin
+drop cascades to table "VLE".edge
+drop cascades to table "VLE".middle
+drop cascades to table "VLE"."end"
+drop cascades to table "VLE".self_loop
+drop cascades to table "VLE".alternate_edge
+drop cascades to table "VLE".bypass_edge
 NOTICE:  graph "VLE" has been dropped
  drop_graph 
 ------------

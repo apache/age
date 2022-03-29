@@ -39,6 +39,7 @@
  * locate entries.
  */
 const ScanKeyword cypher_keywords[] = {
+    {"all", ALL, RESERVED_KEYWORD},
     {"analyze", ANALYZE, RESERVED_KEYWORD},
     {"and", AND, RESERVED_KEYWORD},
     {"as", AS, RESERVED_KEYWORD},
@@ -64,8 +65,10 @@ const ScanKeyword cypher_keywords[] = {
     {"is", IS, RESERVED_KEYWORD},
     {"limit", LIMIT, RESERVED_KEYWORD},
     {"match", MATCH, RESERVED_KEYWORD},
+    {"merge", MERGE, RESERVED_KEYWORD},
     {"not", NOT, RESERVED_KEYWORD},
     {"null", NULL_P, RESERVED_KEYWORD},
+    {"optional", OPTIONAL, RESERVED_KEYWORD},
     {"or", OR, RESERVED_KEYWORD},
     {"order", ORDER, RESERVED_KEYWORD},
     {"remove", REMOVE, RESERVED_KEYWORD},
@@ -75,6 +78,8 @@ const ScanKeyword cypher_keywords[] = {
     {"starts", STARTS, RESERVED_KEYWORD},
     {"then", THEN, RESERVED_KEYWORD},
     {"true", TRUE_P, RESERVED_KEYWORD},
+    {"union", UNION, RESERVED_KEYWORD},
+    {"unwind", UNWIND, RESERVED_KEYWORD},
     {"verbose", VERBOSE, RESERVED_KEYWORD},
     {"when", WHEN, RESERVED_KEYWORD},
     {"where", WHERE, RESERVED_KEYWORD},

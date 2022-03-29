@@ -127,6 +127,17 @@ $$) AS (a agtype);
  {"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex
 (1 row)
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH p=()-[e]-() RETURN e
+$$) AS (a agtype);
+                                                             a                                                             
+---------------------------------------------------------------------------------------------------------------------------
+ {"id": 1407374883553282, "label": "e1", "end_id": 1125899906842626, "start_id": 1125899906842625, "properties": {}}::edge
+ {"id": 1407374883553282, "label": "e1", "end_id": 1125899906842626, "start_id": 1125899906842625, "properties": {}}::edge
+ {"id": 1407374883553281, "label": "e1", "end_id": 1125899906842627, "start_id": 1125899906842626, "properties": {}}::edge
+ {"id": 1407374883553281, "label": "e1", "end_id": 1125899906842627, "start_id": 1125899906842626, "properties": {}}::edge
+(4 rows)
+
 -- Right Path Test
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[:e1]->(b:v1)-[:e1]->(c:v1) RETURN a, b, c
@@ -528,15 +539,29 @@ ERROR:  label vmissing does not exists
 LINE 1: SELECT * FROM cypher('cypher_match', $$MATCH (n:vmissing)-[]...
                                                      ^
 --
---Errors
+-- Path of one vertex. This should select 14
 --
 SELECT * FROM cypher('cypher_match', $$
        MATCH p=() RETURN p
 $$) AS (p agtype);
-ERROR:  paths consist of alternating vertices and edges.
-LINE 2:        MATCH p=() RETURN p
-                       ^
-HINT:  paths require at least 2 vertices and 1 edge
+                                                                                        p                                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"int_key": 1, "map_key": {"key": "value"}, "list_key": [1, 2, 3], "float_key": 3.14, "string_key": "test"}}::vertex]::path
+ [{"id": 281474976710658, "label": "", "properties": {"lst": [1, null, 3.14, "string", {"key": "value"}, []]}}::vertex]::path
+ [{"id": 844424930131969, "label": "v", "properties": {}}::vertex]::path
+ [{"id": 844424930131970, "label": "v", "properties": {"i": 0}}::vertex]::path
+ [{"id": 844424930131971, "label": "v", "properties": {"i": 1}}::vertex]::path
+ [{"id": 1125899906842625, "label": "v1", "properties": {"id": "initial"}}::vertex]::path
+ [{"id": 1125899906842626, "label": "v1", "properties": {"id": "middle"}}::vertex]::path
+ [{"id": 1125899906842627, "label": "v1", "properties": {"id": "end"}}::vertex]::path
+ [{"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path
+ [{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex]::path
+ [{"id": 1688849860263939, "label": "v2", "properties": {"id": "end"}}::vertex]::path
+ [{"id": 2251799813685249, "label": "v3", "properties": {"id": "initial"}}::vertex]::path
+ [{"id": 2251799813685250, "label": "v3", "properties": {"id": "middle"}}::vertex]::path
+ [{"id": 2251799813685251, "label": "v3", "properties": {"id": "end"}}::vertex]::path
+(14 rows)
+
 --
 -- MATCH with WHERE EXISTS(pattern)
 --
@@ -890,6 +915,68 @@ $$) AS (i agtype);
 (3 rows)
 
 --
+-- Optional Match
+--
+SELECT * FROM cypher('cypher_match', $$
+    CREATE (:opt_match_v {name: 'someone'})-[:opt_match_e]->(:opt_match_v {name: 'somebody'}),
+           (:opt_match_v {name: 'anybody'})-[:opt_match_e]->(:opt_match_v {name: 'nobody'})
+$$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (u:opt_match_v)
+    OPTIONAL MATCH (u)-[m]-(l)
+    RETURN u.name as u, type(m), l.name as l
+    ORDER BY u, m, l
+$$) AS (u agtype, m agtype, l agtype);
+     u      |       m       |     l      
+------------+---------------+------------
+ "someone"  | "opt_match_e" | "somebody"
+ "somebody" | "opt_match_e" | "someone"
+ "anybody"  | "opt_match_e" | "nobody"
+ "nobody"   | "opt_match_e" | "anybody"
+(4 rows)
+
+SELECT * FROM cypher('cypher_match', $$
+    OPTIONAL MATCH (n:opt_match_v)-[r]->(p), (m:opt_match_v)-[s]->(q)
+    WHERE id(n) <> id(m)
+    RETURN n.name as n, type(r) AS r, p.name as p,
+           m.name AS m, type(s) AS s, q.name AS q
+    ORDER BY n, p, m, q
+$$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
+     n     |       r       |     p      |     m     |       s       |     q      
+-----------+---------------+------------+-----------+---------------+------------
+ "someone" | "opt_match_e" | "somebody" | "anybody" | "opt_match_e" | "nobody"
+ "anybody" | "opt_match_e" | "nobody"   | "someone" | "opt_match_e" | "somebody"
+(2 rows)
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (n:opt_match_v), (m:opt_match_v)
+    WHERE id(n) <> id(m)
+    OPTIONAL MATCH (n)-[r]->(p), (m)-[s]->(q)
+    RETURN n.name AS n, type(r) AS r, p.name AS p,
+           m.name AS m, type(s) AS s, q.name AS q
+    ORDER BY n, p, m, q
+ $$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
+     n      |       r       |     p      |     m      |       s       |     q      
+------------+---------------+------------+------------+---------------+------------
+ "someone"  | "opt_match_e" | "somebody" | "anybody"  | "opt_match_e" | "nobody"
+ "someone"  |               |            | "somebody" |               | 
+ "someone"  |               |            | "nobody"   |               | 
+ "somebody" |               |            | "someone"  |               | 
+ "somebody" |               |            | "anybody"  |               | 
+ "somebody" |               |            | "nobody"   |               | 
+ "anybody"  | "opt_match_e" | "nobody"   | "someone"  | "opt_match_e" | "somebody"
+ "anybody"  |               |            | "somebody" |               | 
+ "anybody"  |               |            | "nobody"   |               | 
+ "nobody"   |               |            | "someone"  |               | 
+ "nobody"   |               |            | "somebody" |               | 
+ "nobody"   |               |            | "anybody"  |               | 
+(12 rows)
+
+--
 -- JIRA: AGE2-544
 --
 -- Clean up
@@ -981,7 +1068,7 @@ $$) as (f agtype, t agtype);
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
-NOTICE:  drop cascades to 14 other objects
+NOTICE:  drop cascades to 16 other objects
 DETAIL:  drop cascades to table cypher_match._ag_label_vertex
 drop cascades to table cypher_match._ag_label_edge
 drop cascades to table cypher_match.v
@@ -996,6 +1083,8 @@ drop cascades to table cypher_match.self
 drop cascades to table cypher_match.duplicate
 drop cascades to table cypher_match.dup_edge
 drop cascades to table cypher_match.other_v
+drop cascades to table cypher_match.opt_match_v
+drop cascades to table cypher_match.opt_match_e
 NOTICE:  graph "cypher_match" has been dropped
  drop_graph 
 ------------

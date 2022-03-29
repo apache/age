@@ -64,6 +64,10 @@ SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[]->(), ()-[]->(a) RETURN a
 $$) AS (a agtype);
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH p=()-[e]-() RETURN e
+$$) AS (a agtype);
+
 -- Right Path Test
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[:e1]->(b:v1)-[:e1]->(c:v1) RETURN a, b, c
@@ -290,7 +294,7 @@ SELECT * FROM cypher('cypher_match', $$MATCH (n:e1)-[]-() RETURN n$$) AS (n agty
 SELECT * FROM cypher('cypher_match', $$MATCH (n:vmissing)-[]-() RETURN n$$) AS (n agtype);
 
 --
---Errors
+-- Path of one vertex. This should select 14
 --
 SELECT * FROM cypher('cypher_match', $$
        MATCH p=() RETURN p
@@ -455,6 +459,39 @@ SELECT * FROM cypher('cypher_match', $$
 	MATCH (u)
 	RETURN u SKIP 7 LIMIT 3
 $$) AS (i agtype);
+
+
+--
+-- Optional Match
+--
+SELECT * FROM cypher('cypher_match', $$
+    CREATE (:opt_match_v {name: 'someone'})-[:opt_match_e]->(:opt_match_v {name: 'somebody'}),
+           (:opt_match_v {name: 'anybody'})-[:opt_match_e]->(:opt_match_v {name: 'nobody'})
+$$) AS (u agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (u:opt_match_v)
+    OPTIONAL MATCH (u)-[m]-(l)
+    RETURN u.name as u, type(m), l.name as l
+    ORDER BY u, m, l
+$$) AS (u agtype, m agtype, l agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    OPTIONAL MATCH (n:opt_match_v)-[r]->(p), (m:opt_match_v)-[s]->(q)
+    WHERE id(n) <> id(m)
+    RETURN n.name as n, type(r) AS r, p.name as p,
+           m.name AS m, type(s) AS s, q.name AS q
+    ORDER BY n, p, m, q
+$$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (n:opt_match_v), (m:opt_match_v)
+    WHERE id(n) <> id(m)
+    OPTIONAL MATCH (n)-[r]->(p), (m)-[s]->(q)
+    RETURN n.name AS n, type(r) AS r, p.name AS p,
+           m.name AS m, type(s) AS s, q.name AS q
+    ORDER BY n, p, m, q
+ $$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
 
 --
 -- JIRA: AGE2-544

@@ -77,7 +77,7 @@
 %token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE
 
 /* keywords in alphabetical order */
-%token <keyword> ANALYZE AND AS ASC ASCENDING
+%token <keyword> ALL ANALYZE AND AS ASC ASCENDING
                  BY
                  CASE COALESCE CONTAINS CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
@@ -85,18 +85,20 @@
                  FALSE_P
                  IN IS
                  LIMIT
-                 MATCH
+                 MATCH MERGE
                  NOT NULL_P
-                 OR ORDER
+                 OPTIONAL OR ORDER
                  REMOVE RETURN
                  SET SKIP STARTS
                  THEN TRUE_P
+                 UNION UNWIND
                  VERBOSE
                  WHEN WHERE WITH
                  XOR
 
 /* query */
-%type <list> single_query query_part_init query_part_last
+%type <node> stmt
+%type <list> single_query query_part_init query_part_last query_list
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
@@ -109,8 +111,13 @@
 %type <node> match cypher_varlen_opt cypher_range_opt cypher_range_idx
              cypher_range_idx_opt
 %type <integer> Iconst
+%type <boolean> optional_opt
+
 /* CREATE clause */
 %type <node> create
+
+/* UNWIND clause */
+%type <node> unwind
 
 /* SET and REMOVE clause */
 %type <node> set set_item remove remove_item
@@ -119,6 +126,9 @@
 /* DELETE clause */
 %type <node> delete
 %type <boolean> detach_opt
+
+/* MERGE clause */
+%type <node> merge
 
 /* common */
 %type <node> where_opt
@@ -147,6 +157,7 @@
 %type <list> func_name
 
 /* precedence: lowest to highest */
+%left UNION
 %left OR
 %left AND
 %left XOR
@@ -162,11 +173,15 @@
 %left '.'
 %left TYPECAST
 
+/*set operations*/
+%type <boolean> all_or_distinct
+
 %{
 //
 // unique name generation
 #define UNIQUE_NAME_NULL_PREFIX "_unique_null_prefix"
 static char *create_unique_name(char *prefix_name);
+static unsigned long get_a_unique_number(void);
 
 // logical operators
 static Node *make_or_expr(Node *lexpr, Node *rexpr, int location);
@@ -202,7 +217,7 @@ static Node *make_function_expr(List *func_name, List *exprs, int location);
  */
 
 stmt:
-    single_query semicolon_opt
+    query_list semicolon_opt
         {
             /*
              * If there is no transition for the lookahead token and the
@@ -223,7 +238,7 @@ stmt:
             extra->result = $1;
             extra->extra = NULL;
         }
-    | EXPLAIN single_query semicolon_opt
+    | EXPLAIN query_list semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -237,7 +252,7 @@ stmt:
             estmt->options = NIL;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN VERBOSE single_query semicolon_opt
+    | EXPLAIN VERBOSE query_list semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -251,7 +266,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("verbose", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE single_query semicolon_opt
+    | EXPLAIN ANALYZE query_list semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -265,7 +280,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("analyze", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE VERBOSE single_query semicolon_opt
+    | EXPLAIN ANALYZE VERBOSE query_list semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -282,10 +297,42 @@ stmt:
         }
     ;
 
+query_list:
+    single_query
+        {
+            $$ = $1;
+        }
+    | single_query UNION all_or_distinct query_list
+        {
+            cypher_union *u = make_ag_node(cypher_union);
+
+            u->all_or_distinct = $3;
+            u->op = SETOP_UNION;
+            u->larg = $1;
+            u->rarg = $4;
+
+            $$ = list_make1((Node *) u);
+        }
+    ;
+
 semicolon_opt:
     /* empty */
     | ';'
     ;
+
+all_or_distinct:
+    ALL
+    {
+        $$ = true;
+    }
+    | DISTINCT
+    {
+        $$ = false;
+    }
+    | /*EMPTY*/
+    {
+        $$ = false;
+    }
 
 /*
  * The overall structure of single_query looks like below.
@@ -335,6 +382,7 @@ reading_clause_list:
 
 reading_clause:
     match
+    | unwind
     ;
 
 updating_clause_list_0:
@@ -361,6 +409,7 @@ updating_clause:
     | set
     | remove
     | delete
+    | merge
     ;
 
 cypher_varlen_opt:
@@ -671,17 +720,46 @@ with:
  */
 
 match:
-    MATCH pattern where_opt
+    optional_opt MATCH pattern where_opt
         {
             cypher_match *n;
 
             n = make_ag_node(cypher_match);
-            n->pattern = $2;
-            n->where = $3;
+            n->optional = $1;
+            n->pattern = $3;
+            n->where = $4;
 
             $$ = (Node *)n;
         }
     ;
+
+optional_opt:
+    OPTIONAL
+        {
+            $$ = true;
+        }
+    | /* EMPTY */
+        {
+            $$ = false;
+        }
+    ;
+
+
+unwind:
+    UNWIND expr AS var_name
+        {
+            ResTarget  *res;
+            cypher_unwind *n;
+
+            res = makeNode(ResTarget);
+            res->name = $4;
+            res->val = (Node *) $2;
+            res->location = @2;
+
+            n = make_ag_node(cypher_unwind);
+            n->target = res;
+            $$ = (Node *) n;
+        }
 
 /*
  * CREATE clause
@@ -824,6 +902,21 @@ detach_opt:
     ;
 
 /*
+ * MERGE clause
+ */
+merge:
+    MERGE path
+        {
+            cypher_merge *n;
+
+            n = make_ag_node(cypher_merge);
+            n->path = $2;
+
+            $$ = (Node *)n;
+        }
+    ;
+
+/*
  * common
  */
 
@@ -915,7 +1008,11 @@ simple_path:
                 cypher_node *cnr = NULL;
                 Node *node = NULL;
                 int length = 0;
+                unsigned long unique_number = 0;
                 int location = 0;
+
+                /* get a unique number to identify this VLE node */
+                unique_number = get_a_unique_number();
 
                 /* get the location */
                 location = cr->location;
@@ -1045,6 +1142,9 @@ simple_path:
                 }
                 /* add in the direction as Const */
                 args = lappend(args, make_int_const(cr->dir, @2));
+
+                /* add in the unique number used to identify this VLE node */
+                args = lappend(args, make_int_const(unique_number, -1));
 
                 /* build the VLE function node */
                 cr->varlen = make_function_expr(list_make1(makeString("vle")),
@@ -1381,6 +1481,22 @@ expr:
                     ereport(ERROR,
                             (errcode(ERRCODE_SYNTAX_ERROR),
                              errmsg("function already qualified"),
+                             ag_scanner_errposition(@1, scanner)));
+            }
+            /* allow a function to be used as a parent of an indirection */
+            else if (IsA($1, FuncCall) && IsA($3, ColumnRef))
+            {
+                ColumnRef *cr = (ColumnRef*)$3;
+                List *fields = cr->fields;
+                Value *string = linitial(fields);
+
+                $$ = append_indirection($1, (Node*)string);
+            }
+            else if (IsA($1, FuncCall) && IsA($3, A_Indirection))
+            {
+                ereport(ERROR,
+                            (errcode(ERRCODE_SYNTAX_ERROR),
+                             errmsg("not supported A_Indirection indirection"),
                              ag_scanner_errposition(@1, scanner)));
             }
             /*
@@ -1740,8 +1856,9 @@ reserved_keyword:
  */
 
 safe_keywords:
-    AND          { $$ = pnstrdup($1, 3); }
+    ALL          { $$ = pnstrdup($1, 3); }
     | ANALYZE    { $$ = pnstrdup($1, 7); }
+    | AND        { $$ = pnstrdup($1, 3); }
     | AS         { $$ = pnstrdup($1, 2); }
     | ASC        { $$ = pnstrdup($1, 3); }
     | ASCENDING  { $$ = pnstrdup($1, 9); }
@@ -1763,7 +1880,9 @@ safe_keywords:
     | IS         { $$ = pnstrdup($1, 2); }
     | LIMIT      { $$ = pnstrdup($1, 6); }
     | MATCH      { $$ = pnstrdup($1, 6); }
+    | MERGE      { $$ = pnstrdup($1, 6); }
     | NOT        { $$ = pnstrdup($1, 3); }
+    | OPTIONAL   { $$ = pnstrdup($1, 8); }
     | OR         { $$ = pnstrdup($1, 2); }
     | ORDER      { $$ = pnstrdup($1, 5); }
     | REMOVE     { $$ = pnstrdup($1, 6); }
@@ -1772,6 +1891,7 @@ safe_keywords:
     | SKIP       { $$ = pnstrdup($1, 4); }
     | STARTS     { $$ = pnstrdup($1, 6); }
     | THEN       { $$ = pnstrdup($1, 4); }
+    | UNION      { $$ = pnstrdup($1, 5); }
     | WHEN       { $$ = pnstrdup($1, 4); }
     | VERBOSE    { $$ = pnstrdup($1, 7); }
     | WHERE      { $$ = pnstrdup($1, 5); }
@@ -2038,9 +2158,10 @@ static char *create_unique_name(char *prefix_name)
     char *name = NULL;
     char *prefix = NULL;
     uint nlen = 0;
+    unsigned long unique_number = 0;
 
-    /* STATIC VARIABLE unique_counter for name uniqueness */
-    static unsigned long unique_counter = 0;
+    /* get a unique number */
+    unique_number = get_a_unique_number();
 
     /* was a valid prefix supplied */
     if (prefix_name == NULL || strlen(prefix_name) <= 0)
@@ -2054,13 +2175,13 @@ static char *create_unique_name(char *prefix_name)
     }
 
     /* get the length of the combinded string */
-    nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_counter);
+    nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_number);
 
     /* allocate the space */
     name = palloc0(nlen + 1);
 
     /* create the name */
-    snprintf(name, nlen + 1, "%s_%lu", prefix, unique_counter);
+    snprintf(name, nlen + 1, "%s_%lu", prefix, unique_number);
 
     /* if we created the prefix, we need to free it */
     if (prefix_name == NULL || strlen(prefix_name) <= 0)
@@ -2068,8 +2189,14 @@ static char *create_unique_name(char *prefix_name)
         pfree(prefix);
     }
 
-    /* increment the counter */
-    unique_counter++;
-
     return name;
+}
+
+/* function to return a unique unsigned long number */
+static unsigned long get_a_unique_number(void)
+{
+    /* STATIC VARIABLE unique_counter for number uniqueness */
+    static unsigned long unique_counter = 0;
+
+    return unique_counter++;
 }

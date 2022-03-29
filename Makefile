@@ -27,6 +27,7 @@ OBJS = src/backend/age.o \
        src/backend/commands/graph_commands.o \
        src/backend/commands/label_commands.o \
        src/backend/executor/cypher_create.o \
+       src/backend/executor/cypher_merge.o \
        src/backend/executor/cypher_set.o \
        src/backend/executor/cypher_utils.o \
        src/backend/nodes/ag_nodes.o \
@@ -47,21 +48,27 @@ OBJS = src/backend/age.o \
        src/backend/parser/cypher_parse_agg.o \
        src/backend/parser/cypher_parse_node.o \
        src/backend/parser/cypher_parser.o \
+       src/backend/utils/adt/age_graphid_ds.o \
        src/backend/utils/adt/agtype.o \
        src/backend/utils/adt/agtype_ext.o \
        src/backend/utils/adt/agtype_ops.o \
        src/backend/utils/adt/agtype_parser.o \
        src/backend/utils/adt/agtype_util.o \
-       src/backend/utils/adt/agtype_vle.o \
+       src/backend/utils/adt/age_global_graph.o \
+       src/backend/utils/adt/age_vle.o \
        src/backend/utils/adt/cypher_funcs.o \
        src/backend/utils/adt/ag_float8_supp.o \
        src/backend/utils/adt/graphid.o \
        src/backend/utils/ag_func.o \
-       src/backend/utils/cache/ag_cache.o
+       src/backend/utils/cache/ag_cache.o \
+       src/backend/utils/load/ag_load_labels.o \
+       src/backend/utils/load/ag_load_edges.o \
+       src/backend/utils/load/age_load.o \
+       src/backend/utils/load/libcsv.o
 
 EXTENSION = age
 
-DATA = age--0.6.0.sql
+DATA = age--1.0.0.sql
 
 # sorted in dependency order
 REGRESS = scan \
@@ -72,11 +79,15 @@ REGRESS = scan \
           expr \
           cypher_create \
           cypher_match \
+          cypher_unwind \
           cypher_set \
           cypher_remove \
           cypher_delete \
           cypher_with \
           cypher_vle \
+          cypher_union \
+          cypher_merge \
+          age_load \
           drop
 
 srcdir=`pwd`

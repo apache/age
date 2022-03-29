@@ -422,7 +422,9 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
 
     /* Quick out without a palloc cycle if object/array is empty */
     if (count <= 0)
+    {
         return NULL;
+    }
 
     result = palloc(sizeof(agtype_value));
 
@@ -1434,7 +1436,7 @@ void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
     case AGTV_VERTEX:
     {
         graphid id;
-        agtype_value *id_agt = get_agtype_value_object_value(scalar_val, "id");
+        agtype_value *id_agt = GET_AGTYPE_VALUE_OBJECT_VALUE(scalar_val, "id");
         id = id_agt->val.int_value;
         tmp = DatumGetUInt64(DirectFunctionCall2(
             hashint8extended, Float8GetDatum(id), UInt64GetDatum(seed)));
@@ -1443,7 +1445,7 @@ void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
     case AGTV_EDGE:
     {
         graphid id;
-        agtype_value *id_agt = get_agtype_value_object_value(scalar_val, "id");
+        agtype_value *id_agt = GET_AGTYPE_VALUE_OBJECT_VALUE(scalar_val, "id");
         id = id_agt->val.int_value;
         tmp = DatumGetUInt64(DirectFunctionCall2(
             hashint8extended, Float8GetDatum(id), UInt64GetDatum(seed)));
@@ -1605,8 +1607,8 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
             agtype_value *a_id, *b_id;
             graphid a_graphid, b_graphid;
 
-            a_id = get_agtype_value_object_value(a, "id");
-            b_id = get_agtype_value_object_value(b, "id");
+            a_id = GET_AGTYPE_VALUE_OBJECT_VALUE(a, "id");
+            b_id = GET_AGTYPE_VALUE_OBJECT_VALUE(b, "id");
 
             a_graphid = a_id->val.int_value;
             b_graphid = b_id->val.int_value;
@@ -2193,4 +2195,39 @@ void uniqueify_agtype_object(agtype_value *object)
 
         object->val.object.num_pairs = res + 1 - object->val.object.pairs;
     }
+}
+
+char *agtype_value_type_to_string(enum agtype_value_type type)
+{
+    switch (type)
+    {
+        case AGTV_NULL:
+            return "NULL";
+        case AGTV_STRING:
+            return "string";
+        case AGTV_NUMERIC:
+            return "numeric";
+        case AGTV_INTEGER:
+            return "integer";
+        case AGTV_FLOAT:
+            return "float";
+        case AGTV_BOOL:
+            return "boolean";
+        case AGTV_VERTEX:
+            return "vertex";
+        case AGTV_EDGE:
+            return "edge";
+        case AGTV_ARRAY:
+            return "array";
+        case AGTV_OBJECT:
+            return "map";
+        case AGTV_BINARY:
+            return "binary";
+        default:
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                            errmsg("unknown agtype")));
+    }
+
+    return NULL;
 }

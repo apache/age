@@ -402,8 +402,8 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
      * coercion logic applied to them because we are forcing the column
      * definition list to be a particular way in this case.
      */
-    if (is_ag_node(llast(stmt), cypher_create)  || is_ag_node(llast(stmt), cypher_set) ||
-        is_ag_node(llast(stmt), cypher_delete))
+    if (is_ag_node(llast(stmt), cypher_create) || is_ag_node(llast(stmt), cypher_set) ||
+        is_ag_node(llast(stmt), cypher_delete) || is_ag_node(llast(stmt), cypher_merge))
     {
         // column definition list must be ... AS relname(colname agtype) ...
         if (!(rtfunc->funccolcount == 1 &&
@@ -578,6 +578,8 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     ListCell *lc2;
     ListCell *lc3;
 
+    int attr_count = 0;
+
     pstate = make_parsestate(parent_pstate);
 
     query = makeNode(Query);
@@ -597,8 +599,18 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     pstate->p_lateral_active = false;
     pstate->p_expr_kind = EXPR_KIND_NONE;
 
+    // ALIAS Syntax makes `RESJUNK`. So, It must be skipping.
+    foreach(lt, subquery->targetList)
+    {
+        TargetEntry *te = lfirst(lt);
+        if (!te->resjunk)
+        {
+            attr_count++;
+        }
+    }
+
     // check the number of attributes first
-    if (list_length(subquery->targetList) != rtfunc->funccolcount)
+    if (attr_count != rtfunc->funccolcount)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_DATATYPE_MISMATCH),
