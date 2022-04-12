@@ -108,6 +108,21 @@ RETURNS void
 LANGUAGE c
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.load_labels_from_file(graph_name name,
+                                            label_name name,
+                                            file_path text,
+                                            id_field_exists bool default true)
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
+                                                label_name name,
+                                                file_path text)
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';
+
 --
 -- graphid type
 --
@@ -178,7 +193,9 @@ CREATE OPERATOR = (
   COMMUTATOR = =,
   NEGATOR = <>,
   RESTRICT = eqsel,
-  JOIN = eqjoinsel
+  JOIN = eqjoinsel,
+  HASHES,
+  MERGES
 );
 
 CREATE FUNCTION ag_catalog.graphid_ne(graphid, graphid)
@@ -1359,6 +1376,21 @@ CREATE OPERATOR ^ (
   LEFTARG = agtype,
   RIGHTARG = agtype
 );
+
+
+CREATE FUNCTION ag_catalog.graphid_hash_cmp(graphid)
+RETURNS INTEGER
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE OPERATOR CLASS graphid_ops_hash
+  DEFAULT
+  FOR TYPE graphid
+  USING hash AS
+  OPERATOR 1 =,
+  FUNCTION 1 ag_catalog.graphid_hash_cmp(graphid);
 
 --
 -- agtype - comparison operators (=, <>, <, >, <=, >=)
@@ -3781,8 +3813,21 @@ STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- original VLE function definition
 CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
                                    IN agtype, IN agtype, IN agtype,
+                                   OUT edges agtype)
+RETURNS SETOF agtype
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE -- might be safe
+AS 'MODULE_PATHNAME';
+
+-- This is an overloaded function definition to allow for the VLE local context
+-- caching mechanism to coexist with the previous VLE version.
+CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
+                                   IN agtype, IN agtype, IN agtype, IN agtype,
                                    OUT edges agtype)
 RETURNS SETOF agtype
 LANGUAGE C
@@ -3800,7 +3845,7 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 -- function to match a terminal vle edge
-CREATE FUNCTION ag_catalog.age_match_vle_terminal_edge(agtype, agtype, agtype)
+CREATE FUNCTION ag_catalog.age_match_vle_terminal_edge(variadic "any")
 RETURNS boolean
 LANGUAGE C
 STABLE
@@ -3827,7 +3872,7 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.age_match_vle_edge_to_id_qual(agtype, agtype, agtype)
+CREATE FUNCTION ag_catalog.age_match_vle_edge_to_id_qual(variadic "any")
 RETURNS boolean
 LANGUAGE C
 STABLE
@@ -3886,6 +3931,20 @@ CREATE FUNCTION ag_catalog.age_unnest(agtype, block_types boolean = false)
     RETURNS SETOF agtype
     LANGUAGE c
     STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_vertex_stats(agtype, agtype)
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_delete_global_graphs(agtype)
+RETURNS boolean
+LANGUAGE c
+STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 

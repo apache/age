@@ -236,6 +236,32 @@ RETURN (1 + 1.0) = (7 % 5)
 $$) AS r(result boolean);
 
 --
+-- Test chained comparisons
+--
+
+SELECT * FROM create_graph('chained');
+SELECT * FROM cypher('chained', $$ CREATE (:people {name: "Jason", age:50}) $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ CREATE (:people {name: "Amy", age:25}) $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ CREATE (:people {name: "Samantha", age:35}) $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ CREATE (:people {name: "Mark", age:40}) $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ CREATE (:people {name: "David", age:15}) $$) AS (result agtype);
+-- should return 1
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 35 < u.age <= 49  RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 25 <= u.age <= 25  RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 35 = u.age = 35  RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 50 > u.age > 35  RETURN u $$) AS (result agtype);
+-- should return 3
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 40 <> u.age <> 35 RETURN u $$) AS (result agtype);
+-- should return 2
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 30 <= u.age <= 49 > u.age RETURN u $$) AS (result agtype);
+-- should return 0
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 30 <= u.age <= 49 = u.age RETURN u $$) AS (result agtype);
+-- should return 2
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE 35 < u.age + 1 <= 50 RETURN u $$) AS (result agtype);
+-- should return 3
+SELECT * FROM cypher('chained', $$ MATCH (u:people) WHERE NOT 35 < u.age + 1 <= 50 RETURN u $$) AS (result agtype);
+
+--
 -- Test transform logic for IS NULL & IS NOT NULL
 --
 
@@ -2284,6 +2310,18 @@ SELECT * FROM cypher('VLE', $$MATCH (u)-[*0..1]-(v) RETURN u, v$$) AS (u agtype,
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..1]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 SELECT * FROM cypher('VLE', $$MATCH (u)-[*..5]-(v) RETURN u, v$$) AS (u agtype, v agtype);
 
+-- Create a graph to test
+SELECT * FROM cypher('VLE', $$CREATE (b:begin)-[:edge {name: 'main edge', number: 1, dangerous: {type: "all", level: "all"}}]->(u1:middle)-[:edge {name: 'main edge', number: 2, dangerous: {type: "all", level: "all"}, packages: [2,4,6]}]->(u2:middle)-[:edge {name: 'main edge', number: 3, dangerous: {type: "all", level: "all"}}]->(u3:middle)-[:edge {name: 'main edge', number: 4, dangerous: {type: "all", level: "all"}}]->(e:end), (u1)-[:self_loop {name: 'self loop', number: 1, dangerous: {type: "all", level: "all"}}]->(u1), (e)-[:self_loop {name: 'self loop', number: 2, dangerous: {type: "all", level: "all"}}]->(e), (b)-[:alternate_edge {name: 'alternate edge', number: 1, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(u1), (u2)-[:alternate_edge {name: 'alternate edge', number: 2, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(u3), (u3)-[:alternate_edge {name: 'alternate edge', number: 3, packages: [2,4,6], dangerous: {type: "poisons", level: "all"}}]->(e), (u2)-[:bypass_edge {name: 'bypass edge', number: 1, packages: [1,3,5,7]}]->(e), (e)-[:alternate_edge {name: 'backup edge', number: 1, packages: [1,3,5,7]}]->(u3), (u3)-[:alternate_edge {name: 'backup edge', number: 2, packages: [1,3,5,7]}]->(u2), (u2)-[:bypass_edge {name: 'bypass edge', number: 2, packages: [1,3,5,7], dangerous: {type: "poisons", level: "all"}}]->(b) RETURN b, e $$) AS (b agtype, e agtype);
+
+-- test vertex_stats command
+SELECT * FROM cypher('VLE', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+
+-- test indirection operator for a function
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).self_loops <> 0 RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).in_degree < vertex_stats(u).out_degree RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('VLE', $$ MATCH (u) WHERE vertex_stats(u).out_degree < vertex_stats(u).in_degree RETURN vertex_stats(u) $$) AS (result agtype);
+
+
 -- list functions relationships(), range(), keys()
 SELECT create_graph('keys');
 -- keys()
@@ -2362,6 +2400,7 @@ SELECT * from cypher('list', $$RETURN labels("string")$$) as (Labels agtype);
 --
 -- Cleanup
 --
+SELECT * FROM drop_graph('chained', true);
 SELECT * FROM drop_graph('VLE', true);
 SELECT * FROM drop_graph('case_statement', true);
 SELECT * FROM drop_graph('opt_forms', true);

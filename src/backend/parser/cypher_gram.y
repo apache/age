@@ -98,7 +98,7 @@
 
 /* query */
 %type <node> stmt
-%type <list> single_query query_part_init query_part_last query_list
+%type <list> single_query query_part_init query_part_last cypher_stmt
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
@@ -162,7 +162,7 @@
 %left AND
 %left XOR
 %right NOT
-%nonassoc '=' NOT_EQ '<' LT_EQ '>' GT_EQ
+%left '=' NOT_EQ '<' LT_EQ '>' GT_EQ
 %left '+' '-'
 %left '*' '/' '%'
 %left '^'
@@ -181,6 +181,7 @@
 // unique name generation
 #define UNIQUE_NAME_NULL_PREFIX "_unique_null_prefix"
 static char *create_unique_name(char *prefix_name);
+static unsigned long get_a_unique_number(void);
 
 // logical operators
 static Node *make_or_expr(Node *lexpr, Node *rexpr, int location);
@@ -207,8 +208,17 @@ static Node *make_typecast_expr(Node *expr, char *typecast, int location);
 
 // functions
 static Node *make_function_expr(List *func_name, List *exprs, int location);
-%}
 
+// setops
+static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
+                         List *rarg);
+
+// comparison
+static bool is_A_Expr_a_comparison_operation(A_Expr *a);
+static Node *build_comparison_expression(Node *left_grammar_node,
+                                         Node *right_grammar_node,
+                                         char *opr_name, int location);
+%}
 %%
 
 /*
@@ -216,7 +226,7 @@ static Node *make_function_expr(List *func_name, List *exprs, int location);
  */
 
 stmt:
-    query_list semicolon_opt
+    cypher_stmt semicolon_opt
         {
             /*
              * If there is no transition for the lookahead token and the
@@ -237,7 +247,7 @@ stmt:
             extra->result = $1;
             extra->extra = NULL;
         }
-    | EXPLAIN query_list semicolon_opt
+    | EXPLAIN cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -251,7 +261,7 @@ stmt:
             estmt->options = NIL;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN VERBOSE query_list semicolon_opt
+    | EXPLAIN VERBOSE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -265,7 +275,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("verbose", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE query_list semicolon_opt
+    | EXPLAIN ANALYZE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -279,7 +289,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("analyze", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE VERBOSE query_list semicolon_opt
+    | EXPLAIN ANALYZE VERBOSE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -296,21 +306,14 @@ stmt:
         }
     ;
 
-query_list:
+cypher_stmt:
     single_query
         {
             $$ = $1;
         }
-    | single_query UNION all_or_distinct query_list
+    | cypher_stmt UNION all_or_distinct cypher_stmt
         {
-            cypher_union *u = make_ag_node(cypher_union);
-
-            u->all_or_distinct = $3;
-            u->op = SETOP_UNION;
-            u->larg = $1;
-            u->rarg = $4;
-
-            $$ = list_make1((Node *) u);
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
         }
     ;
 
@@ -1007,7 +1010,11 @@ simple_path:
                 cypher_node *cnr = NULL;
                 Node *node = NULL;
                 int length = 0;
+                unsigned long unique_number = 0;
                 int location = 0;
+
+                /* get a unique number to identify this VLE node */
+                unique_number = get_a_unique_number();
 
                 /* get the location */
                 location = cr->location;
@@ -1137,6 +1144,9 @@ simple_path:
                 }
                 /* add in the direction as Const */
                 args = lappend(args, make_int_const(cr->dir, @2));
+
+                /* add in the unique number used to identify this VLE node */
+                args = lappend(args, make_int_const(unique_number, -1));
 
                 /* build the VLE function node */
                 cr->varlen = make_function_expr(list_make1(makeString("vle")),
@@ -1277,27 +1287,27 @@ expr:
         }
     | expr '=' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "=", @2);
         }
     | expr NOT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<>", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<>", @2);
         }
     | expr '<' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<", @2);
         }
     | expr LT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<=", @2);
         }
     | expr '>' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, ">", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, ">", @2);
         }
     | expr GT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, ">=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, ">=", @2);
         }
     | expr '+' expr
         {
@@ -1473,6 +1483,22 @@ expr:
                     ereport(ERROR,
                             (errcode(ERRCODE_SYNTAX_ERROR),
                              errmsg("function already qualified"),
+                             ag_scanner_errposition(@1, scanner)));
+            }
+            /* allow a function to be used as a parent of an indirection */
+            else if (IsA($1, FuncCall) && IsA($3, ColumnRef))
+            {
+                ColumnRef *cr = (ColumnRef*)$3;
+                List *fields = cr->fields;
+                Value *string = linitial(fields);
+
+                $$ = append_indirection($1, (Node*)string);
+            }
+            else if (IsA($1, FuncCall) && IsA($3, A_Indirection))
+            {
+                ereport(ERROR,
+                            (errcode(ERRCODE_SYNTAX_ERROR),
+                             errmsg("not supported A_Indirection indirection"),
                              ag_scanner_errposition(@1, scanner)));
             }
             /*
@@ -2134,9 +2160,10 @@ static char *create_unique_name(char *prefix_name)
     char *name = NULL;
     char *prefix = NULL;
     uint nlen = 0;
+    unsigned long unique_number = 0;
 
-    /* STATIC VARIABLE unique_counter for name uniqueness */
-    static unsigned long unique_counter = 0;
+    /* get a unique number */
+    unique_number = get_a_unique_number();
 
     /* was a valid prefix supplied */
     if (prefix_name == NULL || strlen(prefix_name) <= 0)
@@ -2150,13 +2177,13 @@ static char *create_unique_name(char *prefix_name)
     }
 
     /* get the length of the combinded string */
-    nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_counter);
+    nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_number);
 
     /* allocate the space */
     name = palloc0(nlen + 1);
 
     /* create the name */
-    snprintf(name, nlen + 1, "%s_%lu", prefix, unique_counter);
+    snprintf(name, nlen + 1, "%s_%lu", prefix, unique_number);
 
     /* if we created the prefix, we need to free it */
     if (prefix_name == NULL || strlen(prefix_name) <= 0)
@@ -2164,8 +2191,170 @@ static char *create_unique_name(char *prefix_name)
         pfree(prefix);
     }
 
-    /* increment the counter */
-    unique_counter++;
-
     return name;
+}
+
+/* function to return a unique unsigned long number */
+static unsigned long get_a_unique_number(void)
+{
+    /* STATIC VARIABLE unique_counter for number uniqueness */
+    static unsigned long unique_counter = 0;
+
+    return unique_counter++;
+}
+
+/*set operation function node to make a set op node*/
+static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
+                         List *rarg)
+{
+    cypher_return *n = make_ag_node(cypher_return);
+
+    n->op = op;
+    n->all_or_distinct = all_or_distinct;
+    n->larg = (List *) larg;
+    n->rarg = (List *) rarg;
+    return (Node *) n;
+}
+
+/* check if A_Expr is a comparison expression */
+static bool is_A_Expr_a_comparison_operation(A_Expr *a)
+{
+    Value *v = NULL;
+    char *opr_name = NULL;
+
+    /* we don't support qualified comparison operators */
+    if (list_length(a->name) != 1)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("qualified comparison operator names are not permitted")));
+    }
+
+    /* get the value and verify that it is a string */
+    v = linitial(a->name);
+    Assert(v->type == T_String);
+
+    /* get the string value */
+    opr_name = v->val.str;
+
+    /* verify it is a comparison operation */
+    if (strcmp(opr_name, "<") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, ">") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "<=") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "=>") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "=") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "<>") == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Helper function to build the comparison operator expression. It will also
+ * build a chained comparison operator expression if it detects a chained
+ * comparison.
+ */
+static Node *build_comparison_expression(Node *left_grammar_node,
+                                         Node *right_grammar_node,
+                                         char *opr_name, int location)
+{
+    Node *result_expr = NULL;
+
+    Assert(left_grammar_node != NULL);
+    Assert(right_grammar_node != NULL);
+    Assert(opr_name != NULL);
+
+    /*
+     * Case 1:
+     *    If the previous expression is an A_Expr and it is also a
+     *    comparison, then this is part of a chained comparison. In this
+     *    specific case, the second chained element.
+     */
+    if (IsA(left_grammar_node, A_Expr) &&
+        is_A_Expr_a_comparison_operation((A_Expr *)left_grammar_node))
+    {
+        A_Expr *aexpr = NULL;
+        Node *lexpr = NULL;
+        Node *n = NULL;
+
+        /* get the A_Expr on the left side */
+        aexpr = (A_Expr *) left_grammar_node;
+        /* get its rexpr which will be our lexpr */
+        lexpr = aexpr->rexpr;
+        /* build our comparison operator */
+        n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+                                     right_grammar_node, location);
+
+        /* now add it (AND) to the other comparison */
+        result_expr = make_and_expr(left_grammar_node, n, location);
+    }
+
+    /*
+     * Case 2:
+     *    If the previous expression is a boolean AND and its right most
+     *    expression is an A_Expr and a comparison, then this is part of
+     *    a chained comparison. In this specific case, the third and
+     *    beyond chained element.
+     */
+    if (IsA(left_grammar_node, BoolExpr) &&
+        ((BoolExpr*)left_grammar_node)->boolop == AND_EXPR)
+    {
+        BoolExpr *bexpr = NULL;
+        Node *last = NULL;
+
+        /* cast the left to a boolean */
+        bexpr = (BoolExpr *)left_grammar_node;
+        /* extract the last node - ANDs are chained in a flat list */
+        last = llast(bexpr->args);
+
+        /* is the last node an A_Expr and a comparison operator */
+        if (IsA(last, A_Expr) &&
+            is_A_Expr_a_comparison_operation((A_Expr *)last))
+        {
+            A_Expr *aexpr = NULL;
+            Node *lexpr = NULL;
+            Node *n = NULL;
+
+            /* get the last expressions right expression */
+            aexpr = (A_Expr *) last;
+            lexpr = aexpr->rexpr;
+            /* make our comparison operator */
+            n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+                                         right_grammar_node, location);
+
+            /* now add it (AND) to the other comparisons */
+            result_expr = make_and_expr(left_grammar_node, n, location);
+        }
+    }
+
+    /*
+     * Case 3:
+     *    The previous expression isn't a chained comparison. So, treat
+     *    it as a regular comparison expression.
+     */
+    if (result_expr == NULL)
+    {
+        result_expr = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name,
+                                               left_grammar_node,
+                                               right_grammar_node, location);
+    }
+
+    return result_expr;
 }
