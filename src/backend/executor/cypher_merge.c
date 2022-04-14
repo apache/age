@@ -263,7 +263,11 @@ static void process_simple_merge(CustomScanState *node)
 
         /* setup the scantuple that the process_path needs */
         econtext->ecxt_scantuple = node->ss.ps.lefttree->ps_ResultTupleSlot;
+#if PG12_GE
+        econtext->ecxt_scantuple->tts_flags &= ~TTS_FLAG_EMPTY;
+#else
         econtext->ecxt_scantuple->tts_isempty = false;
+#endif
 
         process_path(css);
     }
