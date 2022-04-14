@@ -217,7 +217,7 @@ HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
     HeapTuple tuple;
 
     ExecStoreVirtualTuple(elemTupleSlot);
-    tuple = ExecMaterializeSlot(elemTupleSlot);
+    tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
 
     // Check the constraints of the tuple
     tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);

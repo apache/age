@@ -127,7 +127,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     if (lock_result == TM_Ok)
     {
         ExecStoreVirtualTuple(elemTupleSlot);
-        tuple = ExecMaterializeSlot(elemTupleSlot);
+        tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
         tuple->t_self = old_tuple->t_self;
 
         // Check the constraints of the tuple

@@ -52,6 +52,9 @@
 
 #define QTW_EXAMINE_RTES_BEFORE QTW_EXAMINE_RTES
 
+#define ExecFetchSlotHeapTuple(slot, materialize, shouldFree) \
+    ExecMaterializeSlot(slot)
+
 #endif
 
 #endif //PG_COMPAT_H
