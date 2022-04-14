@@ -50,6 +50,8 @@
 #define TM_Updated HeapTupleUpdated
 #define TM_Invisible HeapTupleInvisible
 
+#define QTW_EXAMINE_RTES_BEFORE QTW_EXAMINE_RTES
+
 #endif
 
 #endif //PG_COMPAT_H

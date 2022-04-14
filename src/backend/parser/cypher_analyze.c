@@ -163,7 +163,7 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
         Query *query = (Query *)node;
 
         /*
-         * QTW_EXAMINE_RTES
+         * QTW_EXAMINE_RTES_BEFORE
          *     We convert RTE_FUNCTION (cypher()) to RTE_SUBQUERY (SELECT)
          *     in-place.
          *
@@ -175,7 +175,7 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * QTW_IGNORE_JOINALIASES
          *     We are not interested in this.
          */
-        flags = QTW_EXAMINE_RTES | QTW_IGNORE_RT_SUBQUERIES |
+        flags = QTW_EXAMINE_RTES_BEFORE | QTW_IGNORE_RT_SUBQUERIES |
                 QTW_IGNORE_JOINALIASES;
 
         /* clear the global variable extra_node */
