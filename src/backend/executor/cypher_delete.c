@@ -283,9 +283,9 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
 {
     ResultRelInfo *saved_resultRelInfo;
     LockTupleMode lockmode;
-    HeapUpdateFailureData hufd;
-    HTSU_Result lock_result;
-    HTSU_Result delete_result;
+    TM_FailureData hufd;
+    TM_Result lock_result;
+    TM_Result delete_result;
     Buffer buffer;
 
     // Find the physical tuple, this variable is coming from
@@ -300,13 +300,12 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
 
     /*
      * It is possible the entity may have already been deleted. If the tuple
-     * can be deleted, the lock result will be HeapTupleMayBeUpdated. If the
-     * tuple was already deleted by this DELETE clause, the result would be
-     * HeapTupleSelfUpdated, if the result was deleted by a previous delete
-     * clause, the result will HeapTupleInvisible. Throw an error if any
-     * other result was returned.
+     * can be deleted, the lock result will be TM_Ok. If the tuple was already
+     * deleted by this DELETE clause, the result would be TM_SelfModified, if
+     * the result was deleted by a previous delete clause, the result will
+     * TM_Invisible. Throw an error if any other result was returned.
      */
-    if (lock_result == HeapTupleMayBeUpdated)
+    if (lock_result == TM_Ok)
     {
         delete_result = heap_delete(resultRelInfo->ri_RelationDesc,
                                     &tuple->t_self, GetCurrentCommandId(true),
@@ -319,30 +318,32 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
          */
         switch (delete_result)
         {
-                case HeapTupleMayBeUpdated:
-                        break;
-                case HeapTupleSelfUpdated:
-                        ereport(ERROR,
-                                (errcode(ERRCODE_INTERNAL_ERROR),
-                                         errmsg("deleting the same entity more than once cannot happen")));
-                        /* ereport never gets here */
-                        break;
-                case HeapTupleUpdated:
-                        ereport(ERROR,
-                                (errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-                                         errmsg("could not serialize access due to concurrent update")));
-                        /* ereport never gets here */
-                        break;
-                default:
-                        elog(ERROR, "Entity failed to be update");
-                        /* elog never gets here */
-                        break;
+        case TM_Ok:
+            break;
+        case TM_SelfModified:
+            ereport(
+                ERROR,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                 errmsg(
+                     "deleting the same entity more than once cannot happen")));
+            /* ereport never gets here */
+            break;
+        case TM_Updated:
+            ereport(
+                ERROR,
+                (errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+                 errmsg("could not serialize access due to concurrent update")));
+            /* ereport never gets here */
+            break;
+        default:
+            elog(ERROR, "Entity failed to be update");
+            /* elog never gets here */
+            break;
         }
         /* increment the command counter */
         CommandCounterIncrement();
     }
-    else if (lock_result != HeapTupleInvisible &&
-             lock_result != HeapTupleSelfUpdated)
+    else if (lock_result != TM_Invisible && lock_result != TM_SelfModified)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),

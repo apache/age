@@ -41,6 +41,15 @@
 
 #define table_beginscan(a, b, c, d) heap_beginscan(a, b, c, d)
 #define table_endscan(a) heap_endscan(a)
+
+#define TM_FailureData HeapUpdateFailureData
+#define TM_Result HTSU_Result
+
+#define TM_Ok HeapTupleMayBeUpdated
+#define TM_SelfModified HeapTupleSelfUpdated
+#define TM_Updated HeapTupleUpdated
+#define TM_Invisible HeapTupleInvisible
+
 #endif
 
 #endif //PG_COMPAT_H

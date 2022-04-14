@@ -110,9 +110,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 {
     HeapTuple tuple = NULL;
     LockTupleMode lockmode;
-    HeapUpdateFailureData hufd;
-    HTSU_Result lock_result;
-    HTSU_Result update_result;
+    TM_FailureData hufd;
+    TM_Result lock_result;
+    TM_Result update_result;
     Buffer buffer;
 
     ResultRelInfo *saved_resultRelInfo = saved_resultRelInfo;;
@@ -124,7 +124,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                   GetCurrentCommandId(false), lockmode,
                                   LockWaitBlock, false, &buffer, &hufd);
 
-    if (lock_result == HeapTupleMayBeUpdated)
+    if (lock_result == TM_Ok)
     {
         ExecStoreVirtualTuple(elemTupleSlot);
         tuple = ExecMaterializeSlot(elemTupleSlot);
@@ -142,10 +142,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                     estate->es_crosscheck_snapshot, true, &hufd,
                                     &lockmode);
 
-        if (update_result != HeapTupleMayBeUpdated)
-        ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
-                        errmsg("Entity failed to be updated: %i",
-                               update_result)));
+        if (update_result != TM_Ok)
+            ereport(ERROR,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                     errmsg("Entity failed to be updated: %i", update_result)));
 
         // Insert index entries for the tuple
         if (resultRelInfo->ri_NumIndices > 0)
