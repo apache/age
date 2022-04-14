@@ -20,7 +20,7 @@
 #ifndef INCUBATOR_AGE_AG_LOAD_H
 #define INCUBATOR_AGE_AG_LOAD_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "access/heapam.h"
 #include "access/xact.h"

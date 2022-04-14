@@ -20,7 +20,7 @@
 #ifndef AG_AGTYPE_EXT_H
 #define AG_AGTYPE_EXT_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "utils/agtype.h"
 

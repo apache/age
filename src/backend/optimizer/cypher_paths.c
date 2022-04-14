@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "access/sysattr.h"
 #include "catalog/pg_type_d.h"

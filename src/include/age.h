@@ -17,48 +17,10 @@
  * under the License.
  */
 
-#include "age.h"
+#ifndef AGE_H
+#define AGE_H
 
-#include "fmgr.h"
+#include "postgres.h"
+#include "pg_compat.h"
 
-PG_FUNCTION_INFO_V1(cypher);
-
-Datum cypher(PG_FUNCTION_ARGS)
-{
-    const char *s;
-
-    s = PG_ARGISNULL(0) ? "NULL" : PG_GETARG_CSTRING(0);
-
-    ereport(ERROR, (errmsg_internal("unhandled cypher(cstring) function call"),
-                    errdetail_internal("%s", s)));
-
-    PG_RETURN_NULL();
-}
-
-PG_FUNCTION_INFO_V1(_cypher_create_clause);
-
-Datum _cypher_create_clause(PG_FUNCTION_ARGS)
-{
-    PG_RETURN_NULL();
-}
-
-PG_FUNCTION_INFO_V1(_cypher_set_clause);
-
-Datum _cypher_set_clause(PG_FUNCTION_ARGS)
-{
-    PG_RETURN_NULL();
-}
-
-PG_FUNCTION_INFO_V1(_cypher_delete_clause);
-
-Datum _cypher_delete_clause(PG_FUNCTION_ARGS)
-{
-    PG_RETURN_NULL();
-}
-
-PG_FUNCTION_INFO_V1(_cypher_merge_clause);
-
-Datum _cypher_merge_clause(PG_FUNCTION_ARGS)
-{
-    PG_RETURN_NULL();
-}
+#endif //AGE_H

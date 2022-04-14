@@ -18,7 +18,7 @@
  * under the License.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/makefuncs.h"
 #include "nodes/nodes.h"

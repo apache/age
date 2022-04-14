@@ -20,7 +20,7 @@
 #ifndef AG_AG_NODES_H
 #define AG_AG_NODES_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"

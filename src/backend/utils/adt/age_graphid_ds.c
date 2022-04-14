@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "utils/graphid.h"
 #include "utils/age_graphid_ds.h"

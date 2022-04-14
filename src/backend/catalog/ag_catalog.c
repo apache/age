@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "catalog/dependency.h"
 #include "catalog/objectaccess.h"

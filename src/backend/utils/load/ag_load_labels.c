@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "postgres.h"
+#include "age.h"
 
 #include "access/heapam.h"
 #include "access/xact.h"

@@ -20,7 +20,7 @@
 #ifndef AG_GRAPHID_H
 #define AG_GRAPHID_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "fmgr.h"
 #include "utils/fmgroids.h"

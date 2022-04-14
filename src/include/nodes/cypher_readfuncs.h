@@ -20,7 +20,7 @@
 #ifndef AG_CYPHER_READFUNCS_H
 #define AG_CYPHER_READFUNCS_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"

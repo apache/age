@@ -20,7 +20,7 @@
 #ifndef AG_LABEL_COMMANDS_H
 #define AG_LABEL_COMMANDS_H
 
-#include "postgres.h"
+#include "age.h"
 
 #define LABEL_TYPE_VERTEX 'v'
 #define LABEL_TYPE_EDGE 'e'

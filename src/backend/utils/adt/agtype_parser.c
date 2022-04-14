@@ -29,7 +29,7 @@
  * Portions Copyright (c) 1994, Regents of the University of California
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "catalog/pg_type.h"
 #include "libpq/pqformat.h"

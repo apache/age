@@ -20,7 +20,7 @@
 #ifndef AG_AG_LABEL_H
 #define AG_AG_LABEL_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/execnodes.h"
 

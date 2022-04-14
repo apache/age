@@ -22,7 +22,7 @@
  * HAS NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "access/htup.h"
 #include "access/htup_details.h"

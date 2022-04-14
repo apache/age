@@ -21,7 +21,7 @@
  * Functions for operators in Cypher expressions.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include <math.h>
 

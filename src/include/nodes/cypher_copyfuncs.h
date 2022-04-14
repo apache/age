@@ -20,7 +20,7 @@
 #ifndef AG_CYPHER_COPYFUNCS_H
 #define AG_CYPHER_COPYFUNCS_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/nodes.h"
 

@@ -28,7 +28,7 @@
  *     - JSON (RFC 8259)
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "common/string.h"
 #include "mb/pg_wchar.h"

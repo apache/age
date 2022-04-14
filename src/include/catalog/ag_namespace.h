@@ -20,7 +20,7 @@
 #ifndef AG_AG_NAMESPACE_H
 #define AG_AG_NAMESPACE_H
 
-#include "postgres.h"
+#include "age.h"
 
 Oid ag_catalog_namespace_id(void);
 Oid pg_catalog_namespace_id(void);

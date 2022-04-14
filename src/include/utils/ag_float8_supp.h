@@ -25,7 +25,7 @@
 #ifndef AG_FLOAT_H
 #define AG_FLOAT_H
 
-#include "postgres.h"
+#include "age.h"
 
 bool is_float8_special_number(float8 number);
 float8 float8in_internal_null(char *num, char **endptr_p, const char *type_name,

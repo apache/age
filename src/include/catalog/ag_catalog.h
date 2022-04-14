@@ -20,7 +20,7 @@
 #ifndef AG_AG_CATALOG_H
 #define AG_AG_CATALOG_H
 
-#include "postgres.h"
+#include "age.h"
 
 void object_access_hook_init(void);
 void object_access_hook_fini(void);

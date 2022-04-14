@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include "lib/stringinfo.h"
 #include "nodes/extensible.h"

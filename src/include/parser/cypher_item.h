@@ -20,7 +20,7 @@
 #ifndef AG_CYPHER_ITEM_H
 #define AG_CYPHER_ITEM_H
 
-#include "postgres.h"
+#include "age.h"
 
 #include "nodes/nodes.h"
 #include "nodes/pg_list.h"

@@ -28,7 +28,7 @@
  * Portions Copyright (c) 2014-2018, PostgreSQL Global Development Group
  */
 
-#include "postgres.h"
+#include "age.h"
 
 #include <math.h>
 

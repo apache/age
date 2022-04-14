@@ -25,7 +25,7 @@
 #ifndef AG_AG_FUNC_H
 #define AG_AG_FUNC_H
 
-#include "postgres.h"
+#include "age.h"
 
 #define CREATE_CLAUSE_FUNCTION_NAME "_cypher_create_clause"
 #define SET_CLAUSE_FUNCTION_NAME "_cypher_set_clause"
