@@ -24,6 +24,7 @@
 
 #include "age.h"
 
+#include "access/heapam.h"
 #include "access/sysattr.h"
 #include "catalog/pg_type_d.h"
 #include "miscadmin.h"
@@ -45,9 +46,9 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteHandler.h"
-#include "utils/typcache.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
+#include "utils/typcache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -4422,8 +4423,9 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
 
-    rte = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
-                                        NULL, false, false);
+    rte = addRangeTableEntryForRelationCompat((ParseState *) cpstate,
+                                              label_relation, AccessShareLock,
+                                              NULL, false, false);
     rte->requiredPerms = ACL_INSERT;
 
     // Build Id expression, always use the default logic
@@ -4648,8 +4650,9 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
 
-    rte = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
-                                        NULL, false, false);
+    rte = addRangeTableEntryForRelationCompat((ParseState *) cpstate,
+                                              label_relation, AccessShareLock,
+                                              NULL, false, false);
     rte->requiredPerms = ACL_INSERT;
 
     // id
@@ -5436,8 +5439,9 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
 
-    rte = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
-                                        NULL, false, false);
+    rte = addRangeTableEntryForRelationCompat((ParseState *) cpstate,
+                                              label_relation, AccessShareLock,
+                                              NULL, false, false);
     rte->requiredPerms = ACL_INSERT;
 
     // Build Id expression, always use the default logic
@@ -5541,8 +5545,9 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
 
-    rte = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
-                                        NULL, false, false);
+    rte = addRangeTableEntryForRelationCompat((ParseState *) cpstate,
+                                              label_relation, AccessShareLock,
+                                              NULL, false, false);
     rte->requiredPerms = ACL_INSERT;
 
     // id

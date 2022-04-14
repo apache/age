@@ -36,6 +36,8 @@
 #define GetSysCacheOid3Compat GetSysCacheOid3
 
 #define CreateTemplateTupleDescCompat CreateTemplateTupleDesc
+
+#define addRangeTableEntryForRelationCompat addRangeTableEntryForRelation
 #else
 /* PG11 */
 /*
@@ -96,6 +98,15 @@
 
 #define CreateTemplateTupleDescCompat(natts) \
     CreateTemplateTupleDesc(natts, false)
+
+/*
+ * Create an RTE field to record the query's lock mode for each relation.
+ * fdba460a26af919c0b366755d119f384706e670a
+ */
+#define addRangeTableEntryForRelationCompat(pstate, rel, lockmode, alias, inh, \
+                                            inFromCl) \
+    addRangeTableEntryForRelation(pstate, rel, alias, inh, inFromCl)
+
 #endif
 
 #endif //PG_COMPAT_H
