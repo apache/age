@@ -32,18 +32,20 @@
 
 #include <math.h>
 
+#include "access/genam.h"
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
-#include "catalog/pg_type.h"
 #include "catalog/pg_aggregate_d.h"
 #include "catalog/pg_collation_d.h"
 #include "catalog/pg_operator_d.h"
+#include "catalog/pg_type.h"
 #include "executor/nodeAgg.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
-#include "parser/parse_coerce.h"
 #include "nodes/pg_list.h"
+#include "parser/parse_coerce.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/int8.h"

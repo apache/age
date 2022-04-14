@@ -31,8 +31,9 @@
 #ifndef AG_AGTYPE_H
 #define AG_AGTYPE_H
 
-#include "fmgr.h"
 #include "access/htup_details.h"
+#include "catalog/pg_type.h"
+#include "fmgr.h"
 #include "lib/stringinfo.h"
 #include "nodes/pg_list.h"
 #include "utils/array.h"

@@ -24,17 +24,20 @@
 
 #include "age.h"
 
+#include "access/genam.h"
+#include "access/heapam.h"
 #include "access/htup_details.h"
+#include "access/multixact.h"
+#include "access/relscan.h"
 #include "access/sysattr.h"
 #include "access/xact.h"
-#include "access/multixact.h"
 #include "nodes/extensible.h"
 #include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/nodes.h"
 #include "nodes/plannodes.h"
-#include "parser/parsetree.h"
 #include "parser/parse_relation.h"
+#include "parser/parsetree.h"
 #include "storage/procarray.h"
 #include "utils/rel.h"
 

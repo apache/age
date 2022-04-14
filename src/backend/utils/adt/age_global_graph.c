@@ -19,12 +19,14 @@
 
 #include "age.h"
 
+#include "access/genam.h"
+#include "access/relscan.h"
 #include "catalog/namespace.h"
+#include "commands/label_commands.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
-#include "commands/label_commands.h"
 
 #include "utils/age_global_graph.h"
 #include "utils/agtype.h"
