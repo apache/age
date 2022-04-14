@@ -2014,7 +2014,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("id"));
 
-    if (fcinfo->argnull[0])
+    if (PG_ARGISNULL(0))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_vertex() graphid cannot be NULL")));
@@ -2027,7 +2027,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
 
-    if (fcinfo->argnull[1])
+    if (PG_ARGISNULL(1))
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("_agtype_build_vertex() label cannot be NULL")));
 
@@ -2040,7 +2040,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
                                    string_to_agtype_value("properties"));
 
     //if the properties object is null, push an empty object
-    if (fcinfo->argnull[2])
+    if (PG_ARGISNULL(2))
     {
         result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
                                        NULL);
@@ -2096,7 +2096,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("id"));
 
-    if (fcinfo->argnull[0])
+    if (PG_ARGISNULL(0))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_edge() graphid cannot be NULL")));
@@ -2109,7 +2109,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
 
-    if (fcinfo->argnull[3])
+    if (PG_ARGISNULL(3))
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("_agtype_build_vertex() label cannot be NULL")));
 
@@ -2121,7 +2121,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("end_id"));
 
-    if (fcinfo->argnull[2])
+    if (PG_ARGISNULL(2))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_edge() endid cannot be NULL")));
@@ -2134,7 +2134,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("start_id"));
 
-    if (fcinfo->argnull[1])
+    if (PG_ARGISNULL(1))
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_edge() startid cannot be NULL")));
@@ -2148,7 +2148,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
                                    string_to_agtype_value("properties"));
 
     /* if the properties object is null, push an empty object */
-    if (fcinfo->argnull[4])
+    if (PG_ARGISNULL(4))
     {
         result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
                                        NULL);
