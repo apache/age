@@ -84,8 +84,9 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
 
     ExecAssignExprContext(estate, &node->ss.ps);
 
-    ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
+    ExecInitScanTupleSlotCompat(estate, &node->ss,
+                                ExecGetResultType(node->ss.ps.lefttree),
+                                &TTSOpsHeapTuple);
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -120,9 +121,10 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
             ExecOpenIndices(cypher_node->resultRelInfo, false);
 
             // Setup the relation's tuple slot
-            cypher_node->elemTupleSlot = ExecInitExtraTupleSlot(
+            cypher_node->elemTupleSlot = ExecInitExtraTupleSlotCompat(
                 estate,
-                RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc));
+                RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc),
+                &TTSOpsHeapTuple);
 
             if (cypher_node->id_expr != NULL)
             {

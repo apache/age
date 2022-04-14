@@ -349,7 +349,8 @@ List *get_graphnames(void)
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 0, NULL);
 
-    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph));
+    slot = MakeTupleTableSlotCompat(RelationGetDescr(ag_graph),
+                                    &TTSOpsHeapTuple);
 
     for (;;)
     {

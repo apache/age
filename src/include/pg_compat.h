@@ -43,6 +43,10 @@
 
 #define addRangeTableEntryForRelationCompat addRangeTableEntryForRelation
 
+#define MakeTupleTableSlotCompat MakeTupleTableSlot
+#define ExecInitScanTupleSlotCompat ExecInitScanTupleSlot
+#define ExecInitExtraTupleSlotCompat ExecInitExtraTupleSlot
+
 #else
 /* PG11 */
 /*
@@ -113,6 +117,18 @@
 #define addRangeTableEntryForRelationCompat(pstate, rel, lockmode, alias, inh, \
                                             inFromCl) \
     addRangeTableEntryForRelation(pstate, rel, alias, inh, inFromCl)
+
+/*
+ * Introduce notion of different types of slots (without implementing them).
+ * 1a0586de3657cd35581f0639c87d5050c6197bb7
+ */
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops) \
+    MakeTupleTableSlot(tupleDesc)
+#define ExecInitScanTupleSlotCompat(estate, scanstate, tupleDesc, tts_ops) \
+    ExecInitScanTupleSlot(estate, scanstate, tupleDesc)
+#define ExecInitExtraTupleSlotCompat(estate, tupledesc, tts_ops) \
+    ExecInitExtraTupleSlot(estate, tupledesc)
+
 #endif
 
 #endif //PG_COMPAT_H

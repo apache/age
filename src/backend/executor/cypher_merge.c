@@ -89,8 +89,9 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
 
     ExecAssignExprContext(estate, &node->ss.ps);
 
-    ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
+    ExecInitScanTupleSlotCompat(estate, &node->ss,
+                                ExecGetResultType(node->ss.ps.lefttree),
+                                &TTSOpsHeapTuple);
 
     /*
      * When MERGE is not the last clause in a cypher query. Setup projection
@@ -137,9 +138,10 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         ExecOpenIndices(cypher_node->resultRelInfo, false);
 
         // Setup the relation's tuple slot
-        cypher_node->elemTupleSlot = ExecInitExtraTupleSlot(
+        cypher_node->elemTupleSlot = ExecInitExtraTupleSlotCompat(
             estate,
-            RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc));
+            RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
 
         if (cypher_node->id_expr != NULL)
         {
@@ -459,8 +461,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              * information from the newly created path that the query needs.
              */
             ExprContext *econtext = node->ss.ps.ps_ExprContext;
-            SubqueryScanState *sss = (SubqueryScanState *)node->ss.ps.lefttree;
-            HeapTuple heap_tuple;
+            SubqueryScanState *sss = (SubqueryScanState *) node->ss.ps.lefttree;
 
             /*
              * Our child execution node is always a subquery. If not there
@@ -486,9 +487,9 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              *  Postgres cleared the child tuple table slot, we need to remake
              *  it.
              */
-            ExecInitScanTupleSlot(estate, &sss->ss,
-                                  ExecGetResultType(sss->subplan));
-
+            ExecInitScanTupleSlotCompat(estate, &sss->ss,
+                                        ExecGetResultType(sss->subplan),
+                                        &TTSOpsVirtual);
 
             /* setup the scantuple that the process_path needs */
             econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;
@@ -505,14 +506,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              */
             mark_tts_isnull(econtext->ecxt_scantuple);
 
-            // create the physical heap tuple
-            heap_tuple = heap_form_tuple(
-                                econtext->ecxt_scantuple->tts_tupleDescriptor,
-                                econtext->ecxt_scantuple->tts_values,
-                                econtext->ecxt_scantuple->tts_isnull);
-
             // store the heap tuble
-            ExecStoreHeapTuple(heap_tuple, econtext->ecxt_scantuple, false);
+            ExecStoreVirtualTuple(econtext->ecxt_scantuple);
 
             /*
              * make the subquery's projection scan slot be the tuple table we

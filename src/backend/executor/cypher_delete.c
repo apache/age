@@ -99,8 +99,9 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
     ExecAssignExprContext(estate, &node->ss.ps);
 
     // setup scan tuple slot and projection info
-    ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
+    ExecInitScanTupleSlotCompat(estate, &node->ss,
+                                ExecGetResultType(node->ss.ps.lefttree),
+                                &TTSOpsHeapTuple);
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -504,8 +505,9 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
         scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
                                     estate->es_snapshot, 0, NULL);
 
-        slot = ExecInitExtraTupleSlot(estate,
-                    RelationGetDescr(resultRelInfo->ri_RelationDesc));
+        slot = ExecInitExtraTupleSlotCompat(
+            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
 
         // scan the table
         while(true)

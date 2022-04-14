@@ -287,8 +287,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
     scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
 
-    slot = ExecInitExtraTupleSlot(estate,
-                RelationGetDescr(ag_label));
+    slot = ExecInitExtraTupleSlotCompat(estate, RelationGetDescr(ag_label),
+                                        &TTSOpsHeapTuple);
 
     // scan through the results and get all the label names.
     while(true)

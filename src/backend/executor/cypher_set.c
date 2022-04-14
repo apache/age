@@ -83,8 +83,9 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
 
     ExecAssignExprContext(estate, &node->ss.ps);
 
-    ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
+    ExecInitScanTupleSlotCompat(estate, &node->ss,
+                                ExecGetResultType(node->ss.ps.lefttree),
+                                &TTSOpsHeapTuple);
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -404,7 +405,9 @@ static void process_update_list(CustomScanState *node)
                                                       css->set_list->graph_name,
                                                       label_name);
 
-        slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(resultRelInfo->ri_RelationDesc));
+        slot = ExecInitExtraTupleSlotCompat(
+            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
 
         /*
          *  Now that we have the updated properties, create a either a vertex or
