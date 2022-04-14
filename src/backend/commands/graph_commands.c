@@ -358,7 +358,7 @@ List *get_graphnames(void)
             break;
 
         ExecClearTuple(slot);
-        ExecStoreTuple(tuple, slot, InvalidBuffer, false);
+        ExecStoreHeapTuple(tuple, slot, false);
 
         slot_getallattrs(slot);
 

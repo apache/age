@@ -303,7 +303,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
         if (!HeapTupleIsValid(tuple))
             break;
 
-        ExecStoreTuple(tuple, slot, InvalidBuffer, false);
+        ExecStoreHeapTuple(tuple, slot, false);
 
         datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
         label = DatumGetName(datum);

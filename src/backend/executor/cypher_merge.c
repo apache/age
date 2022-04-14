@@ -511,7 +511,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                                 econtext->ecxt_scantuple->tts_isnull);
 
             // store the heap tuble
-            ExecStoreTuple(heap_tuple, econtext->ecxt_scantuple, InvalidBuffer, false);
+            ExecStoreHeapTuple(heap_tuple, econtext->ecxt_scantuple, false);
 
             /*
              * make the subquery's projection scan slot be the tuple table we

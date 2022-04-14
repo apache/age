@@ -55,6 +55,9 @@
 #define ExecFetchSlotHeapTuple(slot, materialize, shouldFree) \
     ExecMaterializeSlot(slot)
 
+#define ExecStoreHeapTuple(tuple, slot, shouldFree) \
+    ExecStoreTuple(tuple, slot, InvalidBuffer, shouldFree)
+
 #endif
 
 #endif //PG_COMPAT_H

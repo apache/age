@@ -517,7 +517,7 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
             if (!HeapTupleIsValid(tuple))
                 break;
 
-            ExecStoreTuple(tuple, slot, InvalidBuffer, false);
+            ExecStoreHeapTuple(tuple, slot, false);
 
             startid = GRAPHID_GET_DATUM(slot_getattr(slot, Anum_ag_label_edge_table_start_id, &isNull));
             endid = GRAPHID_GET_DATUM(slot_getattr(slot, Anum_ag_label_edge_table_end_id, &isNull));
