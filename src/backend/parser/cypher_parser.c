@@ -67,12 +67,10 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         break;
     case AG_TOKEN_IDENTIFIER:
     {
-        const ScanKeyword *keyword;
+        uint16 cypher_keyword_token;
         char *ident;
 
-        keyword = ScanKeywordLookup(token.value.s, cypher_keywords,
-                                    num_cypher_keywords);
-        if (keyword)
+        if (get_cypher_keyword_token(token.value.s, &cypher_keyword_token))
         {
             /*
              * use token.value.s instead of keyword->name to preserve
@@ -80,7 +78,7 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
              */
             lvalp->keyword = token.value.s;
             *llocp = token.location;
-            return keyword->value;
+            return cypher_keyword_token;
         }
 
         ident = pstrdup(token.value.s);

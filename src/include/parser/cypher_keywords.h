@@ -20,9 +20,6 @@
 #ifndef AG_KEYWORDS_H
 #define AG_KEYWORDS_H
 
-#include "common/keywords.h"
-
-extern const ScanKeyword cypher_keywords[];
-extern const int num_cypher_keywords;
+extern bool get_cypher_keyword_token(const char *text, uint16 *value);
 
 #endif

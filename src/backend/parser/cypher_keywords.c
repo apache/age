@@ -28,66 +28,75 @@
 #include "access/htup.h"
 #include "access/tupdesc.h"
 #include "catalog/pg_type.h"
+#if PG12_GE
+#include "common/kwlookup.h"
+#else
 #include "common/keywords.h"
+#endif
 #include "fmgr.h"
 #include "funcapi.h"
 
 #include "parser/cypher_gram.h"
+#include "parser/cypher_keywords.h"
 
-/*
- * This list must be sorted by ASCII name, because binary search is used to
- * locate entries.
- */
+#if PG12_GE
+#include "parser/cypher_kwlist_d.h"
+#define NUM_CYPHER_KEYWORDS CypherKeyword.num_keywords
+#else
+#define PG_KEYWORD(kwname, value, category) {kwname, value, category},
 const ScanKeyword cypher_keywords[] = {
-    {"all", ALL, RESERVED_KEYWORD},
-    {"analyze", ANALYZE, RESERVED_KEYWORD},
-    {"and", AND, RESERVED_KEYWORD},
-    {"as", AS, RESERVED_KEYWORD},
-    {"asc", ASC, RESERVED_KEYWORD},
-    {"ascending", ASCENDING, RESERVED_KEYWORD},
-    {"by", BY, RESERVED_KEYWORD},
-    {"case", CASE, RESERVED_KEYWORD},
-    {"coalesce", COALESCE, RESERVED_KEYWORD},
-    {"contains", CONTAINS, RESERVED_KEYWORD},
-    {"create", CREATE, RESERVED_KEYWORD},
-    {"delete", DELETE, RESERVED_KEYWORD},
-    {"desc", DESC, RESERVED_KEYWORD},
-    {"descending", DESCENDING, RESERVED_KEYWORD},
-    {"detach", DETACH, RESERVED_KEYWORD},
-    {"distinct", DISTINCT, RESERVED_KEYWORD},
-    {"else", ELSE, RESERVED_KEYWORD},
-    {"end", END_P, RESERVED_KEYWORD},
-    {"ends", ENDS, RESERVED_KEYWORD},
-    {"exists", EXISTS, RESERVED_KEYWORD},
-    {"explain", EXPLAIN, RESERVED_KEYWORD},
-    {"false", FALSE_P, RESERVED_KEYWORD},
-    {"in", IN, RESERVED_KEYWORD},
-    {"is", IS, RESERVED_KEYWORD},
-    {"limit", LIMIT, RESERVED_KEYWORD},
-    {"match", MATCH, RESERVED_KEYWORD},
-    {"merge", MERGE, RESERVED_KEYWORD},
-    {"not", NOT, RESERVED_KEYWORD},
-    {"null", NULL_P, RESERVED_KEYWORD},
-    {"optional", OPTIONAL, RESERVED_KEYWORD},
-    {"or", OR, RESERVED_KEYWORD},
-    {"order", ORDER, RESERVED_KEYWORD},
-    {"remove", REMOVE, RESERVED_KEYWORD},
-    {"return", RETURN, RESERVED_KEYWORD},
-    {"set", SET, RESERVED_KEYWORD},
-    {"skip", SKIP, RESERVED_KEYWORD},
-    {"starts", STARTS, RESERVED_KEYWORD},
-    {"then", THEN, RESERVED_KEYWORD},
-    {"true", TRUE_P, RESERVED_KEYWORD},
-    {"union", UNION, RESERVED_KEYWORD},
-    {"unwind", UNWIND, RESERVED_KEYWORD},
-    {"verbose", VERBOSE, RESERVED_KEYWORD},
-    {"when", WHEN, RESERVED_KEYWORD},
-    {"where", WHERE, RESERVED_KEYWORD},
-    {"with", WITH, RESERVED_KEYWORD},
-    {"xor", XOR, RESERVED_KEYWORD}
+#include "parser/cypher_kwlist.h"
 };
+#undef PG_KEYWORD
 
-const int num_cypher_keywords = lengthof(cypher_keywords);
+const int NUM_CYPHER_KEYWORDS = lengthof(cypher_keywords);
+#endif
+
+#define PG_KEYWORD(kwname, value, category) value,
+const uint16 CypherKeywordTokens[] = {
+#include "parser/cypher_kwlist.h"
+};
+#undef PG_KEYWORD
+
+#define PG_KEYWORD(kwname, value, category) category,
+const uint16 CypherKeywordCategories[] = {
+#include "parser/cypher_kwlist.h"
+};
+#undef PG_KEYWORD
+
+const char *get_cypher_keyword(int n);
+
+bool get_cypher_keyword_token(const char *text, uint16 *value)
+{
+#if PG12_GE
+    int kwnum = ScanKeywordLookup(text, &CypherKeyword);
+    if (kwnum >= 0)
+    {
+        *value = CypherKeywordTokens[kwnum];
+        return true;
+    }
+#else
+    const ScanKeyword *keyword = ScanKeywordLookup(text, cypher_keywords,
+                                                   NUM_CYPHER_KEYWORDS);
+    if (keyword)
+    {
+        *value = keyword->value;
+        return true;
+    }
+#endif
+
+    return false;
+}
+
+const char *get_cypher_keyword(int n)
+{
+#if PG12_GE
+    return GetScanKeyword(n, &CypherKeyword);
+#else
+    return cypher_keywords[n].name;
+#endif
+    return NULL;
+}
 
 PG_FUNCTION_INFO_V1(get_cypher_keywords);
 
@@ -116,15 +125,16 @@ Datum get_cypher_keywords(PG_FUNCTION_ARGS)
 
     func_ctx = SRF_PERCALL_SETUP();
 
-    if (func_ctx->call_cntr < num_cypher_keywords)
+    if (func_ctx->call_cntr < NUM_CYPHER_KEYWORDS)
     {
         char *values[3];
         HeapTuple tuple;
+        char *keyword = (char *) get_cypher_keyword((int) func_ctx->call_cntr);
 
         // cast-away-const is ugly but alternatives aren't much better
-        values[0] = (char *)cypher_keywords[func_ctx->call_cntr].name;
+        values[0] = keyword;
 
-        switch (cypher_keywords[func_ctx->call_cntr].category)
+        switch (CypherKeywordCategories[func_ctx->call_cntr])
         {
         case UNRESERVED_KEYWORD:
             values[1] = "U";
