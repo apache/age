@@ -4443,7 +4443,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     *target_list = lappend(*target_list, te);
 
     // Keep the lock
-    heap_close(label_relation, NoLock);
+    table_close(label_relation, NoLock);
 
     return rel;
 }
@@ -4667,7 +4667,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     te = makeTargetEntry(props, resno, alias, false);
     *target_list = lappend(*target_list, te);
 
-    heap_close(label_relation, NoLock);
+    table_close(label_relation, NoLock);
 
     if (node->name)
     {
@@ -5448,7 +5448,7 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                                               edge->props, ENT_EDGE);
 
     // Keep the lock
-    heap_close(label_relation, NoLock);
+    table_close(label_relation, NoLock);
 
     return rel;
 }
@@ -5552,7 +5552,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     rel->prop_expr = cypher_create_properties(cpstate, rel, label_relation,
                                               node->props, ENT_VERTEX);
 
-    heap_close(label_relation, NoLock);
+    table_close(label_relation, NoLock);
 
     return rel;
 }

@@ -29,7 +29,6 @@
 #include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
 #include "utils/rel.h"
-#include "utils/tqual.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
@@ -108,7 +107,7 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
                 continue;
 
             // Open relation and aquire a row exclusive lock.
-            rel = heap_open(cypher_node->relid, RowExclusiveLock);
+            rel = table_open(cypher_node->relid, RowExclusiveLock);
 
             // Initialize resultRelInfo for the vertex
             cypher_node->resultRelInfo = makeNode(ResultRelInfo);
@@ -274,8 +273,8 @@ static void end_cypher_create(CustomScanState *node)
             ExecCloseIndices(cypher_node->resultRelInfo);
 
             // close the relation itself
-            heap_close(cypher_node->resultRelInfo->ri_RelationDesc,
-                       RowExclusiveLock);
+            table_close(cypher_node->resultRelInfo->ri_RelationDesc,
+                        RowExclusiveLock);
         }
     }
 }

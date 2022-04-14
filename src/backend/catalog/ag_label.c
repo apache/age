@@ -82,7 +82,7 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
     values[Anum_ag_label_relation - 1] = ObjectIdGetDatum(label_relation);
     nulls[Anum_ag_label_relation - 1] = false;
 
-    ag_label = heap_open(ag_label_relation_id(), RowExclusiveLock);
+    ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
 
     tuple = heap_form_tuple(RelationGetDescr(ag_label), values, nulls);
 
@@ -92,7 +92,7 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
      */
     label_oid = CatalogTupleInsert(ag_label, tuple);
 
-    heap_close(ag_label, RowExclusiveLock);
+    table_close(ag_label, RowExclusiveLock);
 
     return label_oid;
 }
@@ -108,7 +108,7 @@ void delete_label(Oid relation)
     ScanKeyInit(&scan_keys[0], Anum_ag_label_relation, BTEqualStrategyNumber,
                 F_OIDEQ, ObjectIdGetDatum(relation));
 
-    ag_label = heap_open(ag_label_relation_id(), RowExclusiveLock);
+    ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
     scan_desc = systable_beginscan(ag_label, ag_label_relation_index_id(),
                                    true, NULL, 1, scan_keys);
 
@@ -123,7 +123,7 @@ void delete_label(Oid relation)
     CatalogTupleDelete(ag_label, &tuple->t_self);
 
     systable_endscan(scan_desc);
-    heap_close(ag_label, RowExclusiveLock);
+    table_close(ag_label, RowExclusiveLock);
 }
 
 Oid get_label_oid(const char *label_name, Oid label_graph)
@@ -273,7 +273,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     List *labels = NIL;
     ScanKeyData scan_keys[2];
     Relation ag_label;
-    HeapScanDesc scan_desc;
+    TableScanDesc scan_desc;
     HeapTuple tuple;
     TupleTableSlot *slot;
 
@@ -284,8 +284,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
                 F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
 
     // setup the table to be scanned
-    ag_label = heap_open(ag_label_relation_id(), RowExclusiveLock);
-    scan_desc = heap_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
+    ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
+    scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
 
     slot = ExecInitExtraTupleSlot(estate,
                 RelationGetDescr(ag_label));
@@ -311,8 +311,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
         labels = lappend(labels, label);
     }
 
-    heap_endscan(scan_desc);
-    heap_close(ag_label, RowExclusiveLock);
+    table_endscan(scan_desc);
+    table_close(ag_label, RowExclusiveLock);
 
     return labels;
 }

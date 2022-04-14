@@ -19,21 +19,20 @@
 
 #include "age.h"
 
-#include "access/sysattr.h"
 #include "access/htup_details.h"
 #include "access/multixact.h"
+#include "access/sysattr.h"
 #include "access/xact.h"
-#include "storage/bufmgr.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
-#include "parser/parsetree.h"
 #include "parser/parse_relation.h"
+#include "parser/parsetree.h"
 #include "rewrite/rewriteHandler.h"
+#include "storage/bufmgr.h"
 #include "utils/rel.h"
-#include "utils/tqual.h"
 
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
@@ -374,7 +373,7 @@ static void process_delete_list(CustomScanState *node)
         cypher_delete_item *item;
         agtype_value *original_entity_value, *id, *label;
         ScanKeyData scan_keys[1];
-        HeapScanDesc scan_desc;
+        TableScanDesc scan_desc;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple;
         char *label_name;
@@ -424,8 +423,8 @@ static void process_delete_list(CustomScanState *node)
         /*
          * Setup the scan description, with the correct snapshot and scan keys.
          */
-        scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
-                                   estate->es_snapshot, 1, scan_keys);
+        scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                    estate->es_snapshot, 1, scan_keys);
 
         /* Retrieve the tuple. */
         heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
@@ -437,7 +436,7 @@ static void process_delete_list(CustomScanState *node)
          */
         if (!HeapTupleIsValid(heap_tuple))
         {
-            heap_endscan(scan_desc);
+            table_endscan(scan_desc);
             destroy_entity_result_rel_info(resultRelInfo);
 
             continue;
@@ -459,7 +458,7 @@ static void process_delete_list(CustomScanState *node)
         delete_entity(estate, resultRelInfo, heap_tuple);
 
         /* Close the scan and the relation. */
-        heap_endscan(scan_desc);
+        table_endscan(scan_desc);
         destroy_entity_result_rel_info(resultRelInfo);
     }
 }
@@ -492,15 +491,15 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
     {
         char *label_name = lfirst(lc);
         ResultRelInfo *resultRelInfo;
-        HeapScanDesc scan_desc;
+        TableScanDesc scan_desc;
         HeapTuple tuple;
         TupleTableSlot *slot;
 
         resultRelInfo = create_entity_result_rel_info(estate,
                                                       graph_name, label_name);
 
-        scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
-                                   estate->es_snapshot, 0, NULL);
+        scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                    estate->es_snapshot, 0, NULL);
 
         slot = ExecInitExtraTupleSlot(estate,
                     RelationGetDescr(resultRelInfo->ri_RelationDesc));
@@ -540,7 +539,7 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
             }
         }
 
-        heap_endscan(scan_desc);
+        table_endscan(scan_desc);
         destroy_entity_result_rel_info(resultRelInfo);
     }
 

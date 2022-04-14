@@ -4237,7 +4237,7 @@ static char *get_label_name(const char *graph_name, int64 graphid)
     ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
                 F_INT4EQ, Int32GetDatum(get_graphid_label_id(graphid)));
 
-    ag_label = heap_open(ag_relation_id("ag_label", "table"), ShareLock);
+    ag_label = table_open(ag_relation_id("ag_label", "table"), ShareLock);
     scan_desc = systable_beginscan(ag_label,
                                    ag_relation_id("ag_label_graph_id_index",
                                                   "index"), true, NULL, 2,
@@ -4268,7 +4268,7 @@ static char *get_label_name(const char *graph_name, int64 graphid)
 
     /* end the scan and close the relation */
     systable_endscan(scan_desc);
-    heap_close(ag_label, ShareLock);
+    table_close(ag_label, ShareLock);
 
     return result;
 }
@@ -4278,7 +4278,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
 {
     ScanKeyData scan_keys[1];
     Relation graph_vertex_label;
-    HeapScanDesc scan_desc;
+    TableScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
     Datum id, properties, result;
@@ -4296,8 +4296,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
                 Int64GetDatum(graphid));
 
     /* open the relation (table), begin the scan, and get the tuple  */
-    graph_vertex_label = heap_open(vertex_label_table_oid, ShareLock);
-    scan_desc = heap_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
+    graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
+    scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
     tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
     /* bail if the tuple isn't valid */
@@ -4326,8 +4326,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     result = DirectFunctionCall3(_agtype_build_vertex, id,
                                  CStringGetDatum(vertex_label), properties);
     /* end the scan and close the relation */
-    heap_endscan(scan_desc);
-    heap_close(graph_vertex_label, ShareLock);
+    table_endscan(scan_desc);
+    table_close(graph_vertex_label, ShareLock);
     /* return the vertex datum */
     return result;
 }

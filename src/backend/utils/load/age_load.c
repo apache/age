@@ -154,15 +154,14 @@ void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
     values[2] = GRAPHID_GET_DATUM(end_id);
     values[3] = AGTYPE_P_GET_DATUM((edge_properties));
 
-    label_relation = heap_open(get_label_relation(label_name,
-                                                  graph_id),
-                               RowExclusiveLock);
+    label_relation = table_open(get_label_relation(label_name, graph_id),
+                                RowExclusiveLock);
 
     tuple = heap_form_tuple(RelationGetDescr(label_relation),
                             values, nulls);
     heap_insert(label_relation, tuple,
                 GetCurrentCommandId(true), 0, NULL);
-    heap_close(label_relation, RowExclusiveLock);
+    table_close(label_relation, RowExclusiveLock);
     CommandCounterIncrement();
 }
 
@@ -179,14 +178,13 @@ void insert_vertex_simple(Oid graph_id, char* label_name,
     values[0] = GRAPHID_GET_DATUM(vertex_id);
     values[1] = AGTYPE_P_GET_DATUM((vertex_properties));
 
-    label_relation = heap_open(get_label_relation(label_name,
-                                                  graph_id),
-                               RowExclusiveLock);
+    label_relation = table_open(get_label_relation(label_name, graph_id),
+                                RowExclusiveLock);
     tuple = heap_form_tuple(RelationGetDescr(label_relation),
                             values, nulls);
     heap_insert(label_relation, tuple,
                 GetCurrentCommandId(true), 0, NULL);
-    heap_close(label_relation, RowExclusiveLock);
+    table_close(label_relation, RowExclusiveLock);
     CommandCounterIncrement();
 }
 

@@ -325,7 +325,7 @@ static void process_update_list(CustomScanState *node)
         TupleTableSlot *slot;
         ResultRelInfo *resultRelInfo;
         ScanKeyData scan_keys[1];
-        HeapScanDesc scan_desc;
+        TableScanDesc scan_desc;
         bool remove_property;
         char *label_name;
         cypher_update_item *update_item;
@@ -463,8 +463,8 @@ static void process_update_list(CustomScanState *node)
              * Setup the scan description, with the correct snapshot and scan
              * keys.
              */
-            scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
-                                       estate->es_snapshot, 1, scan_keys);
+            scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                        estate->es_snapshot, 1, scan_keys);
             /* Retrieve the tuple. */
             heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
@@ -478,12 +478,12 @@ static void process_update_list(CustomScanState *node)
                                                  heap_tuple);
             }
             /* close the ScanDescription */
-            heap_endscan(scan_desc);
+            table_endscan(scan_desc);
         }
 
         /* close relation */
         ExecCloseIndices(resultRelInfo);
-        heap_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
+        table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
         /* increment loop index */
         lidx++;

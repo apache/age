@@ -19,10 +19,10 @@
 
 #include "age.h"
 
+#include "access/heapam.h"
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"
 #include "nodes/pg_list.h"
-#include "nodes/relation.h"
 
 #include "optimizer/cypher_createplan.h"
 #include "optimizer/cypher_pathnode.h"

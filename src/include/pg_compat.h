@@ -30,4 +30,17 @@
 #define PG11 (PG11_GE && PG12_LT)
 #define PG12 (PG12_GE && PG13_LT)
 
+#if PG12_GE
+/* Here will used for PG12 and later versions. */
+#else
+/* PG11 */
+#define TableScanDesc HeapScanDesc
+
+#define table_open(a, b) heap_open(a, b)
+#define table_close(a, b) heap_close(a, b)
+
+#define table_beginscan(a, b, c, d) heap_beginscan(a, b, c, d)
+#define table_endscan(a) heap_endscan(a)
+#endif
+
 #endif //PG_COMPAT_H

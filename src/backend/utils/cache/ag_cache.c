@@ -353,11 +353,11 @@ static graph_cache_data *search_graph_name_cache_miss(Name name)
     scan_keys[0].sk_argument = NameGetDatum(name);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might flush the graph caches. This is OK because this function is called
      * when the desired entry is not in the cache.
      */
-    ag_graph = heap_open(ag_graph_relation_id(), AccessShareLock);
+    ag_graph = table_open(ag_graph_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 1, scan_keys);
 
@@ -366,7 +366,7 @@ static graph_cache_data *search_graph_name_cache_miss(Name name)
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_graph, AccessShareLock);
+        table_close(ag_graph, AccessShareLock);
 
         return NULL;
     }
@@ -379,7 +379,7 @@ static graph_cache_data *search_graph_name_cache_miss(Name name)
     fill_graph_cache_data(&entry->data, tuple, RelationGetDescr(ag_graph));
 
     systable_endscan(scan_desc);
-    heap_close(ag_graph, AccessShareLock);
+    table_close(ag_graph, AccessShareLock);
 
     return &entry->data;
 }
@@ -412,11 +412,11 @@ static graph_cache_data *search_graph_namespace_cache_miss(Oid namespace)
     scan_keys[0].sk_argument = ObjectIdGetDatum(namespace);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might flush the graph caches. This is OK because this function is called
      * when the desired entry is not in the cache.
      */
-    ag_graph = heap_open(ag_graph_relation_id(), AccessShareLock);
+    ag_graph = table_open(ag_graph_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_graph, ag_graph_namespace_index_id(),
                                    true, NULL, 1, scan_keys);
 
@@ -426,7 +426,7 @@ static graph_cache_data *search_graph_namespace_cache_miss(Oid namespace)
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_graph, AccessShareLock);
+        table_close(ag_graph, AccessShareLock);
 
         return NULL;
     }
@@ -440,7 +440,7 @@ static graph_cache_data *search_graph_namespace_cache_miss(Oid namespace)
     fill_graph_cache_data(&entry->data, tuple, RelationGetDescr(ag_graph));
 
     systable_endscan(scan_desc);
-    heap_close(ag_graph, AccessShareLock);
+    table_close(ag_graph, AccessShareLock);
 
     return &entry->data;
 }
@@ -828,11 +828,11 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     scan_keys[0].sk_argument = ObjectIdGetDatum(oid);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might invalidate the label caches. This is OK because this function is
      * called when the desired entry is not in the cache.
      */
-    ag_label = heap_open(ag_label_relation_id(), AccessShareLock);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_label, ag_label_oid_index_id(), true,
                                    NULL, 1, scan_keys);
 
@@ -841,7 +841,7 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_label, AccessShareLock);
+        table_close(ag_label, AccessShareLock);
 
         return NULL;
     }
@@ -856,7 +856,7 @@ static label_cache_data *search_label_oid_cache_miss(Oid oid)
     Assert(entry->oid == oid);
 
     systable_endscan(scan_desc);
-    heap_close(ag_label, AccessShareLock);
+    table_close(ag_label, AccessShareLock);
 
     return entry;
 }
@@ -896,11 +896,11 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     scan_keys[1].sk_argument = ObjectIdGetDatum(graph);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might invalidate the label caches. This is OK because this function is
      * called when the desired entry is not in the cache.
      */
-    ag_label = heap_open(ag_label_relation_id(), AccessShareLock);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_label, ag_label_name_graph_index_id(),
                                    true, NULL, 2, scan_keys);
 
@@ -912,7 +912,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_label, AccessShareLock);
+        table_close(ag_label, AccessShareLock);
 
         return NULL;
     }
@@ -926,7 +926,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
     fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
 
     systable_endscan(scan_desc);
-    heap_close(ag_label, AccessShareLock);
+    table_close(ag_label, AccessShareLock);
 
     return &entry->data;
 }
@@ -974,11 +974,11 @@ static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
     scan_keys[1].sk_argument = Int32GetDatum(id);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might invalidate the label caches. This is OK because this function is
      * called when the desired entry is not in the cache.
      */
-    ag_label = heap_open(ag_label_relation_id(), AccessShareLock);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_label, ag_label_graph_id_index_id(),
                                    true, NULL, 2, scan_keys);
 
@@ -990,7 +990,7 @@ static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_label, AccessShareLock);
+        table_close(ag_label, AccessShareLock);
 
         return NULL;
     }
@@ -1003,7 +1003,7 @@ static label_cache_data *search_label_graph_id_cache_miss(Oid graph, int32 id)
     fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
 
     systable_endscan(scan_desc);
-    heap_close(ag_label, AccessShareLock);
+    table_close(ag_label, AccessShareLock);
 
     return &entry->data;
 }
@@ -1047,11 +1047,11 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     scan_keys[0].sk_argument = ObjectIdGetDatum(relation);
 
     /*
-     * Calling heap_open() might call AcceptInvalidationMessage() and that
+     * Calling table_open() might call AcceptInvalidationMessage() and that
      * might invalidate the label caches. This is OK because this function is
      * called when the desired entry is not in the cache.
      */
-    ag_label = heap_open(ag_label_relation_id(), AccessShareLock);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
     scan_desc = systable_beginscan(ag_label, ag_label_relation_index_id(),
                                    true, NULL, 1, scan_keys);
 
@@ -1061,7 +1061,7 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     if (!HeapTupleIsValid(tuple))
     {
         systable_endscan(scan_desc);
-        heap_close(ag_label, AccessShareLock);
+        table_close(ag_label, AccessShareLock);
 
         return NULL;
     }
@@ -1075,7 +1075,7 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     fill_label_cache_data(entry, tuple, RelationGetDescr(ag_label));
 
     systable_endscan(scan_desc);
-    heap_close(ag_label, AccessShareLock);
+    table_close(ag_label, AccessShareLock);
 
     return entry;
 }

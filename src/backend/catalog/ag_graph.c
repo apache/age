@@ -56,7 +56,7 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
     values[Anum_ag_graph_namespace - 1] = ObjectIdGetDatum(nsp_id);
     nulls[Anum_ag_graph_namespace - 1] = false;
 
-    ag_graph = heap_open(ag_graph_relation_id(), RowExclusiveLock);
+    ag_graph = table_open(ag_graph_relation_id(), RowExclusiveLock);
 
     tuple = heap_form_tuple(RelationGetDescr(ag_graph), values, nulls);
 
@@ -66,7 +66,7 @@ Oid insert_graph(const Name graph_name, const Oid nsp_id)
      */
     graph_oid = CatalogTupleInsert(ag_graph, tuple);
 
-    heap_close(ag_graph, RowExclusiveLock);
+    table_close(ag_graph, RowExclusiveLock);
 
     return graph_oid;
 }
@@ -82,7 +82,7 @@ void delete_graph(const Name graph_name)
     ScanKeyInit(&scan_keys[0], Anum_ag_graph_name, BTEqualStrategyNumber,
                 F_NAMEEQ, NameGetDatum(graph_name));
 
-    ag_graph = heap_open(ag_graph_relation_id(), RowExclusiveLock);
+    ag_graph = table_open(ag_graph_relation_id(), RowExclusiveLock);
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 1, scan_keys);
 
@@ -97,7 +97,7 @@ void delete_graph(const Name graph_name)
     CatalogTupleDelete(ag_graph, &tuple->t_self);
 
     systable_endscan(scan_desc);
-    heap_close(ag_graph, RowExclusiveLock);
+    table_close(ag_graph, RowExclusiveLock);
 }
 
 // Function updates graph name in ag_graph table.
@@ -116,7 +116,7 @@ void update_graph_name(const Name graph_name, const Name new_name)
     ScanKeyInit(&scan_keys[0], Anum_ag_graph_name, BTEqualStrategyNumber,
                 F_NAMEEQ, NameGetDatum(graph_name));
 
-    ag_graph = heap_open(ag_graph_relation_id(), RowExclusiveLock);
+    ag_graph = table_open(ag_graph_relation_id(), RowExclusiveLock);
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 1, scan_keys);
 
@@ -146,7 +146,7 @@ void update_graph_name(const Name graph_name, const Name new_name)
 
     // end scan and close ag_graph
     systable_endscan(scan_desc);
-    heap_close(ag_graph, RowExclusiveLock);
+    table_close(ag_graph, RowExclusiveLock);
 }
 
 Oid get_graph_oid(const char *graph_name)
