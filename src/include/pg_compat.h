@@ -34,6 +34,13 @@
 /* Here will used for PG12 and later versions. */
 #else
 /* PG11 */
+/*
+ * Introduce access/{table.h, relation.h}, for generic functions from heapam.h.
+ * 4b21acf522d751ba5b6679df391d5121b6c4a35f
+ *
+ * tableam: Add and use scan APIs.
+ * c2fe139c201c48f1133e9fbea2dd99b8efe2fadd
+ */
 #define TableScanDesc HeapScanDesc
 
 #define table_open(a, b) heap_open(a, b)
@@ -42,6 +49,10 @@
 #define table_beginscan(a, b, c, d) heap_beginscan(a, b, c, d)
 #define table_endscan(a) heap_endscan(a)
 
+/*
+ * tableam: Add tuple_{insert, delete, update, lock} and use.
+ * 5db6df0c0117ff2a4e0cd87594d2db408cd5022f
+ */
 #define TM_FailureData HeapUpdateFailureData
 #define TM_Result HTSU_Result
 
@@ -50,11 +61,23 @@
 #define TM_Updated HeapTupleUpdated
 #define TM_Invisible HeapTupleInvisible
 
+/*
+ * Split QTW_EXAMINE_RTES flag into QTW_EXAMINE_RTES_BEFORE/_AFTER.
+ * 18c0da88a5d9da566c3bfac444366b73bd0b57da
+ */
 #define QTW_EXAMINE_RTES_BEFORE QTW_EXAMINE_RTES
 
+/*
+ * Rejigger materializing and fetching a HeapTuple from a slot.
+ * 763f2edd92095b1ca2f4476da073a28505c13820
+ */
 #define ExecFetchSlotHeapTuple(slot, materialize, shouldFree) \
     ExecMaterializeSlot(slot)
 
+/*
+ * Split ExecStoreTuple into ExecStoreHeapTuple and ExecStoreBufferHeapTuple.
+ * 29c94e03c7d05d2b29afa1de32795ce178531246
+ */
 #define ExecStoreHeapTuple(tuple, slot, shouldFree) \
     ExecStoreTuple(tuple, slot, InvalidBuffer, shouldFree)
 
