@@ -34,6 +34,8 @@
 /* Here will used for PG12 and later versions. */
 #define GetSysCacheOid2Compat GetSysCacheOid2
 #define GetSysCacheOid3Compat GetSysCacheOid3
+
+#define CreateTemplateTupleDescCompat CreateTemplateTupleDesc
 #else
 /* PG11 */
 /*
@@ -92,6 +94,8 @@
 #define GetSysCacheOid3Compat(cacheId, oidcol, key1, key2, key3) \
     GetSysCacheOid3(cacheId, key1, key2, key3)
 
+#define CreateTemplateTupleDescCompat(natts) \
+    CreateTemplateTupleDesc(natts, false)
 #endif
 
 #endif //PG_COMPAT_H

@@ -104,7 +104,7 @@ Datum get_cypher_keywords(PG_FUNCTION_ARGS)
         func_ctx = SRF_FIRSTCALL_INIT();
         old_mem_ctx = MemoryContextSwitchTo(func_ctx->multi_call_memory_ctx);
 
-        tup_desc = CreateTemplateTupleDesc(3, false);
+        tup_desc = CreateTemplateTupleDescCompat(3);
         TupleDescInitEntry(tup_desc, (AttrNumber)1, "word", TEXTOID, -1, 0);
         TupleDescInitEntry(tup_desc, (AttrNumber)2, "catcode", CHAROID, -1, 0);
         TupleDescInitEntry(tup_desc, (AttrNumber)3, "catdesc", TEXTOID, -1, 0);
