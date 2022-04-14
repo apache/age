@@ -32,6 +32,8 @@
 
 #if PG12_GE
 /* Here will used for PG12 and later versions. */
+#define GetSysCacheOid2Compat GetSysCacheOid2
+#define GetSysCacheOid3Compat GetSysCacheOid3
 #else
 /* PG11 */
 /*
@@ -80,6 +82,15 @@
  */
 #define ExecStoreHeapTuple(tuple, slot, shouldFree) \
     ExecStoreTuple(tuple, slot, InvalidBuffer, shouldFree)
+
+/*
+ * Remove WITH OIDS support, change oid catalog column visibility.
+ * 578b229718e8f15fa779e20f086c4b6bb3776106
+ */
+#define GetSysCacheOid2Compat(cacheId, oidcol, key1, key2) \
+    GetSysCacheOid2(cacheId, key1, key2)
+#define GetSysCacheOid3Compat(cacheId, oidcol, key1, key2, key3) \
+    GetSysCacheOid3(cacheId, key1, key2, key3)
 
 #endif
 

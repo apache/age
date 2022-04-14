@@ -54,11 +54,13 @@ typedef int64 graphid;
 
 // OID of graphid and _graphid
 #define GRAPHIDOID \
-    (GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("graphid"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+    (GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid, \
+                           CStringGetDatum("graphid"), \
+                           ObjectIdGetDatum(ag_catalog_namespace_id())))
 #define GRAPHIDARRAYOID \
-    (GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("_graphid"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+    (GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid, \
+                           CStringGetDatum("_graphid"), \
+                           ObjectIdGetDatum(ag_catalog_namespace_id())))
 
 #define GET_LABEL_ID(id) \
        (((uint64)id) >> ENTRY_ID_BITS)

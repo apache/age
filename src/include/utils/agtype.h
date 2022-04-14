@@ -546,12 +546,15 @@ void add_agtype(Datum val, bool is_null, agtype_in_state *result, Oid val_type,
                 bool key_scalar);
 // OID of agtype and _agtype
 #define AGTYPEOID \
-    (GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("agtype"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+    (GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid, \
+                           CStringGetDatum("agtype"), \
+                           ObjectIdGetDatum(ag_catalog_namespace_id())))
 #define AGTYPEARRAYOID \
-    (GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("_agtype"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+    (GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid, \
+                           CStringGetDatum("_agtype"), \
+                           ObjectIdGetDatum(ag_catalog_namespace_id())))
 #define GRAPHIDOID \
-    (GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("graphid"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+    (GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid, \
+                           CStringGetDatum("graphid"), \
+                           ObjectIdGetDatum(ag_catalog_namespace_id())))
 #endif
