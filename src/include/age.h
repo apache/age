@@ -21,6 +21,7 @@
 #define AGE_H
 
 #include "postgres.h"
+
 #include "pg_compat.h"
 
-#endif //AGE_H
+#endif // AGE_H

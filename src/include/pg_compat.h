@@ -131,4 +131,4 @@
 
 #endif
 
-#endif //PG_COMPAT_H
+#endif // PG_COMPAT_H

@@ -146,9 +146,11 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                     &lockmode);
 
         if (update_result != TM_Ok)
+        {
             ereport(ERROR,
                     (errcode(ERRCODE_INTERNAL_ERROR),
                      errmsg("Entity failed to be updated: %i", update_result)));
+        }
 
         // Insert index entries for the tuple
         if (resultRelInfo->ri_NumIndices > 0)

@@ -64,15 +64,13 @@ static void check_ungrouped_columns(Node *node, ParseState *pstate, Query *qry,
                                     List *groupClauseCommonVars,
                                     bool have_non_var_grouping,
                                     List **func_grouped_rels);
-static bool
-check_ungrouped_columns_walker(Node *node,
-                               check_ungrouped_columns_context *context);
+static bool check_ungrouped_columns_walker(
+    Node *node, check_ungrouped_columns_context *context);
 static void finalize_grouping_exprs(Node *node, ParseState *pstate, Query *qry,
                                     List *groupClauses, PlannerInfo *root,
                                     bool have_non_var_grouping);
-static bool
-finalize_grouping_exprs_walker(Node *node,
-                               check_ungrouped_columns_context *context);
+static bool finalize_grouping_exprs_walker(
+    Node *node, check_ungrouped_columns_context *context);
 static List *expand_groupingset_node(GroupingSet *gs);
 static List *expand_grouping_sets(List *groupingSets, int limit);
 
@@ -119,6 +117,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
         List *gsets = expand_grouping_sets(qry->groupingSets, 4096);
 
         if (!gsets)
+        {
             ereport(
                 ERROR,
                 (errcode(ERRCODE_STATEMENT_TOO_COMPLEX),
@@ -127,6 +126,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
                      pstate, qry->groupClause ?
                                  exprLocation((Node *) qry->groupClause) :
                                  exprLocation((Node *) qry->groupingSets))));
+        }
 
         /*
          * The intersection will often be empty, so help things along by
@@ -140,7 +140,9 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
             {
                 gset_common = list_intersection_int(gset_common, lfirst(l));
                 if (!gset_common)
+                {
                     break;
+                }
             }
         }
 
@@ -151,7 +153,9 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
          * just had a normal GROUP BY.
          */
         if (list_length(gsets) == 1 && qry->groupClause)
+        {
             qry->groupingSets = NIL;
+        }
     }
 
     /*
@@ -164,9 +168,13 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
         RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
 
         if (rte->rtekind == RTE_JOIN)
+        {
             hasJoinRTEs = true;
+        }
         else if (rte->rtekind == RTE_CTE && rte->self_reference)
+        {
             hasSelfRefRTEs = true;
+        }
     }
 
     /*
@@ -183,7 +191,9 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
 
         expr = get_sortgroupclause_tle(grpcl, qry->targetList);
         if (expr == NULL)
+        {
             continue; /* probably cannot happen */
+        }
 
         groupClauses = lcons(expr, groupClauses);
     }
@@ -247,7 +257,9 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
     finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
+    {
         clause = flatten_join_alias_vars(root, clause);
+    }
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
@@ -256,7 +268,9 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
     finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
+    {
         clause = flatten_join_alias_vars(root, clause);
+    }
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
@@ -265,12 +279,14 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
      * Per spec, aggregates can't appear in a recursive term.
      */
     if (pstate->p_hasAggs && hasSelfRefRTEs)
+    {
         ereport(
             ERROR,
             (errcode(ERRCODE_INVALID_RECURSION),
              errmsg(
                  "aggregate functions are not allowed in a recursive query's recursive term"),
              parser_errposition(pstate, locate_agg_of_level((Node *) qry, 0))));
+    }
 }
 
 /*
@@ -314,17 +330,20 @@ static void check_ungrouped_columns(Node *node, ParseState *pstate, Query *qry,
     check_ungrouped_columns_walker(node, &context);
 }
 
-static bool
-check_ungrouped_columns_walker(Node *node,
-                               check_ungrouped_columns_context *context)
+static bool check_ungrouped_columns_walker(
+    Node *node, check_ungrouped_columns_context *context)
 {
     ListCell *gl;
 
     if (node == NULL)
+    {
         return false;
+    }
 
     if (IsA(node, Const) || IsA(node, Param))
+    {
         return false; /* constants are always acceptable */
+    }
 
     if (IsA(node, Aggref))
     {
@@ -357,7 +376,9 @@ check_ungrouped_columns_walker(Node *node,
          * levels, however.
          */
         if ((int) agg->agglevelsup > context->sublevels_up)
+        {
             return false;
+        }
     }
 
     if (IsA(node, GroupingFunc))
@@ -367,7 +388,9 @@ check_ungrouped_columns_walker(Node *node,
         /* handled GroupingFunc separately, no need to recheck at this level */
 
         if ((int) grp->agglevelsup >= context->sublevels_up)
+        {
             return false;
+        }
     }
 
     /*
@@ -384,7 +407,9 @@ check_ungrouped_columns_walker(Node *node,
             TargetEntry *tle = lfirst(gl);
 
             if (equal(node, tle->expr))
+            {
                 return false; /* acceptable, do not descend more */
+            }
         }
     }
 
@@ -401,7 +426,9 @@ check_ungrouped_columns_walker(Node *node,
         char *attname;
 
         if (var->varlevelsup != context->sublevels_up)
+        {
             return false; /* it's not local to my query, ignore */
+        }
 
         /*
          * Check for a match, if we didn't do it above.
@@ -414,7 +441,9 @@ check_ungrouped_columns_walker(Node *node,
 
                 if (IsA(gvar, Var) && gvar->varno == var->varno &&
                     gvar->varattno == var->varattno && gvar->varlevelsup == 0)
+                {
                     return false; /* acceptable, we're okay */
+                }
             }
         }
 
@@ -435,7 +464,9 @@ check_ungrouped_columns_walker(Node *node,
          * the constraintDeps list.
          */
         if (list_member_int(*context->func_grouped_rels, var->varno))
+        {
             return false; /* previously proven acceptable */
+        }
 
         Assert(var->varno > 0 &&
                (int) var->varno <= list_length(context->pstate->p_rtable));
@@ -455,6 +486,7 @@ check_ungrouped_columns_walker(Node *node,
         /* Found an ungrouped local variable; generate error message */
         attname = get_rte_attribute_name(rte, var->varattno);
         if (context->sublevels_up == 0)
+        {
             ereport(
                 ERROR,
                 (errcode(ERRCODE_GROUPING_ERROR),
@@ -466,7 +498,9 @@ check_ungrouped_columns_walker(Node *node,
                          "Direct arguments of an ordered-set aggregate must use only grouped columns.") :
                      0,
                  parser_errposition(context->pstate, var->location)));
+        }
         else
+        {
             ereport(
                 ERROR,
                 (errcode(ERRCODE_GROUPING_ERROR),
@@ -474,6 +508,7 @@ check_ungrouped_columns_walker(Node *node,
                      "subquery uses ungrouped column \"%s.%s\" from outer query",
                      rte->eref->aliasname, attname),
                  parser_errposition(context->pstate, var->location)));
+        }
     }
 
     if (IsA(node, Query))
@@ -522,16 +557,19 @@ static void finalize_grouping_exprs(Node *node, ParseState *pstate, Query *qry,
     finalize_grouping_exprs_walker(node, &context);
 }
 
-static bool
-finalize_grouping_exprs_walker(Node *node,
-                               check_ungrouped_columns_context *context)
+static bool finalize_grouping_exprs_walker(
+    Node *node, check_ungrouped_columns_context *context)
 {
     ListCell *gl;
 
     if (node == NULL)
+    {
         return false;
+    }
     if (IsA(node, Const) || IsA(node, Param))
+    {
         return false; /* constants are always acceptable */
+    }
 
     if (IsA(node, Aggref))
     {
@@ -562,7 +600,9 @@ finalize_grouping_exprs_walker(Node *node,
          * levels, however.
          */
         if ((int) agg->agglevelsup > context->sublevels_up)
+        {
             return false;
+        }
     }
 
     if (IsA(node, GroupingFunc))
@@ -585,7 +625,9 @@ finalize_grouping_exprs_walker(Node *node,
                 Index ref = 0;
 
                 if (context->root)
+                {
                     expr = flatten_join_alias_vars(context->root, expr);
+                }
 
                 /*
                  * Each expression must match a grouping entry at the current
@@ -630,6 +672,7 @@ finalize_grouping_exprs_walker(Node *node,
                 }
 
                 if (ref == 0)
+                {
                     ereport(
                         ERROR,
                         (errcode(ERRCODE_GROUPING_ERROR),
@@ -637,6 +680,7 @@ finalize_grouping_exprs_walker(Node *node,
                              "arguments to GROUPING must be grouping expressions of the associated query level"),
                          parser_errposition(context->pstate,
                                             exprLocation(expr))));
+                }
 
                 ref_list = lappend_int(ref_list, ref);
             }
@@ -645,7 +689,9 @@ finalize_grouping_exprs_walker(Node *node,
         }
 
         if ((int) grp->agglevelsup > context->sublevels_up)
+        {
             return false;
+        }
     }
 
     if (IsA(node, Query))
@@ -710,7 +756,9 @@ static List *expand_groupingset_node(GroupingSet *gs)
 
                 /* If we are done with making the current group, break */
                 if (--i == 0)
+                {
                     break;
+                }
             }
 
             result = lappend(result, current_result);
@@ -797,7 +845,9 @@ static List *expand_grouping_sets(List *groupingSets, int limit)
     ListCell *lc;
 
     if (groupingSets == NIL)
+    {
         return NIL;
+    }
 
     foreach (lc, groupingSets)
     {
@@ -811,7 +861,9 @@ static List *expand_grouping_sets(List *groupingSets, int limit)
         numsets *= list_length(current_result);
 
         if (limit >= 0 && numsets > limit)
+        {
             return NIL;
+        }
 
         expanded_groups = lappend(expanded_groups, current_result);
     }
@@ -864,7 +916,9 @@ static List *expand_grouping_sets(List *groupingSets, int limit)
         ptr = buf;
 
         while (result_len-- > 0)
+        {
             result = lappend(result, *ptr++);
+        }
 
         pfree(buf);
     }
