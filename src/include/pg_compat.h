@@ -32,12 +32,17 @@
 
 #if PG12_GE
 /* Here will used for PG12 and later versions. */
+#define ExecInsertIndexTuplesCompat(slot, tupleid, estate, noDupErr, \
+                                    specConflict, arbiterIndexes) \
+    ExecInsertIndexTuples(slot, estate, noDupErr, specConflict, arbiterIndexes)
+
 #define GetSysCacheOid2Compat GetSysCacheOid2
 #define GetSysCacheOid3Compat GetSysCacheOid3
 
 #define CreateTemplateTupleDescCompat CreateTemplateTupleDesc
 
 #define addRangeTableEntryForRelationCompat addRangeTableEntryForRelation
+
 #else
 /* PG11 */
 /*
@@ -66,6 +71,8 @@
 #define TM_SelfModified HeapTupleSelfUpdated
 #define TM_Updated HeapTupleUpdated
 #define TM_Invisible HeapTupleInvisible
+
+#define ExecInsertIndexTuplesCompat ExecInsertIndexTuples
 
 /*
  * Split QTW_EXAMINE_RTES flag into QTW_EXAMINE_RTES_BEFORE/_AFTER.
@@ -106,7 +113,6 @@
 #define addRangeTableEntryForRelationCompat(pstate, rel, lockmode, alias, inh, \
                                             inFromCl) \
     addRangeTableEntryForRelation(pstate, rel, alias, inh, inFromCl)
-
 #endif
 
 #endif //PG_COMPAT_H

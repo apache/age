@@ -236,8 +236,8 @@ HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
     // Insert index entries for the tuple
     if (resultRelInfo->ri_NumIndices > 0)
     {
-        ExecInsertIndexTuples(elemTupleSlot, &(tuple->t_self), estate, false,
-                              NULL, NIL);
+        ExecInsertIndexTuplesCompat(elemTupleSlot, &(tuple->t_self), estate,
+                                    false, NULL, NIL);
     }
 
     return tuple;
