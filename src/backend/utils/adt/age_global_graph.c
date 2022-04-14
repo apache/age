@@ -20,6 +20,7 @@
 #include "age.h"
 
 #include "access/genam.h"
+#include "access/heapam.h"
 #include "access/relscan.h"
 #include "catalog/namespace.h"
 #include "commands/label_commands.h"

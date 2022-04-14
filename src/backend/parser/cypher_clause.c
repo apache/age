@@ -34,7 +34,6 @@
 #include "nodes/parsenodes.h"
 #include "nodes/pg_list.h"
 #include "nodes/primnodes.h"
-#include "optimizer/var.h"
 #include "parser/parse_clause.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
@@ -49,6 +48,11 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/typcache.h"
+#if PG12_GE
+#include "optimizer/optimizer.h"
+#else
+#include "optimizer/var.h"
+#endif
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
