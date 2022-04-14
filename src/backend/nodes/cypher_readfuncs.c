@@ -29,11 +29,26 @@
  *
  * Macros for declaring appropriate local variables.
  */
-// Declare the extensible node and local fields for the pg_strtok
+// A few guys need only local_node
+#define READ_LOCALS_NO_FIELDS(nodeTypeName) \
+    nodeTypeName *local_node = (nodeTypeName *) node
+
+// And a few guys need only the pg_strtok support fields
+#if PG12_GE
+/* Fix warnings */
+#define READ_TEMP_LOCALS() \
+    const char *token; \
+    int length
+#else
+#define READ_TEMP_LOCALS() \
+    char *token; \
+    int length
+#endif
+
+/* ... but most need both */
 #define READ_LOCALS(nodeTypeName) \
-        nodeTypeName *local_node = (nodeTypeName *)node; \
-        char *token; \
-        int  length;
+    READ_LOCALS_NO_FIELDS(nodeTypeName); \
+    READ_TEMP_LOCALS()
 
 /*
  * The READ_*_FIELD defines first skips the :fildname token (key) part of the string
