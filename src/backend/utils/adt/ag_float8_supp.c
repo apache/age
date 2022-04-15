@@ -26,7 +26,6 @@
 
 #include <math.h>
 
-#include "utils/builtins.h"
 #include "utils/ag_float8_supp.h"
 
 /*
