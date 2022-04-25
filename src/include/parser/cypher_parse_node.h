@@ -23,6 +23,8 @@
 #include "nodes/primnodes.h"
 #include "parser/parse_node.h"
 
+#include "catalog/ag_graph.h"
+
 #define AGE_DEFAULT_ALIAS_PREFIX "_age_default_alias_"
 #define AGE_DEFAULT_VARNAME_PREFIX "_age_varname_"
 
@@ -30,7 +32,7 @@ typedef struct cypher_parsestate
 {
     ParseState pstate;
     char *graph_name;
-    Oid graph_oid;
+    graphoid graph_oid;
     Param *params;
     int default_alias_num;
     List *entities;

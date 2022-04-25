@@ -45,7 +45,7 @@
 
 // INSERT INTO ag_catalog.ag_label
 // VALUES (label_name, label_graph, label_id, label_kind, label_relation)
-Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
+Oid insert_label(const char *label_name, graphoid label_graph, int32 label_id,
                  char label_kind, Oid label_relation)
 {
     NameData label_name_data;
@@ -60,7 +60,7 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
      *       than to use assert to check label_id and label_kind are valid?
      */
     AssertArg(label_name);
-    AssertArg(OidIsValid(label_graph));
+    AssertArg(graph_oid_is_valid(label_graph));
     AssertArg(label_id_is_valid(label_id));
     AssertArg(label_kind == LABEL_KIND_VERTEX ||
               label_kind == LABEL_KIND_EDGE);
@@ -174,14 +174,14 @@ Datum _label_name(PG_FUNCTION_ARGS)
 {
     char *label_name;
     label_cache_data *label_cache;
-    Oid graph;
+    graphoid graph;
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
                         errmsg("graph_oid and label_id must not be null")));
 
-    graph = PG_GETARG_OID(0);
+    graph = AG_GETARG_GRAPHOID(0);
 
     label_id = (int32)(((uint64)AG_GETARG_GRAPHID(1)) >> ENTRY_ID_BITS);
 
@@ -201,7 +201,7 @@ Datum _label_id(PG_FUNCTION_ARGS)
 {
     Name graph_name;
     Name label_name;
-    Oid graph;
+    graphoid graph;
     int32 id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -248,7 +248,7 @@ bool label_id_exists(Oid label_graph, int32 label_id)
 /*
  * Creates A RangeVar for the given label.
  */
-RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
+RangeVar *get_label_range_var(char *graph_name, graphoid graph_oid,
                               char *label_name)
 {
     char *relname;
@@ -268,7 +268,7 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
  * however the cache system currently requires us to know the
  * name of the label we want.
   */
-List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
+List *get_all_edge_labels_per_graph(EState *estate, graphoid graph_oid)
 {
     List *labels = NIL;
     ScanKeyData scan_keys[2];
@@ -279,7 +279,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
     // setup scan keys to get all edges for the given graph oid
     ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
+                F_GRAPHOIDEQ, GraphOidGetDatum(graph_oid));
     ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                 F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
 

@@ -4089,12 +4089,12 @@ static Node *make_edge_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
     end_id = scanRTEForColumn(pstate, rte, AG_EDGE_COLNAME_END_ID, -1, 0,
                               NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
+    label_name_func_oid = get_ag_func_oid("_label_name", 2, GRAPHOIDOID,
                                           GRAPHIDOID);
 
-    graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
-                                ObjectIdGetDatum(cpstate->graph_oid), false,
-                                true);
+    graph_oid_const =
+        makeConst(GRAPHOIDOID, -1, INVALID_AG_GRAPH_OID, sizeof(graphoid),
+                  GraphOidGetDatum(cpstate->graph_oid), false, true);
 
     label_name_args = list_make2(graph_oid_const, id);
 
@@ -4132,12 +4132,12 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate, RangeTblEntry *rte,
 
     id = scanRTEForColumn(pstate, rte, AG_VERTEX_COLNAME_ID, -1, 0, NULL);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
+    label_name_func_oid = get_ag_func_oid("_label_name", 2, GRAPHOIDOID,
                                           GRAPHIDOID);
 
-    graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
-                                ObjectIdGetDatum(cpstate->graph_oid), false,
-                                true);
+    graph_oid_const =
+        makeConst(GRAPHOIDOID, -1, INVALID_AG_GRAPH_OID, sizeof(graphoid),
+                  GraphOidGetDatum(cpstate->graph_oid), false, true);
 
     label_name_args = list_make2(graph_oid_const, id);
 
