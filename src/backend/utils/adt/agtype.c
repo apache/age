@@ -138,6 +138,8 @@ static agtype_value *execute_map_access_operator(agtype *map,
                                                  agtype *key);
 static agtype_value *execute_map_access_operator_internal(
     agtype *map, agtype_value *map_value, char *key, int key_len);
+Datum agtype_object_field_impl(FunctionCallInfo fcinfo, bool as_text);
+Datum agtype_array_element_impl(FunctionCallInfo fcinfo, bool as_text);
 /* typecast functions */
 static void agtype_typecast_object(agtype_in_state *state, char *annotation);
 static void agtype_typecast_array(agtype_in_state *state, char *annotation);
@@ -3163,9 +3165,10 @@ static int extract_variadic_args_min(FunctionCallInfo fcinfo,
     return nargs;
 }
 
-PG_FUNCTION_INFO_V1(agtype_object_field);
-
-Datum agtype_object_field(PG_FUNCTION_ARGS)
+/*
+ * get agtype object field
+ */
+Datum agtype_object_field_impl(FunctionCallInfo fcinfo, bool as_text)
 {
     agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
     text *key = PG_GETARG_TEXT_PP(1);
@@ -3181,98 +3184,87 @@ Datum agtype_object_field(PG_FUNCTION_ARGS)
 
     if (v != NULL)
     {
-        AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
+        if (as_text)
+        {
+            text *result = agtype_value_to_text(v, false);
+
+            if (result)
+            {
+                PG_RETURN_TEXT_P(result);
+            }
+        }
+        else
+        {
+            AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
+        }
     }
 
     PG_RETURN_NULL();
 }
 
-PG_FUNCTION_INFO_V1(agtype_object_field_text);
-
-Datum agtype_object_field_text(PG_FUNCTION_ARGS)
+/*
+ * get agtype array element
+ */
+Datum agtype_array_element_impl(FunctionCallInfo fcinfo, bool as_text)
 {
     agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
-    text *key = PG_GETARG_TEXT_PP(1);
+    int element = PG_GETARG_INT32(1);
     agtype_value *v;
 
-    if (!AGT_ROOT_IS_OBJECT(agtype_in))
+    if (!AGT_ROOT_IS_ARRAY(agtype_in))
     {
         PG_RETURN_NULL();
     }
 
-    v = execute_map_access_operator_internal(agtype_in, NULL, VARDATA_ANY(key),
-                                             VARSIZE_ANY_EXHDR(key));
+    if (element < 0)
+    {
+        PG_RETURN_NULL();
+    }
+
+    v = execute_array_access_operator_internal(agtype_in, NULL, element);
 
     if (v != NULL)
     {
-        text *result = agtype_value_to_text(v, false);
-
-        if (result)
+        if (as_text)
         {
-            PG_RETURN_TEXT_P(result);
+            text *result = agtype_value_to_text(v, false);
+
+            if (result)
+            {
+                PG_RETURN_TEXT_P(result);
+            }
+        }
+        else
+        {
+            AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
         }
     }
 
     PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(agtype_object_field);
+Datum agtype_object_field(PG_FUNCTION_ARGS)
+{
+    return agtype_object_field_impl(fcinfo, false);
+}
+
+PG_FUNCTION_INFO_V1(agtype_object_field_text);
+Datum agtype_object_field_text(PG_FUNCTION_ARGS)
+{
+    return agtype_object_field_impl(fcinfo, true);
 }
 
 PG_FUNCTION_INFO_V1(agtype_array_element);
 Datum agtype_array_element(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
-    int element = PG_GETARG_INT32(1);
-    agtype_value *v;
-
-    if (!AGT_ROOT_IS_ARRAY(agtype_in))
-    {
-        PG_RETURN_NULL();
-    }
-
-    if (element < 0)
-    {
-        PG_RETURN_NULL();
-    }
-
-    v = execute_array_access_operator_internal(agtype_in, NULL, element);
-
-    if (v != NULL)
-    {
-        AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
-    }
-
-    PG_RETURN_NULL();
+    return agtype_array_element_impl(fcinfo, false);
 }
 
 PG_FUNCTION_INFO_V1(agtype_array_element_text);
 Datum agtype_array_element_text(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
-    int element = PG_GETARG_INT32(1);
-    agtype_value *v;
-
-    if (!AGT_ROOT_IS_ARRAY(agtype_in))
-    {
-        PG_RETURN_NULL();
-    }
-
-    if (element < 0)
-    {
-        PG_RETURN_NULL();
-    }
-
-    v = execute_array_access_operator_internal(agtype_in, NULL, element);
-
-    if (v != NULL)
-    {
-        text *result = agtype_value_to_text(v, false);
-
-        if (result)
-        {
-            PG_RETURN_TEXT_P(result);
-        }
-    }
-
-    PG_RETURN_NULL();
+    return agtype_array_element_impl(fcinfo, true);
 }
 
 PG_FUNCTION_INFO_V1(agtype_access_operator);
