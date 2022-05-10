@@ -48,9 +48,11 @@ OBJS = src/backend/age.o \
        src/backend/parser/cypher_parse_agg.o \
        src/backend/parser/cypher_parse_node.o \
        src/backend/parser/cypher_parser.o \
+       src/backend/parser/cypher_transform_entity.o \
        src/backend/utils/adt/age_graphid_ds.o \
        src/backend/utils/adt/agtype.o \
        src/backend/utils/adt/agtype_ext.o \
+       src/backend/utils/adt/agtype_gin.o \
        src/backend/utils/adt/agtype_ops.o \
        src/backend/utils/adt/agtype_parser.o \
        src/backend/utils/adt/agtype_util.o \
@@ -88,6 +90,7 @@ REGRESS = graphid \
           cypher_union \
           cypher_merge \
           age_load \
+          index \
           drop
 
 srcdir=`pwd`

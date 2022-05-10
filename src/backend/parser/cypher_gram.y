@@ -79,7 +79,7 @@
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
                  BY
-                 CASE COALESCE CONTAINS CREATE
+                 CALL CASE COALESCE CONTAINS CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
                  ELSE END_P ENDS EXISTS EXPLAIN
                  FALSE_P
@@ -95,10 +95,11 @@
                  VERBOSE
                  WHEN WHERE WITH
                  XOR
+                 YIELD
 
 /* query */
 %type <node> stmt
-%type <list> single_query query_part_init query_part_last query_list
+%type <list> single_query query_part_init query_part_last cypher_stmt
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
@@ -129,6 +130,10 @@
 
 /* MERGE clause */
 %type <node> merge
+
+/* CALL ... YIELD clause */
+%type <node> call_stmt yield_item
+%type <list> yield_item_list
 
 /* common */
 %type <node> where_opt
@@ -162,7 +167,7 @@
 %left AND
 %left XOR
 %right NOT
-%nonassoc '=' NOT_EQ '<' LT_EQ '>' GT_EQ
+%left '=' NOT_EQ '<' LT_EQ '>' GT_EQ
 %left '+' '-'
 %left '*' '/' '%'
 %left '^'
@@ -208,8 +213,23 @@ static Node *make_typecast_expr(Node *expr, char *typecast, int location);
 
 // functions
 static Node *make_function_expr(List *func_name, List *exprs, int location);
-%}
 
+// setops
+static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
+                         List *rarg);
+
+// VLE
+static cypher_relationship *build_VLE_relation(List *left_arg,
+                                               cypher_relationship *cr,
+                                               Node *right_arg,
+                                               int left_arg_location,
+                                               int cr_location);
+// comparison
+static bool is_A_Expr_a_comparison_operation(A_Expr *a);
+static Node *build_comparison_expression(Node *left_grammar_node,
+                                         Node *right_grammar_node,
+                                         char *opr_name, int location);
+%}
 %%
 
 /*
@@ -217,7 +237,7 @@ static Node *make_function_expr(List *func_name, List *exprs, int location);
  */
 
 stmt:
-    query_list semicolon_opt
+    cypher_stmt semicolon_opt
         {
             /*
              * If there is no transition for the lookahead token and the
@@ -238,7 +258,7 @@ stmt:
             extra->result = $1;
             extra->extra = NULL;
         }
-    | EXPLAIN query_list semicolon_opt
+    | EXPLAIN cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -252,7 +272,7 @@ stmt:
             estmt->options = NIL;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN VERBOSE query_list semicolon_opt
+    | EXPLAIN VERBOSE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -266,7 +286,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("verbose", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE query_list semicolon_opt
+    | EXPLAIN ANALYZE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -280,7 +300,7 @@ stmt:
             estmt->options = list_make1(makeDefElem("analyze", NULL, @2));;
             extra->extra = (Node *)estmt;
         }
-    | EXPLAIN ANALYZE VERBOSE query_list semicolon_opt
+    | EXPLAIN ANALYZE VERBOSE cypher_stmt semicolon_opt
         {
             ExplainStmt *estmt = NULL;
 
@@ -297,21 +317,53 @@ stmt:
         }
     ;
 
-query_list:
+cypher_stmt:
     single_query
         {
             $$ = $1;
         }
-    | single_query UNION all_or_distinct query_list
+    | cypher_stmt UNION all_or_distinct cypher_stmt
         {
-            cypher_union *u = make_ag_node(cypher_union);
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+        }
+    ;
 
-            u->all_or_distinct = $3;
-            u->op = SETOP_UNION;
-            u->larg = $1;
-            u->rarg = $4;
+call_stmt:
+    CALL expr_func_norm
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_SYNTAX_ERROR),
+                     errmsg("CALL not supported yet"),
+                     ag_scanner_errposition(@1, scanner)));
+        }
+    | CALL expr_func_norm YIELD yield_item_list where_opt
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_SYNTAX_ERROR),
+                     errmsg("CALL... [YIELD] not supported yet"),
+                     ag_scanner_errposition(@1, scanner)));
+        }
+    ;
 
-            $$ = list_make1((Node *) u);
+yield_item_list:
+    yield_item
+        {
+            $$ = list_make1($1);
+        }
+    | yield_item_list ',' yield_item
+        {
+            $$ = lappend($1, $3);
+        }
+    ;
+
+yield_item:
+    expr AS var_name
+        {
+
+        }
+    | expr
+        {
+
         }
     ;
 
@@ -410,6 +462,7 @@ updating_clause:
     | remove
     | delete
     | merge
+    | call_stmt
     ;
 
 cypher_varlen_opt:
@@ -999,159 +1052,13 @@ simple_path:
             /* if this is a VLE relation node */
             if (cr->varlen != NULL)
             {
-                ColumnRef *cref = NULL;
-                A_Indices *ai = NULL;
-                List *args = NIL;
-                List *eargs = NIL;
-                List *fname = NIL;
-                cypher_node *cnl = NULL;
-                cypher_node *cnr = NULL;
-                Node *node = NULL;
-                int length = 0;
-                unsigned long unique_number = 0;
-                int location = 0;
+                /* build the VLE relation */
+                cr = build_VLE_relation($1, cr, $3, @1, @2);
 
-                /* get a unique number to identify this VLE node */
-                unique_number = get_a_unique_number();
-
-                /* get the location */
-                location = cr->location;
-
-                /* get the left and right cypher_nodes */
-                cnl = (cypher_node*)llast($1);
-                cnr = (cypher_node*)$3;
-
-                /* get the length of the left path */
-                length = list_length($1);
-
-                /*
-                 * If the left name is NULL and the left path is greater than 1
-                 * If the left name is NULL and the left label is not NULL
-                 * If the left name is NULL and the left props is not NULL
-                 * If the left name is NULL and the right name is not NULL
-                 * If the left name is NULL and the right label is not NULL
-                 * If the left name is NULL and the right props is not NULL
-                 * we need to create a variable name for the left node.
-                 */
-                if ((cnl->name == NULL && length > 1) ||
-                    (cnl->name == NULL && cnl->label != NULL) ||
-                    (cnl->name == NULL && cnl->props != NULL) ||
-                    (cnl->name == NULL && cnr->name != NULL) ||
-                    (cnl->name == NULL && cnr->label != NULL) ||
-                    (cnl->name == NULL && cnr->props != NULL))
-                {
-                    cnl->name = create_unique_name("_vle_function_start_var");
-                }
-                /* add in the start vertex as a ColumnRef if necessary */
-                if (cnl->name != NULL)
-                {
-                    cref = makeNode(ColumnRef);
-                    cref->fields = list_make2(makeString(cnl->name),
-                                              makeString("id"));
-                    cref->location = @1;
-                    args = lappend(args, cref);
-                }
-                /*
-                 * If there aren't any variables in the VLE path, we can use
-                 * the FROM_ALL algorithm.
-                 */
-                else
-                {
-                    args = lappend(args, make_null_const(-1));
-                }
-
-                /*
-                 * Create a variable name for the end vertex if we have a label
-                 * name or props but we don't have a variable name.
-                 *
-                 * For example: ()-[*]-(:label) or ()-[*]-({name: "John"})
-                 *
-                 * We need this so the addition of match_vle_terminal_edge is
-                 * done in the transform phase.
-                 */
-                if (cnr->name == NULL &&
-                    (cnr->label != NULL || cnr->props != NULL))
-                {
-                    cnr->name = create_unique_name("_vle_function_end_var");
-                }
-                /*
-                 * We need a NULL for the target vertex in the VLE match to
-                 * force the dfs_find_a_path_from algorithm. However, for now,
-                 * the default will be to only do that when a target isn't
-                 * supplied.
-                 *
-                 * TODO: We will likely want to force it to use
-                 * dfs_find_a_path_from.
-                 */
-                if (cnl->name == NULL && cnr->name != NULL)
-                {
-                    cref = makeNode(ColumnRef);
-                    cref->fields = list_make2(makeString(cnr->name),
-                                              makeString("id"));
-                    cref->location = @1;
-                    args = lappend(args, cref);
-                }
-                else
-                {
-                    args = lappend(args, make_null_const(-1));
-                }
-
-                /* build the required edge arguments */
-                if (cr->label == NULL)
-                {
-                    eargs = lappend(eargs, make_null_const(location));
-                }
-                else
-                {
-                    eargs = lappend(eargs, make_string_const(cr->label,
-                                                             location));
-                }
-                if (cr->props == NULL)
-                {
-                    eargs = lappend(eargs, make_null_const(location));
-                }
-                else
-                {
-                    eargs = lappend(eargs, cr->props);
-                }
-                /* build the edge function name (schema.funcname) */
-                fname = list_make2(makeString("ag_catalog"),
-                                   makeString("age_build_vle_match_edge"));
-                /* build the edge function node */
-                node = make_function_expr(fname, eargs, location);
-                /* add in the edge*/
-                args = lappend(args, node);
-
-                /* add in the lidx and uidx range as Const */
-                ai = (A_Indices*)cr->varlen;
-                if (ai == NULL || ai->lidx == NULL)
-                {
-                    args = lappend(args, make_null_const(location));
-                }
-                else
-                {
-                    args = lappend(args, ai->lidx);
-                }
-                if (ai == NULL || ai->uidx == NULL)
-                {
-                    args = lappend(args, make_null_const(location));
-                }
-                else
-                {
-                    args = lappend(args, ai->uidx);
-                }
-                /* add in the direction as Const */
-                args = lappend(args, make_int_const(cr->dir, @2));
-
-                /* add in the unique number used to identify this VLE node */
-                args = lappend(args, make_int_const(unique_number, -1));
-
-                /* build the VLE function node */
-                cr->varlen = make_function_expr(list_make1(makeString("vle")),
-                                                args, @2);
                 /* return the VLE relation in the path */
                 $$ = lappend(lappend($1, cr), $3);
             }
+            /* otherwise, it is a regular relationship node */
             else
             {
                 $$ = lappend(lappend($1, $2), $3);
@@ -1285,27 +1192,27 @@ expr:
         }
     | expr '=' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "=", @2);
         }
     | expr NOT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<>", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<>", @2);
         }
     | expr '<' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<", @2);
         }
     | expr LT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, "<=", @2);
         }
     | expr '>' expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, ">", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, ">", @2);
         }
     | expr GT_EQ expr
         {
-            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, ">=", $1, $3, @2);
+            $$ = build_comparison_expression($1, $3, ">=", @2);
         }
     | expr '+' expr
         {
@@ -1863,6 +1770,7 @@ safe_keywords:
     | ASC        { $$ = pnstrdup($1, 3); }
     | ASCENDING  { $$ = pnstrdup($1, 9); }
     | BY         { $$ = pnstrdup($1, 2); }
+    | CALL       { $$ = pnstrdup($1, 4); }
     | CASE       { $$ = pnstrdup($1, 4); }
     | COALESCE   { $$ = pnstrdup($1, 8); }
     | CONTAINS   { $$ = pnstrdup($1, 8); }
@@ -1897,6 +1805,7 @@ safe_keywords:
     | WHERE      { $$ = pnstrdup($1, 5); }
     | WITH       { $$ = pnstrdup($1, 4); }
     | XOR        { $$ = pnstrdup($1, 3); }
+    | YIELD      { $$ = pnstrdup($1, 5); }
     ;
 
 conflicted_keywords:
@@ -2199,4 +2108,317 @@ static unsigned long get_a_unique_number(void)
     static unsigned long unique_counter = 0;
 
     return unique_counter++;
+}
+
+/*set operation function node to make a set op node*/
+static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
+                         List *rarg)
+{
+    cypher_return *n = make_ag_node(cypher_return);
+
+    n->op = op;
+    n->all_or_distinct = all_or_distinct;
+    n->larg = (List *) larg;
+    n->rarg = (List *) rarg;
+    return (Node *) n;
+}
+
+/* check if A_Expr is a comparison expression */
+static bool is_A_Expr_a_comparison_operation(A_Expr *a)
+{
+    Value *v = NULL;
+    char *opr_name = NULL;
+
+    /* we don't support qualified comparison operators */
+    if (list_length(a->name) != 1)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("qualified comparison operator names are not permitted")));
+    }
+
+    /* get the value and verify that it is a string */
+    v = linitial(a->name);
+    Assert(v->type == T_String);
+
+    /* get the string value */
+    opr_name = v->val.str;
+
+    /* verify it is a comparison operation */
+    if (strcmp(opr_name, "<") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, ">") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "<=") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "=>") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "=") == 0)
+    {
+        return true;
+    }
+    if (strcmp(opr_name, "<>") == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Helper function to build the comparison operator expression. It will also
+ * build a chained comparison operator expression if it detects a chained
+ * comparison.
+ */
+static Node *build_comparison_expression(Node *left_grammar_node,
+                                         Node *right_grammar_node,
+                                         char *opr_name, int location)
+{
+    Node *result_expr = NULL;
+
+    Assert(left_grammar_node != NULL);
+    Assert(right_grammar_node != NULL);
+    Assert(opr_name != NULL);
+
+    /*
+     * Case 1:
+     *    If the previous expression is an A_Expr and it is also a
+     *    comparison, then this is part of a chained comparison. In this
+     *    specific case, the second chained element.
+     */
+    if (IsA(left_grammar_node, A_Expr) &&
+        is_A_Expr_a_comparison_operation((A_Expr *)left_grammar_node))
+    {
+        A_Expr *aexpr = NULL;
+        Node *lexpr = NULL;
+        Node *n = NULL;
+
+        /* get the A_Expr on the left side */
+        aexpr = (A_Expr *) left_grammar_node;
+        /* get its rexpr which will be our lexpr */
+        lexpr = aexpr->rexpr;
+        /* build our comparison operator */
+        n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+                                     right_grammar_node, location);
+
+        /* now add it (AND) to the other comparison */
+        result_expr = make_and_expr(left_grammar_node, n, location);
+    }
+
+    /*
+     * Case 2:
+     *    If the previous expression is a boolean AND and its right most
+     *    expression is an A_Expr and a comparison, then this is part of
+     *    a chained comparison. In this specific case, the third and
+     *    beyond chained element.
+     */
+    if (IsA(left_grammar_node, BoolExpr) &&
+        ((BoolExpr*)left_grammar_node)->boolop == AND_EXPR)
+    {
+        BoolExpr *bexpr = NULL;
+        Node *last = NULL;
+
+        /* cast the left to a boolean */
+        bexpr = (BoolExpr *)left_grammar_node;
+        /* extract the last node - ANDs are chained in a flat list */
+        last = llast(bexpr->args);
+
+        /* is the last node an A_Expr and a comparison operator */
+        if (IsA(last, A_Expr) &&
+            is_A_Expr_a_comparison_operation((A_Expr *)last))
+        {
+            A_Expr *aexpr = NULL;
+            Node *lexpr = NULL;
+            Node *n = NULL;
+
+            /* get the last expressions right expression */
+            aexpr = (A_Expr *) last;
+            lexpr = aexpr->rexpr;
+            /* make our comparison operator */
+            n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+                                         right_grammar_node, location);
+
+            /* now add it (AND) to the other comparisons */
+            result_expr = make_and_expr(left_grammar_node, n, location);
+        }
+    }
+
+    /*
+     * Case 3:
+     *    The previous expression isn't a chained comparison. So, treat
+     *    it as a regular comparison expression.
+     */
+    if (result_expr == NULL)
+    {
+        result_expr = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name,
+                                               left_grammar_node,
+                                               right_grammar_node, location);
+    }
+
+    return result_expr;
+}
+
+static cypher_relationship *build_VLE_relation(List *left_arg,
+                                               cypher_relationship *cr,
+                                               Node *right_arg,
+                                               int left_arg_location,
+                                               int cr_location)
+{
+    ColumnRef *cref = NULL;
+    A_Indices *ai = NULL;
+    List *args = NIL;
+    List *eargs = NIL;
+    List *fname = NIL;
+    cypher_node *cnl = NULL;
+    cypher_node *cnr = NULL;
+    Node *node = NULL;
+    int length = 0;
+    unsigned long unique_number = 0;
+    int location = 0;
+
+    /* get a unique number to identify this VLE node */
+    unique_number = get_a_unique_number();
+
+    /* get the location */
+    location = cr->location;
+
+    /* get the left and right cypher_nodes */
+    cnl = (cypher_node*)llast(left_arg);
+    cnr = (cypher_node*)right_arg;
+
+    /* get the length of the left path */
+    length = list_length(left_arg);
+
+    /*
+     * If the left name is NULL and the left path is greater than 1
+     * If the left name is NULL and the left label is not NULL
+     * If the left name is NULL and the left props is not NULL
+     * If the left name is NULL and the right name is not NULL
+     * If the left name is NULL and the right label is not NULL
+     * If the left name is NULL and the right props is not NULL
+     * we need to create a variable name for the left node.
+     */
+    if ((cnl->name == NULL && length > 1) ||
+        (cnl->name == NULL && cnl->label != NULL) ||
+        (cnl->name == NULL && cnl->props != NULL) ||
+        (cnl->name == NULL && cnr->name != NULL) ||
+        (cnl->name == NULL && cnr->label != NULL) ||
+        (cnl->name == NULL && cnr->props != NULL))
+    {
+        cnl->name = create_unique_name("_vle_function_start_var");
+    }
+
+    /* add in the start vertex as a ColumnRef if necessary */
+    if (cnl->name != NULL)
+    {
+        cref = makeNode(ColumnRef);
+        cref->fields = list_make2(makeString(cnl->name), makeString("id"));
+        cref->location = left_arg_location;
+        args = lappend(args, cref);
+    }
+    /*
+     * If there aren't any variables in the VLE path, we can use
+     * the FROM_ALL algorithm.
+     */
+    else
+    {
+        args = lappend(args, make_null_const(-1));
+    }
+
+    /*
+     * Create a variable name for the end vertex if we have a label
+     * name or props but we don't have a variable name.
+     *
+     * For example: ()-[*]-(:label) or ()-[*]-({name: "John"})
+     *
+     * We need this so the addition of match_vle_terminal_edge is
+     * done in the transform phase.
+     */
+    if (cnr->name == NULL &&
+        (cnr->label != NULL || cnr->props != NULL))
+    {
+        cnr->name = create_unique_name("_vle_function_end_var");
+    }
+    /*
+     * We need a NULL for the target vertex in the VLE match to
+     * force the dfs_find_a_path_from algorithm. However, for now,
+     * the default will be to only do that when a target isn't
+     * supplied.
+     *
+     * TODO: We will likely want to force it to use
+     * dfs_find_a_path_from.
+     */
+    if (cnl->name == NULL && cnr->name != NULL)
+    {
+        cref = makeNode(ColumnRef);
+        cref->fields = list_make2(makeString(cnr->name), makeString("id"));
+        cref->location = left_arg_location;
+        args = lappend(args, cref);
+    }
+    else
+    {
+        args = lappend(args, make_null_const(-1));
+    }
+
+    /* build the required edge arguments */
+    if (cr->label == NULL)
+    {
+        eargs = lappend(eargs, make_null_const(location));
+    }
+    else
+    {
+        eargs = lappend(eargs, make_string_const(cr->label, location));
+    }
+    if (cr->props == NULL)
+    {
+        eargs = lappend(eargs, make_null_const(location));
+    }
+    else
+    {
+        eargs = lappend(eargs, cr->props);
+    }
+    /* build the edge function name (schema.funcname) */
+    fname = list_make2(makeString("ag_catalog"),
+                       makeString("age_build_vle_match_edge"));
+    /* build the edge function node */
+    node = make_function_expr(fname, eargs, location);
+    /* add in the edge*/
+    args = lappend(args, node);
+    /* add in the lidx and uidx range as Const */
+    ai = (A_Indices*)cr->varlen;
+    if (ai == NULL || ai->lidx == NULL)
+    {
+        args = lappend(args, make_null_const(location));
+    }
+    else
+    {
+        args = lappend(args, ai->lidx);
+    }
+    if (ai == NULL || ai->uidx == NULL)
+    {
+        args = lappend(args, make_null_const(location));
+    }
+    else
+    {
+        args = lappend(args, ai->uidx);
+    }
+    /* add in the direction as Const */
+    args = lappend(args, make_int_const(cr->dir, cr_location));
+
+    /* add in the unique number used to identify this VLE node */
+    args = lappend(args, make_int_const(unique_number, -1));
+
+    /* build the VLE function node */
+    cr->varlen = make_function_expr(list_make1(makeString("vle")), args,
+                                    cr_location);
+    /* return the VLE relation node */
+    return cr;
 }

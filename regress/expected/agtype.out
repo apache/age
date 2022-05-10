@@ -875,7 +875,7 @@ SELECT 3 % '3.14::numeric'::agtype;
 (1 row)
 
 --
--- Test overloaded agytype any functions and operators for NULL input 
+-- Test overloaded agytype any functions and operators for NULL input
 -- +, -, *, /, %, =, <>, <, >, <=, >=
 -- These should all return null
 SELECT agtype_any_add('null'::agtype, 1);
@@ -2208,6 +2208,66 @@ SELECT agtype_access_operator('{"bool":false, "int":3, "float":3.14}', '2');
 ERROR:  AGTV_INTEGER is not a valid key type
 SELECT agtype_access_operator('{"bool":false, "int":3, "float":3.14}', '2.0');
 ERROR:  AGTV_FLOAT is not a valid key type
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":true, "array":[1,3,{"bool":false, "int":3, "float":3.14},7], "float":3.14}'::agtype->'array'->2->'float' as i) a;
+  i   | pg_typeof 
+------+-----------
+ 3.14 | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":true, "array":[1,3,{"bool":false, "int":3, "float":3.14},7], "float":3.14}'::agtype->'array'->2->>'float' as i) a;
+  i   | pg_typeof 
+------+-----------
+ 3.14 | text
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{}'::agtype->'array' as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[]'::agtype->0 as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype->2 as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype->3 as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":false, "int":3, "float":3.14}'::agtype->'true' as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":false, "int":3, "float":3.14}'::agtype->2 as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":false, "int":3, "float":3.14}'::agtype->'true'->2 as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"bool":false, "int":3, "float":3.14}'::agtype->'true'->>2 as i) a;
+ i | pg_typeof 
+---+-----------
+   | text
+(1 row)
+
 --
 -- Vertex
 --
@@ -2484,6 +2544,102 @@ SELECT age_end_id(agtype_in('null'));
  age_end_id 
 ------------
  
+(1 row)
+
+SELECT agtype_contains('{"id": 1}','{"id": 1}');
+ agtype_contains 
+-----------------
+ t
+(1 row)
+
+SELECT agtype_contains('{"id": 1}','{"id": 2}');
+ agtype_contains 
+-----------------
+ f
+(1 row)
+
+SELECT '{"id": 1}'::agtype @> '{"id": 1}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 1}'::agtype @> '{"id": 2}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists('{"id": 1}','id');
+ agtype_exists 
+---------------
+ t
+(1 row)
+
+SELECT agtype_exists('{"id": 1}','not_id');
+ agtype_exists 
+---------------
+ f
+(1 row)
+
+SELECT '{"id": 1}'::agtype ? 'id';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 1}'::agtype ? 'not_id';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists_any('{"id": 1}', array['id']);
+ agtype_exists_any 
+-------------------
+ t
+(1 row)
+
+SELECT agtype_exists_any('{"id": 1}', array['not_id']);
+ agtype_exists_any 
+-------------------
+ f
+(1 row)
+
+SELECT '{"id": 1}'::agtype ?| array['id'];
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 1}'::agtype ?| array['not_id'];
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists_all('{"id": 1}', array['id']);
+ agtype_exists_all 
+-------------------
+ t
+(1 row)
+
+SELECT agtype_exists_all('{"id": 1}', array['not_id']);
+ agtype_exists_all 
+-------------------
+ f
+(1 row)
+
+SELECT '{"id": 1}'::agtype ?& array['id'];
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 1}'::agtype ?& array['not_id'];
+ ?column? 
+----------
+ f
 (1 row)
 
 --
