@@ -170,4 +170,6 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_SCALAR_FIELD(graph_oid);
     COPY_SCALAR_FIELD(merge_function_attr);
     COPY_NODE_FIELD(path);
+    COPY_NODE_FIELD(on_create_updates);
+    COPY_NODE_FIELD(on_match_updates);
 }

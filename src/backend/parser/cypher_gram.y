@@ -87,7 +87,7 @@
                  LIMIT
                  MATCH MERGE
                  NOT NULL_P
-                 OPTIONAL OR ORDER
+                 ON OPTIONAL OR ORDER
                  REMOVE RETURN
                  SET SKIP STARTS
                  THEN TRUE_P
@@ -129,6 +129,8 @@
 %type <boolean> detach_opt
 
 /* MERGE clause */
+%type <boolean> merge_action_create_or_match
+%type <list> merge_action
 %type <node> merge
 
 /* CALL ... YIELD clause */
@@ -841,6 +843,7 @@ set:
 
             n = make_ag_node(cypher_set);
             n->items = $2;
+            n->kind = CYPHER_SET_REGULAR;
             n->is_remove = false;
             n->location = @1;
 
@@ -892,6 +895,7 @@ remove:
             cypher_set *n;
 
             n = make_ag_node(cypher_set);
+            n->kind = CYPHER_SET_REGULAR;
             n->items = $2;
             n->is_remove = true;
              n->location = @1;
@@ -957,15 +961,66 @@ detach_opt:
 /*
  * MERGE clause
  */
+
+
 merge:
-    MERGE path
+    MERGE path merge_action
+        {
+            cypher_merge *n;
+            n = make_ag_node(cypher_merge);
+            n->path = $2;
+            n->actions = $3;
+
+            $$ = (Node *)n;
+        }
+    | MERGE path
         {
             cypher_merge *n;
 
             n = make_ag_node(cypher_merge);
             n->path = $2;
+            n->actions = NULL;
 
             $$ = (Node *)n;
+        }
+    ;
+
+
+merge_action:
+    ON merge_action_create_or_match SET set_item_list
+        {
+            cypher_set *n;
+
+            n = make_ag_node(cypher_set);
+            n->items = $4;
+            n->kind = $2 ? CYPHER_SET_ON_CREATE : CYPHER_SET_ON_MATCH;
+            n->is_remove = false;
+            n->location = @1;
+
+            $$ = list_make1((Node *)n);
+        }
+    | merge_action ON merge_action_create_or_match  SET set_item_list
+        {
+            cypher_set *n;
+
+            n = make_ag_node(cypher_set);
+            n->items = $5;
+            n->kind = $3 ? CYPHER_SET_ON_CREATE : CYPHER_SET_ON_MATCH;
+            n->is_remove = false;
+            n->location = @1;
+
+            $$ = lappend($1, (Node *)n);
+        }
+    ;
+
+merge_action_create_or_match:
+    CREATE
+        {
+            $$ = true;
+        }
+    | MATCH
+        {
+            $$ = false;
         }
     ;
 
@@ -1790,6 +1845,7 @@ safe_keywords:
     | MATCH      { $$ = pnstrdup($1, 6); }
     | MERGE      { $$ = pnstrdup($1, 6); }
     | NOT        { $$ = pnstrdup($1, 3); }
+    | ON         { $$ = pnstrdup($1, 2); }
     | OPTIONAL   { $$ = pnstrdup($1, 8); }
     | OR         { $$ = pnstrdup($1, 2); }
     | ORDER      { $$ = pnstrdup($1, 5); }
