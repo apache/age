@@ -5398,6 +5398,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     Query *query;
     FuncExpr *func_expr;
     TargetEntry *tle;
+    ListCell *lc = NULL;
 
     Assert(is_ag_node(self->path, cypher_path));
 
@@ -5483,6 +5484,17 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     query->hasSubLinks = pstate->p_hasSubLinks;
 
     assign_query_collations(pstate, query);
+
+    /*
+     * FIXME: What to do with the actions? (set item list items)
+     */
+    foreach (lc, self->actions)
+    {
+	/*
+	 * FIXME: Dummy
+	 */
+        transform_cypher_set_item_list(cpstate, lfirst(lc), query);
+    }
 
     return query;
 }

@@ -69,6 +69,7 @@ const ScanKeyword cypher_keywords[] = {
     {"merge", MERGE, RESERVED_KEYWORD},
     {"not", NOT, RESERVED_KEYWORD},
     {"null", NULL_P, RESERVED_KEYWORD},
+    {"on", ON, RESERVED_KEYWORD},
     {"optional", OPTIONAL, RESERVED_KEYWORD},
     {"or", OR, RESERVED_KEYWORD},
     {"order", ORDER, RESERVED_KEYWORD},

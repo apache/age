@@ -87,10 +87,18 @@ typedef struct cypher_create
     List *pattern; // a list of cypher_paths
 } cypher_create;
 
+typedef enum cypher_set_kind
+{
+    CYPHER_SET_REGULAR = 0,
+    CYPHER_SET_ON_CREATE = 1,
+    CYPHER_SET_ON_MATCH = 2
+} cypher_set_kind;
+
 typedef struct cypher_set
 {
     ExtensibleNode extensible;
-    List *items; // a list of cypher_set_items
+    List *items;    // a list of cypher_set_items
+    int kind;       // cypher_set_kind
     bool is_remove; // true if this is REMOVE clause
     int location;
 } cypher_set;
@@ -122,6 +130,7 @@ typedef struct cypher_merge
 {
     ExtensibleNode extensible;
     Node *path;
+    List *actions; // List of cypher_merge_action or NULL
 } cypher_merge;
 
 /*
@@ -400,6 +409,8 @@ typedef struct cypher_merge_information
     Oid graph_oid;
     AttrNumber merge_function_attr;
     cypher_create_path *path;
+    List *on_create_updates;
+    List *on_match_updates;
 } cypher_merge_information;
 
 /* grammar node for typecasts */
