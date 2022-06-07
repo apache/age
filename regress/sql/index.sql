@@ -127,6 +127,8 @@ SELECT * FROM cypher('cypher_index', $$ MATCH(n) MERGE (n)-[:e]->(:idx {i: n.i})
 --data cleanup
 SELECT * FROM cypher('cypher_index', $$ MATCH(n) DETACH DELETE n $$) AS (a agtype);
 
+DROP INDEX cypher_index.cypher_index_idx_props_uq;
+
 /*
  * Section 2: Graphid Indices to Improve Join Performance
  */
@@ -203,34 +205,45 @@ SET enable_nestloop = ON;
 --
 CREATE INDEX load_city_gid_idx
 ON cypher_index."City" USING gin (properties);
+SET enable_seqscan=false;
 
 SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (c:City {country_code: "AD"})
     RETURN c
 $$) as (n agtype);
 
-DROP INDEX load_city_gid_idx;
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City {country_code: "US"})
+    RETURN c
+$$) as (n agtype);
+
+SET enable_seqscan=true;
+DROP INDEX cypher_index.load_city_gid_idx;
 
 --
 -- Section 4: Index use with WHERE clause
 --
+
+CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
+(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
+SET enable_seqscan=false;
+
 SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
     WHERE a.country_code = 'RS'
     RETURN a
 $$) as (n agtype);
 
-CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
-(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
-
-SELECT COUNT(*) FROM cypher('agload_test_graph', $$
+SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
-    WHERE a.country_code = 'RS'
+    WHERE a.country_code = 'US'
     RETURN a
 $$) as (n agtype);
+
+SET enable_seqscan=true;
+DROP INDEX cypher_index.cntry_ode_idx;
 
 --
 -- General Cleanup
 --
 SELECT drop_graph('cypher_index', true);
-SELECT drop_graph('agload_test_graph', true);
