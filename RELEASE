@@ -1,0 +1,36 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+Release Notes for Apache AGE release v1.0.0
+
+Apache AGE 1.0.0 - Release Notes 
+
+    Add an upgrading SQL script file from 0.5.0 to 0.6.0 
+    Add upgrading file age--0.6.0--0.7.0.sql
+    Refactor function get_agtype_value_object_value
+    Age load issue (#188)
+    Refactor agtype_access_operator
+    Bugfix - Remove INLINE from function declaration
+    Rebase VLE code
+    Implement Merge Clause
+    Bugfix: chained union logic
+    Allow a path of one vertex
+    Created functions for load graph from CSV files 
+    Add UNION into EXPLAIN grammar rule
+    Implement `UNWIND` clause(#173)
+    Bugfix:(nodejs) Corrects parsing for independence value(#177)
+    Feat: Implement `OPTIONAL MATCH` (#175)

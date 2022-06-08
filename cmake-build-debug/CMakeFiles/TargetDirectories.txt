@@ -1,0 +1,3 @@
+/Users/muhammad.shoaib/CLionProjects/age-pg-12/incubator-age/cmake-build-debug/CMakeFiles/incubator_age.dir
+/Users/muhammad.shoaib/CLionProjects/age-pg-12/incubator-age/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/muhammad.shoaib/CLionProjects/age-pg-12/incubator-age/cmake-build-debug/CMakeFiles/rebuild_cache.dir
