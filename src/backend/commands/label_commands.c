@@ -259,8 +259,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * new table and sequence. Returns the oid from the new tuple in
  * ag_catalog.ag_label.
  */
-Oid create_label(char *graph_name, char *label_name, char label_type,
-                 List *parents)
+void create_label(char *graph_name, char *label_name, char label_type,
+                  List *parents)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -271,7 +271,6 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     RangeVar *seq_range_var;
     int32 label_id;
     Oid relation_id;
-    Oid label_oid;
 
     cache_data = search_graph_name_cache(graph_name);
     if (!cache_data)
@@ -307,12 +306,9 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
 
-    label_oid = insert_label(label_name, graph_oid, label_id, label_type,
-                             relation_id);
+    insert_label(label_name, graph_oid, label_id, label_type, relation_id);
 
     CommandCounterIncrement();
-
-    return label_oid;
 }
 
 // CREATE TABLE `schema_name`.`rel_name` (
@@ -677,10 +673,10 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
 
     for (cnt = LABEL_ID_MIN; cnt <= LABEL_ID_MAX; cnt++)
     {
-        int64 label_id;
+        int32 label_id;
 
         // the data type of the sequence is integer (int4)
-        label_id = nextval_internal(seq_id, true);
+        label_id = (int32) nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
         if (!label_id_exists(graph_oid, label_id))
             return (int32)label_id;

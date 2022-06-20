@@ -20,23 +20,20 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "access/table.h"
 #include "access/xact.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
-#include "parser/parse_relation.h"
-#include "rewrite/rewriteHandler.h"
 #include "utils/rel.h"
-#include "utils/tqual.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "nodes/cypher_nodes.h"
 #include "utils/agtype.h"
-#include "utils/ag_cache.h"
 #include "utils/graphid.h"
 
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
@@ -90,7 +87,8 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     ExecAssignExprContext(estate, &node->ss.ps);
 
     ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
+                          ExecGetResultType(node->ss.ps.lefttree), 
+                          &TTSOpsVirtual);
 
     /*
      * When MERGE is not the last clause in a cypher query. Setup projection
@@ -125,7 +123,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         }
 
         // Open relation and aquire a row exclusive lock.
-        rel = heap_open(cypher_node->relid, RowExclusiveLock);
+        rel = table_open(cypher_node->relid, RowExclusiveLock);
 
         // Initialize resultRelInfo for the vertex
         cypher_node->resultRelInfo = makeNode(ResultRelInfo);
@@ -139,7 +137,8 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         // Setup the relation's tuple slot
         cypher_node->elemTupleSlot = ExecInitExtraTupleSlot(
             estate,
-            RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc));
+            RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
 
         if (cypher_node->id_expr != NULL)
         {
@@ -162,7 +161,9 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
      * that have modified the command id.
      */
     if (estate->es_output_cid == 0)
+    {
         estate->es_output_cid = estate->es_snapshot->curcid;
+    }
 
     /* store the currentCommandId for this instance */
     css->base_currentCommandId = GetCurrentCommandId(false);
@@ -262,7 +263,6 @@ static void process_simple_merge(CustomScanState *node)
 
         /* setup the scantuple that the process_path needs */
         econtext->ecxt_scantuple = node->ss.ps.lefttree->ps_ResultTupleSlot;
-        econtext->ecxt_scantuple->tts_isempty = false;
 
         process_path(css);
     }
@@ -489,8 +489,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              *  it.
              */
             ExecInitScanTupleSlot(estate, &sss->ss,
-                                  ExecGetResultType(sss->subplan));
-
+                                  ExecGetResultType(sss->subplan),
+                                  &TTSOpsVirtual);
 
             /* setup the scantuple that the process_path needs */
             econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;
@@ -514,7 +514,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                                 econtext->ecxt_scantuple->tts_isnull);
 
             // store the heap tuble
-            ExecStoreTuple(heap_tuple, econtext->ecxt_scantuple, InvalidBuffer, false);
+            ExecStoreVirtualTuple(econtext->ecxt_scantuple);
 
             /*
              * make the subquery's projection scan slot be the tuple table we
@@ -564,8 +564,8 @@ static void end_cypher_merge(CustomScanState *node)
         ExecCloseIndices(cypher_node->resultRelInfo);
 
         // close the relation itself
-        heap_close(cypher_node->resultRelInfo->ri_RelationDesc,
-                   RowExclusiveLock);
+        table_close(cypher_node->resultRelInfo->ri_RelationDesc,
+                    RowExclusiveLock);
     }
 }
 

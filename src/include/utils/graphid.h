@@ -27,6 +27,7 @@
 #include "utils/syscache.h"
 
 #include "catalog/ag_namespace.h"
+#include "catalog/pg_type.h"
 
 typedef int64 graphid;
 #define F_GRAPHIDEQ F_INT8EQ
@@ -52,9 +53,11 @@ typedef int64 graphid;
 #define AG_GETARG_GRAPHID(a) DATUM_GET_GRAPHID(PG_GETARG_DATUM(a))
 #define AG_RETURN_GRAPHID(x) return GRAPHID_GET_DATUM(x)
 
-/* Oid accessors for GRAPHID */
-#define GRAPHIDOID get_GRAPHIDOID()
-#define GRAPHIDARRAYOID get_GRAPHIDARRAYOID()
+// OID of graphid and _graphid
+#define GRAPHIDOID \
+    (GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid, \
+                     CStringGetDatum("graphid"), \
+                     ObjectIdGetDatum(ag_catalog_namespace_id())))
 
 #define GET_LABEL_ID(id) \
        (((uint64)id) >> ENTRY_ID_BITS)
@@ -62,8 +65,6 @@ typedef int64 graphid;
 graphid make_graphid(const int32 label_id, const int64 entry_id);
 int32 get_graphid_label_id(const graphid gid);
 int64 get_graphid_entry_id(const graphid gid);
-Oid get_GRAPHIDOID(void);
-Oid get_GRAPHIDARRAYOID(void);
 void clear_global_Oids_GRAPHID(void);
 
 #endif

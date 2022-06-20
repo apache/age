@@ -19,25 +19,20 @@
 
 #include "postgres.h"
 
-#include "access/sysattr.h"
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
-#include "storage/bufmgr.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
 #include "nodes/extensible.h"
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
-#include "parser/parsetree.h"
-#include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
+#include "storage/bufmgr.h"
 #include "utils/rel.h"
 
-#include "catalog/ag_label.h"
-#include "commands/label_commands.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "parser/cypher_parse_node.h"
 #include "nodes/cypher_nodes.h"
 #include "utils/agtype.h"
 #include "utils/graphid.h"
@@ -82,8 +77,9 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     ExecAssignExprContext(estate, &node->ss.ps);
 
     ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree));
-
+                          ExecGetResultType(node->ss.ps.lefttree),
+                          &TTSOpsHeapTuple);
+    
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
         TupleDesc tupdesc = node->ss.ss_ScanTupleSlot->tts_tupleDescriptor;
@@ -112,12 +108,12 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 {
     HeapTuple tuple = NULL;
     LockTupleMode lockmode;
-    HeapUpdateFailureData hufd;
-    HTSU_Result lock_result;
-    HTSU_Result update_result;
+    TM_FailureData hufd;
+    TM_Result lock_result;
+    TM_Result update_result;
     Buffer buffer;
 
-    ResultRelInfo *saved_resultRelInfo = saved_resultRelInfo;;
+    //ResultRelInfo *saved_resultRelInfo = saved_resultRelInfo;;
     estate->es_result_relation_info = resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
@@ -126,10 +122,11 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                   GetCurrentCommandId(false), lockmode,
                                   LockWaitBlock, false, &buffer, &hufd);
 
-    if (lock_result == HeapTupleMayBeUpdated)
+    if (lock_result == TM_Ok)
     {
+        //ExecOpenIndices(resultRelInfo, false);
         ExecStoreVirtualTuple(elemTupleSlot);
-        tuple = ExecMaterializeSlot(elemTupleSlot);
+        tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
         tuple->t_self = old_tuple->t_self;
 
         // Check the constraints of the tuple
@@ -146,7 +143,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                     estate->es_crosscheck_snapshot, true, &hufd,
                                     &lockmode);
 
-        if (update_result != HeapTupleMayBeUpdated)
+        if (update_result != TM_Ok)
         {
             ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("Entity failed to be updated: %i", update_result)));
@@ -155,13 +152,14 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         // Insert index entries for the tuple
         if (resultRelInfo->ri_NumIndices > 0)
         {
-            ExecInsertIndexTuples(elemTupleSlot, &(tuple->t_self), estate,
+            ExecInsertIndexTuples(elemTupleSlot,estate,
                                   false, NULL, NIL);
         }
+        //ExecCloseIndices(resultRelInfo);
     }
     ReleaseBuffer(buffer);
 
-    estate->es_result_relation_info = saved_resultRelInfo;
+    //estate->es_result_relation_info = saved_resultRelInfo;
 
     return tuple;
 }
@@ -209,10 +207,6 @@ static bool check_path(agtype_value *path, graphid updated_id)
     return false;
 }
 
-/*
- * Construct a new agtype path with the entity with updated_id
- * replacing all of its intances in path with updated_entity
- */
 static agtype_value *replace_entity_in_path(agtype_value *path,
                                             graphid updated_id,
                                             agtype *updated_entity)
@@ -376,7 +370,7 @@ static void process_update_list(CustomScanState *node)
         TupleTableSlot *slot;
         ResultRelInfo *resultRelInfo;
         ScanKeyData scan_keys[1];
-        HeapScanDesc scan_desc;
+        TableScanDesc scan_desc;
         bool remove_property;
         char *label_name;
         cypher_update_item *update_item;
@@ -461,11 +455,12 @@ static void process_update_list(CustomScanState *node)
                                                   new_property_value,
                                                   remove_property);
 
-        resultRelInfo = create_entity_result_rel_info(estate,
-                                                      css->set_list->graph_name,
-                                                      label_name);
+        resultRelInfo = create_entity_result_rel_info(
+            estate, css->set_list->graph_name, label_name);
 
-        slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(resultRelInfo->ri_RelationDesc));
+        slot = ExecInitExtraTupleSlot(
+            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
 
         /*
          *  Now that we have the updated properties, create a either a vertex or
@@ -528,8 +523,8 @@ static void process_update_list(CustomScanState *node)
              * Setup the scan description, with the correct snapshot and scan
              * keys.
              */
-            scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
-                                       estate->es_snapshot, 1, scan_keys);
+            scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                        estate->es_snapshot, 1, scan_keys);
             /* Retrieve the tuple. */
             heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
@@ -543,12 +538,12 @@ static void process_update_list(CustomScanState *node)
                                                  heap_tuple);
             }
             /* close the ScanDescription */
-            heap_endscan(scan_desc);
+            table_endscan(scan_desc);
         }
 
         /* close relation */
         ExecCloseIndices(resultRelInfo);
-        heap_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
+        table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
         /* increment loop index */
         lidx++;

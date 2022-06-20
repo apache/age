@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+SET extra_float_digits = 0;
 LOAD 'age';
 SET search_path TO ag_catalog;
 SELECT * FROM create_graph('expr');
@@ -1143,7 +1144,7 @@ $$) AS (i bigint);
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
 $$) AS (i bigint);
-ERROR:  invalid input syntax for integer: "1.0"
+ERROR:  invalid input syntax for type bigint: "1.0"
 -- Casting to ints that will cause overflow
 SELECT * FROM cypher('type_coercion', $$
 	RETURN 10000000000000000000
@@ -1312,11 +1313,11 @@ SELECT agtype_in('null::int');
 SELECT * FROM cypher('expr', $$
 RETURN '0.0'::int
 $$) AS r(result agtype);
-ERROR:  invalid input syntax for integer: "0.0"
+ERROR:  invalid input syntax for type bigint: "0.0"
 SELECT * FROM cypher('expr', $$
 RETURN '1.5'::int
 $$) AS r(result agtype);
-ERROR:  invalid input syntax for integer: "1.5"
+ERROR:  invalid input syntax for type bigint: "1.5"
 SELECT * FROM cypher('graph_name', $$
 RETURN "15555555555555555555555555555"::int
 $$) AS (string_result agtype);
