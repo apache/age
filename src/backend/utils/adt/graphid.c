@@ -36,7 +36,7 @@ Oid get_GRAPHIDOID(void)
 {
     if (g_GRAPHIDOID == InvalidOid)
     {
-        g_GRAPHIDOID = GetSysCacheOid2(TYPENAMENSP, CStringGetDatum("graphid"),
+        g_GRAPHIDOID = GetSysCacheOid1(TYPENAMENSP, CStringGetDatum("graphid"),
                                        ObjectIdGetDatum(ag_catalog_namespace_id()));
     }
 
@@ -48,7 +48,7 @@ Oid get_GRAPHIDARRAYOID(void)
 {
     if (g_GRAPHIDARRAYOID == InvalidOid)
     {
-        g_GRAPHIDARRAYOID = GetSysCacheOid2(TYPENAMENSP,
+        g_GRAPHIDARRAYOID = GetSysCacheOid1(TYPENAMENSP,
                                             CStringGetDatum("_graphid"),
                                             ObjectIdGetDatum(ag_catalog_namespace_id()));
     }

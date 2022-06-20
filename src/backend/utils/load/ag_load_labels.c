@@ -101,7 +101,7 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
     agtype *props = NULL;
     size_t i, n_fields;
-    graphid object_graph_id;
+    graphid object_graph_oid;
     int64 label_id_int;
 
     n_fields = cr->cur_field;
@@ -131,12 +131,12 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
             label_id_int = (int64)cr->row;
         }
 
-        object_graph_id = make_graphid(cr->object_id, label_id_int);
+        object_graph_oid = make_graphid(cr->object_id, label_id_int);
 
         props = create_agtype_from_list(cr->header, cr->fields,
                                         n_fields, label_id_int);
-        insert_vertex_simple(cr->graph_id, cr->object_name,
-                             object_graph_id, props);
+        insert_vertex_simple(cr->graph_oid, cr->object_name,
+                             object_graph_oid, props);
     }
 
 
@@ -183,7 +183,7 @@ static int is_term(unsigned char c)
 
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
-                                Oid graph_id,
+                                Oid graph_oid,
                                 char *object_name,
                                 int object_id,
                                 bool id_field_exists)
@@ -221,7 +221,7 @@ int create_labels_from_csv_file(char *file_path,
     cr.header_row_length = 0;
     cr.curr_row_length = 0;
     cr.graph_name = graph_name;
-    cr.graph_id = graph_id;
+    cr.graph_oid = graph_oid;
     cr.object_name = object_name;
     cr.object_id = object_id;
     cr.id_field_exists = id_field_exists;
