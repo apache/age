@@ -112,8 +112,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     TM_Result lock_result;
     TM_Result update_result;
     Buffer buffer;
+    bool update_indexes; 
 
-    //ResultRelInfo *saved_resultRelInfo = saved_resultRelInfo;;
+    //ResultRelInfo *saved_resultRelInfo;
     estate->es_result_relation_info = resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
@@ -135,7 +136,16 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         {
             ExecConstraints(resultRelInfo, elemTupleSlot, estate);
         }
-
+        /*
+        simple_table_tuple_update(resultRelInfo->ri_RelationDesc, 
+                                  GetCurrentCommandId(true), 
+                                  elemTupleSlot, estate->es_snapshot,
+                                  &update_indexes);
+        
+        if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
+          //ExecInsertIndexTuples(elemTupleSlot, estate, false, NULL,
+          //                                       NIL);
+        */ 
         // Insert the tuple normally
         update_result = heap_update(resultRelInfo->ri_RelationDesc,
                                     &(tuple->t_self), tuple,
@@ -148,14 +158,15 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
             ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("Entity failed to be updated: %i", update_result)));
         }
-
+        
+        &update_indexes = update_result == TM_Ok && !HeapTupleIsHeapOnly(tuple);
+        
         // Insert index entries for the tuple
-        if (resultRelInfo->ri_NumIndices > 0)
+        if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
         {
-            ExecInsertIndexTuples(elemTupleSlot,estate,
-                                  false, NULL, NIL);
+          //ExecInsertIndexTuples(elemTupleSlot, estate, false, NULL, NIL);
         }
-        //ExecCloseIndices(resultRelInfo);
+         
     }
     ReleaseBuffer(buffer);
 
@@ -377,6 +388,8 @@ static void process_update_list(CustomScanState *node)
         Datum new_entity;
         HeapTuple heap_tuple;
         char *clause_name = css->set_list->clause_name;
+        Oid relid;
+        Relation rel; 
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -412,8 +425,8 @@ static void process_update_list(CustomScanState *node)
         /* get the id and label for later */
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
         label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
+        
         label_name = pnstrdup(label->val.string.val, label->val.string.len);
-
         /* get the properties we need to update */
         original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
                                                             "properties");
@@ -454,9 +467,13 @@ static void process_update_list(CustomScanState *node)
                                                   update_item->prop_name,
                                                   new_property_value,
                                                   remove_property);
-
+        
         resultRelInfo = create_entity_result_rel_info(
             estate, css->set_list->graph_name, label_name);
+        //relid = RelationGetRelid(resultRelInfo->ri_RelationDesc); 
+        //rel = table_open(relid, RowExclusiveLock);
+        
+        //ExecOpenIndices(resultRelInfo, false);
 
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),

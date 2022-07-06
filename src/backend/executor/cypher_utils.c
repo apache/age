@@ -32,6 +32,7 @@
 #include "parser/parse_relation.h"
 #include "utils/rel.h"
 
+#include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
@@ -45,6 +46,8 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     RangeVar *rv;
     Relation label_relation;
     ResultRelInfo *resultRelInfo;
+    Oid relid; 
+    Relation  rel; 
 
     ParseState *pstate = make_parsestate(NULL);
 
@@ -52,19 +55,28 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
 
     if (strlen(label_name) == 0)
     {
-        rv = makeRangeVar(graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
-    }
-    else
-    {
-        rv = makeRangeVar(graph_name, label_name, -1);
+        label_name = AG_DEFAULT_LABEL_VERTEX; 
     }
 
+    rv = makeRangeVar(graph_name, label_name, -1);
+
+    
     label_relation = parserOpenTable(pstate, rv, RowExclusiveLock);
-
+    relid = RelationGetRelid(label_relation);
+    table_close(label_relation, NoLock); 
+    
+    //relid = get_label_relation(label_name, 
+    //                           get_graph_oid(graph_name)); 
+    //rel = table_open(relid, RowExclusiveLock);
+    
+    label_relation = table_open(relid,
+                                RowExclusiveLock);
+    
     InitResultRelInfo(resultRelInfo, label_relation,
                       list_length(estate->es_range_table), NULL,
                       estate->es_instrument);
-
+    
+    ExecOpenIndices(resultRelInfo, false); 
     free_parsestate(pstate);
 
     return resultRelInfo;
@@ -152,7 +164,7 @@ TupleTableSlot *populate_edge_tts(
  * Find out if the entity still exists. This is for 'implicit' deletion
  * of an entity.
  */
-bool entity_exists(EState *estate, uint32 graph_oid, graphid id)
+bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];

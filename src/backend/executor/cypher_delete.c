@@ -487,7 +487,7 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
      * improved. However, right now we have to scan every edge to see if
      * one has this vertex as a start or end vertex.
      */
-    foreach (lc, labels)
+    foreach(lc, labels)
     {
         char *label_name = lfirst(lc);
         ResultRelInfo *resultRelInfo;
@@ -495,8 +495,8 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
         HeapTuple tuple;
         TupleTableSlot *slot;
 
-        resultRelInfo = create_entity_result_rel_info(estate, graph_name,
-                                                      label_name);
+        resultRelInfo = create_entity_result_rel_info(estate,
+                                                      graph_name, label_name);
 
         scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
                                     estate->es_snapshot, 0, NULL);
@@ -506,7 +506,7 @@ static void find_connected_edges(CustomScanState *node, char *graph_name,
             &TTSOpsHeapTuple);
 
         // scan the table
-        while (true)
+        while(true)
         {
             graphid startid, endid;
             bool isNull;

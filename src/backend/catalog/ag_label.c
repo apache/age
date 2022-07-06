@@ -116,7 +116,7 @@ void delete_label(Oid relation)
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("label (relation=%u) does not exist", relation)));
     }
-
+    
     CatalogTupleDelete(ag_label, &tuple->t_self);
 
     systable_endscan(scan_desc);
@@ -303,7 +303,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     }
 
     table_endscan(scan_desc);
-    table_close(ag_label, RowExclusiveLock);
+
+    destroy_entity_result_rel_info(resultRelInfo); 
     table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
     return labels;
