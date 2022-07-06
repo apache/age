@@ -59,6 +59,8 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     RangeVar *rv;
     Relation label_relation;
     ResultRelInfo *resultRelInfo;
+    Oid relid; 
+    Relation  rel; 
 
     ParseState *pstate = make_parsestate(NULL);
 
@@ -170,7 +172,7 @@ TupleTableSlot *populate_edge_tts(
  * Find out if the entity still exists. This is for 'implicit' deletion
  * of an entity.
  */
-bool entity_exists(EState *estate, uint32 graph_oid, graphid id)
+bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];
