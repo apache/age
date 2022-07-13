@@ -64,10 +64,12 @@
 #include "utils/ag_cache.h"
 #include "utils/agtype.h"
 #include "utils/graphid.h"
+#include "utils/load/age_load.h"
 
 
 
 typedef struct {
+    age_load_custom_state *state;
     size_t row;
     char **header;
     size_t *header_len;

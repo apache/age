@@ -107,7 +107,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
         props = create_agtype_from_list_i(cr->header, cr->fields,
                                           n_fields, 3);
 
-        insert_edge_simple(cr->graph_id, cr->object_name,
+        insert_edge_simple(cr->state, cr->graph_id, cr->object_name,
                            object_graph_id, start_vertex_graph_id,
                            end_vertex_graph_id, props);
 
@@ -159,6 +159,11 @@ int create_edges_from_csv_file(char *file_path,
                                char *object_name,
                                int object_id )
 {
+    age_load_custom_state *state;
+    EState *estate;
+    Relation rel;
+    TupleTableSlot *slot;
+    ResultRelInfo *resultRelInfo;
 
     FILE *fp;
     struct csv_parser p;
@@ -183,6 +188,31 @@ int create_edges_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    estate = CreateExecutorState();
+    rel = heap_open(get_label_relation(object_name,
+                                       graph_id),
+                    RowExclusiveLock);
+    resultRelInfo = makeNode(ResultRelInfo);
+    InitResultRelInfo(resultRelInfo,
+                      rel,
+                      1,		/* dummy rangetable index */
+                      NULL,
+                      0);
+
+    ExecOpenIndices(resultRelInfo, false);
+
+    slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel));
+
+    estate->es_result_relations = resultRelInfo;
+    estate->es_num_result_relations = 1;
+    estate->es_result_relation_info = resultRelInfo;
+
+    state = palloc0(sizeof(age_load_custom_state));
+
+    state->estate = estate;
+    state->rel = rel;
+    state->resultRelInfo = resultRelInfo;
+    state->slot = slot;
 
     memset((void*)&cr, 0, sizeof(csv_edge_reader));
     cr.alloc = 128;
@@ -194,6 +224,7 @@ int create_edges_from_csv_file(char *file_path,
     cr.graph_id = graph_id;
     cr.object_name = object_name;
     cr.object_id = object_id;
+    cr.state = state;
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
@@ -212,9 +243,19 @@ int create_edges_from_csv_file(char *file_path,
         ereport(ERROR, (errmsg("Error while reading file %s\n", file_path)));
     }
 
+    ExecDropSingleTupleTableSlot(state->slot);
+    ExecCloseIndices(resultRelInfo);
+
+    heap_close(rel, RowExclusiveLock);
+
+    ExecCleanUpTriggerState(estate);
+    FreeExecutorState(estate);
+
     fclose(fp);
 
     free(cr.fields);
+    pfree(resultRelInfo);
+    pfree(cr.state);
     csv_free(&p);
     return EXIT_SUCCESS;
 }

@@ -135,7 +135,7 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
 
         props = create_agtype_from_list(cr->header, cr->fields,
                                         n_fields, label_id_int);
-        insert_vertex_simple(cr->graph_id, cr->object_name,
+        insert_vertex_simple(cr->state, cr->graph_id, cr->object_name,
                              object_graph_id, props);
     }
 
@@ -188,6 +188,11 @@ int create_labels_from_csv_file(char *file_path,
                                 int object_id,
                                 bool id_field_exists)
 {
+    age_load_custom_state *state;
+    EState *estate;
+    Relation rel;
+    TupleTableSlot *slot;
+    ResultRelInfo *resultRelInfo;
 
     FILE *fp;
     struct csv_parser p;
@@ -212,6 +217,32 @@ int create_labels_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    estate = CreateExecutorState();
+    rel = heap_open(get_label_relation(object_name,
+                                       graph_id),
+                    RowExclusiveLock);
+
+    resultRelInfo = makeNode(ResultRelInfo);
+    InitResultRelInfo(resultRelInfo,
+                      rel,
+                      1,		/* dummy rangetable index */
+                      NULL,
+                      0);
+
+    ExecOpenIndices(resultRelInfo, false);
+
+    slot = MakeTupleTableSlot(RelationGetDescr(rel));
+
+    estate->es_result_relations = resultRelInfo;
+    estate->es_num_result_relations = 1;
+    estate->es_result_relation_info = resultRelInfo;
+
+    state = palloc0(sizeof(age_load_custom_state));
+
+    state->estate = estate;
+    state->rel = rel;
+    state->resultRelInfo = resultRelInfo;
+    state->slot = slot;
 
     memset((void*)&cr, 0, sizeof(csv_vertex_reader));
 
@@ -225,8 +256,7 @@ int create_labels_from_csv_file(char *file_path,
     cr.object_name = object_name;
     cr.object_id = object_id;
     cr.id_field_exists = id_field_exists;
-
-
+    cr.state = state;
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
@@ -235,6 +265,8 @@ int create_labels_from_csv_file(char *file_path,
         {
             ereport(ERROR, (errmsg("Error while parsing file: %s\n",
                                    csv_strerror(csv_error(&p)))));
+            
+            heap_close(rel, RowExclusiveLock);
         }
     }
 
@@ -244,11 +276,21 @@ int create_labels_from_csv_file(char *file_path,
     {
         ereport(ERROR, (errmsg("Error while reading file %s\n",
                                file_path)));
+
+        heap_close(rel, RowExclusiveLock);
     }
+
+    ExecDropSingleTupleTableSlot(state->slot);
+    ExecCloseIndices(resultRelInfo);
+    heap_close(rel, RowExclusiveLock);
+
+    ExecCleanUpTriggerState(estate);
+    FreeExecutorState(estate);
 
     fclose(fp);
 
     free(cr.fields);
+    pfree(cr.state);
     csv_free(&p);
     return EXIT_SUCCESS;
 }

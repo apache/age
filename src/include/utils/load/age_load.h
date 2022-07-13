@@ -28,6 +28,7 @@
 #include "commands/defrem.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
+#include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodes.h"
@@ -57,13 +58,23 @@
 #ifndef INCUBATOR_AGE_ENTITY_CREATOR_H
 #define INCUBATOR_AGE_ENTITY_CREATOR_H
 
+typedef struct age_load_custom_state {
+    Relation rel;
+    EState *estate;
+    ResultRelInfo *resultRelInfo;
+    TupleTableSlot *slot;
+    TupleDesc tupDesc;
+} age_load_custom_state;
+
 agtype* create_agtype_from_list(char **header, char **fields,
                                 size_t fields_len, int64 vertex_id);
 agtype* create_agtype_from_list_i(char **header, char **fields,
                                   size_t fields_len, size_t start_index);
-void insert_vertex_simple(Oid graph_id, char* label_name, graphid vertex_id,
+void insert_vertex_simple(age_load_custom_state *state, Oid graph_id,
+                          char* label_name, graphid vertex_id,
                           agtype* vertex_properties);
-void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
+void insert_edge_simple(age_load_custom_state *state, Oid graph_id,
+                        char* label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
                         agtype* end_properties);
 

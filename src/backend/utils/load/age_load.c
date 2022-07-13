@@ -138,55 +138,64 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
     return agtype_value_to_agtype(result.res);
 }
 
-void insert_edge_simple(Oid graph_id, char* label_name, graphid edge_id,
+void insert_edge_simple(age_load_custom_state *state, Oid graph_id,
+                        char* label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
                         agtype* edge_properties)
 {
 
-    Datum values[6];
+    Datum values[4];
     bool nulls[4] = {false, false, false, false};
-    Relation label_relation;
+    TupleTableSlot *slot;
     HeapTuple tuple;
-
 
     values[0] = GRAPHID_GET_DATUM(edge_id);
     values[1] = GRAPHID_GET_DATUM(start_id);
     values[2] = GRAPHID_GET_DATUM(end_id);
     values[3] = AGTYPE_P_GET_DATUM((edge_properties));
 
-    label_relation = heap_open(get_label_relation(label_name,
-                                                  graph_id),
-                               RowExclusiveLock);
+    slot = state->slot;
+    ExecClearTuple(slot);
+    slot->tts_isnull = nulls;
+    slot->tts_values = values;
 
-    tuple = heap_form_tuple(RelationGetDescr(label_relation),
-                            values, nulls);
-    heap_insert(label_relation, tuple,
+    ExecStoreVirtualTuple(slot);
+    tuple = ExecMaterializeSlot(slot);
+    tuple->t_tableOid = RelationGetRelid(state->rel);
+    heap_insert(state->rel, tuple,
                 GetCurrentCommandId(true), 0, NULL);
-    heap_close(label_relation, RowExclusiveLock);
+    ExecInsertIndexTuples(slot, &(tuple->t_self), state->estate, false,
+                          NULL, NIL);
+    ExecClearTuple(slot);
     CommandCounterIncrement();
 }
 
-void insert_vertex_simple(Oid graph_id, char* label_name,
+void insert_vertex_simple(age_load_custom_state *state, Oid graph_id, char* label_name,
                           graphid vertex_id,
                           agtype* vertex_properties)
 {
 
     Datum values[2];
     bool nulls[2] = {false, false};
-    Relation label_relation;
+    TupleTableSlot *slot;
     HeapTuple tuple;
 
     values[0] = GRAPHID_GET_DATUM(vertex_id);
     values[1] = AGTYPE_P_GET_DATUM((vertex_properties));
 
-    label_relation = heap_open(get_label_relation(label_name,
-                                                  graph_id),
-                               RowExclusiveLock);
-    tuple = heap_form_tuple(RelationGetDescr(label_relation),
-                            values, nulls);
-    heap_insert(label_relation, tuple,
+    slot = state->slot;
+    ExecClearTuple(slot);
+    slot->tts_isnull = nulls;
+    slot->tts_values = values;
+
+    ExecStoreVirtualTuple(slot);
+    tuple = ExecMaterializeSlot(slot);
+    tuple->t_tableOid = RelationGetRelid(state->rel);
+    heap_insert(state->rel, tuple,
                 GetCurrentCommandId(true), 0, NULL);
-    heap_close(label_relation, RowExclusiveLock);
+    ExecInsertIndexTuples(slot, &(tuple->t_self), state->estate, false,
+                          NULL, NIL);
+    ExecClearTuple(slot);
     CommandCounterIncrement();
 }
 
@@ -194,7 +203,6 @@ void insert_vertex_simple(Oid graph_id, char* label_name,
 PG_FUNCTION_INFO_V1(load_labels_from_file);
 Datum load_labels_from_file(PG_FUNCTION_ARGS)
 {
-
     Name graph_name;
     Name label_name;
     text* file_path;
@@ -223,6 +231,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
                 errmsg("file path must not be NULL")));
     }
 
+
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
     file_path = PG_GETARG_TEXT_P(2);
@@ -236,7 +245,8 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     graph_id = get_graph_oid(graph_name_str);
     label_id = get_label_id(label_name_str, graph_id);
 
-    create_labels_from_csv_file(file_path_str, graph_name_str,
+    create_labels_from_csv_file(file_path_str,
+                                graph_name_str,
                                 graph_id, label_name_str,
                                 label_id, id_field_exists);
     PG_RETURN_VOID();
@@ -255,6 +265,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     char* file_path_str;
     Oid graph_id;
     int32 label_id;
+
 
     if (PG_ARGISNULL(0))
     {
