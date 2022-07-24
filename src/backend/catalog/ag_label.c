@@ -126,17 +126,6 @@ void delete_label(Oid relation)
     heap_close(ag_label, RowExclusiveLock);
 }
 
-Oid get_label_oid(const char *label_name, Oid label_graph)
-{
-    label_cache_data *cache_data;
-
-    cache_data = search_label_name_graph_cache(label_name, label_graph);
-    if (cache_data)
-        return cache_data->oid;
-    else
-        return InvalidOid;
-}
-
 int32 get_label_id(const char *label_name, Oid label_graph)
 {
     label_cache_data *cache_data;
