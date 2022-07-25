@@ -190,6 +190,7 @@ int create_labels_from_csv_file(char *file_path,
 {
     age_load_custom_state *state;
     EState *estate;
+    Oid rel_oid; 
     Relation rel;
     TupleTableSlot *slot;
     ResultRelInfo *resultRelInfo;
@@ -218,9 +219,8 @@ int create_labels_from_csv_file(char *file_path,
     }
 
     estate = CreateExecutorState();
-    rel = heap_open(get_label_relation(object_name,
-                                       graph_id),
-                    RowExclusiveLock);
+    rel_oid = get_label_relation(object_name,graph_id);
+    rel = heap_open(rel_oid, RowExclusiveLock);
 
     resultRelInfo = makeNode(ResultRelInfo);
     InitResultRelInfo(resultRelInfo,

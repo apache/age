@@ -161,6 +161,7 @@ int create_edges_from_csv_file(char *file_path,
 {
     age_load_custom_state *state;
     EState *estate;
+    Oid rel_oid; 
     Relation rel;
     TupleTableSlot *slot;
     ResultRelInfo *resultRelInfo;
@@ -189,9 +190,8 @@ int create_edges_from_csv_file(char *file_path,
     }
 
     estate = CreateExecutorState();
-    rel = heap_open(get_label_relation(object_name,
-                                       graph_id),
-                    RowExclusiveLock);
+    rel_oid = get_label_relation(object_name, graph_id);
+    rel = heap_open(reloid,RowExclusiveLock);
     resultRelInfo = makeNode(ResultRelInfo);
     InitResultRelInfo(resultRelInfo,
                       rel,
