@@ -59,8 +59,6 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     RangeVar *rv;
     Relation label_relation;
     ResultRelInfo *resultRelInfo;
-    Oid relid; 
-    Relation  rel; 
 
     ParseState *pstate = make_parsestate(NULL);
 
