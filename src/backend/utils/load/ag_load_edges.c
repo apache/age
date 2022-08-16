@@ -161,7 +161,7 @@ int create_edges_from_csv_file(char *file_path,
 {
     age_load_custom_state *state;
     EState *estate;
-    Oid rel_oid; 
+    Oid rel_oid;
     Relation rel;
     TupleTableSlot *slot;
     ResultRelInfo *resultRelInfo;
