@@ -292,9 +292,9 @@ csv_increase_buffer(struct csv_parser *p)
   if (p == NULL) return 0;
   if (p->realloc_func == NULL) return 0;
   
-  /* Increase the size of the entry buffer.  Attempt to increase size by 
+  /* Increase the size of the entry buffer.  Attempt to increase size by
    * p->blk_size, if this is larger than SIZE_MAX try to increase current
-   * buffer size to SIZE_MAX.  If allocation fails, try to allocate halve 
+   * buffer size to SIZE_MAX.  If allocation fails, try to allocate halve
    * the size and try again until successful or increment size is zero.
    */
 
@@ -342,7 +342,7 @@ csv_parse(struct csv_parser *p, const void *s, size_t len, void (*cb1)(void *, s
 
   if (!p->entry_buf && pos < len) {
     /* Buffer hasn't been allocated yet and len > 0 */
-    if (csv_increase_buffer(p) != 0) { 
+    if (csv_increase_buffer(p) != 0) {
       p->quoted = quoted, p->pstate = pstate, p->spaces = spaces, p->entry_pos = entry_pos;
       return pos;
     }
@@ -367,7 +367,7 @@ csv_parse(struct csv_parser *p, const void *s, size_t len, void (*cb1)(void *, s
         } else if (is_term ? is_term(c) : c == CSV_CR || c == CSV_LF) { /* Carriage Return or Line Feed */
           if (pstate == FIELD_NOT_BEGUN) {
             SUBMIT_FIELD(p);
-            SUBMIT_ROW(p, c); 
+            SUBMIT_ROW(p, c);
           } else {  /* ROW_NOT_BEGUN */
             /* Don't submit empty rows by default */
             if (p->options & CSV_REPALL_NL) {

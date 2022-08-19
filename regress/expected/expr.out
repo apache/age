@@ -5303,7 +5303,7 @@ SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN stDev(u.gpa), stDevP(u.gpa) $$)
 AS (stDev agtype, stDevP agtype);
        stdev       |      stdevp       
 -------------------+-------------------
- 0.549566929066705 | 0.508800109100231
+ 0.549566929066706 | 0.508800109100232
 (1 row)
 
 -- should return 0

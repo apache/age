@@ -87,7 +87,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     ExecAssignExprContext(estate, &node->ss.ps);
 
     ExecInitScanTupleSlot(estate, &node->ss,
-                          ExecGetResultType(node->ss.ps.lefttree), 
+                          ExecGetResultType(node->ss.ps.lefttree),
                           &TTSOpsVirtual);
 
     /*
@@ -462,7 +462,6 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              */
             ExprContext *econtext = node->ss.ps.ps_ExprContext;
             SubqueryScanState *sss = (SubqueryScanState *)node->ss.ps.lefttree;
-            HeapTuple heap_tuple;
 
             /*
              * Our child execution node is always a subquery. If not there
@@ -506,12 +505,6 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              *  mark as null.
              */
             mark_tts_isnull(econtext->ecxt_scantuple);
-
-            // create the physical heap tuple
-            heap_tuple = heap_form_tuple(
-                                econtext->ecxt_scantuple->tts_tupleDescriptor,
-                                econtext->ecxt_scantuple->tts_values,
-                                econtext->ecxt_scantuple->tts_isnull);
 
             // store the heap tuble
             ExecStoreVirtualTuple(econtext->ecxt_scantuple);

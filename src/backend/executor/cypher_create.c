@@ -121,10 +121,6 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
             // Setup the relation's tuple slot
             cypher_node->elemTupleSlot = table_slot_create(
                 rel, &estate->es_tupleTable);
-            //cypher_node->elemTupleSlot = ExecInitExtraTupleSlot(
-            //    estate,
-            //    RelationGetDescr(cypher_node->resultRelInfo->ri_RelationDesc),
-            //    &TTSOpsHeapTuple);
 
             if (cypher_node->id_expr != NULL)
             {

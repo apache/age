@@ -304,7 +304,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
     table_endscan(scan_desc);
 
-    destroy_entity_result_rel_info(resultRelInfo); 
+    destroy_entity_result_rel_info(resultRelInfo);
     table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
     return labels;

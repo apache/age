@@ -88,7 +88,6 @@ Datum get_cypher_keywords(PG_FUNCTION_ARGS)
         HeapTuple tuple;
 
         // cast-away-const is ugly but alternatives aren't much better
-        //values[0] = (char *)cypher_keywords[func_ctx->call_cntr].name;
         values[0] = (char *) GetScanKeyword((int) func_ctx->call_cntr,
                                             &CypherKeyword);
 
