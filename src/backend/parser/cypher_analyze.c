@@ -183,7 +183,7 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
         /* recurse on query */
         result = query_tree_walker(query, convert_cypher_walker, pstate, flags);
 
-        /* todo: I don't understand why wrote this. but, can't event this */
+        /* check for EXPLAIN */
         if (extra_node != NULL && nodeTag(extra_node) == T_ExplainStmt)
         {
             ExplainStmt *estmt = NULL;

@@ -59,7 +59,7 @@ const char *node_names[] = {
     "cypher_update_item",
     "cypher_delete_information",
     "cypher_delete_item",
-    "cypher_merge_information",
+    "cypher_merge_information"
 };
 
 /*

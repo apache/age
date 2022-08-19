@@ -240,6 +240,10 @@ static bool check_path(agtype_value *path, graphid updated_id)
     return false;
 }
 
+/*
+ * Construct a new agtype path with the entity with updated_id
+ * replacing all of its intances in path with updated_entity
+ */
 static agtype_value *replace_entity_in_path(agtype_value *path,
                                             graphid updated_id,
                                             agtype *updated_entity)
