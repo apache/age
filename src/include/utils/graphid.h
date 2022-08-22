@@ -65,6 +65,8 @@ typedef int64 graphid;
 graphid make_graphid(const int32 label_id, const int64 entry_id);
 int32 get_graphid_label_id(const graphid gid);
 int64 get_graphid_entry_id(const graphid gid);
+Oid get_GRAPHIDOID(void);
+Oid get_GRAPHIDARRAYOID(void);
 void clear_global_Oids_GRAPHID(void);
 
 #endif

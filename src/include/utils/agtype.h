@@ -545,15 +545,12 @@ agtype_value *string_to_agtype_value(char *s);
 agtype_value *integer_to_agtype_value(int64 int_value);
 void add_agtype(Datum val, bool is_null, agtype_in_state *result, Oid val_type,
                 bool key_scalar);
-void clear_global_Oids_AGTYPE(void); 
-void clear_global_Oids_GRAPHID(void); 
 
-// OID of agtype and _agtype
-#define AGTYPEOID \
-    (GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid, CStringGetDatum("agtype"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
-#define AGTYPEARRAYOID \
-    (GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid, \
-                     CStringGetDatum("_agtype"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+/* Oid accessors for AGTYPE */
+Oid get_AGTYPEOID(void);
+Oid get_AGTYPEARRAYOID(void);
+void clear_global_Oids_AGTYPE(void);
+#define AGTYPEOID get_AGTYPEOID()
+#define AGTYPEARRAYOID get_AGTYPEARRAYOID()
+
 #endif
