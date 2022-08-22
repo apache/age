@@ -193,7 +193,8 @@ Oid get_AGTYPEOID(void)
 {
     if (g_AGTYPEOID == InvalidOid)
     {
-        g_AGTYPEOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid, CStringGetDatum("agtype"), 
+        g_AGTYPEOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
+                                    CStringGetDatum("agtype"),
                                     ObjectIdGetDatum(ag_catalog_namespace_id()));
     }
 
