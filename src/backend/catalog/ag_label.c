@@ -116,7 +116,7 @@ void delete_label(Oid relation)
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("label (relation=%u) does not exist", relation)));
     }
-    
+
     CatalogTupleDelete(ag_label, &tuple->t_self);
 
     systable_endscan(scan_desc);
