@@ -53,11 +53,9 @@ typedef int64 graphid;
 #define AG_GETARG_GRAPHID(a) DATUM_GET_GRAPHID(PG_GETARG_DATUM(a))
 #define AG_RETURN_GRAPHID(x) return GRAPHID_GET_DATUM(x)
 
-// OID of graphid and _graphid
-#define GRAPHIDOID \
-    (GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid, \
-                     CStringGetDatum("graphid"), \
-                     ObjectIdGetDatum(ag_catalog_namespace_id())))
+/* Oid accessors for GRAPHID */
+#define GRAPHIDOID get_GRAPHIDOID()
+#define GRAPHIDARRAYOID get_GRAPHIDARRAYOID()
 
 #define GET_LABEL_ID(id) \
        (((uint64)id) >> ENTRY_ID_BITS)
