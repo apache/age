@@ -23,9 +23,9 @@
 
 #include "nodes/ag_nodes.h"
 #include "nodes/cypher_copyfuncs.h"
-#include "nodes/cypher_nodes.h"
 #include "nodes/cypher_outfuncs.h"
 #include "nodes/cypher_readfuncs.h"
+#include "nodes/cypher_nodes.h"
 
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b);
 
