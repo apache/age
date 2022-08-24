@@ -32,7 +32,6 @@
 #include "parser/parse_node.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
-#include "parser/parsetree.h"
 #include "utils/builtins.h"
 
 #include "catalog/ag_graph.h"
@@ -58,11 +57,11 @@ static const char *expr_get_const_cstring(Node *expr, const char *source_str);
 static int get_query_location(const int location, const char *source_str);
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params);
+                             char *graph_name, uint32 graph_oid, Param *params);
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, uint32 graph_oid,
                                         Param *params);
 
 void post_parse_analyze_init(void)
@@ -175,7 +174,7 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * QTW_IGNORE_JOINALIASES
          *     We are not interested in this.
          */
-        flags = QTW_EXAMINE_RTES | QTW_IGNORE_RT_SUBQUERIES |
+        flags = QTW_EXAMINE_RTES_BEFORE | QTW_IGNORE_RT_SUBQUERIES |
                 QTW_IGNORE_JOINALIASES;
 
         /* clear the global variable extra_node */
@@ -271,7 +270,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     FuncExpr *funcexpr = (FuncExpr *)rtfunc->funcexpr;
     Node *arg;
     Name graph_name;
-    Oid graph_oid;
+    uint32 graph_oid;
     const char *query_str;
     int query_loc;
     Param *params;
@@ -485,7 +484,7 @@ static int get_query_location(const int location, const char *source_str)
 
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params)
+                             char *graph_name, uint32 graph_oid, Param *params)
 {
     cypher_clause *clause;
     ListCell *lc;
@@ -564,7 +563,7 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, uint32 graph_oid,
                                         Param *params)
 {
     ParseState *pstate;

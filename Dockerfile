@@ -17,14 +17,14 @@
 #
 
 
-FROM postgres:11
+FROM postgres:12
 
 RUN apt-get update 
 RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
   bison \
   build-essential \
   flex \
-  postgresql-server-dev-11 
+  postgresql-server-dev-12 
 
 COPY . /age 
 RUN cd /age && make install 

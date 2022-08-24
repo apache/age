@@ -54,7 +54,7 @@
 #define IS_AG_DEFAULT_LABEL(x) \
     (IS_DEFAULT_LABEL_EDGE(x) || IS_DEFAULT_LABEL_VERTEX(x))
 
-Oid create_label(char *graph_name, char *label_name, char label_type,
-                 List *parents);
+void create_label(char *graph_name, char *label_name, char label_type,
+                  List *parents);
 
 #endif

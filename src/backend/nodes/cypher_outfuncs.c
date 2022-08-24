@@ -303,7 +303,7 @@ void out_cypher_create_target_nodes(StringInfo str, const ExtensibleNode *node)
 
     WRITE_NODE_FIELD(paths);
     WRITE_INT32_FIELD(flags);
-    WRITE_OID_FIELD(graph_oid);
+    WRITE_INT32_FIELD(graph_oid);
 }
 
 // serialization function for the cypher_create_path ExtensibleNode.
@@ -370,7 +370,7 @@ void out_cypher_delete_information(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(delete_items);
     WRITE_INT32_FIELD(flags);
     WRITE_STRING_FIELD(graph_name);
-    WRITE_OID_FIELD(graph_oid);
+    WRITE_INT32_FIELD(graph_oid);
     WRITE_BOOL_FIELD(detach);
 }
 
@@ -389,7 +389,7 @@ void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node)
     DEFINE_AG_NODE(cypher_merge_information);
 
     WRITE_INT32_FIELD(flags);
-    WRITE_OID_FIELD(graph_oid);
+    WRITE_INT32_FIELD(graph_oid);
     WRITE_INT32_FIELD(merge_function_attr);
     WRITE_NODE_FIELD(path);
 }
