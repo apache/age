@@ -32,6 +32,33 @@
 
 static void errpos_ecb(void *arg);
 
+extends_parsestate *make_extends_parsestate(ParseState* parent_cpstate)
+{
+    extends_parsestate *cpstate;
+    ParseState *pstate;
+
+    cpstate = palloc0(sizeof(*cpstate));
+    pstate = (ParseState *)cpstate;
+
+    /* Fill in fields that don't start at null/false/zero */
+    pstate->parentParseState = parent_cpstate;
+    pstate->p_next_resno = 1;
+    pstate->p_resolve_unknowns = true;
+
+    if (parent_cpstate)
+    {
+        pstate->p_sourcetext = parent_cpstate->p_sourcetext;
+        pstate->p_queryEnv = parent_cpstate->p_queryEnv;
+        pstate->p_pre_columnref_hook = parent_cpstate->p_pre_columnref_hook;
+        pstate->p_post_columnref_hook = parent_cpstate->p_post_columnref_hook;
+        pstate->p_paramref_hook = parent_cpstate->p_paramref_hook;
+        pstate->p_coerce_param_hook = parent_cpstate->p_coerce_param_hook;
+        pstate->p_ref_hook_state = parent_cpstate->p_ref_hook_state;
+    }
+
+    return cpstate;
+}
+
 // NOTE: sync the logic with make_parsestate()
 cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
 {
