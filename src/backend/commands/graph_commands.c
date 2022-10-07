@@ -93,19 +93,19 @@ Datum create_graph(PG_FUNCTION_ARGS)
         if(((validity & (1<<0)) != 0) && ((validity & (1<<1)) != 0))
         {
             ereport(ERROR,
-                (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                (errcode(ERRCODE_INVALID_NAME),
                         errmsg("Graph name must begin either with an alphabet or an underscore and no spaces or other special characters except underscore are allowed.")));
         }
         if((validity & (1<<0)) != 0)
         {
             ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                    (errcode(ERRCODE_INVALID_NAME),
                             errmsg("Graph name must begin either with an alphabet or an underscore.")));
         }
         if((validity & (1<<1)) != 0)
         {
             ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                    (errcode(ERRCODE_INVALID_NAME),
                             errmsg("No spaces or other special characters except underscore are allowed.")));
         }
     }
