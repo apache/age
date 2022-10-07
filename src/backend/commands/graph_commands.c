@@ -54,6 +54,7 @@ static Oid create_schema_for_graph(const Name graph_name);
 static void drop_schema_for_graph(char *graph_name_str, const bool cascade);
 static void remove_schema(Node *schema_name, DropBehavior behavior);
 static void rename_graph(const Name graph_name, const Name new_name);
+u_int8_t check_validity(char *graph_name_str, size_t graph_name_str_len);
 
 PG_FUNCTION_INFO_V1(create_graph);
 
@@ -84,6 +85,29 @@ Datum create_graph(PG_FUNCTION_ARGS)
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("graph \"%s\" already exists", graph_name_str)));
+    }
+
+    uint8_t validity = check_validity(graph_name_str, strlen(graph_name_str));
+    if(validity != 0)
+    {
+        if(((validity & (1<<0)) != 0) && ((validity & (1<<1)) != 0))
+        {
+            ereport(ERROR,
+                (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                        errmsg("Graph name must begin either with an alphabet or an underscore and no spaces or other special characters except underscore are allowed.")));
+        }
+        if((validity & (1<<0)) != 0)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                            errmsg("Graph name must begin either with an alphabet or an underscore.")));
+        }
+        if((validity & (1<<1)) != 0)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_SCHEMA_NAME),
+                            errmsg("No spaces or other special characters except underscore are allowed.")));
+        }
     }
 
     nsp_id = create_schema_for_graph(graph_name);
@@ -393,3 +417,29 @@ void drop_graphs(List *graphnames)
             drop_graph, CStringGetDatum(graphname), BoolGetDatum(true));
     }
 }
+
+bool isAlphabet(char c)
+{
+    if(c>='a' && c<='z') return true;
+    if(c>='A' && c<='Z') return true;
+    if(c == '_') return true;
+    return false;
+}
+
+bool isNumeral(char c)
+{
+    if(c>='0' && c<='9') return true;
+    return false;
+}
+
+uint8_t check_validity(char *graph_name_str, size_t graph_name_str_len)
+{
+    uint8_t validity = 0;
+    if(!isAlphabet(graph_name_str[0])) validity = validity | (1<<0);
+    for(int i = 1; i < graph_name_str_len; i++)
+    {
+        if(!isAlphabet(graph_name_str[i]) && !isNumeral(graph_name_str[i])) validity = validity | (1<<1);
+    }
+    return validity;
+}
+
