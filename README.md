@@ -40,7 +40,7 @@ Also, while the technology can be integrated against many data layers, a graph d
 - [Use a docker image - official ver.](https://hub.docker.com/r/apache/age)
 - [Installing from source](https://age.apache.org/#)
 
-## Graph visualization tool for AGE
+## Graph Visualization Tool for AGE
 
 Apache AGE Viewer is a user interface for Apache AGE that provides visualization and exploration of data.
 Through this simple web visualization tool, users can enter complex graph queries and explore the results in graph and table forms.
@@ -49,8 +49,6 @@ Apache AGE Viewer will become a graph data administration and development platfo
 
 - This is a visualization tool.
 After installing AGE Extension, you may use this tool to get access to the visualization features.
-- Follow the instructions on the link to run it.
-Under "Connect to Database", select database type as "Apache AGE"
 
 ## Documentation
 
@@ -66,9 +64,7 @@ Learn how to install Apache AGE, its features and built-in functions, and how to
 - [NodeJs driver](./drivers/nodejs)
 - [Python driver](./drivers/python)
 
-### Community
-
-- [Apache AGE Python Driver](https://github.com/rhizome-ai/apache-age-python)
+### Community-driven Driver
 - [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
 
 ## Contribution
