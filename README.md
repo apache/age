@@ -1,14 +1,37 @@
-# [Apache AGE](https://age.apache.org/#)
+<br>
 
-[![license badge](https://img.shields.io/github/license/apache/age)](https://github.com/apache/age/blob/master/LICENSE)
-[![release badge](https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases)](https://github.com/apache/age/releases)
-[![issue badge](https://img.shields.io/github/issues/apache/age)](https://github.com/apache/age/issues)
-[![forks badge](https://img.shields.io/github/forks/apache/age)](https://github.com/apache/age/network/members)
-[![stars badge](https://img.shields.io/github/stars/apache/age)](https://github.com/apache/age/stargazers)
+<p align="center">
+     <img src="https://age.apache.org/age-manual/master/_static/logo.png" width="30%" height="30%">
+</p>
 
-<img src="https://age.apache.org/age-manual/master/_static/logo.png" width="30%" height="30%">
+<br>
 
-Apache AGE is a PostgreSQL Extension that provides graph database functionality. AGE is an acronym for A Graph Extension, and is inspired by Bitnine's AgensGraph, a multimodel database fork of PostgreSQL. The goal of the project is to enable users of Postgres to use graph query modeling in unison with Postgres' existing relational model. 
+<p align="center">                                                                                                    
+  <a href="https://github.com/apache/age/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/releases">
+    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/issues">
+    <img src="https://img.shields.io/github/issues/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/network/members">
+    <img src="https://img.shields.io/github/forks/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/stargazers">
+    <img src="https://img.shields.io/github/stars/apache/age"/>
+  </a>
+  &nbsp;
+</p>
+
+<br>
+
+[Apache AGE](https://age.apache.org/#) is a PostgreSQL Extension that provides graph database functionality. AGE is an acronym for A Graph Extension, and is inspired by Bitnine's AgensGraph, a multimodel database fork of PostgreSQL. The goal of the project is to enable users of Postgres to use graph query modeling in unison with Postgres' existing relational model.
 
 A graph consists of a set of vertices (also called nodes) and edges, where each individual vertex and edge possesses a map of properties. A vertex is the basic object of a graph, that can exist independently of everything else in the graph. An edge creates a directed connection between two vertices. A graph database is simply composed of vertices and edges. This type of database is useful when the meaning is in the relationships between the data. Relational databases can easily handle direct relationships, but indirect relationships are more difficult to deal with in relational databases. A graph database stores relationship information as a first-class entity. Apache AGE gives you the best of both worlds, simultaneously.
 
