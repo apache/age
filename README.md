@@ -20,18 +20,19 @@ Intelligent -- AGE allows you to perform graph queries that are the basis for ma
 
 ## Overview
 
-- **Apache AGE is currently being developed for the PostgreSQL 11 release** and will support PostgreSQL 12, 13 and all the future releases of PostgreSQL.
+**This README file is for the Apache AGE PostgreSQL 12 release**
+
+- **Apache AGE is currently being developed for the PostgreSQL 11, and 12 releases** and will support all the future releases of PostgreSQL.
 - Apache AGE supports the openCypher graph query language.
 - Apache AGE enables querying multiple graphs at the same time.
 - Apache AGE will be enhanced with an aim to support all of the key features of AgensGraph (PostgreSQL fork extended with graph DB functionality).
 
 ## Latest happenings
 
-- Latest Apache AGE release, [Apache AGE 1.0.0 (https://github.com/apache/age/releases/tag/v1.1.0-rc1).
+- Latest Apache AGE for PG 12 release, [Apache AGE 1.1.0 (https://github.com/apache/age/releases/tag/PG12/v1.1.0-rc0).
 - The latest Apache AGE documentation is now available at [here](https://age.apache.org/docs/master/index.html).
 - The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
 - Send all your comments and inquiries to the user mailing list, users@age.apache.org.
-- To focus more on implementing the openCypher specification, the support for PostgreSQL 12 will be added in the Q1 2022. 
 
 ## Installation
 
