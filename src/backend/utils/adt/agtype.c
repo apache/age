@@ -3819,15 +3819,21 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     while ((tok = agtype_iterator_next(&it, r, false)) != WAGT_DONE)
     {
         if (IS_A_AGTYPE_SCALAR(r) && AGTYPE_ITERATOR_TOKEN_IS_HASHABLE(tok))
+        {
             agtype_hash_scalar_value_extended(r, &hash, seed);
+        }
         else if (tok == WAGT_BEGIN_ARRAY && !r->val.array.raw_scalar)
+        {
             seed = LEFT_ROTATE(seed, 4);
+        }
         else if (tok == WAGT_BEGIN_OBJECT)
+        {
             seed = LEFT_ROTATE(seed, 6);
-        else if (tok == WAGT_END_ARRAY && !r->val.array.raw_scalar)
+        }
+        else if (tok == WAGT_END_ARRAY || tok == WAGT_END_OBJECT)
+        {
             seed = RIGHT_ROTATE(seed, 4);
-        else if (tok == WAGT_END_OBJECT)
-            seed = RIGHT_ROTATE(seed, 4);
+        }
 
         seed = LEFT_ROTATE(seed, 1);
     }
