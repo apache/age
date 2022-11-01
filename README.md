@@ -37,27 +37,19 @@
 
 A graph consists of a set of vertices (also called nodes) and edges, where each individual vertex and edge possesses a map of properties. A vertex is the basic object of a graph, that can exist independently of everything else in the graph. An edge creates a directed connection between two vertices. A graph database is simply composed of vertices and edges. This type of database is useful when the meaning is in the relationships between the data. Relational databases can easily handle direct relationships, but indirect relationships are more difficult to deal with in relational databases. A graph database stores relationship information as a first-class entity. Apache AGE gives you the best of both worlds, simultaneously.
 
-Apache AGE is:
-
-- **Powerful**: adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
-- **Flexible**: allows you to perform openCypher queries, which make complex queries much easier to write.
-- **Intelligent**: allows you to perform graph queries that are the basis for many next level web services such as fraud detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management and more.
-
 Also, while the technology can be integrated against many data layers, a graph database is also the perfect companion for a [GraphQL](https://graphql.org/) API. Since the information is already in a native format, it simplifies many factors and even allows many operations to be generated automatically. GraphQL is rapidly  superceeding REST as the standard for cloud applications. 
 
 ## Overview
 
-- **Apache AGE is currently being developed for the PostgreSQL 12 release** and will support PostgreSQL 13 and all the future releases of PostgreSQL.
-- Apache AGE supports the openCypher graph query language.
-- Apache AGE enables querying multiple graphs at the same time.
-- The goal of Apache AGE is to make it compatible with all relational databases in the future.
+**This README file is for the Apache AGE PostgreSQL 11 release**
 
-## Latest Events
+Apache AGE is:
 
-- Latest Apache AGE release, [Apache AGE 1.1.0](https://github.com/apache/age/releases/tag/v1.1.0-rc0).
-- Renewed Apache AGE homepage - [Apache AGE website](http://age.apache.org/).
-- Send all your comments and inquiries to the user mailing list, users@age.apache.org.
-- Support for PostgreSQL will be added in the Q4 2022 to focus more on implementing the openCypher specification.
+- **Powerful**: adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
+
+- **Flexible**: allows you to perform openCypher queries, which make complex queries much easier to write. Also enables multiple graphs at the same time.
+
+- **Intelligent**: allows you to perform graph queries that are the basis for many next level web services such as fraud detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management and more.
 
 ## Documentation
 
@@ -95,3 +87,4 @@ After installing AGE Extension, you may use this tool to get access to the visua
 
 You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/age).
 Also, you can learn from the code review process, how to merge pull requests, and from code style compliance to documentation, by visiting the [Apache AGE official site - Developer Guidelines](https://age.apache.org/contribution/guide).
+Send all your comments and inquiries to the user mailing list, users@age.apache.org.
