@@ -42,10 +42,10 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node);
 static void end_cypher_merge(CustomScanState *node);
 static void rescan_cypher_merge(CustomScanState *node);
 static Datum merge_vertex(cypher_merge_custom_scan_state *css,
-                          cypher_target_node *node, ListCell *next);
+                          cypher_target_node *node, ListCell *next, List* list);
 static void merge_edge(cypher_merge_custom_scan_state *css,
                        cypher_target_node *node, Datum prev_vertex_id,
-                       ListCell *next);
+                       ListCell *next, List *list);
 static void process_simple_merge(CustomScanState *node);
 static bool check_path(cypher_merge_custom_scan_state *css,
                        TupleTableSlot *slot);
@@ -221,7 +221,7 @@ static void process_path(cypher_merge_custom_scan_state *css)
      * Create the first vertex. The create_vertex function will
      * create the rest of the path, if necessary.
      */
-    merge_vertex(css, lfirst(lc), lnext(lc));
+    merge_vertex(css, lfirst(lc), lnext(path->target_nodes, lc), path->target_nodes);
 
 
     /*
@@ -615,7 +615,7 @@ Node *create_cypher_merge_plan_state(CustomScan *cscan)
  * the create_edge function.
  */
 static Datum merge_vertex(cypher_merge_custom_scan_state *css,
-                          cypher_target_node *node, ListCell *next)
+                          cypher_target_node *node, ListCell *next, List *list)
 {
     bool isNull;
     Datum id;
@@ -634,7 +634,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
      */
     if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
     {
-        ResultRelInfo *old_estate_es_result_relation_info = NULL;
+        ResultRelInfo **old_estate_es_result_relations_info = NULL;
         Datum prop;
         /*
          * Set estate's result relation to the vertex's result
@@ -644,9 +644,9 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
          */
 
         /* save the old result relation info */
-        old_estate_es_result_relation_info = estate->es_result_relation_info;
+        old_estate_es_result_relations_info = estate->es_result_relations;
 
-        estate->es_result_relation_info = resultRelInfo;
+        estate->es_result_relations = &resultRelInfo;
 
         ExecClearTuple(elemTupleSlot);
 
@@ -703,7 +703,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         }
 
         /* restore the old result relation info */
-        estate->es_result_relation_info = old_estate_es_result_relation_info;
+        estate->es_result_relations = old_estate_es_result_relations_info;
 
         /*
          * When the vertex is used by clauses higher in the execution tree
@@ -811,7 +811,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     /* If the path continues, create the next edge, passing the vertex's id. */
     if (next != NULL)
     {
-        merge_edge(css, lfirst(next), id, lnext(next));
+        merge_edge(css, lfirst(next), id, lnext(list, next), list);
     }
 
     return id;
@@ -822,13 +822,13 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
  */
 static void merge_edge(cypher_merge_custom_scan_state *css,
                        cypher_target_node *node, Datum prev_vertex_id,
-                       ListCell *next)
+                       ListCell *next, List *list)
 {
     bool isNull;
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     ResultRelInfo *resultRelInfo = node->resultRelInfo;
-    ResultRelInfo *old_estate_es_result_relation_info = NULL;
+    ResultRelInfo **old_estate_es_result_relations_info = NULL;
     TupleTableSlot *elemTupleSlot = node->elemTupleSlot;
     Datum id;
     Datum start_id, end_id, next_vertex_id;
@@ -843,7 +843,7 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
      * next vertex's id.
      */
     css->path_values = NIL;
-    next_vertex_id = merge_vertex(css, lfirst(next), lnext(next));
+    next_vertex_id = merge_vertex(css, lfirst(next), lnext(list, next), list);
 
     /*
      * Set the start and end vertex ids
@@ -875,9 +875,9 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
      */
 
     /* save the old result relation info */
-    old_estate_es_result_relation_info = estate->es_result_relation_info;
+    old_estate_es_result_relations_info = estate->es_result_relations;
 
-    estate->es_result_relation_info = resultRelInfo;
+    estate->es_result_relations = &resultRelInfo;
 
     ExecClearTuple(elemTupleSlot);
 
@@ -903,7 +903,7 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
     insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
 
     /* restore the old result relation info */
-    estate->es_result_relation_info = old_estate_es_result_relation_info;
+    estate->es_result_relations = old_estate_es_result_relations_info;
 
     /*
      * When the edge is used by clauses higher in the execution tree

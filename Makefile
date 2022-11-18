@@ -17,8 +17,6 @@
 
 MODULE_big = age
 
-
-
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \
@@ -124,3 +122,5 @@ src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c
 src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
+
+installcheck: export LC_COLLATE=C

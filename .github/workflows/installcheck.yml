@@ -1,4 +1,4 @@
-name: PG12 Regression
+name: PG14 Regression
 
 on:
   push:
@@ -12,29 +12,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get latest commit id of PostgreSQL 12
+      - name: Get latest commit id of PostgreSQL 14
         run: |
-          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_12_STABLE | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_14_STABLE | awk '{print $1}')" >> $GITHUB_ENV
 
-      - name: Cache PostgreSQL 12
+      - name: Cache PostgreSQL 14
         uses: actions/cache@v2
-        id: pg12cache
+        id: pg14cache
         with:
-          path: ~/pg12
-          key: ${{ runner.os }}-v1-pg12-${{ env.PG_COMMIT_HASH }}
+          path: ~/pg14
+          key: ${{ runner.os }}-v1-pg14-${{ env.PG_COMMIT_HASH }}
 
-      - name: Install PostgreSQL 12
-        if: steps.pg12cache.outputs.cache-hit != 'true'
+      - name: Install PostgreSQL 14
+        if: steps.pg14cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch REL_12_STABLE git://git.postgresql.org/git/postgresql.git ~/pg12source
-          cd ~/pg12source
-          ./configure --prefix=$HOME/pg12 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
+          git clone --depth 1 --branch REL_14_STABLE git://git.postgresql.org/git/postgresql.git ~/pg14source
+          cd ~/pg14source
+          ./configure --prefix=$HOME/pg14 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
 
       - uses: actions/checkout@v2
       - name: Regression
         run: |
-          export PG_CONFIG=$HOME/pg12/bin/pg_config 
+          export PG_CONFIG=$HOME/pg14/bin/pg_config
           make -j$(nproc)
           make install
           make installcheck

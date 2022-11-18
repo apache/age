@@ -17,17 +17,17 @@
 #
 
 
-FROM postgres:12
+FROM postgres:14
 
-RUN apt-get update 
+RUN apt-get update
 RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
   bison \
   build-essential \
   flex \
-  postgresql-server-dev-12 
+  postgresql-server-dev-14
 
-COPY . /age 
-RUN cd /age && make install 
+COPY . /age
+RUN cd /age && make install
 
 COPY docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
