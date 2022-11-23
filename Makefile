@@ -57,6 +57,7 @@ OBJS = src/backend/age.o \
        src/backend/utils/adt/agtype_parser.o \
        src/backend/utils/adt/agtype_util.o \
        src/backend/utils/adt/age_global_graph.o \
+       src/backend/utils/adt/age_session_info.o \
        src/backend/utils/adt/age_vle.o \
        src/backend/utils/adt/cypher_funcs.o \
        src/backend/utils/adt/ag_float8_supp.o \
@@ -90,8 +91,10 @@ REGRESS = scan \
           cypher_union \
 	  cypher_call \
           cypher_merge \
+	  age_global_graph \
           age_load \
           index \
+          analyze \
           drop
 
 srcdir=`pwd`
