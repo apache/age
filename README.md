@@ -1,12 +1,57 @@
-# [Apache AGE](https://age.apache.org/#)
+<br>
 
-[![license badge](https://img.shields.io/github/license/apache/age)](https://github.com/apache/age/blob/master/LICENSE)
-[![release badge](https://img.shields.io/github/v/release/apache/age?sort=semver)](https://github.com/apache/age/releases)
-[![issue badge](https://img.shields.io/github/issues/apache/age)](https://github.com/apache/age/issues)
-[![forks badge](https://img.shields.io/github/forks/apache/age)](https://github.com/apache/age/network/members)
-[![stars badge](https://img.shields.io/github/stars/apache/age)](https://github.com/apache/age/stargazers)
+<p align="center">
+     <img src="https://age.apache.org/age-manual/master/_static/logo.png" width="30%" height="30%">
+</p>
+<br>
 
-<img src="https://age.apache.org/docs/master/_static/logo.png" width="30%" height="30%">
+<h3 align="center">
+    <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
+        <img src="https://age.apache.org/age-manual/master/_static/logo.png"" height="25" height="30% alt="Apache AGE">
+    </a>
+    <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
+    </a>
+     is the leading multi-model graph database </h3>
+     
+</h3>
+
+<h3 align="center">Graph Processing & Analytics for Relational Databases</h3>
+
+<br>
+
+
+</br>
+
+
+
+<p align="center">                                                                                                    
+  <a href="https://github.com/apache/age/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/releases">
+    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/issues">
+    <img src="https://img.shields.io/github/issues/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/network/members">
+    <img src="https://img.shields.io/github/forks/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://github.com/apache/age/stargazers">
+    <img src="https://img.shields.io/github/stars/apache/age"/>
+  </a>
+  &nbsp;
+  <a href="https://discord.gg/NMsBs9X8Ss">
+    <img src="https://img.shields.io/discord/1022177873127280680.svg?label=discord&style=flat&color=5a66f6"></a>
+</p>
+
+<br>
+
+
 
 Apache AGE is a PostgreSQL Extension that provides graph database functionality. AGE is an acronym for A Graph Extension, and is inspired by Bitnine's fork of PostgreSQL 10, AgensGraph, which is a multi-model database. The goal of the project is to create single storage that can handle both relational and graph model data so that users can use standard ANSI SQL along with openCypher, the Graph query language.
 
