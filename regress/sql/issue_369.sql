@@ -25,3 +25,7 @@ SELECT create_graph('cypher');
 SELECT * from cypher('cypher', $$ CREATE (a {x:1})-[:foo]->(b {x:2}),(c {x:3}) $$) as (v0 agtype);
 
 SELECT * from cypher('cypher', $$ MATCH ()-[a:foo]->(), (b {x:2}),(c {x:3}) MERGE (b)-[d:bar]->(c) RETURN d $$) as (v0 agtype);
+
+SELECT * from cypher('cypher', $$ MATCH (x)-[a:foo]->(), (b {x:2}),(c {x:3}) MERGE (b)-[d:bar]->(c) RETURN d $$) as (v0 agtype);
+
+SELECT * from cypher('cypher', $$ MATCH ()-[a:foo]->(y), (b {x:2}),(c {x:3}) MERGE (b)-[d:bar]->(c) RETURN d $$) as (v0 agtype);

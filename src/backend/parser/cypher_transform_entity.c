@@ -61,7 +61,9 @@ transform_entity *find_transform_entity(cypher_parsestate *cpstate,
                                         enum transform_entity_type type)
 {
     if( name == NULL )
+    {
         return NULL;
+    }
     
     ListCell *lc;
 
