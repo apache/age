@@ -96,7 +96,9 @@ REGRESS = scan \
           age_load \
           index \
           analyze \
+          graph_generation \
           drop
+          
 
 srcdir=`pwd`
 

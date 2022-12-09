@@ -4165,6 +4165,7 @@ CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name, nodes int, edg
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
+PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_prepare_cypher(cstring, cstring)
