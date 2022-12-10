@@ -1,7 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 LOAD 'age';
 SET search_path TO ag_catalog;
 
 --
+
 -- delete_specific_GRAPH_global_contexts
 --
 
@@ -12,6 +32,7 @@ SELECT * FROM cypher('ag_graph_1', $$ CREATE (v:vertex1) RETURN v  $$) AS (v agt
 SELECT * FROM create_graph('ag_graph_2');
 SELECT * FROM cypher('ag_graph_2', $$ CREATE (v:vertex2) RETURN v  $$) AS (v agtype);
 
+
 SELECT * FROM create_graph('ag_graph_3');
 SELECT * FROM cypher('ag_graph_3', $$ CREATE (v:vertex3) RETURN v  $$) AS (v agtype);
 
@@ -20,9 +41,11 @@ SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (r
 SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
 
+
 --- loading undefined contexts
 --- should throw exception - graph "ag_graph_4" does not exist
 SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+
 
 --- delete with invalid parameter
 ---should return false
@@ -50,7 +73,6 @@ SELECT * FROM cypher('ag_graph_3', $$ RETURN delete_global_graphs('ag_graph_3') 
 --- should throw exception graph "ag_graph_4" does not exist
 SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_graphs('ag_graph_4') $$) AS (result agtype);
 
---
 -- delete_GRAPH_global_contexts
 --
 
@@ -58,6 +80,7 @@ SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_graphs('ag_graph_4') 
 SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+
 
 -- delete all graph contexts
 -- should return true
