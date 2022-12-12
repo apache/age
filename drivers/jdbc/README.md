@@ -30,8 +30,8 @@ After the build completes successfully, a jar file will be created at path `age/
 * Install AGE on your machine. [https://age.apache.org/age-manual/master/index.html](https://age.apache.org/age-manual/master/index.html)
 * Add the downloaded jar files to class path.
 * Connect to the postgres server using pg JDBC drivers. 
-* Lets say we have a graph named `demo_graph` having some nodes. In order to extract its nodes we can try following steps.
-* To create some more graphs. [https://github.com/apache/age#quick-start](https://github.com/apache/age#quick-start)
+
+Lets say we have a graph named `demo_graph` having some nodes. In order to extract its nodes we can try following steps. To create some more graphs. [https://github.com/apache/age#quick-start](https://github.com/apache/age#quick-start). Following sample code shows how to return query result as `Agtype`.
 
 ```java
 import org.apache.age.jdbc.base.Agtype;
