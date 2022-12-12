@@ -38,6 +38,7 @@ typedef struct label_cache_data
     int32 id;
     char kind;
     Oid relation;
+    NameData seq_name;
 } label_cache_data;
 
 // callers of these functions must not modify the returned struct
@@ -47,5 +48,6 @@ label_cache_data *search_label_oid_cache(Oid oid);
 label_cache_data *search_label_name_graph_cache(const char *name, Oid graph);
 label_cache_data *search_label_graph_oid_cache(Oid graph, int32 id);
 label_cache_data *search_label_relation_cache(Oid relation);
+label_cache_data *search_label_seq_name_graph_cache(const char *name, Oid graph);
 
 #endif

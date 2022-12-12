@@ -306,7 +306,8 @@ void create_label(char *graph_name, char *label_name, char label_type,
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
 
-    insert_label(label_name, graph_oid, label_id, label_type, relation_id);
+    insert_label(label_name, graph_oid, label_id, label_type,
+                 relation_id, seq_name);
 
     CommandCounterIncrement();
 }

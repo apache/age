@@ -37,7 +37,7 @@
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
 
-static agtype *create_empty_agtype(void)
+agtype *create_empty_agtype(void)
 {
     agtype_in_state result;
 
