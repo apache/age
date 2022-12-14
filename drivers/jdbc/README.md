@@ -40,43 +40,41 @@ import org.postgresql.jdbc.PgConnection;
 import java.sql.*;
 
 public class Sample {
-   static final String DB_URL = "jdbc:postgresql://localhost:5432/demo";
-   static final String USER = "postgres";
-   static final String PASS = "1234";
-   static final String QUERY = "SELECT * from cypher('demo_graph', $$ MATCH (n) RETURN n $$) as (n agtype);";
+    static final String DB_URL = "jdbc:postgresql://localhost:5432/demo";
+    static final String USER = "postgres";
+    static final String PASS = "pass";
 
-   public static void main(String[] args) {
-      
-      // Open a connection
-      try {
+    public static void main(String[] args) {
 
-         PgConnection connection = DriverManager.getConnection(DB_URL, USER, PASS).unwrap(PgConnection.class);
-         connection.addDataType("agtype", Agtype.class);
-         
-         // configure AGE
-         Statement statement = connection.createStatement();
-         statement.execute("CREATE EXTENSION IF NOT EXISTS age;");
-         statement.execute("LOAD 'age'");
-         statement.execute("SET search_path = ag_catalog, \"$user\", public;");
+        // Open a connection
+        try {
 
-         Statement stmt = connection.createStatement();
-         ResultSet rs = stmt.executeQuery(QUERY);
+            PgConnection connection = DriverManager.getConnection(DB_URL, USER, PASS).unwrap(PgConnection.class);
+            connection.addDataType("agtype", Agtype.class);
 
-         while (rs.next()) {
+            // configure AGE
+            Statement stmt = connection.createStatement();
+            stmt.execute("CREATE EXTENSION IF NOT EXISTS age;");
+            stmt.execute("LOAD 'age'");
+            stmt.execute("SET search_path = ag_catalog, \"$user\", public;");
 
-            // getting result as Agtype
-            Agtype returnedAgtype = rs.getObject(1, Agtype.class);
-            
-            // System.out.println(returnedAgtype);
-            String nodeLabel = returnedAgtype.getMap().getObject("label").toString();
-            String nodeProp =  returnedAgtype.getMap().getObject("properties").toString();
+            // Run cypher
+            ResultSet rs = stmt.executeQuery("SELECT * from cypher('demo_graph', $$ MATCH (n) RETURN n $$) as (n agtype);");
 
-            System.out.println("Vertex : " + nodeLabel + ", \tProps : " + nodeProp);
-         }
-      } catch (Exception e) {
-         e.printStackTrace();
-      }
-   }
+            while (rs.next()) {
+
+                // Returning Result as Agtype
+                Agtype returnedAgtype = rs.getObject(1, Agtype.class);
+
+                String nodeLabel = returnedAgtype.getMap().getObject("label").toString();
+                String nodeProp =  returnedAgtype.getMap().getObject("properties").toString();
+
+                System.out.println("Vertex : " + nodeLabel + ", \tProps : " + nodeProp);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }
 ```
 
