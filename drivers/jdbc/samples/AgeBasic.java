@@ -8,10 +8,10 @@ public class AgeBasic {
     public static PgConnection connection;
     static final String DB_URL = "jdbc:postgresql://localhost:5432/demo";
     static final String USER = "postgres";
-    static final String PASS = "1234";
+    static final String PASS = "pass";
 
     public static void main(String[] args) {
-        
+
         // Open a connection
         try {
             makeConnection();
@@ -21,7 +21,7 @@ public class AgeBasic {
 
             createGraph();
             getResult();
-            getNodesFromResult();
+            getObjectsFromResult();
 
             // after all
             dropGraph();
@@ -47,17 +47,14 @@ public class AgeBasic {
         statement.execute("LOAD 'age'");
         statement.execute("SET search_path = ag_catalog, \"$user\", public;");
     }
-
-
+    
     /**
      * Using Agtype parser on the ResultSet to get the result in Agtype.
-     *
      */
     public static void getResult() throws SQLException {
         Statement stmt = connection.createStatement();
         ResultSet rs = stmt.executeQuery("SELECT * from cypher('demo_graph', $$ MATCH (n) RETURN n $$) as (n agtype);");
-
-
+        
         // Returning result as Agtype
         System.out.println("\nRESULT AS AGTYPE");
         while (rs.next()) {
@@ -68,9 +65,8 @@ public class AgeBasic {
 
     /**
      * Using Agtype to extract specific objects from the Agtype result.
-     *
      */
-    public static void getNodesFromResult() throws SQLException {
+    public static void getObjectsFromResult() throws SQLException {
         Statement stmt = connection.createStatement();
         ResultSet rs = stmt.executeQuery("SELECT * from cypher('demo_graph', $$ MATCH (n) RETURN n $$) as (n agtype);");
 
@@ -83,7 +79,6 @@ public class AgeBasic {
             System.out.println("Vertex : " + nodeLabel + ", \tProps : " + nodeProp);
         }
     }
-
 
     /**
      * Creating a 'demo_graph'.
@@ -113,13 +108,11 @@ public class AgeBasic {
     }
 
     /**
-     * After done querying drop the whole graph
-     *
+     * After done querying drop the whole graph.
+     * Dropping the GRAPH with CASCADE:true. Deletes the whole data in the graph.
      */
     public static void dropGraph() throws SQLException {
         Statement statement = connection.createStatement();
-
-        // DROPPING GRAPH with CASCADE:true
         statement.execute("SELECT * FROM ag_catalog.drop_graph('demo_graph', true);");
     }
 
@@ -138,5 +131,5 @@ public class AgeBasic {
     public static void closeConnection() throws SQLException {
         connection.close();
     }
-
+    
 }
