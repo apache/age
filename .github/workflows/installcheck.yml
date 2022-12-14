@@ -38,4 +38,9 @@ jobs:
           make -j$(nproc)
           make install
           make installcheck
-          cat /home/runner/work/age/age/./regress/regression.diffs
+          
+      - name: Dumps
+        run: |
+          echo "Dump section begin."
+          cat /home/runner/work/age/age/regress/regression.diffs
+          echo "Dump section end."
