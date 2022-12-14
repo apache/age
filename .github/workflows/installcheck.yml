@@ -33,6 +33,7 @@ jobs:
 
       - uses: actions/checkout@v2
       - name: Regression
+        id: regression_tests
         run: |
           export PG_CONFIG=$HOME/pg12/bin/pg_config 
           make -j$(nproc)
@@ -40,8 +41,10 @@ jobs:
           make installcheck
         continue-on-error: true
           
-      - name: Dumps
+      - name: Dump regression test errors
+        if: steps.regression_tests.outcome != 'success'
         run: |
           echo "Dump section begin."
           cat /home/runner/work/age/age/regress/regression.diffs
           echo "Dump section end."
+          exit 1
