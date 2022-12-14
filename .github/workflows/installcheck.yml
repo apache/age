@@ -38,6 +38,7 @@ jobs:
           make -j$(nproc)
           make install
           make installcheck
+        continue-on-error: true
           
       - name: Dumps
         run: |
