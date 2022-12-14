@@ -38,4 +38,4 @@ jobs:
           make -j$(nproc)
           make install
           make installcheck
-          diff /home/runner/work/age/age/./regress/regression.diffs
+          cat /home/runner/work/age/age/./regress/regression.diffs
