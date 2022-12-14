@@ -21,14 +21,14 @@ class AgeNotSet(Exception):
         self.name = name
 
     def __repr__(self) :
-        return 'AGE extension is not set.' 
+        return 'AGE extension is not set.'
 
 class GraphNotFound(Exception):
     def __init__(self, name):
         self.name = name
 
     def __repr__(self) :
-        return 'Graph[' + self.name + '] does not exist.' 
+        return 'Graph[' + self.name + '] does not exist.'
 
 
 class GraphAlreadyExists(Exception):
@@ -36,9 +36,9 @@ class GraphAlreadyExists(Exception):
         self.name = name
 
     def __repr__(self) :
-        return 'Graph[' + self.name + '] already exists.' 
+        return 'Graph[' + self.name + '] already exists.'
 
-        
+
 class GraphNotSet(Exception):
     def __repr__(self) :
         return 'Graph name is not set.'
@@ -52,14 +52,14 @@ class NoCursor(Exception):
     def __repr__(self) :
         return 'No Cursor'
 
-class SqlExcutionError(Exception):
+class SqlExecutionError(Exception):
     def __init__(self, msg, cause):
         self.msg = msg
         self.cause = cause
         super().__init__(msg, cause)
-    
+
     def __repr__(self) :
-        return 'SqlExcution [' + self.msg + ']'  
+        return 'SqlExecution [' + self.msg + ']'
 
 class AGTypeError(Exception):
     def __init__(self, msg, cause):
