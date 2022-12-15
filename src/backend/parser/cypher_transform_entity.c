@@ -62,6 +62,11 @@ transform_entity *find_transform_entity(cypher_parsestate *cpstate,
 {
     ListCell *lc;
 
+    if (name == NULL)
+    {
+        return NULL;
+    }
+
     foreach(lc, cpstate->entities)
     {
         transform_entity *entity = lfirst(lc);
@@ -73,14 +78,14 @@ transform_entity *find_transform_entity(cypher_parsestate *cpstate,
 
         if (type == ENT_VERTEX)
         {
-            if (!strcmp(entity->entity.node->name, name))
+            if (entity->entity.node->name != NULL && !strcmp(entity->entity.node->name, name))
             {
                 return entity;
             }
         }
         else if (type == ENT_EDGE || type == ENT_VLE_EDGE)
         {
-            if (!strcmp(entity->entity.rel->name, name))
+            if (entity->entity.rel->name != NULL && !strcmp(entity->entity.rel->name, name))
             {
                 return entity;
             }
