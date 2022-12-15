@@ -188,7 +188,6 @@ SELECT * FROM cypher('cypher_create', $$MATCH (n) RETURN n$$) AS (n agtype);
 -- prepared statements
 PREPARE p_1 AS SELECT * FROM cypher('cypher_create', $$CREATE (v:new_vertex {key: 'value'}) RETURN v$$) AS (a agtype);
 EXECUTE p_1;
-EXECUTE p_1;
 
 PREPARE p_2 AS SELECT * FROM cypher('cypher_create', $$CREATE (v:new_vertex {key: $var_name}) RETURN v$$, $1) AS (a agtype);
 EXECUTE p_2('{"var_name": "Hello Prepared Statements"}');
@@ -205,7 +204,6 @@ BEGIN
 END
 $BODY$;
 
-SELECT create_test();
 SELECT create_test();
 
 --
