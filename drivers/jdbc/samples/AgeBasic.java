@@ -103,8 +103,7 @@ public class AgeBasic {
         statement.execute("SELECT * FROM cypher('demo_graph', $$ CREATE (n:Country{name : 'US'}) $$) AS (a agtype);");
 
         // creating relationship (n:PERSON)-[r:BORNIN]-(n:COUNTRY)
-        statement.execute("SELECT * from cypher('demo_graph', $$ MATCH (a:Person)-[r]-(b:Country) WHERE a.bornIn = b.name RETURN a, r, b $$) as (a agtype, r agtype, b agtype);");
-
+        statement.execute("SELECT * FROM cypher('demo_graph', $$ MATCH (a:Person), (b:Country) WHERE a.bornIn = b.name CREATE (a)-[r:BORNIN]->(b) RETURN r $$) as (r agtype);");
     }
 
     /**
