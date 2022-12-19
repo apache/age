@@ -448,11 +448,6 @@ EXECUTE p_1;
  {"id": 2533274790395905, "label": "new_vertex", "properties": {"key": "value"}}::vertex
 (1 row)
 
-EXECUTE p_1;
-                                            a                                            
------------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "new_vertex", "properties": {"key": "value"}}::vertex
-(1 row)
 
 PREPARE p_2 AS SELECT * FROM cypher('cypher_create', $$CREATE (v:new_vertex {key: $var_name}) RETURN v$$, $1) AS (a agtype);
 EXECUTE p_2('{"var_name": "Hello Prepared Statements"}');
@@ -481,12 +476,6 @@ SELECT create_test();
                                        create_test                                       
 -----------------------------------------------------------------------------------------
  {"id": 2533274790395909, "label": "new_vertex", "properties": {"key": "value"}}::vertex
-(1 row)
-
-SELECT create_test();
-                                       create_test                                       
------------------------------------------------------------------------------------------
- {"id": 2533274790395910, "label": "new_vertex", "properties": {"key": "value"}}::vertex
 (1 row)
 
 --
