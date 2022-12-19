@@ -478,6 +478,7 @@ SELECT create_test();
  {"id": 2533274790395909, "label": "new_vertex", "properties": {"key": "value"}}::vertex
 (1 row)
 
+
 --
 -- Errors
 --
