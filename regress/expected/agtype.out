@@ -2883,7 +2883,7 @@ SELECT agtype_btree_cmp('"string"'::agtype, '"string"'::agtype);
                 0
 (1 row)
 
-SELECT agtype_btree_cmp('"string"'::agtype, '"string "'::agtype);
+SELECT sign(agtype_btree_cmp('"string"'::agtype, '"string "'::agtype)) AS agtype_btree_cmp;
  agtype_btree_cmp 
 ------------------
                -1

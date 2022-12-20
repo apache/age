@@ -835,7 +835,7 @@ SELECT agtype_btree_cmp('1'::agtype, '1.0'::agtype);
 SELECT agtype_btree_cmp('1'::agtype, '"1"'::agtype);
 
 SELECT agtype_btree_cmp('"string"'::agtype, '"string"'::agtype);
-SELECT agtype_btree_cmp('"string"'::agtype, '"string "'::agtype);
+SELECT sign(agtype_btree_cmp('"string"'::agtype, '"string "'::agtype)) AS agtype_btree_cmp;
 
 SELECT agtype_btree_cmp(NULL, NULL);
 SELECT agtype_btree_cmp(NULL, '1'::agtype);
