@@ -54,8 +54,10 @@
 #include "utils/agtype.h"
 #include "utils/graphid.h"
 
-#ifndef AGE_ENTITY_CREATOR_H
-#define AGE_ENTITY_CREATOR_H
+#ifndef INCUBATOR_AGE_ENTITY_CREATOR_H
+#define INCUBATOR_AGE_ENTITY_CREATOR_H
+
+agtype* create_empty_agtype(void);
 
 agtype* create_empty_agtype(void);
 
