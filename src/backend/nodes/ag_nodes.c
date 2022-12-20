@@ -23,9 +23,9 @@
 
 #include "nodes/ag_nodes.h"
 #include "nodes/cypher_copyfuncs.h"
-#include "nodes/cypher_nodes.h"
 #include "nodes/cypher_outfuncs.h"
 #include "nodes/cypher_readfuncs.h"
+#include "nodes/cypher_nodes.h"
 
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b);
 
@@ -59,7 +59,7 @@ const char *node_names[] = {
     "cypher_update_item",
     "cypher_delete_information",
     "cypher_delete_item",
-    "cypher_merge_information",
+    "cypher_merge_information"
 };
 
 /*
@@ -121,7 +121,7 @@ const ExtensibleNodeMethods node_methods[] = {
     DEFINE_NODE_METHODS_EXTENDED(cypher_update_item),
     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_information),
     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_item),
-    DEFINE_NODE_METHODS_EXTENDED(cypher_merge_information),
+    DEFINE_NODE_METHODS_EXTENDED(cypher_merge_information)
 };
 
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b)

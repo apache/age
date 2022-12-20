@@ -4,13 +4,13 @@ dist: bionic
 arch: amd64
 jobs:
   include:
-  - name: PostgreSQL 12
+  - name: PostgreSQL 13
     compiler: gcc
     addons:
       apt:
         packages:
-        - postgresql-12
-        - postgresql-server-dev-12
+        - postgresql-13
+        - postgresql-server-dev-13
     script:
     - sudo make install -j$(nproc)
     - make installcheck

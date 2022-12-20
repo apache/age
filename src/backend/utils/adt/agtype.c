@@ -193,8 +193,9 @@ Oid get_AGTYPEOID(void)
 {
     if (g_AGTYPEOID == InvalidOid)
     {
-        g_AGTYPEOID = GetSysCacheOid1(TYPENAMENSP, CStringGetDatum("agtype"),
-                                      ObjectIdGetDatum(ag_catalog_namespace_id()));
+        g_AGTYPEOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
+                                    CStringGetDatum("agtype"),
+                                    ObjectIdGetDatum(ag_catalog_namespace_id()));
     }
 
     return g_AGTYPEOID;
@@ -205,7 +206,7 @@ Oid get_AGTYPEARRAYOID(void)
 {
     if (g_AGTYPEARRAYOID == InvalidOid)
     {
-        g_AGTYPEARRAYOID = GetSysCacheOid1(TYPENAMENSP,
+        g_AGTYPEARRAYOID = GetSysCacheOid2(TYPENAMENSP,Anum_pg_type_oid,
                                            CStringGetDatum("_agtype"),
                                            ObjectIdGetDatum(ag_catalog_namespace_id()));
     }
