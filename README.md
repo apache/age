@@ -138,8 +138,7 @@ You can use a <a href="https://www.postgresql.org/download/">package management 
 <br>
 
 ```bash
-sudo apt install postgresql 
-
+sudo apt install postgresql
 ```
 <h4>
 &nbsp;Install From Source Code
@@ -180,9 +179,8 @@ make PG_CONFIG=/path/to/postgres/bin/pg_config install
 
 ```bash
 docker pull apache/age
-
 ```
-<h5> Create AGE docker container </h5>
+<h5> Create age docker container for first time</h5>
 
 ```bash
 docker run \
@@ -195,7 +193,23 @@ docker run \
     apache/age
 ```
 
+<h5> Or Run docker container if you previously worked with age container </h5>
 
+```bash
+docker start age
+```
+
+<h5> Access CLI for running age container</h5>
+
+```bash
+docker exec -it age /bin/bash
+```
+
+<h5> Access Postgres shell </h5>
+
+```bash
+psql -U postgresUser postgresDB
+```
 
 <h2><img height="20" src="/img/contents.svg">&nbsp;&nbsp;Post Installation</h2>
 
