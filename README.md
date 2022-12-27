@@ -180,7 +180,7 @@ make PG_CONFIG=/path/to/postgres/bin/pg_config install
 ```bash
 docker pull apache/age
 ```
-<h5> Create age docker container for first time</h5>
+<h5> Create AGE docker container for first time</h5>
 
 ```bash
 docker run \
@@ -193,13 +193,13 @@ docker run \
     apache/age
 ```
 
-<h5> Or Run docker container if you previously worked with age container </h5>
+<h5> Or Run docker container if you previously worked with AGE container </h5>
 
 ```bash
 docker start age
 ```
 
-<h5> Access CLI for running age container</h5>
+<h5> Access CLI for running AGE container</h5>
 
 ```bash
 docker exec -it age /bin/bash
