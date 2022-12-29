@@ -1,0 +1,36 @@
+name: Code Format Test
+
+on:
+  pull_request:
+    branches: [ "master" , "code-format-workflow" ]
+
+  push: 
+    branches: [ "master" ]
+
+jobs:
+  pre-commit:
+    name: Format
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install clang-format-12
+      run: sudo apt-get install clang-format-12
+
+    - name: Install and run pre-commit
+      run: |
+       python -m pip install pre-commit
+       git fetch origin
+       pre-commit run --show-diff-on-failure --color=always --from-ref origin/${{ github.event.pull_request.base.ref }} --to-ref ${{ github.event.pull_request.head.sha }}
+      id: precommit
+
+    - name: Upload pre-commit changes
+      if: failure() && steps.precommit.outcome == 'failure'
+      uses: rhaschke/upload-git-patch-action@main
+      with:
+        name: pre-commit
