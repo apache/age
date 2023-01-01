@@ -1,4 +1,4 @@
-name: PG12 Regression
+name: PG13 Regression
 
 on:
   push:

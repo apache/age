@@ -5691,7 +5691,7 @@ static agtype_iterator *get_next_list_element(agtype_iterator *it,
 
     /* the next token should be an element or the end of the array */
     itok = agtype_iterator_next(&it, &tmp, true);
-    Assert(itok == WAGT_ELEM || WAGT_END_ARRAY);
+    Assert(itok == WAGT_ELEM || itok == WAGT_END_ARRAY);
 
     /* if this is the end of the array return NULL */
     if (itok == WAGT_END_ARRAY) {
@@ -9484,7 +9484,7 @@ static agtype_iterator *get_next_object_key(agtype_iterator *it,
 
     /* the next token should be a key or the end of the object */
     itok = agtype_iterator_next(&it, &tmp, false);
-    Assert(itok == WAGT_KEY || WAGT_END_OBJECT);
+    Assert(itok == WAGT_KEY || itok == WAGT_END_OBJECT);
     /* if this is the end of the object return NULL */
     if (itok == WAGT_END_OBJECT)
     {
