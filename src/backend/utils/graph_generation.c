@@ -135,8 +135,8 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     if (!PG_ARGISNULL(3))
     {
         vtx_label_name = PG_GETARG_NAME(3);
-        vtx_name_str = NameStr(*vtx_label_name);
         // Check if label with the input name already exists
+        vtx_name_str = NameStr(*vtx_label_name);
         if (!label_exists(vtx_name_str, graph_id))
         {
             DirectFunctionCall2(create_vlabel, CStringGetDatum(graph_name), CStringGetDatum(vtx_label_name));
@@ -196,6 +196,156 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                             end_vertex_graph_id, props);
             
         }
+    }
+
+    PG_RETURN_VOID();
+}
+
+
+PG_FUNCTION_INFO_V1(age_create_cycle_graph);
+
+// SELECT * FROM ag_catalog.age_create_cycle_graph(string graph_name, int no_of_vertices, str vertex_label_name, vertex_properties=NULL, str edge_label_name
+//, edge_properties=NULL, biderctional=TRUE);
+
+Datum age_create_cycle_graph(PG_FUNCTION_ARGS)
+{
+
+    Name vertex_label_name;
+    Name edge_label_name;
+    Name vertex_seq_name;
+    Name edge_seq_name;
+    Name graph_name;
+
+    char* graph_name_str;
+    char* vertex_name_str;
+    char* edge_name_str;
+    char *vertex_seq_name_str;
+    char *edge_seq_name_str;
+
+    int32 vertex_label_id;
+    int32 edge_label_id;
+
+    Oid graph_id;
+    Oid nsp_id;
+    Oid vertex_seq_id;
+    Oid edge_seq_id;
+
+    graph_cache_data *graph_cache;
+    label_cache_data *vertex_cache;
+    label_cache_data *edge_cache;
+
+    graphid object_graph_id;
+    graphid start_vertex_graph_id;
+    graphid end_vertex_graph_id;
+
+    int64 vid, lid, eid, start_vid, end_vid;
+    int64 vertices_count;
+
+    agtype *props = NULL;
+
+
+    if(PG_ARGISNULL(0)){
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("graph name can not be NULL")));
+    }
+    
+    graph_name = PG_GETARG_NAME(0);
+    
+    DirectFunctionCall1(create_graph, CStringGetDatum(graph_name));
+    //create_graph(graph_name);
+
+    if(PG_ARGISNULL(1)){
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("Number of vertices cannot be NULL")));
+    }
+
+    if(PG_ARGISNULL(2)){
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("vertex label cannot be NULL")));
+    }
+
+    if(PG_ARGISNULL(4)){
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("edge label cannot be NULL")));
+    }
+
+    vertices_count = PG_GETARG_INT64(1);
+
+    if(vertices_count<3){
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("Number of vertices cannot be less than 3")));
+    }
+
+    vertex_label_name = PG_GETARG_NAME(2);
+    edge_label_name = PG_GETARG_NAME(4);
+
+    vertex_name_str = NameStr(*vertex_label_name);
+    edge_name_str = NameStr(*edge_label_name);
+    graph_name_str = NameStr(*graph_name);
+
+    graph_id = get_graph_oid(graph_name_str);
+
+    //create_vlabel(graph_name, vertex_label_name);
+    //create_elabel(graph_name, edge_label_name);
+    //Can't call functions directly!
+    DirectFunctionCall2(create_vlabel, CStringGetDatum(graph_name), CStringGetDatum(vertex_label_name));
+    DirectFunctionCall2(create_elabel, CStringGetDatum(graph_name), CStringGetDatum(edge_label_name));
+
+    vertex_label_id = get_label_id(vertex_name_str, graph_id);
+    edge_label_id = get_label_id(edge_name_str, graph_id);
+
+    graph_cache = search_graph_name_cache(graph_name_str);
+    vertex_cache = search_label_name_graph_cache(vertex_name_str,graph_id);
+    edge_cache = search_label_name_graph_cache(edge_name_str,graph_id);
+
+    nsp_id = graph_cache->namespace;
+    vertex_seq_name = &(vertex_cache->seq_name);
+    vertex_seq_name_str = NameStr(*vertex_seq_name);
+
+    edge_seq_name = &(edge_cache->seq_name);
+    edge_seq_name_str = NameStr(*edge_seq_name);
+
+    vertex_seq_id = get_relname_relid(vertex_seq_name_str, nsp_id);
+    edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
+
+
+    /* Creating vertices*/
+    for (int64 i=(int64)1;i<=vertices_count;i++)
+    {   
+        vid = nextval_internal(vertex_seq_id, true);
+        object_graph_id = make_graphid(vertex_label_id, vid);
+        props = create_empty_agtype();
+        insert_vertex_simple(graph_id,vertex_name_str,object_graph_id,props);
+    }
+
+    lid = vid;
+    
+    /* Creating edges*/
+    /* We create edges such that every vertice has only 1 incoming and outgoing edge and all vertices are connected*/
+    for (int64 i = 1;i<=vertices_count;i++)
+    {   
+        start_vid = lid-vertices_count+i;
+        if (i==vertices_count)
+        {
+            end_vid = start_vid - vertices_count + 1;
+        }
+        else
+        {
+            end_vid = start_vid + 1;
+        }
+        
+        eid = nextval_internal(edge_seq_id, true);
+        object_graph_id = make_graphid(edge_label_id, eid);
+
+        start_vertex_graph_id = make_graphid(vertex_label_id, start_vid);
+        end_vertex_graph_id = make_graphid(vertex_label_id, end_vid);
+
+        props = create_empty_agtype();
+
+        insert_edge_simple(graph_id, edge_name_str,
+                        object_graph_id, start_vertex_graph_id,
+                        end_vertex_graph_id, props);
+
     }
 
     PG_RETURN_VOID();

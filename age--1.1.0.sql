@@ -4181,6 +4181,12 @@ STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.age_create_cycle_graph(graph_name name, nodes int, vertex_label name, vertex_properties name, edge_label name, edge_properties name, biderectional bool default true)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
+AS 'MODULE_PATHNAME';
+
 --
 -- End
 --
