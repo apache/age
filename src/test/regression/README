@@ -1,0 +1,39 @@
+This directory contains files for simple regression tests.
+To execute regress.sh you need to install:
+
+- pgpool_setup
+- PostgreSQL 8.3 or later (requires EXTENSION)
+- pgbench
+- perl PostgreSQL interface
+- other tools or libraries required in each test cases
+
+regress.sh: the regression test driver. To execute the test, type "sh regress.sh".
+	   To get the lists of arguments accepted by regress.sh type "sh regress.sh -?"
+
+clean.sh: remove files including PostgreSQL DB clusters created by regress.sh.
+
+tests: test scripts live here. Each test case has its own
+	   subdirectory. In the directory the test script resides and the
+	   script name must be "test.sh". The script should return exit
+	   code 0 upon successful completion of the test. Otherwise it
+	   should return non 0 value. To add a new test case, simply
+	   create a shell script under this.
+
+	   The test name "001.*" to "050.*" is for regular regression
+	   tests, while after "051.*" are for bugs.
+
+	   regress.sh exports following environment variables which can be
+	   used by test scripts.
+	   
+	   PGPOOL_SETUP		file path of pgpool_setup file
+	   PGPOOL_INSTALL_DIR	pgpool-II installed directory
+	   PGBIN		directory path containing PostgreSQL binaries		
+	   JDBC_DRIVER		file path of JDBC driver
+
+
+log: any output of the test files above is created under the
+	  directory. The log file name is same as the test name.
+
+libs.sh: contains some useful bash functions. The file name is
+		 exported as "$TESTLIBS",
+

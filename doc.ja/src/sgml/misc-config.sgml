@@ -1,0 +1,391 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-misc">
+ <!--
+ <title>Misc Configuration Parameters</title>
+ -->
+ <title>その他の設定パラメータ</title>
+
+ <variablelist>
+
+  <varlistentry id="guc-relcache-expire" xreflabel="relcache_expire">
+   <term><varname>relcache_expire</varname> (<type>integer</type>)
+    <indexterm>
+     <!--
+     <primary><varname>relcache_expire</varname> configuration parameter</primary>
+     -->
+     <primary><varname>relcache_expire</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Specifies the relation cache expiration time in seconds.
+     The relation cache is used for caching the query result of
+     <productname>PostgreSQL</> system catalogs that is used by <productname>Pgpool-II
+    </productname> to get various information including the table
+     structures and to check table types(e.g. To check if the referred
+     table is a temporary table or not). The cache is maintained in
+     the local memory space of <productname>Pgpool-II</productname>
+     child process and its lifetime is same as of the child process.
+     The cache is also maintained in shared memory to share among child
+     processes,if enable  <xref linkend="guc-enable-shared-relcache">.
+     So If the table is modified using <command>ALTER TABLE</command>
+     or some other means, the relcache becomes inconsistent.
+     For this purpose, <varname>relcache_expire</varname> controls
+     the life time of the cache.
+     Default is 0, which means the cache never expires.
+     -->
+     リレーションキャッシュの寿命を秒単位で指定します。
+     リレーションキャッシュは、<productname>Pgpool-II</productname>がテーブルの構造を含む様々な情報を取得したり、テーブルのタイプ（たとえば、参照されているテーブルが一時テーブルかどうかなど）をチェックするために使う<productname>PostgreSQL</>のシステムカタログの問い合わせ結果を保存しておくものです。
+     キャッシュはpgpoolの子プロセスのローカルメモリ空間に保管されています。
+     <xref linkend="guc-enable-shared-relcache">が有効な場合、子プロセス間で共有するために共有メモリにも保管されます。
+      もし<command>ALTER TABLE</command>でテーブルが変更された場合などは、リレーションキャッシュと一致しなくなります。
+      そのため、<varname>relcache_expire</varname>がキャッシュの寿命をコントロールしています。
+      デフォルトは0で、キャッシュの期限が切れることはありません。
+    </para>
+
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータは、サーバ起動時にのみ設定できます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-relcache-size" xreflabel="relcache_size">
+   <term><varname>relcache_size</varname> (<type>integer</type>)
+    <indexterm>
+     <!--
+     <primary><varname>relcache_size</varname> configuration parameter</primary>
+     -->
+     <primary><varname>relcache_size</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Specifies the number of relcache entries. Default is 256.
+     The cache is created  about 10 entries per table. So you can estimate
+     the required number of relation cache at "number of using table * 10".
+     -->
+     リレーションキャッシュのエントリ数を指定します。
+     デフォルトは256です。
+     リレーションキャッシュは、一つのテーブルあたり最大10個程度のエントリが作成されます。
+     そのため、必要なリレーションキャッシュのサイズは、使用するテーブル数 * 10 で見積れます。
+    </para>
+    <note>
+     <para>
+      <!--
+      If the below message frequently appears in the
+      <productname>Pgpool-II</productname> log, you may need to
+      increase the <varname>relcache_size</varname> for better performance.
+      -->
+      もし以下のようなメッセージが<productname>Pgpool-II</productname>ログに頻繁に出る場合は、パフォーマンス向上のため<varname>relcache_size</varname>を大きくしてください。
+      <programlisting>
+       "pool_search_relcache: cache replacement happened"
+      </programlisting>
+     </para>
+    </note>
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータは、サーバ起動時にのみ設定できます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-enable-shared-relcache" xreflabel="enable_shared_relcache">
+   <term><varname>enable_shared_relcache</varname> (<type>boolean</type>)
+    <indexterm>
+     <!--
+     <primary><varname>enable_shared_relcache</varname> configuration parameter</primary>
+     -->
+     <primary><varname>enable_shared_relcache</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     onにするとインメモリクエリキャッシュ(<xref linkend="runtime-in-memory-query-cache-enabling">参照)を利用して子プロセス間でリレーションキャッシュを共有します。
+     デフォルトはonです。
+     それぞれの子プロセスは<productname>PostgreSQL</productname>のシステムカタログを参照するためにクエリを実行します。
+     この機能を有効にすると、他のプロセスはクエリキャッシュからカタログを参照した結果を得ることができるので、クエリの実行頻度が減ることが期待できます。
+     システムカタログが変更されてもキャッシュは削除されません。
+     ですから時間によるキャッシュの削除を<xref linkend="guc-relcache-expire">を使って行うことを強くお勧めします。
+    </para>
+    <para>
+      本パラメータは、<xref linkend="guc-memory-cache-enabled">がoffの場合も有効です。
+       この場合、一部のクエリキャッシュのパラメータ（<xref linkend="guc-memqcache-method">と<xref linkend="guc-memqcache-maxcache">、および各キャッシュストレージ用のパラメータ）も有効になります。
+    </para>
+    <para>
+     このパラメータがonなら、<productname>Pgpool-II</productname>はローカルのリレーションキャッシュをまず検索します。
+     該当するキャッシュエントリが見つからない場合は、次に共有クエリキャッシュを検索します。
+     もしクエリキャッシュに該当エントリが見つかったら、ローカルキャッシュにコピーします。
+     見つからなかった場合には、<productname>PostgreSQL</productname>にクエリを発行して問い合わせを実行し、結果をクエリキャッシュに登録するとともに、ローカルキャッシュにも登録します。
+    </para>
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータはサーバ起動時にのみ設定可能です
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-relcache-query-target" xreflabel="relcache_query_target">
+   <term><varname>relcache_query_target</varname> (<type>enum</type>)
+    <indexterm>
+     <primary><varname>relcache_query_target</varname>設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     リレーションキャッシュを作成するためのクエリを送る先のノードを指定します。
+     <literal>primary</literal>にすると、クエリはメイン（プライマリ）に送られます。
+     これがデフォルトで、最新のデータを入手できるため、ほとんどのユーザに推奨する設定です。
+     もしメイン（プライマリ）の負荷を下げたい場合は、このパラメータを<literal>load_balance_node</literal>に設定できます。
+     これにより、クエリは負荷分散ノードに送られます。
+     これは特に、大陸Aに<productname>Pgpool-II</productname>とプライマリサーバがあり、一方大陸Bに<productname>Pgpool-II</productname>とスタンバイサーバがあるような構成で有効です。
+     Bのユーザは地理的にスタンバイサーバが近いため、スタンバイからデータを読みたいと思うでしょう。
+     その場合は、backend_weight0 (これはプライマリの設定です)を0に、backend_weight1(これはスタンバイの設定です)を1にし、relcache_query_targetを<literal>load_balance_node</literal>にします。
+    </para>
+    <para>
+     しかし、スタンバイにクエリを送る場合、レプリケーションの遅延により、最近作られたテーブルや行はスタンバイサーバにはまだないかもしれないことに注意してください。
+     ですから、更新頻度の高いシステムではこの設定はおすすめできません。
+    </para>
+    <para>
+     このパラメータは<productname>Pgpool-II</productname>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-check-temp-table" xreflabel="check_temp_table">
+   <term><varname>check_temp_table</varname> (<type>enum</type>)
+    <indexterm>
+     <!--
+     <primary><varname>check_temp_table</varname> configuration parameter</primary>
+     -->
+     <primary><varname>check_temp_table</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <literal>catalog</literal>あるいは<literal>trace</literal>に設定されたとき、<acronym>SELECT</acronym>に含まれるテーブルが一時テーブルかどうかのチェックを行います。
+     <literal>catalog</literal>に設定すると一時テーブルをチェックするため<productname>Pgpool-II</productname>はプライマリ/メイン<productname>PostgreSQL</productname>バックエンドのシステムカタログに問い合わせ、プライマリ/マスタサーバの負荷を上げます。
+    </para>
+    <para>
+     <literal>trace</literal>に設定されていると、一時テーブルの情報を入手するために<productname>Pgpool-II</productname>は一時テーブルの作成と削除を追跡します。
+     ですからシステムカタログへアクセする必要がありません。
+     しかし、一時テーブルの生成が<productname>Pgpool-II</productname>から見えない場合（たとえば関数やトリガの中で行われる場合）、<productname>Pgpool-II</productname>は一時テーブルの生成を認識できません。
+    </para>
+    <para>
+     もしシステムが決して一時テーブルを使用しないことが確かならば、安全に<varname>check_tmp_table</varname>を<literal>none</literal>にすることができます。
+    </para>
+    <note>
+     <para>
+      4.0以前のバージョンとの互換性のために、<literal>catalog</literal>と同じ意味の<literal>on</literal>、<literal>none</literal>と同じ意味の<literal>off</literal>も受け付けますが、将来のバージョンではこれらは削除されるかもしれません。
+     </para>
+    </note>
+    <para>
+     デフォルトは<literal>catalog</literal>です。
+    </para>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+     this parameter for a current session.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     現在のセッションでのパラメータ値は、<xref linkend="SQL-PGPOOL-SET">コマンドで変更することもできます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-check-unlogged-table" xreflabel="check_unlogged_table">
+   <term><varname>check_unlogged_table</varname> (<type>boolean</type>)
+    <indexterm>
+     <!--
+     <primary><varname>check_unlogged_table</varname> configuration parameter</primary>
+     -->
+     <primary><varname>check_unlogged_table</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Setting to on, enables the unlogged table check in the <acronym>SELECT</acronym>
+     statements. To check the unlogged table <productname>Pgpool-II</productname>
+     queries the system catalog of primary/main <productname>PostgreSQL</> backend which increases
+     the load on the primary/main server.
+     If you are absolutely sure that your system never uses the unlogged tables
+     (for example, you are using 9.0 or earlier version of <productname>PostgreSQL</>) then you
+     can safely turn off the <varname>check_unlogged_table</varname>.
+     Default is on.
+     -->
+     onに設定されたとき、<acronym>SELECT</acronym>に含まれるテーブルがunloggedテーブルかどうかのチェックを行います。
+     unloggedテーブルをチェックするため<productname>Pgpool-II</productname>はプライマリ/メイン<productname>PostgreSQL</>バックエンドのシステムカタログに問い合わせ、プライマリ/マスタサーバの負荷を上げます。
+     もしシステムが決してunloggedテーブルを使用しないことが確かならば（たとえば、9.0 以前のバージョンの<productname>PostgreSQL</>を使っている）、安全に<varname>check_unlogged_table</varname>をoffにすることができます。
+     デフォルトはonです。
+    </para>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+     this parameter for a current session.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     現在のセッションでのパラメータ値は、<xref linkend="SQL-PGPOOL-SET">コマンドで変更することもできます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-pid-file-name" xreflabel="pid_file_name">
+   <term><varname>pid_file_name</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>pid_file_name</varname> configuration parameter</primary>
+     -->
+     <primary><varname>pid_file_name</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Specifies the full path to a file to store the <productname>Pgpool-II
+    </productname> process id.
+     Default is <literal>"/var/run/pgpool/pgpool.pid"</literal>.
+     -->
+     <productname>Pgpool-II</productname>のプロセスIDを格納するファイルのフルパスを指定します。
+     デフォルトは<literal>'/var/run/pgpool/pgpool.pid'</literal>です。
+    </para>
+
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータは、サーバ起動時にのみ設定できます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-logdir" xreflabel="logdir">
+   <term><varname>logdir</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>logdir</varname> configuration parameter</primary>
+     -->
+     <primary><varname>logdir</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Specifies the full path to a directory to store the <literal>pgpool_status</literal>.
+     Default is <literal>"/tmp"</literal>.
+     -->
+     <literal>pgpool_status</literal>ファイルを格納するディレクトリのフルパスを指定します。
+     デフォルトは<literal>'/tmp'</literal>です。
+    </para>
+
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータは、サーバ起動時にのみ設定できます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-test" xreflabel="health_check_test">
+   <term><varname>health_check_test</varname> (<type>boolean</type>)
+    <indexterm>
+<!--
+     <primary><varname>health_check_test</varname> configuration parameter</primary>
+-->
+     <primary><varname>health_check_test</varname>設定パラメータr</primary>
+    </indexterm>
+   </term>
+   <listitem>
+     <caution>
+       <para>
+<!--
+	Do not set this parameter to on in a production
+	environment. This feature is purely for testing purpose.
+-->
+        実運用のシステムでこのパラメータをonにしないでください。
+        この機能はテスト目的専用です。
+       </para>
+     </caution>
+    <para>
+<!--
+     Setting to on,
+     enables the testing facility of health checking. In this case the
+     health check process looks
+     into <filename>backend_down_request</filename>
+     under <xref linkend="guc-logdir">.  The file may contain multiple
+     lines, and each line corresponds to each backend. A line in the
+     file starts with backend id (must be a decimal number starting
+     with zero), then a TAB, and ends with "down". The backend is
+     assumed in down status and <productname>Pgpool-II</productname>
+     will start a failover. Once the failover completes, the "down" is
+     rewritten to "already_down" by health check process to prevent
+     repeating failovers.
+-->
+     onにすると、ヘルスチェックのテスト機能が有効になります。
+     この場合、ヘルスチェックプロセスは<xref linkend="guc-logdir">の下にある<filename>backend_down_request</filename>を参照します。
+     このファイルは、複数の行から構成され、各行は各々のバックエンドに対応します。
+     各行はバックエンドID（ゼロから始まる十進数でなければなりません）で始まり、続いてタブ、最後に"down"で終わります。
+     そのバックエンドはダウン状態と見なされ、<productname>Pgpool-II</productname>はフェイルオーバを開始します。
+     フェイルオーバが完了すると、"down"はヘルスチェックプロセスによって"already_down"に書き換えられ、何度もフェイルオーバが起きることを防ぎます。
+    </para>
+    <para>
+<!--
+     This feature is particularly useful for
+     testing <xref linkend="guc-failover-require-consensus">. Suppose
+     we have 3 watchdog node. Each watchdog checks healthiness of
+     backend 0. By setting "0	down" in the file only under watchdog 0,
+     other watchdogs disagree with the unhealthiness of backend 0, so
+     failover will not occur. This kind of partial network failure can
+     be simulated using this feature.
+-->
+     この機能は特に<xref linkend="guc-failover-require-consensus">のテストに有用です。
+     今3つのwatchdogノードがあるとします。
+     各々のwatchdogはバックエンド0の健全性を検証します。
+     "0	down"とwatchdog 0の配下のファイルのみに書き込むと、他のバックエンドはバックエンド0が健全ではないことに同意しないので、フェイルオーバは起きません。
+     このような、部分的なネットワーク障害がこの機能でシミュレーションできます。
+    </para>
+    <para>
+<!--
+     Default is <literal>off</literal>.
+-->
+     デフォルトは<literal>off</literal>です。
+    </para>
+
+    <para>
+     <!--
+     This parameter can only be set at server start.
+     -->
+     このパラメータは、サーバ起動時にのみ設定できます。
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+</sect1>

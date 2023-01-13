@@ -1,0 +1,4 @@
+CREATE FUNCTION pg_catalog.pgpool_regclass(cstring)
+RETURNS oid
+AS 'MODULE_PATHNAME', 'pgpool_regclass'
+LANGUAGE C STRICT;

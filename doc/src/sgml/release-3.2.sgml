@@ -1,0 +1,378 @@
+<!-- doc/src/sgml/release-3.2.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id="release-3-2-22">
+ <title>Release 3.2.22</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2017-09-05</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-08-24 [cb4d863]
+    -->
+    <para>
+     Doc: Fix documentation about load-balancing. (Yugo Nagata)
+    </para>
+    <para>
+
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-15 [2cd5bd3]
+    -->
+    <para>
+     Fix ancient bug of <function>pool_unread()</function>. (Tatsuo Ishii)
+    </para>
+    <para>
+     When <function>realloc()</function> is called in <function>pool_unread()</function>, it did not update the
+     buffer size.  This could cause variety of memory corruption and
+     unexpected data reading from backend. The reason why we did not found
+     that is, probably recently <productname>Pgpool-II</productname> starts extensively to use
+     <function>pool_unread()</function>.
+
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-03 [3f9806b]
+    -->
+    <para>
+     Fix for when failover is triggered by worker process, it is possible that wrong DB node could failover. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=303">bug 303</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     This is due to the db_node_id member in the <varname>POLL_CONNECTION</varname> structure is not initialized in the process (in child process the member is properly initialized). To solve the problem, add new function <function>pool_set_db_node_id()</function> to set the structure member variable and call it inside <function>make_persistent_db_connection()</function>.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-31 [ea6ea69]
+    -->
+    <para>
+     Fix starting unnecessary transaction when <command>SET</command> command is issued. (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-27 [576312c]
+    -->
+    <para>
+     Fix for <ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-July/005679.html">[pgpool-general: 5621]</ulink> <function>Failover()</function> function should be executed with health check alarm disabled. (Muhammad Usama)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-2-21">
+ <title>Release 3.2.21</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2017-07-11</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2017-06-24 [242e87a]
+    -->
+    <para>
+     Fixing  <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-June/002390.html">[pgpool-hackers: 2390]</ulink>Problems with the relative paths in daemon mode (Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-19 [11b0808]
+    -->
+    <para>
+     Adjust function name change in <productname>PostgreSQL</productname> 10 dev head. (Tatsuo Ishii)
+    </para>
+    <programlisting>
+     pg_current_wal_location     -> pg_current_wal_lsn
+     pg_last_wal_replay_location -> pg_last_wal_replay_lsn
+    </programlisting>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-31 [69f486f]
+    -->
+    <para>
+     Fix query cache hang when used by node.js. (Tatsuo Ishii)
+    </para>
+    <para>
+     See <ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-May/005569.html">[pgpool-general: 5511]</ulink> for more details.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-29 [487bf5e]
+    -->
+    <para>
+     Deal with <productname>PostgreSQL</productname> 10 in streaming replication delay checking. (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-27 [378f61d]
+    -->
+    <para>
+     Fix query cache memory leak. (Tatsuo Ishii)
+    </para>
+    <para>
+     Clearing cache buffers in case of no oid queries (like <command>BEGIN</command>,
+     <command>CHECKPOINT</command>, <command>VACUUM</command>, etc) should have been done, but it did not.
+     Fix query cache memory leak. (Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-2-20">
+ <title>Release 3.2.20</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2017-04-28</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2017-04-12 [0185d33]
+    -->
+    <para>
+
+     Fix for 0000299: Errors on the reloading of configuration.
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=299">(Bug 299)</ulink> (Muhammad Usama)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+
+<sect1 id="release-3-2-19">
+ <title>Release 3.2.19</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2017-03-17</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-03-09 [1ddb7f1]
+    -->
+    <para>
+     Fix  <link linkend="PCP-PROMOTE-NODE">pcp_promote_node</link> bug that fails promoting node 0. (Yugo Nagata)
+    </para>
+    <para>
+     The master node could not be promoted by pcp_promote_node with
+     the following error;
+    </para>
+
+    <programlisting>
+     FATAL: invalid pgpool mode for process recovery request
+     DETAIL: specified node is already primary node, can't promote node id 0
+    </programlisting>
+
+    <para>
+     In streaming replication mode, there is a case that Pgpool-II
+     regards the status of primary node as "standby" for some reasons,
+     for example, when pg_ctl promote is executed manually during
+     Pgpool-II is running, in which case, it seems to Pgpool-II
+     that the primary node doesn't exist.
+    </para>
+
+    <para>
+     This status mismatch should be fixed by pcp_promote_node, but when the node
+     is the master node (the first alive node), it fails as mentioned above.
+    </para>
+
+    <para>
+     The reason is as following. before changing the status, pcp_promote_node
+     checks if the specified node is already primary or not by comparing the
+     node id with PRIMARY_NODE_ID. However, if the primary doesn't exist from
+     Pgpool-II's view, PRIMARY_NODE_ID is set to 0, which is same as MASTER_NODE_ID.
+     Hence, when the master node is specified to be promoted, pcp_promote_node
+     is confused that this node is already primary and doesn't have to be
+     promoted, and it exits with the error.
+    </para>
+
+    <para>
+     To fix this, pcp_promote_node should check the node id by using
+     REAL_PRIMARY_NODE_ID, which is set -1 when the primary doesn't exist,
+     rather than PRIMARY_NODE_ID.
+
+    </para>
+   </listitem>
+
+
+   <listitem>
+    <!--
+    2017-02-28 [5b4f78c]
+    -->
+    <para>
+     Add the latest release note link to README file.(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-23 [7ed400b]
+    -->
+    <para>
+     Fix to release shared memory segments when <productname>Pgpool-II</productname>exits.
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=272">bug 272</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-11 [29b61eb]
+    -->
+    <para>
+     Remove pool_log/pool_error calls from signal handlers. (Tatsuo Ishii)
+    </para>
+    <para>
+     See  <ulink url="http://www.pgpool.net/pipermail/pgpool-hackers/2016-December/001950.html">[pgpool-hackers: 1950]</ulink> for details.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [8598d5a]
+    -->
+    <para>
+     Fix for 0000249: watchdog sometimes fails de-escalation.
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=249">bug 249</ulink>) (Muhammad Usama)
+    </para>
+
+    <para>
+     The solution is to use the <function>waitpid()</function> system call without WNOHANG option.
+
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [bd92a11]
+    -->
+    <para>
+     Fix connection_life_time broken by authentication_timeout. (Yugo Nagata)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-28 [afebadf]
+    -->
+    <para>
+     Fix authentication timeout that can occur right after client connections. (Yugo Nagata)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+<sect1 id="release-3-2-18">
+ <title>Release 3.2.18</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2016-12-26</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2016-12-20 [888ac16]
+    -->
+    <para>
+     Fix occasional segfault when query cache is enabled. (Tatsuo Ishii)
+    </para>
+    <para>
+     Per bug 263.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-10-27 [f37c592]
+    -->
+    <para>
+     Do not cancel a query when the query resulted in an error other than in native replication mode. (Tatsuo Ishii)
+    </para>
+    <para>
+     It was intended to keep the consistency, but there's no point in other
+     than native replication mode.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-09 [8231f65]
+    -->
+    <para>
+     Do not use <function>random()</function> while generating MD5 salt. (Tatsuo Ishii)
+    </para>
+    <para>
+     <function>random()</function> should not be used in security related applications.  To
+     replace <function>random()</function>, import <function>PostmasterRandom()</function> from PostgreSQL.  Also
+     store current time at the start up of <productname>Pgpool-II</productname> main process for later
+     use.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-06 [891ce0f]
+    -->
+    <para>
+     Don't ignore sync message from frontend when query cache is enabled. (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+

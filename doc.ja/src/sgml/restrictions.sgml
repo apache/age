@@ -1,0 +1,547 @@
+<!-- doc/src/sgml/restrictions.sgml -->
+
+<sect1 id="restrictions" xreflabel="制限事項">
+ <!--
+ <title>Restrictions</title>
+ -->
+ <title>制限事項</title>
+
+ <para>
+  <!--
+  This section describes current restrictions of <productname>Pgpool-II</productname>.
+  -->
+  この章では、<productname>Pgpool-II</productname>の現在の制限事項について説明します。
+
+  <variablelist>
+
+   <varlistentry>
+    <!--
+    <term>Functionality of PostgreSQL</term>
+    -->
+    <term>pg_terminate_backendの利用</term>
+    <listitem>
+     <para>
+      <!--
+      If you use <function>pg_terminate_backend()</function> to stop a
+      backend, this will trigger a failover.  The reason why this
+      happens is that <productname>PostgreSQL</productname> sends
+      exactly the same message for a terminated backend as for a full
+      postmaster shutdown.  There is no workaround prior of version
+      3.6. From version 3.6, this limitation has been mitigated. If
+      the argument to the function (that is a process id) is a
+      constant, you can safely use the function. In extended protocol
+      mode, you cannot use the function though.  In 4.3 or later you
+      can completely prevent the failover caused
+      by <function>pg_terminate_backend()</function> by
+      setting <literal>off</literal>
+      to <xref linkend="guc-failover-on-backend-shutdown">, this will
+      prevent failover caused by termination of postmaster.
+      -->
+      <function>pg_terminate_backend()</function>を使ってバックエンドを停止すると、フェイルオーバが起こります。
+      これは、<productname>PostgreSQL</productname>が、postmasterの停止と全く同じメッセージをバックエンド停止時に送るためです。
+      <productname>Pgpool-II</productname> 3.6より前のバージョンには回避策はありません。
+      3.6以降では、この制限は緩和されています。
+      その関数の引数（プロセスIDです）が定数なら、その関数を使っても安全です。
+      しかし、拡張プロトコルでは、その関数は使えません。
+      4.3以降では、<xref linkend="guc-failover-on-backend-shutdown">を<literal>off</literal>にすることで、<function>pg_terminate_backend()</function>によるフェイルオーバを完全に回避できますが、その代わりpostmasterの停止によるフェイルオーバも起きなくなります。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Load Balancing</term>
+    <listitem>
+     <para>
+      マルチステートメントSQL(1行の中に複数のSQLが含まれている)は、常にプライマリノード(ストリーミングレプリケーションモードの場合)かマスターノード(それ以外のモード)に送られます。
+      通常<productname>Pgpool-II</productname>はクエリの種類を見て適切なノードにクエリを送りますが、マルチステートメントSQLではこれが適用されません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Authentication/Access Controls</term>
+    -->
+    <term>認証/アクセス制御</term>
+    <listitem>
+     <para>
+      <!--
+      In the replication mode or native replication mode, trust and pam methods are supported. md5 is also
+      supported since <productname>Pgpool-II</productname> 3.0. md5
+      is supported by using an authentication file <filename>pool_passwd</filename>.
+      scram-sha-256, cert, and clear text password is also supported since
+      <productname>Pgpool-II</productname> 4.0.
+      <filename>pool_passwd</filename> is default name of the
+      authentication file. Here are the
+      steps to enable md5 authentication:
+      -->
+      レプリケーションモードまたマスタ/スレーブモード時にはtrust、reject、pam認証方式が利用できます。
+      <productname>Pgpool-II</productname> 3.0以降では、<filename>pool_passwd</filename>というファイルを使ってmd5認証も使えます。
+      <productname>Pgpool-II</productname> 4.0以降では、scram-sha-256、cert、clear text password認証も使えます。
+      <filename>pool_passwd</filename>はデフォルトの認証ファイル名です。
+      md5認証を有効にする手順を示します。
+     </para>
+
+     <orderedlist>
+
+      <listitem>
+       <para>
+	<!--
+	Login as the database's operating system user and type:
+	-->
+	DBユーザのOSアカウントでログインし、以下を実行します。
+	<programlisting>
+	 pg_md5 --md5auth --username=<literal>your_username</literal> <literal>your_passwd</literal>
+	</programlisting>
+	<!--
+	user name and md5 encrypted password are registered into
+	pool_passwd.  If pool_passwd does not exist yet, pg_md5
+	command will automatically create it for you.  The format
+	of pool_passwd
+	is <literal>username:encrypted_passwd</literal>.
+	-->
+	ユーザ名とmd5により暗号化されたパスワードが<filename>pool_passwd</filename>に登録されます。
+	<filename>pool_passwd</filename>がまだ存在しなければ、pg_md5コマンドは、自動的に<filename>pgpool.conf</filename>と同じディレクトリ内に<filename>pool_passwd</filename>を作成します。
+	<filename>pool_passwd</filename>のフォーマットは、<literal>username:encrypted_passwd</literal>です。
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	<!--
+	You also need to add an appropriate md5 entry to
+	pool_hba.conf.  See Setting up pool_hba.conf for client
+	authentication (HBA) for more details.
+	-->
+	また、pool_hba.confに適当なmd5のエントリを作成する必要があります。
+	詳細は<xref linkend="auth-pool-hba-conf">を見てください。
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	<!--
+	Please note that the user name and password must be
+	identical to those registered
+	in <productname>PostgreSQL</productname>.
+	-->
+	pool_passwdに登録するパスワードは、<productname>PostgreSQL</productname>に登録したパスワードと完全に同じでなければなりません。
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	<!--
+	After changing md5 password (in both pool_passwd and
+	PostgreSQL of course), you need to
+	execute <application>pgpool reload</application>.
+	-->
+	md5パスワード（もちろんpool_passwdとPostgreSQLの両方）を変更したら、pgpool reload を実行してください。
+       </para>
+      </listitem>
+     </orderedlist>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Large objects</term>
+    -->
+    <term>ラージオブジェクト</term>
+    <listitem>
+     <para>
+      <!--
+      In streaming replication
+      mode, <productname>Pgpool-II</productname> supports large
+      objects.
+      -->
+      ストリーミングレプリケーションモードでは、<productname>Pgpool-II</productname>はラージオブジェクトをサポートしています。
+     </para>
+     <para>
+      <!--
+      In native replication
+      mode, <productname>Pgpool-II</productname> supports large
+      objects if the backend
+      is <productname>PostgreSQL</productname> 8.1 or later.  For
+      this, you need to enable lobj_lock_table directive
+      in <filename>pgpool.conf</filename>.  Large object replication
+      using backend function <function>lo_import</function> is not
+      supported, however.
+      -->
+      ネィティブレプリケーションモードでは、<productname>PostgreSQL</productname> 8.1以降ならばラージオブジェクトをサポートします。
+      その際には、<filename>pgpool.conf</filename>のlobj_lock_tableを有効にしてください。
+      なお、バックエンド関数の<function>lo_import</function>を使ったラージオブジェクトのレプリケーションはサポートされていません。
+     </para>
+     <para>
+      <!--
+      In other mode, including Slony mode, large
+      objects are not supported.
+      -->
+      Slonyモードも含め、その他のモードではラージオブジェクトはサポートされていません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Temporary tables in native replication mode</term>
+    -->
+    <term>一時テーブル</term>
+    <listitem>
+     <para>
+      <!--
+      Creating/inserting/updating/deleting temporary tables are
+      always executed on the primary in native replication mode.
+      SELECT on these tables is executed on primary as well.  However
+      if the temporary table name is used as a literal in SELECT,
+      there's no way to detect it, and the SELECT will be load
+      balanced.  That will trigger a "not found the table" error or
+      will find another table having same name.  To avoid the
+      problem, use SQL comment.
+      -->
+      一時テーブルの作成、挿入、更新、削除は、常にマスター（プライマリ）で実行されます。
+      テーブルに対するSELECTもマスター上で実行されます。
+      しかし、一時テーブル名が文字列としてSELECTで使われると、それを検知する方法がないため、SELECTは負荷分散されます。
+      これにより、「テーブルが見つからない」エラーになったり、同じ名前を持つ別のテーブルを検索することになります。
+      この問題を回避するには、SQLコメントを使ってください。
+     </para>
+     <para>
+      <!--
+      Note that such literal table names used in queries to access
+      system catalogs do cause problems described above.  psql's \d
+      command produces such that query:
+      <programlisting>
+      SELECT 't1'::regclass::oid;
+     </programlisting>
+      In such that case <productname>Pgpool-II</productname> always
+      sends the query to primary and will not cause the problem.
+      -->
+      ちなみに、psqlの\dコマンドのように、システムカタログを問い合わせる中で
+      文字列としてのテーブル名を使っている場合:
+      <programlisting>
+       SELECT 't1'::regclass::oid;
+      </programlisting>
+      pgpool-II 3.0以降ではマスタで検索が行なわれるので、問題になりません。
+      なぜなら、システムカタログへの検索は常にマスタで行なわれるからです。
+     </para>
+
+     <para>
+      <!--
+      Tables created by <command>CREATE TEMP TABLE</command> will be
+      deleted at the end of the session by specifying DISCARD ALL in
+      reset_query_list if you are using PostgreSQL 8.3 or later.
+      -->
+      PostgreSQL 8.3以後を使っているのであれば、<command>CREATE TEMP TABLE</command>によって作成されたテーブルは、reset_query_list中のDISCARD ALLを指定することによってセッションの最後で削除されます。
+     </para>
+     <para>
+      <!--
+      For 8.2.x or earlier, tables created by <command>CREATE TEMP
+      TABLE</command> will not be deleted after exiting a
+      session. It is because of the connection pooling which, from
+      PostgreSQL's backend point of view, keeps the session
+      alive. To avoid this, you must explicitly drop the temporary
+      tables by issuing <command>DROP TABLE</command>, or
+      use <command>CREATE TEMP TABLE ... ON COMMIT DROP</command>
+      inside the transaction block.
+      -->
+      8.2.x以前では、<command>CREATE TEMP TABLE</command>によって作成されたテーブルは、セッションを終了した後に削除されません。
+      PostgreSQLバックエンドから見ると、コネクションプールによってセッションが維持されているからです。
+      これを回避するには、明示的に<command>DROP TABLE</command>を発行するか、トランザクションブロックの内側で<command>CREATE TEMP TABLE ... ON COMMIT DROP</command>を実施します。
+     </para>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Functions, etc. In replication mode</term>
+    -->
+    <term>ネィティブレプリケーションモードにおける関数などの扱い</term>
+    <listitem>
+     <para>
+      <!--
+      There is no guarantee that any data provided using a
+      context-dependent mechanism (e.g. random number, transaction
+      ID, OID, SERIAL, sequence), will be replicated correctly on
+      multiple backends. For SERIAL, enabling insert_lock will help
+      replicating data.  insert_lock also helps SELECT setval() and
+      SELECT nextval().
+      -->
+      文脈依存の仕組み（たとえば乱数やトランザクションID、OID、SERIAL、シーケンス）を使って提供されるデータが複数のバックエンドに正しくレプリケーションされる保証はありません。
+      SERIALに対しては、insert_lockを使って対応できます。
+      SELECT setval()とSELECT nextval()に対してもinsert_lockで対応できます。
+     </para>
+     <para>
+      <!--
+      INSERT/UPDATE
+      using <function>CURRENT_TIMESTAMP</function>, <function>CURRENT_DATE</function>,
+      <function>now()</function> will be replicated
+      correctly. INSERT/UPDATE for tables
+      using <function>CURRENT_TIMESTAMP</function>, <function>CURRENT_DATE</function>,
+      <function>now()</function> as their DEFAULT values will also
+      be replicated correctly.  This is done by replacing those
+      functions by constants fetched from primary at query execution
+      time.  There are a few limitations however:
+      -->
+      <function>CURRENT_TIMESTAMP</function>、<function>CURRENT_DATE</function>、<function>now()</function>を含むINSERT/UPDATEは正しくレプリケーションされます。
+      <function>CURRENT_TIMESTAMP</function>、<function>CURRENT_DATE</function>、<function>now()</function>をデフォルト値として使うINSERT/UPDATEも正しくレプリケーションされます。
+      これは、関数を、クエリ実行時にマスターから取得した定数に置き換えることで達成されています。
+      しかし、いくつか制限事項があります。
+     </para>
+     <para>
+      <!--
+      In <productname>Pgpool-II</productname> 3.0 or before, the
+      calculation of temporal data in table default value is not
+      accurate in some cases. For example, the following table
+      definition:
+      -->
+      <productname>Pgpool-II</productname> 3.0以前では、テーブルのデフォルト値としての時制データが正しく計算されない場合があります。
+      例として以下のテーブル定義を示します。
+      <programlisting>
+       CREATE TABLE rel1(
+       d1 date DEFAULT CURRENT_DATE + 1
+       )
+      </programlisting>
+      <!--
+      is treated the same as:
+      -->
+      これは次と同じに扱われます。
+      <programlisting>
+       CREATE TABLE rel1(
+       d1 date DEFAULT CURRENT_DATE
+       )
+      </programlisting>
+      <!--
+      <productname>Pgpool-II</productname> 3.1 or later handles
+      these cases correctly.  Thus the column "d1" will have
+      tomorrow as the default value.  However this enhancement does
+      not apply if extended protocols (used in JDBC, PHP PDO for
+      example) or PREPARE are used.
+      -->
+      <productname>Pgpool-II</productname> 3.1以降はこのケースを正しく扱います。
+      ですのでd1列はtomorrowがデフォルト値になります。
+      しかし、この改善は拡張プロトコル（たとえばJDBC、PHP PDO）やPREPAREが使用されている場合には適用されません。
+     </para>
+     <para>
+      <!--
+      Please note that if the column type is not a temporal one,
+      rewriting is not performed. Such example:
+      -->
+      列の型が時制ではない場合は書き換えは行われないことに注意してください。
+      そのような例を示します。
+      <programlisting>
+       foo bigint default (date_part('epoch'::text,('now'::text)::timestamp(3) with time zone) * (1000)::double precision)
+      </programlisting>
+      <!--
+      Suppose we have the following table:
+      -->
+      以下のテーブルがあるとします。
+      <programlisting>
+       CREATE TABLE rel1(
+       c1 int,
+       c2 timestamp default now()
+       )
+      </programlisting>
+      <!--
+      We can replicate
+      -->
+      <programlisting>
+       INSERT INTO rel1(c1) VALUES(1)
+      </programlisting>
+      <!--
+      since this turn into
+      -->
+      これは以下に書き換えられるものの、
+      <programlisting>
+       INSERT INTO rel1(c1, c2) VALUES(1, '2009-01-01 23:59:59.123456+09')
+      </programlisting>
+      <!--
+      However,
+      -->
+      <programlisting>
+       INSERT INTO rel1(c1) SELECT 1
+      </programlisting>
+      <!--
+      cannot to be transformed, thus cannot be properly replicated in the current implementation.
+      Values will still be inserted, with no transformation at all.
+      -->
+      は変換されません。
+      ですので現在の実装では正しくレプリケーションされません。
+      値は挿入されますが、全く変換が行われません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>SQL型コマンド</term>
+    <listitem>
+     <para>
+      <!--
+      SQL type commands</link> cannot
+      be used in extended query mode.
+      -->
+      <link linkend="sql-commands">SQL型コマンド</link>は、拡張クエリモードでは使用できません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>マルチバイト文字</term>
+    <listitem>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> does not perform encoding conversion between client and
+      <productname>PostgreSQL</productname> for multi-byte characters.
+      The encoding for the client and backends must be the same.
+      -->
+      現在の実装では、クライアントと<productname>PostgreSQL</productname>の間でマルチバイト文字の変換処理を行いません。
+      クライアントエンコーディング、バックエンドノードのサーバエンコーディングを一致させるようにしてください。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>マルチステートメント</term>
+    <listitem>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> cannot process multi-statement queries.
+      However, when <productname>Pgpool-II</productname> is connected by <command>psql</command>, It is no problem.
+      <command>psql</command> parse multi-statement, send a statement one by one.
+      -->
+      マルチステートメント（';'で区切って複数の文をまとめたSQL）を<productname>Pgpool-II</productname>が正しく処理することができません。
+      必ず文を分けて送信してください。
+      なお、<command>psql</command>を使って<productname>Pgpool-II</productname>に接続した場合は、<command>psql</command>内部でマルチステートメントを分解し、1つずつ送信するので、実際には問題になりません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>libpq</term>
+    <listitem>
+     <para>
+      <!--
+      libpq is linked while building <productname>Pgpool-II</productname>.
+      libpq version must be 3.0 or later. Building <productname>Pgpool-II</productname> with libpq version 2.0 will fail.
+      -->
+      <productname>pgpool-II</productname> では libpq をリンクします。
+      libpq のバージョンが 2.0 の場合、configureに失敗します。
+      必ず libpq 3.0 以降(<productname>PostgreSQL</productname> 7.4以降)をリンクするようにしてください。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>ParameterStatus</term>
+    <listitem>
+     <para>
+<!--
+       When a client connects
+       to <productname>PostgreSQL</productname>, <productname>PostgreSQL</productname>
+       sends back some parameter/value pairs to clients. This protocol
+       is
+       called <ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#id-1.10.5.7.3"><firstterm>ParameterStatus</firstterm></ulink>.
+       The parameter/value pairs can be extracted by using some APIs
+       such as <function>PQParameterStatus</function> of libpq.  The
+       actual parameter names can be
+       found <ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#PROTOCOL-ASYNC">here</ulink>.
+       <productname>Pgpool-II</productname> collects ParameterStatus
+       values from multiple <productname>PostgreSQL</productname>
+       servers and it is possible that the values vary among the
+       servers. A typical example is <literal>in_hot_standby</literal>,
+       which is introduced in <productname>PostgreSQL</productname>
+       14. The value for the variable is <literal>off</literal> on
+       primary server and <literal>on</literal> on standby
+       servers. Problem is, <productname>Pgpool-II</productname> has
+       to return client only one of them. In this case it chooses the
+       value reported by the primary
+       server. So <function>PQParameterStatus</function> will
+       return <literal>off</literal>. On the other hand, when the
+       client issues <literal>show in_hot_standby</literal>, the
+       returned value can either <literal>on</literal>
+       or <literal>off</literal> depending on which is the load
+       balance node for the session.
+-->
+       クライアントが<productname>PostgreSQL</productname>に接続すると、<productname>PostgreSQL</productname>は複数のパラメータ/値のペアをクライアントに返します。
+       このプロトコルは<ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#id-1.10.5.7.3"><firstterm>ParameterStatus</firstterm></ulink>と呼ばれます。
+       このパラメータ/値ペアはある種のAPI、たとえばlibpqの<function>PQParameterStatus</function>で取得できます。
+       該当する実際のパラメータ名は<ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#PROTOCOL-ASYNC">ここ</ulink>にあります。
+       <productname>Pgpool-II</productname>はParameterStatusの値を複数の<productname>PostgreSQL</productname>サーバから収集するため、その値がサーバによって異なる可能性があります。典型的な例は、<productname>PostgreSQL</productname> 14で導入された<literal>in_hot_standby</literal>です。
+       この値はプライマリサーバでは<literal>off</literal>で、スタンバイサーバでは<literal>on</literal>になります。
+       問題は、<productname>Pgpool-II</productname>はその値のひとつだけをクライアントに返さなければならないことです。
+       この場合は、プライマリサーバの値が選択されます。
+       ですから、<function>PQParameterStatus</function>は<literal>off</literal>を返すでしょう。
+       一方で、クライアントが<literal>show in_hot_standby</literal>を発行すると、その時のセッションのロードバランスノードによって、<literal>on</literal>あるいは<literal>off</literal>が返ります。
+     </para>
+     <para>
+<!--
+       Note that if the values differ among
+       servers, <productname>Pgpool-II</productname> will emit a log
+       message except <literal>in_hot_standby</literal>. This is to
+       prevent the log file from being flooded
+       since <literal>in_hot_standby</literal> always differs.
+-->
+       その値が<literal>in_hot_standby</literal>以外で異なる時には、<productname>Pgpool-II</productname>はログメッセージを出力することに注意してください。
+       これは、<literal>in_hot_standby</literal>の値は常に異なるからです。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>set_config</term>
+    <listitem>
+     <para>
+<!--
+       <productname>PostgreSQL</productname>
+       has <function>set_config</function> function which allows to
+       change parameter values within current session
+       like <command>SET</command> command
+       (actually <function>set_config</function> has more feature than
+       SET. See <productname>PostgreSQL</productname> manual for more
+       details).  When <productname>Pgpool-II</productname> is
+       operated
+       with <link linkend="guc-backend-clustering-mode">clustering
+       mode</link> being set to
+       <literal>streaming_replication</literal>, it sends the function
+       only to the primary server. As the function is not sent to the
+       standby servers, the parameter values are different among each
+       servers. To avoid the problem, you can
+       use <command>SET</command> command instead
+       of <function>set_config</function>.
+       Since <command>SET</command> command is sent to all servers
+       used for this session, the issue will not happen.  However, if
+       you use more than 2 <productname>PostgreSQL</productname>
+       servers, you need to
+       disable <xref linkend="guc-statement-level-load-balance"> and
+       use <command>SET</command> command. This is because,
+       if <xref linkend="guc-statement-level-load-balance"> enabled,
+       queries might be sent to the third server in addition to the
+       primary server and the server which is assigned to the load
+       balance node.
+-->
+       <productname>PostgreSQL</productname>には<function>set_config</function>という関数があり、<command>SET</command>コマンドで現在のセッションに対してパラメータの値を変更するのと同じ効果を与えることができます（実際にはSETにない機能もあります。詳細は<productname>PostgreSQL</productname>のマニュアルを見てください）。
+       <productname>Pgpool-II</productname>では、現在の<link linkend="guc-backend-clustering-mode">クラスタリングモード</link>が<literal>streaming_replication</literal>の場合、プライマリサーバにのみこの関数を送信します。
+       スタンバイサーバにはこの関数が送信されないので、それぞれのサーバでパラメータの値が異なることになります。
+       この問題を回避するには、<function>set_config</function>の代わりに<command>SET</command>コマンドを使用してください。
+       <command>SET</command>コマンドは、現在のセッションが使用しているすべてのサーバに送信されるので、この問題は起きません。
+       ただし<productname>PostgreSQL</productname>サーバを3台以上使っているときは、<xref linkend="guc-statement-level-load-balance">をoffにした上で<command>SET</command>コマンドを使用してください。
+       <xref linkend="guc-statement-level-load-balance">がonの場合、現在のセッションが使用しているプライマリサーバ、ロードバランスノードになっているスタンバイサーバに加え、3台目のスタンバイサーバにもクエリを送信する可能性があるからです。
+     </para>
+     <para>
+<!--
+       If you need to use <function>set_config</function>, turn off
+       load balancing for the session (not only
+       for <function>set_config</function>, load balancing should be
+       disabled in the whole session).  You can avoid the issue by
+       sacrificing performance.
+-->
+       どうしても<function>set_config</function>を使わなければならないのであれば、そのセッションでの負荷分散機能をoffにしてください(<function>set_config</function>だけでなく、そのセッションで負荷分散機能を使わないようにする必要があります)。
+       性能は犠牲になりますが、問題は回避できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </para>
+</sect1>

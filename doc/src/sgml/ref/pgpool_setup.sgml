@@ -1,0 +1,412 @@
+<!--
+doc/src/sgml/ref/pgpool_setup.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-SETUP">
+ <indexterm zone="pgpool-setup">
+  <primary>pgpool_setup</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_setup</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_setup</refname>
+  <refpurpose>
+   Create a temporary installation of Pgpool-II cluster</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgpool_setup</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PGPOOL-SETUP-1">
+  <title>
+   Description
+  </title>
+  <para>
+   <application>pgpool_setup</application> creates a temporary
+   installation of <productname>Pgpool-II</productname> cluster, which
+   includes a <productname>Pgpool-II</productname> installation and
+   specified number of <productname>PostgreSQL</productname>
+   installations under current directory.
+   Current directory must be empty before running <application>pgpool_setup</application>.
+  </para>
+  <para>
+   <application>pgpool_setup</application> is for testing purpose
+   only and should not be used to create production installations.
+  </para>
+
+  <para>
+   <application>pgpool_setup</application> executes
+   <application>ssh</application> against localhost.  You need to
+   configure <application>ssh</application> so that it can login to
+   localhost without password.
+  </para>
+
+  <para>
+   Currently <application>pgpool_setup</application> supports
+   streaming replication mode, native replication mode, raw mode,
+   logical replication mode and snapshot isolation mode.  To support watchdog,
+   see <xref linkend="WATCHDOG-SETUP"> for details.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <application>pgpool_setup</application> accepts the following command-line arguments:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the running mode.  <replaceable>mode</replaceable>
+       can be <literal>r</literal> (native replication mode), <literal>s</literal> (streaming replication mode),
+       <literal>n</literal> (raw mode), <literal>l</literal>
+       (logical replication mode), <literal>y</literal> (slony mode) or <literal>i</literal> (snapshot isolation mode).  If this is
+       omitted, <literal>s</literal> is assumed.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">num_clusters</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the number of PostgreSQL installations.
+       If this is omitted, <literal>2</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-p <replaceable class="parameter">base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       Specify the base port number used by Pgpool-II and PostgreSQL.
+       Pgpool-II port is base_port. pcp port is base_port + 1. The
+       first PostgreSQL node's port is base_port + 2, second
+       PostgreSQL node's port is base_port + 3 and so on.
+      </para>
+      <para>
+       If -pg option is specified, the first PostgreSQL node's port is
+       assigned to pg_base_port, the second PostgreSQL node's port is
+       pg_base_port + 1 and so on.
+      </para>
+      <para>
+       If this is omitted, <literal>11000</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-pg <replaceable class="parameter">pg_base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       Specify the base port number used by PostgreSQL.
+       The first PostgreSQL node's port is base_port + 2, second
+       PostgreSQL node's port is base_port + 3 and so on.
+      </para>
+      <para>
+       If this is omitted, <literal>base_port</literal>+2 is used.
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>--no-stop</option></term>
+     <listitem>
+      <para>
+       Do not stop pgpool and PostgreSQL after the work.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <listitem>
+      <para>
+       Start pgpool with debug mode.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s</option></term>
+     <listitem>
+      <para>
+       In streaming replication mode, use replication slot instead
+       of archive.  Since the archive directory is shared by all
+       <productname>PostgreSQL</productname> clusters, if a standby
+       is promoted, the time line in the archive directory will be
+       changed and other standby servers will be stopped. Using a
+       replication slot does not have this problem and is always
+       preferable if you can
+       use <productname>PostgreSQL</productname> 9.4 or later, which
+       supports replication slot. The replication slot name used
+       by <application>pgpool_setup</application>
+       is <literal>pgpool_setup_slot</literal>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-r</option></term>
+     <listitem>
+      <para>
+       Use <command>pg_rewind</command> command in recovery script
+       (basebackup.sh).  If the command fails, switch to use ordinal
+       rsync command.  In certain cases recovery
+       using <command>pg_rewind</command> is much faster than rsync
+       since it does not copy whole database cluster.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-e</option></term>
+     <listitem>
+      <para>
+       Omit to create <productname>PostgreSQL</productname> database
+       This option is intended to be used by
+       <command>watchdog_setup</command> and probably useless for
+       other purposes.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-t</option></term>
+     <listitem>
+      <para>
+       Set some additional parameters to pgpool.conf so that the
+       regression test can performs tests against existing
+       installation.  Currently the parameter is
+       <xref linkend="guc-health-check-test">.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-c</option></term>
+     <listitem>
+      <para>
+       Use the sample scripts and configuration files installed in
+       <filename>/etc/pgpool-II/</filename> directory.
+      </para>
+      <para>
+       This option was added for the purpose of testing the sample scripts and
+       configuration files contained in <productname>Pgpool-II</productname> RPM packages.
+       Make sure you have installed the sample scripts and configuration files in
+       <filename>/etc/pgpool-II/</filename> directory before you specify this option.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Environment variables</title>
+  <para>
+   <application>pgpool_setup</application> recognizes following environment variables:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>PGPOOL_INSTALL_DIR</option></term>
+     <listitem>
+      <para>
+       Specifies the Pgpool-II installation directory. Pgpool-II
+       binaries is expected to be placed under PGPOOL_INSTALL_DIR/bin
+       and pgpool.conf and pool_hba.conf etc. are expected to be placed under
+       PGPOOL_INSTALL_DIR/etc. The default is /usr/local.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOLDIR</option></term>
+     <listitem>
+      <para>
+       Specifies the path to Pgpool-II configuration files.
+       The default is PGPOOL_INSTALL_DIR/etc.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGBIN</option></term>
+     <listitem>
+      <para>
+       Specifies the path to PostgreSQL commands such as initdb, pg_ctl and psql.
+       The default is /usr/local/pgsql/bin.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGLIB</option></term>
+     <listitem>
+      <para>
+       Specifies the path to PostgreSQL shared libraries.
+       The default is /usr/local/pgsql/lib.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGSOCKET_DIR</option></term>
+     <listitem>
+      <para>
+       Specifies the path to Unix socket directory.
+       The default is /tmp.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>INITDBARG</option></term>
+     <listitem>
+      <para>
+       Specifies the arguments for initdb command.
+       The default is "--no-locale -E UTF_8".
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>USE_REPLICATION_SLOT</option></term>
+     <listitem>
+      <para>
+       If "true", in streaming replication mode, use replication slot instead
+       of archive. This brings the same effect as "-s" option is specified.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>USE_PG_REWIND</option></term>
+     <listitem>
+      <para>
+       If "true", in streaming replication mode, use <command>pg_rewind</command> in basebackup.sh script.
+       This brings the same effect as "-r" option is specified.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>ENABLE_TEST</option></term>
+     <listitem>
+      <para>
+       If "true", act as if "-t" option is specified.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>TEST_SAMPLES</option></term>
+     <listitem>
+      <para>
+       If "true", act as if "-c" option is specified.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   <screen>
+$ pgpool_setup 
+PostgreSQL major version: 124
+Starting set up in streaming replication mode
+creating startall and shutdownall
+creating failover script
+creating database cluster /tmp/test/data0...done.
+update postgresql.conf
+creating pgpool_remote_start
+creating basebackup.sh
+creating recovery.conf
+creating database cluster /tmp/test/data1...done.
+update postgresql.conf
+creating pgpool_remote_start
+creating basebackup.sh
+creating recovery.conf
+temporarily start data0 cluster to create extensions
+temporarily start pgpool-II to create standby nodes
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:19
+ 1       | /tmp     | 11003 | down   | 0.500000  | standby | 0          | false             | 0                 |                   |                        | 2020-08-18 13:50:18
+(2 rows)
+
+recovery node 1...pcp_recovery_node -- Command Successful
+done.
+creating follow primary script
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:19
+ 1       | /tmp     | 11003 | up     | 0.500000  | standby | 0          | false             | 0                 |                   |                        | 2020-08-18 13:50:23
+(2 rows)
+
+shutdown all
+
+pgpool-II setting for streaming replication mode is done.
+To start the whole system, use /tmp/test/startall.
+To shutdown the whole system, use /tmp/test/shutdownall.
+pcp command user name is "t-ishii", password is "t-ishii".
+Each PostgreSQL, pgpool-II and pcp port is as follows:
+#1 port is 11002
+#2 port is 11003
+pgpool port is 11000
+pcp port is 11001
+The info above is in README.port.
+t-ishii$ ./startall 
+waiting for server to start....5744 2020-08-18 13:50:27 JST LOG:  starting PostgreSQL 12.4 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit
+5744 2020-08-18 13:50:27 JST LOG:  listening on IPv4 address "0.0.0.0", port 11002
+5744 2020-08-18 13:50:27 JST LOG:  listening on IPv6 address "::", port 11002
+5744 2020-08-18 13:50:27 JST LOG:  listening on Unix socket "/tmp/.s.PGSQL.11002"
+5744 2020-08-18 13:50:27 JST LOG:  redirecting log output to logging collector process
+5744 2020-08-18 13:50:27 JST HINT:  Future log output will appear in directory "log".
+ done
+server started
+waiting for server to start....5757 2020-08-18 13:50:27 JST LOG:  starting PostgreSQL 12.4 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit
+5757 2020-08-18 13:50:27 JST LOG:  listening on IPv4 address "0.0.0.0", port 11003
+5757 2020-08-18 13:50:27 JST LOG:  listening on IPv6 address "::", port 11003
+5757 2020-08-18 13:50:27 JST LOG:  listening on Unix socket "/tmp/.s.PGSQL.11003"
+5757 2020-08-18 13:50:27 JST LOG:  redirecting log output to logging collector process
+5757 2020-08-18 13:50:27 JST HINT:  Future log output will appear in directory "log".
+ done
+server started
+t-ishii$ psql -p 11000 test
+psql (12.4)
+Type "help" for help.
+
+test=# show pool_nodes;
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:32
+ 1       | /tmp     | 11003 | up     | 0.500000  | standby | 0          | false             | 0                 | streaming         | async                  | 2020-08-18 13:50:32
+(2 rows)
+
+   </screen>
+  </para>
+ </refsect1>
+
+</refentry>

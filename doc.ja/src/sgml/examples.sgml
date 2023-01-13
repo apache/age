@@ -1,0 +1,30 @@
+<!-- doc/src/sgml/examples.sgml -->
+
+<part id="examples">
+ <!--
+ <title>Examples</title>
+ -->
+ <title>例集</title>
+
+ <partintro>
+  <para>
+   <!--
+   Various examples
+   -->
+   様々な例
+  </para>
+
+ </partintro>
+
+ <chapter id="example-configs">
+  <!--
+  <title>Configuration Examples</title>
+  -->
+  <title>設定の例</title>
+  &example-basic;
+  &example-cluster;
+  &example-replication-si-mode;
+  &example-AWS;
+  &example-Aurora;
+ </chapter>
+</part>

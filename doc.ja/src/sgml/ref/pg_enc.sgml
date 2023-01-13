@@ -1,0 +1,254 @@
+<!--
+doc/src/sgml/ref/pg_enc.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PG-ENC">
+ <indexterm zone="pg-enc">
+  <primary>pg_enc</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pg_enc</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pg_enc</refname>
+  <refpurpose>
+   <!--
+   AES256 password encryption utility
+   -->
+   パスワードのAES256暗号化コマンド
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pg_enc</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>-p</replaceable></arg>
+  </cmdsynopsis>
+  <cmdsynopsis>
+   <command>pg_enc</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>password</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PG-ENC-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pg_enc</command>
+   <!--
+   AES256 password encryption utility.
+   -->
+   パスワードのAES256暗号化コマンド
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-k <replaceable class="parameter">KEY_FILE</replaceable></option></term>
+     <term><option>--key-file=<replaceable class="parameter">KEY_FILE</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Set the path to the encryption key file. Default is the <literal>.pgpoolkey</literal> file
+       located in the users home directory.
+       -->
+       暗号化鍵ファイルのパスを指定します。
+       デフォルトはユーザのホームディレクトリ配下の<literal>.pgpoolkey</literal>ファイルですが、環境変数<varname>PGPOOLKEYFILE</varname>があればそちらでの指定が優先されます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-K <replaceable class="parameter">ENCRYPTION_KEY</replaceable></option></term>
+     <term><option>--enc-key=<replaceable class="parameter">ENCRYPTION_KEY</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Encryption key to be used for encrypting database passwords.
+       -->
+       データベースのパスワードを暗号化するために使用する暗号化鍵です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">CONFIG_FILE</replaceable></option></term>
+     <term><option>--config-file=<replaceable class="parameter">CONFIG_FILE</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the <literal>pgpool.conf</literal> file.
+       -->
+       <literal>pgpool.conf</literal>ファイルを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-p</option></term>
+     <term><option>--prompt</option></term>
+     <listitem>
+      <para>
+       <!--
+       Prompt for database password using standard input.
+       -->
+       標準入力からデータベースのパスワードを読み込みます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-i <replaceable class="parameter">INPUT_FILE</replaceable></option></term>
+     <term><option>--input-file=<replaceable class="parameter">INPUT_FILE</replaceable></option></term>
+     <listitem>
+      <para>
+       ユーザ名とパスワードのペアを含むファイルを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-P</option></term>
+     <term><option>--prompt-for-key</option></term>
+     <listitem>
+      <para>
+       <!--
+       Prompt for encryption key using standard input.
+       -->
+       標準入力から暗号化鍵を読み込みます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-m</option></term>
+     <term><option>--update-pass</option></term>
+     <listitem>
+      <para>
+       <!--
+       Create encrypted password entry in the pool_passwd file.
+       -->
+       pool_passwdファイルにAES256で暗号化したパスワードのエントリを作成します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-u <replaceable class="parameter">your_username</replaceable></option></term>
+     <term><option>--username=<replaceable class="parameter">your_username</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Creates the <literal>pool_passwd</literal> entry for the database user called
+       <literal>your_username</literal>.
+       -->
+       <literal>your_username</literal>で指定したデータベースユーザ名のエントリを<literal>pool_passwd</literal>に作成します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-h</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       <!--
+       Prints the help for <literal>pg_enc</literal>.
+       -->
+       <literal>pg_enc</literal>のヘルプを表示します。
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+   <note>
+    <para>
+     pg_encの引数としてパスワードを指定し、パスワードに「$」文字が含まれる場合にはエスケープする必要があります。
+    </para>
+    <para>
+     例えば、パスワードとしてABC$123を使用する場合、
+     <programlisting>
+pg_enc -m -f /path/to/pgpool.conf -u username ABC\$123
+     </programlisting>
+    </para>
+   </note>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>例</title>
+  <para>
+   <!--
+   Here is an example output:
+   -->
+   ここでは出力の例を示します。
+   <programlisting>
+    pg_enc -p
+    db password: [your password]
+   </programlisting>
+  </para>
+  <para>
+   <!--
+   or
+   -->
+   または
+  </para>
+  <programlisting>
+   ./pg_enc foo
+   trying to read key from file /home/pgpool/.pgpoolkey
+
+   jglid1QRgiCl/vfhHUDyVA==
+   pool_passwd string: AESjglid1QRgiCl/vfhHUDyVA==
+  </programlisting>
+  <para>
+   <!--
+   <literal>pg_enc</literal> can be used for <literal>pool_passwd</literal> passwords with:
+   -->
+   <literal>pg_enc</literal>は<literal>pool_passwd</literal> のパスワード生成のために使用できます。
+   <programlisting>
+    pg_enc -m -f /path/to/pgpool.conf -u username -p
+    db password: [your password]
+   </programlisting>
+   <!--
+   which will add an entry for <literal>username</literal> with the password given.
+   -->
+   入力したパスワードと<literal>username</literal>のエントリが追加されます。
+  </para>
+  <para>
+   パスワードの入力が促されたりコマンド引数の中でパスワードを指定するのを避けたい場合は<literal>pg_enc</literal>は名前:パスワードのペアをファイルから読むことができます。
+   すべてのユーザ名と暗号化されたパスワードが<xref linkend="guc-pool-passwd">認証ファイルに追加されます。
+   <programlisting>
+    $ cat users.txt
+    username1:secretpassword1
+    username2:secretpassword2
+
+    $ pg_enc -m -f /path/to/pgpool.conf -i users.txt
+    trying to read key from file /home/pgpool/.pgpoolkey
+    trying to read user:password pairs from file users.text
+
+    $ cat /path/to/pool_passwd
+    username1:AESrx5QdpGyW/+4CB80KWtwhg==
+    username2:AESUAdohy7nCUhWliRI9WiYQA==
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

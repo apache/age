@@ -1,0 +1,27 @@
+# Test statement_level_load_balance = on
+
+##statement_level_load_balance = on
+##log_min_messages = debug1
+
+'P'	"S0"	"BEGIN"	0
+'B'	""	"S0"	0	0	0
+'E'	""	0
+'C'	'S'	"S0"
+
+'P'	"S1"	"SELECT 1"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+'P'	"S2"	"SELECT 2"	0
+'B'	""	"S2"	0	0	0
+'E'	""	0
+'C'	'S'	"S2"
+
+'P'	"S3"	"COMMIT"	0
+'B'	""	"S3"	0	0	0
+'E'	""	0
+'C'	'S'	"S3"
+'S'
+'Y'
+'X'

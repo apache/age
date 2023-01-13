@@ -1,0 +1,257 @@
+<!-- doc/src/sgml/intro.sgml -->
+
+<preface id="preface">
+ <title>Preface</title>
+
+ <para>
+  This book is the official documentation of
+  <productname>Pgpool-II</productname>.  It has been written by the
+  <productname>Pgpool-II</productname> developers and other
+  volunteers in parallel to the development of the
+  <productname>Pgpool-II</productname> software.  It describes all
+  the functionality that the current version of
+  <productname>Pgpool-II</productname> officially supports.
+ </para>
+
+ <para>
+  To make the large amount of information about
+  <productname>Pgpool-II</productname> manageable, this book has been
+  organized in several parts.  Each part is targeted at a different
+  class of users, or at users in different stages of their
+  <productname>Pgpool-II</productname> experience:
+
+  <itemizedlist>
+   <listitem>
+    <para>
+     <xref linkend="tutorial"> is an informal introduction for new users.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="admin"> describes the installation and
+      administration of the server.  Everyone who runs a
+      <productname>Pgpool-II</productname> server, be it for private
+      use or for others, should read this part.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="examples"> explains several configuration examples
+      so that users can choose the starting point of their actual systems.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="reference"> contains reference information about
+      SQL commands, client and server programs.  This part supports
+      the other parts with structured information sorted by command or
+      program.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="appendixes"> is an appendix information such as release notes.
+    </para>
+   </listitem>
+
+   <!--
+   <listitem>
+   <para>
+   <xref linkend="internals"> contains assorted information that might be of
+   use to <productname>PostgreSQL</> developers.
+  </para>
+  </listitem>
+   -->
+
+  </itemizedlist>
+ </para>
+
+ <sect1 id="intro-whatis">
+  <title> What is <productname>Pgpool-II</productname>?</title>
+
+  <para>
+   <productname>Pgpool-II</productname> manages a
+   <firstterm>pool</firstterm> of
+   <productname>PostgreSQL</productname> servers to achieve some
+   features that are not available with single
+   <productname>PostgreSQL</productname> installation. The features
+   include:
+
+   <variablelist>
+
+    <varlistentry>
+     <term>High Availability</term>
+     <listitem>
+      <para>
+       <productname>Pgpool-II</productname> provides a high
+       availability (HA) feature by using multiple
+       <productname>PostgreSQL</productname> servers so that it
+       automatically removes broken server from the server pool to
+       continue the database task. This is called <firstterm>automatic
+       failover</firstterm>. Also <productname>Pgpool-II</productname>
+       offers an HA feature for <productname>Pgpool-II</productname>
+       itself, called <firstterm>Watchdog</firstterm> (see <xref
+       linkend="tutorial-watchdog"> for more details). Moreover
+       <productname>Pgpool-II</productname> hires sophisticated
+       <firstterm>quorum</firstterm> algorithm to avoid false positive
+       errors and split brain problem to make the whole HA system
+       highly reliable. See <xref
+       linkend="config-watchdog-failover-behavior"> for more details.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term>Load balancing</term>
+     <listitem>
+      <para>
+       <productname>Pgpool-II</productname> distributes read queries
+       over multiple <productname>PostgreSQL</productname> servers to
+       gain higher performance. This feature is called <firstterm>load
+       balancing</firstterm>. Write queries are sent to either the
+       primary server (in streaming replication mode) or all servers
+       (in native replication mode and snapshot isolation mode). See
+       <xref linkend="running-mode"> for more details about these
+       mode. In any case, <productname>Pgpool-II</productname>
+       automatically distinguish the read queries from the write
+       queries.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+  <para>
+   Besides these essential features, <productname>Pgpool-II</productname> also provides useful
+   features such as:
+  </para>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term>Connection Pooling</term>
+     <listitem>
+      <para>
+       <productname>Pgpool-II</productname> maintains established
+       connections to the <productname>PostgreSQL</productname>
+       servers, and reuses them whenever a new connection with the
+       same properties (i.e. user name, database, protocol version, and other connection parameters if any)
+       comes in. It reduces the connection overhead, and improves
+       system's overall throughput.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term>Online Recovery</term>
+     <listitem>
+      <para>
+       <productname>Pgpool-II</productname> can perform online recovery of database
+       node by executing one command. When the online recovery is used with the
+       automated fail over, a detached node by fail over is possible to attach as
+       standby node automatically. It is possible to synchronize and attach new
+       <productname>PostgreSQL</productname> server too.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term>Limiting Exceeding Connections</term>
+     <listitem>
+      <para>
+       There is a limit on the maximum number of concurrent
+       connections with <productname>PostgreSQL</productname>, and
+       new connections are rejected when this number is
+       reached. Raising this maximum number of connections, however,
+       increases resource consumption and has a negative impact on
+       overall system
+       performance. <productname>Pgpool-II</productname> also has a
+       limit on the maximum number of connections, but extra
+       connections will be queued instead of returning an error
+       immediately. However, you can configure to return an error
+       when the connection limit is exceeded (4.1 or later).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term>Watchdog</term>
+     <listitem>
+      <para>
+       Watchdog can coordinate multiple <productname>Pgpool-II</productname>,
+       create a robust cluster system and avoid the single point of failure or split brain.
+       To avoid the split brain, you need at least 3 <productname>Pgpool-II</productname> nodes.
+       Watchdog can perform lifecheck against other <productname>pgpool-II</productname> nodes,
+       to detect a fault of <productname>Pgpool-II</productname>.
+       If active <productname>Pgpool-II</productname> goes down, standby
+       <productname>Pgpool-II</productname> can be promoted to active, and take over Virtual IP.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term>In Memory Query Cache</term>
+     <listitem>
+      <para>
+       In memory query cache allows to save a pair of SELECT statement and its result.
+       If an identical SELECTs comes in, <productname>Pgpool-II</productname> returns the
+       value from cache. Since no SQL parsing nor access to <productname>PostgreSQL</productname>
+       are involved, using in memory cache is extremely fast. On the other hand, it might
+       be slower than the normal path in some cases, because it adds some overhead of storing cache data.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+
+  </para>
+
+  <para>
+   <productname>Pgpool-II</productname> speaks PostgreSQL's backend
+   and frontend protocol, and relays messages between a backend and a
+   frontend. Therefore, a database application (frontend) thinks
+   that <productname>Pgpool-II</productname> is the
+   actual <productname>PostgreSQL</productname> server, and the
+   server (backend) sees <productname>Pgpool-II</productname> as one
+   of its clients. Because
+   <productname>Pgpool-II</productname> is transparent to both the server and the client, an
+   existing database application can be used with <productname>Pgpool-II</productname> almost
+   without a change to its source code.
+  </para>
+
+  <para>
+   <productname>Pgpool-II</productname> works on Linux, FreeBSD, and
+   most of the UNIX-like architectures. Windows is not
+   supported. Supported PostgreSQL server's versions are 7.4 and
+   higher (some of the features may not work with older versions of
+   <productname>PostgreSQL</productname>). You must also make sure
+   that all of your <productname>PostgreSQL</productname> servers are
+   using the same major version. In addition to this, we do not
+   recommend mixing different <productname>PostgreSQL</productname>
+   installation with different build options: including supporting SSL
+   or not, to use --disable-integer-datetimes or not, different block
+   size. These might affect part of functionality of
+   <productname>Pgpool-II</productname>. The difference of
+   <productname>PostgreSQL</productname> minor versions is not usually
+   a problem. However we do not test every occurrence of minor
+   versions and we recommend to use exact same minor version of
+   <productname>PostgreSQL</productname>.
+  </para>
+
+  <para>
+   There are some restrictions to using SQL via <productname>Pgpool-II</productname>.
+   See <link linkend="restrictions">Restrictions</link> for more details.
+  </para>
+
+ </sect1>
+
+ &history;
+ &notation;
+ &info;
+ &restrictions;
+ &problems;
+
+</preface>

@@ -1,0 +1,377 @@
+<!-- doc/src/sgml/release-3.2.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id="release-3-2-22">
+ <title>リリース 3.2.22</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-09-05</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-08-24 [cb4d863]
+    -->
+    <para>
+     Doc: ロードバランスに関するドキュメントを修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-15 [2cd5bd3]
+    -->
+    <para>
+     <function>pool_unread()</function> の不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <function>pool_unread()</function> が<function>realloc()</function>を呼び出すときに、バッファサイズが更新されませんでした。これにより、メモリ破損や予期しないデータの読み取りが発生する可能性がありました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-03 [3f9806b]
+    -->
+    <para>
+     <literal>worker</literal>プロセスが間違った DB ノードをフェイルオーバーさせる不具合を修正しました。 (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=303">bug 303</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <literal>worker</literal>プロセスが間違った DB ノードをフェイルオーバーさせる可能性がありました。原因は、<varname>POLL_CONNECTIO</varname>構造体の<varname>db_node_id</varname>メンバがこのプロセスで初期化されていなかったからです （子プロセスでは適切に初期化されていました）。
+    </para>
+    <para>
+     この問題を解決するには、ノード ID をセットする関数 <function>pool_set_db_node_id()</function>を追加し、<function>make_persistent_db_connection()</function>内で呼び出すように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-31 [ea6ea69]
+    -->
+    <para>
+     <command>SET</command>コマンド発行時の不要なトランザクションの開始を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-27 [576312c]
+    -->
+    <para>
+     ヘルスチェックアラームを無効にした状態で <function>Failover()</function>関数を実行するように修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     詳細は <ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-July/005679.html">[pgpool-general: 5621]</ulink> をご参照ください。
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-2-21">
+ <title>リリース 3.2.21</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-07-11</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2017-06-24 [242e87a]
+    -->
+    <para>
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-June/002390.html">[pgpool-hackers: 2390]</ulink> によって報告されたデーモンモードでの相対パスの問題を修正しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-19 [11b0808]
+    -->
+    <para>
+     <productname>PostgreSQL</productname> 10の変更に合わせて以下の関数名を修正しました。(Tatsuo Ishii)
+    </para>
+    <programlisting>
+     pg_current_wal_location     -> pg_current_wal_lsn
+     pg_last_wal_replay_location -> pg_last_wal_replay_lsn
+    </programlisting>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-31 [69f486f]
+    -->
+    <para>
+     <productname>node.js</productname>を使用する場合に発生するクエリキャッシュのハングアップの問題を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳細は<ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-May/005569.html">[pgpool-general: 5511]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-29 [487bf5e]
+    -->
+    <para>
+     <productname>PostgreSQL</productname> 10のストリーミングレプリケーションの遅延チェックに関する変更に合わせて修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-27 [378f61d]
+    -->
+    <para>
+     クエリキャッシュのメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     oidがないクエリ（<command>BEGIN</command>、<command>CHECKPOINT</command>、<command>VACUUM</command>など）の場合キャッシュバッファがクリアされるべきでしたが、されていませんでした。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-2-20">
+ <title>リリース 3.2.20</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-04-28</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2017-04-12 [0185d33]
+    -->
+    <para>
+     pool_hba.confファイルのリロード時に発生するエラーを修正しました。<ulink url="http://www.pgpool.net/mantisbt/view.php?id=299">(Bug 299)</ulink> (Muhammad Usama)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+
+<sect1 id="release-3-2-19">
+ <title>リリース 3.2.19</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-03-17</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-03-09 [1ddb7f1]
+    -->
+    <para>
+     <link linkend="PCP-PROMOTE-NODE">pcp_promote_node</link>を使ってノード0の昇格に失敗する不具合を修正しました。(Yugo Nagata)
+    </para>
+    <para>
+     失敗したときのエラーメッセージは以下のとおりです。
+    </para>
+
+    <programlisting>
+     FATAL: invalid pgpool mode for process recovery request
+     DETAIL: specified node is already primary node, can't promote node id 0
+    </programlisting>
+
+    <para>
+     ストリーミングレプリケーションモードでは、<productname>Pgpool-II</productname>がプライマリノードを何らかの理由で「スタンバイ」とみなしていました。たとえば、<productname>Pgpool-II</productname>が起動中で、pg_ctl promoteを手動で実行したとき、<productname>Pgpool-II</productname>はプライマリノードが存在しないと認識します。
+    </para>
+
+    <para>
+     この状態の不一致は、pcp_promote_nodeコマンドによって直されるはずですが、昇格させたいノードがマスターノード（最初のアライブノード）である場合、上記のように失敗しました。
+     失敗した理由は次のとおりです。ステータスを変更する前に、pcp_promote_nodeコマンドがPRIMARY_NODE_IDのノードIDと比較することによって、指定されたノードが既にプライマリであるかどうかをチェックします。ただし、プライマリが存在しない場合<productname>Pgpool-II</productname>のビューでは、PRIMARY_NODE_IDが0に設定されます。これはMASTER_NODE_IDと同じです。したがって、マスタノードを昇格させるように指定する場合、pcp_promote_nodeはこのノードが既にプライマリであるとのエラーを返して終了しました。
+    </para>
+
+    <para>
+     これを修正するには、pcp_promote_nodeは指定したノードがプライマリーノードであるかどうかをチェックするとき、PRIMARY_NODE_IDではなくREAL_PRIMARY_NODE_IDを使うように修正しました。REAL_PRIMARY_NODE_IDはプライマリが存在しない場合、-1に設定されます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-28 [5b4f78c]
+    -->
+    <para>
+     READMEに最新リリースノートへのリンクを追加しました。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-23 [7ed400b]
+    -->
+    <para>
+     特定の場合に、<productname>Pgpool-II</productname>が終了したときに共有メモリセグメントを解放しない不具合を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=272">bug 272</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-11 [29b61eb]
+    -->
+    <para>
+     シグナルハンドラがpool_log/pool_errorを呼び出さないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳しくは<ulink url="http://www.pgpool.net/pipermail/pgpool-hackers/2016-December/001950.html">[pgpool-hackers: 1950]</ulink>をご参照ください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [8598d5a]
+    -->
+    <para>
+     特定に場合にwatchdogがデエスカレーションに失敗する不具合を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=249">bug 249</ulink>)(Muhammad Usama)
+    </para>
+
+    <para>
+     WNOHANGオプションなしで<function>waitpid()</function>システムコールを使用するように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [bd92a11]
+    -->
+    <para>
+     authentication_timeoutが有効な場合、connection_life_timeが正しく処理されない不具合を修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-28 [afebadf]
+    -->
+    <para>
+     クライアント接続直後に発生しうる認証タイムアウトを修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+<sect1 id="release-3-2-18">
+ <!--
+ <title>Release 3.2.18</title>
+ -->
+ <title>リリース 3.2.18</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2016-12-26</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2016-12-20 [888ac16]
+    -->
+    <para>
+     <!--
+     Fix occasional segfault when query cache is enabled. (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効になっている場合に、時々発生しうるセグメンテーション違反を修正しました。(bug 263) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-10-27 [f37c592]
+    -->
+    <para>
+     <!--
+     Do not cancel a query when the query resulted in an error other than in native replication mode. (Tatsuo Ishii)
+     -->
+     ネイティブレプリケーションモード以外の場合、エラーが発生した場合は、クエリをキャンセルしないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     It was intended to keep the consistency, but there's no point in other
+     than native replication mode.
+     -->
+     本来は一貫性を維持するためにキャンセルされるようになっていましたが、ネイティブレプリケーションモード以外の場合ではキャンセルする必要がないので、修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-09 [d7a9a98]
+    -->
+    <para>
+     <!--
+     Do not use random() while generating MD5 salt. (Tatsuo Ishii)
+     -->
+     MD5 salt を生成するときに、<function>random()</function> を使用しないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     random() should not be used in security related applications.  To
+     replace random(), import PostmasterRandom() from PostgreSQL.  Also
+     store current time at the start up of Pgpool-II main process for later
+     use.
+     -->
+     <function>random()</function>関数はセキュリティ関連のアプリケーションで使用すべきではありません。
+     <function>random()</function>の代わりに<productname>PostgreSQL</productname>の<function>PostmasterRandom()</function> 使用するように変更しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-06 [891ce0f]
+    -->
+    <para>
+     <!--
+     Don't ignore sync message from frontend when query cache is enabled. (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効な場合、sync メッセージが廃棄されないよう修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>

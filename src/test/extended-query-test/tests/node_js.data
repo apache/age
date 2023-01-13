@@ -1,0 +1,13 @@
+# Test data for 0000345: pgpool node.js prepared statement The purpose
+# for this test is 'y' after 'H' (frontend wants response of H
+# message).
+
+# Issue SELECT
+'P'	""	"SELECT 1"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'H'
+'y'
+'S'
+'Y'
+'X'

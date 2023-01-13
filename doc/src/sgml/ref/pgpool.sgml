@@ -1,0 +1,236 @@
+<!--
+doc/src/sgml/ref/pgpool.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="pgpool">
+ <indexterm zone="pgpool">
+  <primary>pgpool</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool</refentrytitle>
+  <manvolnum>8</manvolnum>
+  <refmiscinfo>Server Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool</refname>
+  <refpurpose>
+   <productname>Pgpool-II</productname> main server</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>stop</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>reload</replaceable></arg>
+  </cmdsynopsis>
+
+ </refsynopsisdiv>
+
+ <refsect1 id="R8-PGPOOL-8">
+  <title>Description</title>
+  <para>
+   the <productname>Pgpool-II</productname> main server
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Usages</title>
+  <para>
+   <command>pgpool</command> runs in 3 modes: start, stop and reload.
+   If none of stop or reload is given, it is assumed that "start" is specified.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Common options</title>
+  <para>
+   These are common options for 3 modes.
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-a <replaceable class="parameter">hba_config_file</replaceable></option></term>
+     <term><option>--hba-file=<replaceable class="parameter">hba_config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       Set the path to the <filename>pool_hba.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">config_file</replaceable></option></term>
+     <term><option>--config-file=<replaceable class="parameter">config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       Set the path to the <filename>pgpool.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-F <replaceable class="parameter">pc_config_file</replaceable></option></term>
+     <term><option>--pcp-file=<replaceable class="parameter">pcp_config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       Set the path to the <filename>pcp.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-k <replaceable class="parameter">key_file</replaceable></option></term>
+     <term><option>--key-file=<replaceable class="parameter">key_file</replaceable></option></term>
+     <listitem>
+      <para>
+       Set the path to the <filename>.pgpoolkey</filename> file.
+       Mandatory if you use AES256 encrypted password and the file is placed other than the standard location and used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-h</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       Print help.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+
+  <title>Starting <productname>Pgpool-II</productname> main server</title>
+  <para>
+   Here are options for the start mode.
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <term><option>--debug</option></term>
+     <listitem>
+      <para>
+       Run <productname>Pgpool-II</productname> in debug mode.
+       Lots of debug messages are produced.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n</option></term>
+     <term><option>--dont-detach</option></term>
+     <listitem>
+      <para>
+       Don't run in daemon mode, does not detach control ttys.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-x</option></term>
+     <term><option>--debug-assertions</option></term>
+     <listitem>
+      <para>
+       Turns on various assertion checks, This is a debugging aid.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-C</option></term>
+     <term><option>--clear-oidmaps</option></term>
+     <listitem>
+      <para>
+       Clear query cache oidmaps when <xref linkend="guc-memqcache-method"> is
+	<varname>memcached</varname>.
+      </para>
+      <para>
+       If memqcache_method
+       is <varname>shmem</varname>, <productname>Pgpool-II</productname>
+       always discards oidmaps at the start-up time. So this option
+       is not necessary.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-D</option></term>
+     <term><option>--discard-status</option></term>
+     <listitem>
+      <para>
+       Discard <filename>pgpool_status</filename> file and do not
+       restore previous status.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+
+  <title>Stopping <productname>Pgpool-II</productname> main server</title>
+  <para>
+   Here are options for the stop mode.
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">shutdown_mode</replaceable></option></term>
+     <term><option>--mode=<replaceable class="parameter">shutdown_mode</replaceable></option></term>
+     <listitem>
+      <para>
+       Stop <productname>Pgpool-II</productname>.
+       <varname>shutdown_mode</varname> is
+       either <literal>smart</literal>, <literal>fast</literal>
+       or <literal>immediate</literal>.  If <literal>smart</literal>
+       is specified, <productname>Pgpool-II</productname> will wait
+       for all clients are disconnected. If <literal>fast</literal>
+       or <literal>immediate</literal> are
+       specified, <productname>Pgpool-II</productname> immediately
+       stops itself without waiting for all clients are
+       disconnected. There's no difference
+       between <literal>fast</literal>
+       and <literal>immediate</literal> in the current
+       implementation.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Reloading <productname>Pgpool-II</productname> configuration files</title>
+  <para>
+   Reload configuration file
+   of <productname>Pgpool-II</productname>. No specific options
+   exist for reload mode. Common options are applicable.
+  </para>
+ </refsect1>
+
+</refentry>

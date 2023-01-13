@@ -1,0 +1,130 @@
+<!-- doc/src/sgml/installation-rpm.sgml -->
+
+ <sect1 id="install-rpm">
+ <title>Installation from RPM</title>
+ <para>
+  This chapter describes the installation
+  of <productname>Pgpool-II</productname> from RPM.  If you are
+  going to install from the source code, please
+  check <xref linkend="install-source">.
+ </para>
+
+ <sect2 id="installing-rpm">
+  <title>Installing RPM</title>
+  <para>
+   <productname>Pgpool-II</productname> official RPMs can be
+   obtained from
+   <ulink url="https://www.pgpool.net/yum">https://www.pgpool.net/yum</ulink>.
+  </para>
+
+  <para>
+   For RHEL and its derivatives do following once:
+   <programlisting>
+dnf install https://www.pgpool.net/yum/rpms/4.4/redhat/rhel-8-x86_64/pgpool-II-release-4.4-1.noarch.rpm
+   </programlisting>
+   Then:
+   <programlisting>
+dnf install pgpool-II-pg15
+   </programlisting>
+
+   <literal>pg15</literal> means <literal>PostgreSQL
+    15</literal>. <productname>Pgpool-II</productname>
+   needs <productname>PostgreSQL</productname>'s library and
+   extensions directory. Since the directory paths are different in
+   the particular <productname>PostgreSQL</productname> versions,
+   You must choose appropriate RPM for
+   your <productname>PostgreSQL</productname> rpm installation. We
+   also assume you are
+   using <ulink url="https://www.postgresql.org/download/linux/redhat/"><productname>PostgreSQL</productname>
+    community rpms</ulink>.
+
+   Optionally you can install:
+   <programlisting>
+dnf install pgpool-II-pg15-debuginfo
+   </programlisting>
+   which makes it easier to retrieve debugging symbols from the core
+   or the backtrace. We recommend to install it.
+
+   There is an optional package for developers.
+   <programlisting>
+dnf install pgpool-II-pg15-devel
+   </programlisting>
+   This installs header files which developers are interested in.
+  </para>
+
+  <para>
+   On all the <productname>PostgreSQL</productname> servers you need
+   to install:
+   <programlisting>
+dnf install pgpool-II-pg15-extensions
+   </programlisting>
+
+  </para>
+ </sect2>
+
+ <sect2 id="configure-rpm">
+  <title>Configuration with RPM</title>
+  <para>
+   All the <productname>Pgpool-II</productname> configuration files
+   live in <filename>/etc/pgpool-II</filename>. Please refer
+   to <xref linkend="configuring-pgpool"> to see how to set up
+    configuration files.
+  </para>
+ </sect2>
+
+ <sect2 id="start-rpm">
+  <title>Starting/stopping Pgpool-II</title>
+  <para>
+   On RHEL7,8/CentOS7,8, do this once, if set the automatic startup of <productname>Pgpool-II</productname>.
+   <programlisting>
+systemctl enable pgpool.service
+   </programlisting>
+
+   After this, to start <productname>Pgpool-II</productname>,
+   run the following command or restart the whole system.
+   Please note that PostgreSQL servers must have been started before this. 
+
+   <programlisting>
+systemctl start pgpool.service 
+   </programlisting>
+
+   To stop <productname>Pgpool-II</productname>, do this once.
+   Please note that <productname>Pgpool-II</productname> must need to stop,
+   before <productname>PostgreSQL</productname> is stopped.
+   <programlisting>
+systemctl stop pgpool.service 
+   </programlisting>
+
+   After this, you can stop <productname>PostgreSQL</productname>
+   servers.
+  </para>
+  <para>
+   On RHEL6/CentOS6, do this once, if set the automatic startup of Pgpool-II. 
+
+   <programlisting>
+chkconfig pgpool on
+   </programlisting>
+
+   After this, to start <productname>Pgpool-II</productname>,
+   run the following command or restart the whole system.
+   Please note that PostgreSQL servers must have been started before this. 
+
+   <programlisting>
+service start pgpool
+   </programlisting>
+
+   To stop <productname>Pgpool-II</productname> run the following command.
+   Please note that <productname>Pgpool-II</productname> must need to stop,
+   before <productname>PostgreSQL</productname> is stopped.
+
+   <programlisting>
+service stop pgpool
+   </programlisting>
+
+   After this, you can stop <productname>PostgreSQL</productname>
+   servers.
+  </para>
+
+ </sect2>
+
+ </sect1>

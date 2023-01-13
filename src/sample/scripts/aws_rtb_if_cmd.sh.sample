@@ -1,0 +1,72 @@
+#!/bin/bash
+
+CMD=$1
+VIP=$2
+LOCAL_INTERFACE=$3
+ROUTE_TABLE_ID=$4
+AWSCLI=$5
+
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+
+MAC_ADDR=$(ip -br link show dev ${LOCAL_INTERFACE} | tr -s ' ' | cut -d ' ' -f3)
+NETWORK_INTERFACE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC_ADDR}/interface-id)
+
+if [ "${CMD}" == "up" ]; then
+
+    echo "running if_up_cmd"
+
+    for rtb in $(echo ${ROUTE_TABLE_ID} | sed -e 's/,/ /g'); do
+
+        echo "create route entry for ${VIP}/32 if it doesn't exist"
+        ${AWSCLI} ec2 create-route --route-table-id ${rtb} \
+            --destination-cidr-block ${VIP}/32 --network-interface-id ${NETWORK_INTERFACE_ID}
+
+        if [ $? -ne 0 ]; then
+            echo "replace route entry for ${VIP}/32"
+            ${AWSCLI} ec2 replace-route --route-table-id ${rtb} \
+                --destination-cidr-block ${VIP}/32 --network-interface-id ${NETWORK_INTERFACE_ID}
+
+            if [ $? -ne 0 ]; then
+                echo "ERROR: failed to replace route entry for ${VIP}/32" >&2
+                exit 1
+            fi
+        fi
+    done
+
+    echo "assign virtual IP ${VIP}/32 to local network interface ${LOCAL_INTERFACE}"
+    /usr/bin/sudo /sbin/ip addr add ${VIP}/32 dev ${LOCAL_INTERFACE} label ${LOCAL_INTERFACE}:1
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: failed to assign virtual IP ${VIP}/32" >&2
+        exit 1
+    fi
+
+elif [ "${CMD}" == "down" ]; then
+
+    echo "running if_down_cmd"
+
+    echo "remove virtual IP ${VIP}/32 from local network interface ${LOCAL_INTERFACE}"
+    /usr/bin/sudo /sbin/ip addr del ${VIP}/32 dev ${LOCAL_INTERFACE}
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: failed to remove virtual IP ${VIP}/32" >&2
+    fi
+
+    for rtb in $(echo ${ROUTE_TABLE_ID} | sed -e 's/,/ /g'); do
+        echo "remove route entry for ${VIP}/32"
+        ${AWSCLI} ec2 delete-route --route-table-id ${rtb} --destination-cidr-block ${VIP}/32
+
+        if [ $? -ne 0 ]; then
+            echo "ERROR: failed to remove route from route table ${rtb}" >&2
+        fi
+    done
+
+    echo "remove remaining route entry if any"
+    ip route show to exact ${VIP}/32 dev ${LOCAL_INTERFACE} | xargs -r ip route delete
+    ip route show table local to exact ${VIP}/32 dev ${LOCAL_INTERFACE} | xargs -r ip route delete
+
+fi
+
+echo "virtual IP ${VIP} ${CMD} successfully"
+exit 0

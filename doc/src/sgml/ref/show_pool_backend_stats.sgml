@@ -1,0 +1,66 @@
+<!--
+    doc/src/sgml/ref/show_pool_backend_stats.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-BACKEND-STATS">
+ <indexterm zone="sql-show-pool-backend-stats">
+  <primary>SHOW POOL_BACKEND_STATS</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_BACKEND_STATS</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_BACKEND_STATS</refname>
+  <refpurpose>
+   show backend SQL command statistics
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_BACKEND_STATS
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>SHOW POOL_BACKEND_STATS</command> displays the node id,
+   the hostname, the port, the status, the role, the
+   SELECT/INSERT/UPDATE/DELETE/DDL/other query counts issued to each
+   backend. Also error messages returned from backend are counted and
+   shown, classified by the severity. The node id, the hostname, the
+   port, the status, the role are same as <xref
+   linkend="sql-show-pool-nodes">.
+  </para>
+  <para>
+   select_cnt, insert_cnt, update_cnt, delete_cnt, ddl_cnt, other_cnt
+   are the numbers of SQL command: SELECT, INSERT, UPDATE, DELETE, DDL
+   and others issued since <productname>Pgpool-II</productname>
+   started. Failed commands (for example SELECT from non-existing
+   table) are counted. Commands rolled back are also
+   counted. Currently, other than
+   SELECT/WITH/INSERT/UPDATE/DELETE/CHECKPOINT/DEALLOCATE/DISCARD/EXECUTE/
+   EXPLAIN/LISTEN/LOAD/LOCK/NOTIFY/PREPARE/SET/SHOW/Transaction
+   commands/UNLISTEN are considered as DDL.
+  </para>
+  <para>
+   Here is an example session:
+   <programlisting>
+test=# show pool_backend_stats;
+ node_id | hostname | port  | status |  role   | select_cnt | insert_cnt | update_cnt | delete_cnt | ddl_cnt | other_cnt | panic_cnt | fatal_cnt | error_cnt 
+---------+----------+-------+--------+---------+------------+------------+------------+------------+---------+-----------+-----------+-----------+-----------
+ 0       | /tmp     | 11002 | up     | primary | 12         | 10         | 30         | 0          | 2       | 30        | 0         | 0         | 1
+ 1       | /tmp     | 11003 | up     | standby | 12         | 0          | 0          | 0          | 0       | 23        | 0         | 0         | 1
+(2 rows)
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

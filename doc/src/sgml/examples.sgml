@@ -1,0 +1,20 @@
+<!-- doc/src/sgml/examples.sgml -->
+
+<part id="examples">
+ <title>Examples</title>
+
+ <partintro>
+  <para>
+   Various examples
+  </para>
+ </partintro>
+
+ <chapter id="example-configs">
+  <title>Configuration Examples</title>
+  &example-basic;
+  &example-cluster;
+  &example-replication-si-mode;
+  &example-AWS;
+  &example-Aurora;
+ </chapter>
+</part>

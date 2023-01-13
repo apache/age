@@ -1,0 +1,195 @@
+<!--
+doc/src/sgml/ref/pgpool_adm_pcp_node_info.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-ADM-PCP-NODE-INFO">
+ <indexterm zone="pgpool-adm-pcp-node-info">
+  <primary>pgpool_adm_pcp_node_info</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_adm_pcp_node_info</refentrytitle>
+  <manvolnum>3</manvolnum>
+  <refmiscinfo>pgpool_adm extension</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_adm_pcp_node_info</refname>
+  <refpurpose>
+   <!--
+   a function to display the information on the given node
+   ID
+   -->
+   指定ノードIDの情報を表示する関数
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <funcsynopsis>
+   <funcprototype>
+    <funcdef><function>pcp_node_info</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>text <parameter>host</parameter></paramdef>
+    <paramdef>integer <parameter>port</parameter></paramdef>
+    <paramdef>text <parameter>username</parameter></paramdef>
+    <paramdef>text <parameter>password</parameter></paramdef>
+    <paramdef>out <parameter>status text</parameter></paramdef>
+    <paramdef>out <parameter>pg_status text</parameter></paramdef>
+    <paramdef>out <parameter>weight float4</parameter></paramdef>
+    <paramdef>out <parameter>role text</parameter></paramdef>
+    <paramdef>out <parameter>pg_role text</parameter></paramdef>
+    <paramdef>out <parameter>replication_delay bigint</parameter></paramdef>
+    <paramdef>out <parameter>replication_state text</parameter></paramdef>
+    <paramdef>out <parameter>replication_sync_state text</parameter></paramdef>
+    <paramdef>out <parameter>last_status_change timestamp</parameter></paramdef>
+   </funcprototype>
+
+   <funcprototype>
+    <funcdef><function>pcp_node_info</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>text <parameter>pcp_server</parameter></paramdef>
+    <paramdef>out <parameter>status text</parameter></paramdef>
+    <paramdef>out <parameter>pg_status text</parameter></paramdef>
+    <paramdef>out <parameter>weight float4</parameter></paramdef>
+    <paramdef>out <parameter>role text</parameter></paramdef>
+    <paramdef>out <parameter>pg_role text</parameter></paramdef>
+    <paramdef>out <parameter>replication_delay bigint</parameter></paramdef>
+    <paramdef>out <parameter>replication_state text</parameter></paramdef>
+    <paramdef>out <parameter>replication_sync_state text</parameter></paramdef>
+    <paramdef>out <parameter>last_status_change timestamp</parameter></paramdef>
+   </funcprototype>
+
+  </funcsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R3-PCP-NODE-INFO-3">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <!--
+   <function>pcp_node_info</function>
+   displays the information on the given node ID.
+   -->
+   <function>pcp_node_info</function>は指定されたノードIDの情報を表示します。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Arguments</title>
+  -->
+  <title>引数</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><replaceable class="parameter">node_id</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       The index of backend node to get information of.
+       -->
+       情報を取得するバックエンドノード
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable class="parameter">pcp_server</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       The foreign server name for pcp server.
+       -->
+       pcpサーバの外部サーバ名
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <!--
+     <term><option>Other arguments </option></term>
+     -->
+     <term><option>他の引数</option></term>
+     <listitem>
+      <para>
+       <!--
+       See <xref linkend="pcp-common-options">.
+       -->
+       <xref linkend="pcp-common-options">を参照ください。
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>使用例</title>
+  <para>
+   <!--
+   Here is an example output:
+   -->
+   使用例です。
+   <programlisting>
+test=# SELECT * FROM pcp_node_info(node_id => 1, host => '', port => 11001, username => 't-ishii', password => 't-ishii');
+ host | port  |      status       | pg_status | weight |  role   | pg_role | replication_delay | replication_state | replication_sync_state | last_status_change  
+------+-------+-------------------+-----------+--------+---------+---------+-------------------+-------------------+------------------------+---------------------
+ /tmp | 11003 | Connection in use | up        |    0.5 | Standby | standby |                 0 | streaming         | async                  | 2021-02-27 15:10:19
+(1 row)
+   </programlisting>
+  </para>
+
+  <para>
+   表示データの意味については、<xref linkend="pcp-node-info">をご覧ください。
+  </para>
+
+  <note>
+   <para>
+    <!--
+    <parameter>role</parameter>, <parameter>replication_delay</parameter>, <parameter>last_status_change</parameter>
+    out parameters are new
+    from <productname>Pgpool-II</productname> 4.0. If you have
+    already installed pre-4.0 pgpool_adm extension, you can upgrade
+    to the new one by using ALTER EXTENSION SQL command.
+    <programlisting>
+    ALTER EXTENSION pgpool_adm UPDATE;
+   </programlisting>
+    -->
+    <parameter>role</parameter>, <parameter>replication_delay</parameter>, <parameter>last_status_change</parameter>出力パラメータは<productname>Pgpool-II</productname> 4.0で追加されました。
+    すでに4.0以前のpgpool_adm拡張をインストールしている場合は、ALTER EXTENSION SQLコマンドを使って更新が可能です。
+    <programlisting>
+     ALTER EXTENSION pgpool_adm UPDATE;
+    </programlisting>
+   </para>
+  </note>
+
+  <note>
+   <para>
+    <parameter>replication_state</parameter>, <parameter>replication_sync_state</parameter>出力パラメータは<productname>Pgpool-II</productname> 4.1で追加されました。
+    すでに4.1以前のpgpool_adm拡張をインストールしている場合は、ALTER EXTENSION SQLコマンドを使って更新が可能です。
+    <programlisting>
+     ALTER EXTENSION pgpool_adm UPDATE;
+    </programlisting>
+   </para>
+  </note>
+
+  <note>
+   <para>
+    <parameter>pg_status</parameter>, <parameter>pg_role</parameter>出力パラメータは<productname>Pgpool-II</productname> 4.3で追加されました。
+    すでに4.2以前のpgpool_adm拡張をインストールしている場合は、ALTER EXTENSION SQLコマンドを使って更新が可能です。
+    <programlisting>
+     ALTER EXTENSION pgpool_adm UPDATE;
+    </programlisting>
+   </para>
+  </note>
+
+ </refsect1>
+
+</refentry>

@@ -1,0 +1,4 @@
+PREPARE "xx" (int4,"text") AS INSERT INTO "foo" VALUES ($1,$2)
+EXECUTE "xx" (1,'xxx')
+DEALLOCATE "xx"
+DEALLOCATE "xx"

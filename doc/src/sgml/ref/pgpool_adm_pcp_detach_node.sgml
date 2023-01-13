@@ -1,0 +1,115 @@
+<!--
+doc/src/sgml/ref/pgpool_adm_pcp_detach_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-ADM-PCP-DETACH-NODE">
+ <indexterm zone="pgpool-adm-pcp-detach-node">
+  <primary>pgpool_adm_pcp_detach_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_adm_pcp_detach_node</refentrytitle>
+  <manvolnum>3</manvolnum>
+  <refmiscinfo>pgpool_adm extension</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_adm_pcp_detach_node</refname>
+  <refpurpose>
+   a function to detach given node ID</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <funcsynopsis>
+   <funcprototype>
+    <funcdef><function>pcp_detach_node</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>boolean <parameter>gracefully</parameter></paramdef>
+    <paramdef>text <parameter>host</parameter></paramdef>
+    <paramdef>integer <parameter>port</parameter></paramdef>
+    <paramdef>text <parameter>username</parameter></paramdef>
+    <paramdef>text <parameter>password</parameter></paramdef>
+    <paramdef>out <parameter>node_detached boolean</parameter></paramdef>
+   </funcprototype>
+
+   <funcprototype>
+    <funcdef><function>pcp_detach_node</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>boolean <parameter>gracefully</parameter></paramdef>
+    <paramdef>text <parameter>pcp_server</parameter></paramdef>
+    <paramdef>out <parameter>node_detached boolean</parameter></paramdef>
+   </funcprototype>
+
+  </funcsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R3-PCP-DETACH-NODE-3">
+  <title>Description</title>
+  <para>
+   <function>pcp_detach_node</function> detaches a node
+   from <productname>Pgpool-II</productname>.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Arguments</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><replaceable class="parameter">node_id</replaceable></term>
+     <listitem>
+      <para>
+       The index of backend node to detach.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable class="parameter">gracefully</replaceable></term>
+     <listitem>
+      <para>
+       If true, wait for all session
+       of <productname>pgpool-II</productname> terminates.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable class="parameter">pcp_server</replaceable></term>
+     <listitem>
+      <para>
+       The foreign server name for pcp server.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other arguments </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+    test=# SELECT * FROM pcp_detach_node(node_id => 1, gracefully => 'false', host => 'localhost', port => 11001, username => 't-ishii', password => 't-ishii');
+    node_detached
+    ---------------
+    t
+    (1 row)
+   </programlisting>
+  </para>
+
+ </refsect1>
+
+</refentry>

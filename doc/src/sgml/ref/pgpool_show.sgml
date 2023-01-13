@@ -1,0 +1,203 @@
+<!--
+doc/src/sgml/ref/show.sgml
+PostgreSQL documentation
+-->
+
+<refentry id="SQL-PGPOOL-SHOW">
+ <indexterm zone="sql-pgpool-show">
+  <primary>SHOW</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>PGPOOL SHOW</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>PGPOOL SHOW</refname>
+  <refpurpose>show the value of a configuration parameter</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   PGPOOL SHOW <replaceable class="PARAMETER">configuration_parameter</replaceable>
+   PGPOOL SHOW <replaceable class="PARAMETER">configuration_parameter_group</replaceable>
+   PGPOOL SHOW ALL
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>PGPOOL SHOW</command> will display the current value of
+   <productname>Pgpool-II</productname> configuration parameters.
+
+   This command is similar to the
+   <ulink url="https://www.postgresql.org/docs/current/static/sql-show.html">
+    <command>SHOW</command></ulink> command in PostgreSQL with an addition
+   of <acronym>PGPOOL</acronym> keyword to distinguish it from the
+   PostgreSQL SHOW command.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+  <variablelist>
+
+   <varlistentry>
+    <term><replaceable class="PARAMETER">configuration_parameter</replaceable></term>
+    <listitem>
+     <para>
+      The name of a <productname>Pgpool-II</productname> configuration parameter.
+      Available parameters are documented in <xref linkend="runtime-config">.
+     </para>
+     <note>
+      <para>
+       If the parameter contains uppercase letters (e.g. <xref linkend="GUC-DELEGATE-IP">),
+       the parameter name must be enclosed in double quotes.
+      </para>
+     </note>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="PARAMETER">configuration_parameter_group</replaceable></term>
+    <listitem>
+     <para>
+      The name of the <productname>Pgpool-II</productname> configuration parameter group.
+      Currently there are four parameter groups.
+     </para>
+     <variablelist>
+      <varlistentry>
+       <term><literal>backend</literal></term>
+       <listitem>
+	<para>
+	 Configuration group of all backend config parameters.
+	</para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><literal>watchdog</literal></term>
+       <listitem>
+	<para>
+	 Configuration group of all watchdog node config parameters.
+	</para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><literal>heartbeat</literal></term>
+       <listitem>
+	<para>
+	 configuration group of all watchdog heartbeat config parameters.
+	</para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><literal>health_check</literal></term>
+       <listitem>
+	<para>
+	 configuration group of all health check parameters.
+	</para>
+       </listitem>
+      </varlistentry>
+
+     </variablelist>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><literal>ALL</literal></term>
+    <listitem>
+     <para>
+      Show the values of all configuration parameters, with descriptions.
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Show the current setting of the parameter <xref linkend="guc-port">:
+
+    <programlisting>
+PGPOOL SHOW port;
+port
+------
+9999
+(1 row)
+    </programlisting>
+  </para>
+
+  <para>
+   Show the current setting of the parameter <xref linkend="guc-write-function-list">:
+    <programlisting>
+PGPOOL SHOW write_function_list;
+write_function_list
+---------------------
+nextval,setval
+(1 row)
+    </programlisting>
+  </para>
+
+  <para>
+   Show the current settings of all the configuration parameters belonging to backend group:
+   <programlisting>
+PGPOOL SHOW backend;
+item                     |          value          |              description
+-------------------------+-------------------------+-----------------------------------------------------------
+backend_hostname0        | 127.0.0.1               | hostname or IP address of PostgreSQL backend.
+backend_port0            | 5434                    | port number of PostgreSQL backend.
+backend_weight0          | 0                       | load balance weight of backend.
+backend_data_directory0  | /var/lib/pgsql/data     | data directory of the backend.
+backend_flag0            | ALLOW_TO_FAILOVER       | Controls various backend behavior.
+backend_hostname1        | 127.0.0.1               | hostname or IP address of PostgreSQL backend.
+backend_port1            | 5432                    | port number of PostgreSQL backend.
+backend_weight1          | 1                       | load balance weight of backend.
+backend_data_directory1  | /home/work/installed/pg | data directory of the backend.
+backend_flag1            | ALLOW_TO_FAILOVER       | Controls various backend behavior.
+(10 rows)
+   </programlisting></para>
+
+  <para>
+   Show all settings:
+   <programlisting>
+PGPOOL SHOW ALL;
+item                     |          value          |              description
+-------------------------+-------------------------+-----------------------------------------------------------
+backend_hostname0        | 127.0.0.1               | hostname or IP address of PostgreSQL backend.
+backend_port0            | 5434                    | port number of PostgreSQL backend.
+backend_weight0          | 0                       | load balance weight of backend.
+backend_data_directory0  | /var/lib/pgsql/data     | data directory of the backend.
+backend_flag0            | ALLOW_TO_FAILOVER       | Controls various backend behavior.
+backend_hostname1        | 127.0.0.1               | hostname or IP address of PostgreSQL backend.
+backend_port1            | 5432                    | port number of PostgreSQL backend.
+backend_weight1          | 1                       | load balance weight of backend.
+backend_data_directory1  | /home/work/installed/pg | data directory of the backend.
+backend_flag1            | ALLOW_TO_FAILOVER       | Controls various backend behavior.
+hostname0                | localhost               | Hostname of pgpool node for watchdog connection.
+.
+.
+.
+ssl                      | off                     | Enables SSL support for frontend and backend connections
+(138 rows)
+   </programlisting></para>
+ </refsect1>
+
+ <refsect1>
+  <title>See Also</title>
+
+  <simplelist type="inline">
+   <member><xref linkend="SQL-PGPOOL-SET"></member>
+  </simplelist>
+ </refsect1>
+
+</refentry>

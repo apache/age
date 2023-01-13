@@ -1,0 +1,64 @@
+CREATE TABLE "foo" ("a" int4,"b" "text") 
+CREATE TABLE "foo" ("a" int4,"b" "text") INHERITS ("bar")
+CREATE TABLE "foo" ("a" int4,"b" "text") INHERITS ("a","b","c","d")
+CREATE TABLE "foo" ("a" int4,"b" numeric)  WITH OIDS 
+CREATE TABLE "foo" ("a" int4,"b" numeric)  WITHOUT OIDS 
+CREATE TABLE "foo" ("a" int4,"b" numeric)  WITH ("fillfactor"=10)
+CREATE TABLE "foo" ("a", "b")  AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  WITH OIDS  AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  WITHOUT OIDS  AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  WITH ("fillfactor"=10) AS SELECT 1,2
+syntax error: CREATE TABLE foo (a, b) ON COMMIT DROP
+syntax error: CREATE TABLE foo (a, b) ON COMMIT DELETE
+syntax error: CREATE TABLE foo (a, b) ON COMMIT PRESERVE
+syntax error: CREATE TABLE foo (a, b) ON COMMIT PRESERVE ROWS TABLESPACE data
+CREATE TABLE "foo" ("a", "b")  ON COMMIT DROP AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  ON COMMIT DELETE ROWS AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  ON COMMIT PRESERVE ROWS AS SELECT 1,2
+CREATE TABLE "foo" ("a", "b")  ON COMMIT PRESERVE ROWS TABLESPACE "data" AS SELECT 1,2
+CREATE TABLE "foo" ("a" int4,LIKE "a" INCLUDING DEFAULTS) 
+CREATE TABLE "foo" ("a" int4,LIKE "a" INCLUDING CONSTRAINTS) 
+CREATE TABLE "foo" ("a" int4,LIKE "a" INCLUDING CONSTRAINTS INCLUDING INDEXES) 
+CREATE TABLE "foo" ("a" int4,LIKE "a" INCLUDING DEFAULTS INCLUDING INDEXES) 
+CREATE TABLE "foo" ("a" int4 UNIQUE) 
+CREATE TABLE "foo" ("a" int4 UNIQUE WITH ("fillfactor"=10)) 
+CREATE TABLE "foo" ("a" int4 PRIMARY KEY) 
+CREATE TABLE "foo" ("a" int4 CHECK ( ("a">100 ))) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c")) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") MATCH FULL) 
+syntax error: CREATE TABLE foo (a int references b(c) MATCH PARTIAL)
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c")) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON UPDATE RESTRICT) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON UPDATE CASCADE) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON UPDATE SET NULL) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON UPDATE SET DEFAULT) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON DELETE RESTRICT) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON DELETE CASCADE) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON DELETE SET NULL) 
+CREATE TABLE "foo" ("a" int4 REFERENCES "b"("c") ON DELETE SET DEFAULT) 
+CREATE TYPE "enum_test" AS ENUM ('label1','label2')
+CREATE TYPE "enum_test" AS ENUM ()
+syntax error: CREATE TYPE enum_test AS ENUM;
+CREATE TEXT SEARCH PARSER "foo"("a"='b')
+CREATE TEXT SEARCH DICTIONARY "foo"("a"='b')
+CREATE TEXT SEARCH CONFIGURATION "foo"("a"='b')
+CREATE INDEX "foo" ON "a"("b")
+CREATE INDEX "foo" ON "a"("b","c")
+CREATE UNIQUE INDEX "foo" ON "a"("b")
+CREATE UNIQUE INDEX CONCURRENTLY "foo" ON "a"("b")
+CREATE SEQUENCE "a_seq"
+CREATE TEMP SEQUENCE "a_seq"
+CREATE TEMP SEQUENCE "a_seq"
+CREATE SEQUENCE "a_seq" INCREMENT 1
+CREATE SEQUENCE "a_seq" INCREMENT 1
+CREATE SEQUENCE "a_seq" MINVALUE 1
+CREATE SEQUENCE "a_seq" NO MINVALUE
+CREATE SEQUENCE "a_seq" MAXVALUE 1
+CREATE SEQUENCE "a_seq" NO MAXVALUE
+CREATE SEQUENCE "a_seq" START 1
+CREATE SEQUENCE "a_seq" START 1
+CREATE SEQUENCE "a_seq" CACHE 1
+CREATE SEQUENCE "a_seq" CYCLE
+CREATE SEQUENCE "a_seq" NO CYCLE
+CREATE SEQUENCE "a_seq" OWNED BY "a", "b"
+CREATE SEQUENCE "a_seq" OWNED BY "none"

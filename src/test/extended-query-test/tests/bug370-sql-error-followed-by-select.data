@@ -1,0 +1,28 @@
+# Test data for 0000370:
+# SQL error followed by normal SELECT gets stuck.
+
+# Test data for 0000370:
+# SQL error followed by normal SELECT gets stuck.
+
+'Q'	"SET statement_timeout = '4s'"
+
+# Receive response from backend
+'Y'
+
+'P'	"S1"	"SELECT 1/0"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+'P'	"S2"	"SELECT * from pg_tables"	0
+'B'	""	"S2"	0	0	0
+'E'	""	0
+'C'	'S'	"S2"
+
+# Issue Sync message
+'S'
+
+# Receive response from backend
+'Y'
+# Send terminate message
+'X'

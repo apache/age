@@ -1,0 +1,90 @@
+<!--
+doc/src/sgml/ref/pcp_recovery_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-RECOVERY-NODE">
+ <indexterm zone="pcp-recovery-node">
+  <primary>pcp_recovery_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_recovery_node</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_recovery_node</refname>
+  <refpurpose>
+   <!--
+   attaches the given backend node with recovery</refpurpose>
+   -->
+   <productname>Pgpool-II</productname> のノードのデータを再同期させた上で復帰させる</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_recovery_node</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-RECOVERY-NODE-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pcp_recovery_node</command>
+   <!--
+   attaches the given backend node with recovery.
+   See <xref linkend="runtime-online-recovery"> to set up necessary parameters of pgpool.conf.
+   -->
+   は <productname>Pgpool-II</productname> のノードのデータを再同期させた上で復帰させます。
+   pgpool.confに必要なパラメータを設定する方法の詳細については、<xref linkend="runtime-online-recovery">をご覧ください。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       The index of backend node.
+       -->
+       バックエンドノードのインデックスを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <!--
+     <term><option>Other options </option></term>
+     -->
+     <term><option>その他 </option></term>
+     <listitem>
+      <para>
+       <!--
+       See <xref linkend="pcp-common-options">.
+       -->
+       <xref linkend="pcp-common-options"> を参照してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

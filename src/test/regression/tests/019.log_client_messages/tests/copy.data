@@ -1,0 +1,30 @@
+# Test for copy protocol
+
+# create test table
+'Q'	"CREATE TABLE t1(a text)"
+'Y'
+
+# CopyIn
+#
+'Q'	"COPY t1 FROM STDIN"
+# CopyData
+'d'	"abc"
+# CopyDone
+'c'
+'Y'
+
+# CopyOut
+#
+'Q'	"COPY t1 TO STDOUT"
+'Y'
+
+#
+# Copy fail case
+#
+'Q'	"COPY t1 FROM STDIN"
+# CopyData
+'d'	"abc"
+# CopyFail
+'f'	"pgproto copy fail test"
+'Y'
+'X'

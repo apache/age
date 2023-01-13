@@ -1,0 +1,749 @@
+<!-- doc/src/sgml/advanced.sgml -->
+
+<chapter id="tutorial-watchdog">
+ <title>Watchdog</title>
+
+ <sect1 id="tutorial-watchdog-intro">
+  <title>Introduction</title>
+
+  <para>
+   <firstterm>Watchdog</firstterm> is a sub process of
+   <productname>Pgpool-II</productname> to add high
+   availability. Watchdog is used to resolve the single point of
+   failure by coordinating multiple
+   <productname>Pgpool-II</productname> nodes. The watchdog was first
+   introduced in <productname>pgpool-II</productname>
+   <emphasis>V3.2</emphasis> and is significantly enhanced in
+   <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>, to
+   ensure the presence of a quorum at all time. This new addition to
+   watchdog makes it more fault tolerant and robust in handling and
+   guarding against the split-brain syndrome and network
+   partitioning. In addition, <emphasis>V3.7</emphasis> introduced
+   quorum failover (see <xref
+    linkend="config-watchdog-failover-behavior">) to reduce the false
+    positives of <productname>PostgreSQL</productname> server
+    failures. <emphasis>To ensure the quorum mechanism properly works, the number
+    of <productname>Pgpool-II</productname> nodes must be odd in number
+    and greater than or equal to 3.</emphasis>
+  </para>
+
+  <sect2 id="tutorial-watchdog-coordinating-nodes">
+   <title>Coordinating multiple <productname>Pgpool-II</productname> nodes</title>
+
+   <indexterm zone="tutorial-watchdog-coordinating-nodes">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    Watchdog coordinates multiple <productname>Pgpool-II</productname> nodes
+    by exchanging information with each other.
+   </para>
+   <para>
+    At the startup, if the watchdog is enabled, <productname>Pgpool-II</productname> node
+    sync the status of all configured backend nodes from the leader watchdog node.
+    And if the node goes on to become a leader node itself it initializes the backend
+    status locally. When a backend node status changes by failover etc..,
+    watchdog notifies the information to other <productname>Pgpool-II</productname>
+    nodes and synchronizes them. When online recovery occurs, watchdog restricts
+    client connections to other <productname>Pgpool-II</productname>
+    nodes for avoiding inconsistency between backends.
+   </para>
+
+   <para>
+    Watchdog also coordinates with all connected <productname>Pgpool-II</productname> nodes to ensure
+    that failback, failover and follow_primary commands must be executed only on one <productname>pgpool-II</productname> node.
+   </para>
+
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-lifechecking">
+   <title>Life checking of other <productname>Pgpool-II</productname> nodes</title>
+
+   <indexterm zone="tutorial-watchdog-lifechecking">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    Watchdog lifecheck is the sub-component of watchdog to monitor
+    the health of <productname>Pgpool-II</productname> nodes participating
+    in the watchdog cluster to provide the high availability.
+    Traditionally <productname>Pgpool-II</productname> watchdog provides
+    two methods of remote node health checking. <literal>"heartbeat"</literal>
+    and <literal>"query"</literal> mode.
+    The watchdog in <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>
+    adds a new <literal>"external"</literal> to <xref linkend="guc-wd-lifecheck-method">,
+     which enables to hook an external third party health checking
+     system with <productname>Pgpool-II</productname> watchdog.
+   </para>
+   <para>
+    Apart from remote node health checking watchdog lifecheck can also check
+    the health of node it is installed on by monitoring the connection to upstream servers.
+    If the monitoring fails, watchdog treats it as the local <productname>Pgpool-II</productname>
+    node failure.
+   </para>
+
+   <para>
+    In <literal>heartbeat</literal> mode, watchdog monitors other <productname>Pgpool-II</productname>
+    processes by using <literal>heartbeat</literal> signal.
+    Watchdog receives heartbeat signals sent by other <productname>Pgpool-II</productname>
+    periodically. If there is no signal for a certain period,
+    watchdog regards this as the failure of the <productname>Pgpool-II</productname>.
+    For redundancy you can use multiple network connections for heartbeat
+    exchange between <productname>Pgpool-II</productname> nodes.
+    This is the default and recommended mode to be used for health checking.
+   </para>
+
+   <para>
+    In <literal>query</literal> mode, watchdog monitors <productname>Pgpool-II</productname>
+    service rather than process. In this mode watchdog sends queries to other
+    <productname>Pgpool-II</productname> and checks the response.
+    <note>
+     <para>
+      Note that this method requires connections from other <productname>Pgpool-II</productname>,
+      so it would fail monitoring if the <xref linkend="guc-num-init-children"> parameter isn't large enough.
+       This mode is deprecated and left for backward compatibility.
+     </para>
+    </note>
+   </para>
+
+   <para>
+    <literal>external</literal> mode is introduced by <productname>Pgpool-II</productname>
+    <emphasis>V3.5</emphasis>. This mode basically disables the built in lifecheck
+    of <productname>Pgpool-II</productname> watchdog and expects that the external system
+    will inform the watchdog about health of local and all remote nodes participating in the watchdog cluster.
+   </para>
+
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-consistency-of-config">
+   <title>Consistency of configuration parameters on all <productname>Pgpool-II</productname> nodes</title>
+
+   <indexterm zone="tutorial-watchdog-consistency-of-config">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    At startup watchdog verifies the <productname>Pgpool-II</productname>
+    configuration of the local node for	the consistency with the configurations
+    on the leader watchdog node and warns the user of any differences.
+    This eliminates the likelihood of undesired behavior that can happen
+    because of different configuration on different <productname>Pgpool-II</productname> nodes.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-changing-active">
+   <title>Changing active/standby state when certain fault is detected</title>
+
+   <indexterm zone="tutorial-watchdog-changing-active">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    When a fault of <productname>Pgpool-II</productname> is detected,
+    watchdog notifies the other watchdogs of it.
+    If this is the active <productname>Pgpool-II</productname>,
+    watchdogs decide the new active <productname>Pgpool-II</productname>
+    by voting and change active/standby state.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-automatic-vip">
+   <title>Automatic virtual IP switching</title>
+
+   <indexterm zone="tutorial-watchdog-automatic-vip">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    When a standby <productname>Pgpool-II</productname> server promotes to active,
+    the new active server brings up virtual IP interface. Meanwhile, the previous
+    active server brings down the virtual IP interface. This enables the active
+    <productname>Pgpool-II</productname> to work using the same
+    IP address even when servers are switched.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-changing-automatic-register-in-recovery">
+   <title>Automatic registration of a server as a standby in recovery</title>
+
+   <indexterm zone="tutorial-watchdog-changing-automatic-register-in-recovery">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    When the broken server recovers or new server is attached, the watchdog process
+    notifies this to the other watchdogs in the cluster along with the information of the new server,
+    and the watchdog process receives information on the active server and
+    other servers. Then, the attached server is registered as a standby.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-start-stop">
+   <title>Starting/stopping watchdog</title>
+
+   <indexterm zone="tutorial-watchdog-start-stop">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    The watchdog process starts and stops automatically as sub-processes
+    of the <productname>Pgpool-II</productname>, therefore there is no
+    dedicated command to start and stop watchdog.
+   </para>
+   <para>
+    Watchdog controls the virtual IP interface, the commands executed by
+    the watchdog for bringing up and bringing down the VIP require the
+    root privileges. <productname>Pgpool-II</productname> requires the
+    user running <productname>Pgpool-II</productname> to have root
+    privileges when the watchdog is enabled along with virtual IP.
+    This is however not good security practice to run the
+    <productname>Pgpool-II</productname> as root user, the alternative
+    and preferred way is to run the <productname>Pgpool-II</productname>
+    as normal user and use either the custom commands for
+    <xref linkend="guc-if-up-cmd">, <xref linkend="guc-if-down-cmd">,
+      and <xref linkend="guc-arping-cmd"> using <command>sudo</command>
+       or use <command>setuid</command> ("set user ID upon execution")
+       on <literal>if_*</literal> commands
+   </para>
+   <para>
+    Lifecheck process is a sub-component of watchdog, its job is to monitor the
+    health of <productname>Pgpool-II</productname> nodes participating in
+    the watchdog cluster. The Lifecheck process is started automatically
+    when the watchdog is configured to use the built-in life-checking,
+    it starts after the watchdog main process initialization is complete.
+    However lifecheck process only kicks in when all configured watchdog
+    nodes join the cluster and becomes active. If some remote node fails
+    before the Lifecheck become active that failure will not get caught by the lifecheck.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="tutorial-watchdog-integrating-external-lifecheck">
+  <title>Integrating external lifecheck with watchdog</title>
+
+  <para>
+   <productname>Pgpool-II</productname> watchdog process uses the
+   <acronym>BSD</acronym> sockets for communicating with
+   all the <productname>Pgpool-II</productname> processes and the
+   same <acronym>BSD</acronym> socket can also be used by any third
+   party system to provide the lifecheck function for local and remote
+   <productname>Pgpool-II</productname> watchdog nodes.
+   The <acronym>BSD</acronym> socket file name for IPC is constructed
+   by appending <productname>Pgpool-II</productname> wd_port after
+   <literal>"s.PGPOOLWD_CMD."</literal> string and the socket file is
+   placed in the <xref linkend="guc-wd-ipc-socket-dir"> directory.
+  </para>
+
+  <sect2 id="tutorial-watchdog-ipc-command-packet">
+   <title>Watchdog IPC command packet format</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-command-packet">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    The watchdog IPC command packet consists of three fields.
+    Below table details the message fields and description.
+   </para>
+
+   <table id="wd-ipc-command-format-table">
+    <title>Watchdog IPC command packet format</title>
+    <tgroup cols="3">
+     <thead>
+      <row>
+       <entry>Field</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>Command Type</entry>
+      </row>
+      <row>
+       <entry>LENGTH</entry>
+       <entry>INT32 in network byte order</entry>
+       <entry>The length of data to follow</entry>
+      </row>
+      <row>
+       <entry>DATA</entry>
+       <entry>DATA in <acronym>JSON</acronym> format</entry>
+       <entry>Command data in <acronym>JSON</acronym> format</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-ipc-result-packet">
+   <title>Watchdog IPC result packet format</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-result-packet">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    The watchdog IPC command result packet consists of three fields.
+    Below table details the message fields and description.
+   </para>
+
+   <table id="wd-ipc-result-format-table">
+    <title>Watchdog IPC result packet format</title>
+    <tgroup cols="3">
+     <thead>
+      <row>
+       <entry>Field</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>Command Type</entry>
+      </row>
+      <row>
+       <entry>LENGTH</entry>
+       <entry>INT32 in network byte order</entry>
+       <entry>The length of data to follow</entry>
+      </row>
+      <row>
+       <entry>DATA</entry>
+       <entry>DATA in <acronym>JSON</acronym> format</entry>
+       <entry>Command result data in <acronym>JSON</acronym> format</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-ipc-command-packet-types">
+   <title>Watchdog IPC command packet types</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-command-packet-types">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    The first byte of the IPC command packet sent to watchdog process
+    and the result returned by watchdog process is identified as the
+    command or command result type.
+    The below table lists all valid types and their meanings
+   </para>
+
+   <table id="wd-ipc-command-packet--types-table">
+    <title>Watchdog IPC command packet types</title>
+    <tgroup cols="4">
+     <thead>
+      <row>
+       <entry>Name</entry>
+       <entry>Byte Value</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>REGISTER FOR NOTIFICATIONS</entry>
+       <entry>'0'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to register the current connection to receive watchdog notifications</entry>
+      </row>
+      <row>
+       <entry>NODE STATUS CHANGE</entry>
+       <entry>'2'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to inform watchdog about node status change of watchdog node</entry>
+      </row>
+      <row>
+       <entry>GET NODES LIST</entry>
+       <entry>'3'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to get the list of all configured watchdog nodes</entry>
+      </row>
+      <row>
+       <entry>NODES LIST DATA</entry>
+       <entry>'4'</entry>
+       <entry>Result packet</entry>
+       <entry>The <acronym>JSON</acronym> data in packet contains the list of all configured watchdog nodes</entry>
+      </row>
+      <row>
+       <entry>CLUSTER IN TRANSITION</entry>
+       <entry>'7'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when it is not possible to process the command because the cluster is transitioning.</entry>
+      </row>
+      <row>
+       <entry>RESULT BAD</entry>
+       <entry>'8'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when the IPC command fails</entry>
+      </row>
+      <row>
+       <entry>RESULT OK</entry>
+       <entry>'9'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when IPC command succeeds</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-external-lifecheck-ipc">
+   <title>External lifecheck IPC packets and data</title>
+
+   <indexterm zone="tutorial-watchdog-external-lifecheck-ipc">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    "GET NODES LIST" ,"NODES LIST DATA" and "NODE STATUS CHANGE"
+    IPC messages of watchdog can be used to integration an external
+    lifecheck systems. Note that the built-in lifecheck of pgpool
+    also uses the same channel and technique.
+   </para>
+
+   <sect3 id="tutorial-watchdog-external-lifecheck-get-nodes">
+    <title>Getting list of configured watchdog nodes</title>
+
+    <indexterm zone="tutorial-watchdog-external-lifecheck-get-nodes">
+     <primary>WATCHDOG</primary>
+    </indexterm>
+    <para>
+     Any third party lifecheck system can send the "GET NODES LIST"
+     packet on watchdog IPC socket with a <acronym>JSON</acronym>
+     data containing the authorization key and value if
+     <xref linkend="guc-wd-authkey"> is set or empty packet data
+      when <xref linkend="guc-wd-authkey"> is not configured to get
+       the "NODES LIST DATA" result packet.
+    </para>
+    <para>
+     The result packet returned by watchdog for the "GET NODES LIST"
+     will contains the list of all configured watchdog nodes to do
+     health check on in the <acronym>JSON</acronym> format.
+     The <acronym>JSON</acronym> of the watchdog nodes contains the
+     <literal>"WatchdogNodes"</literal> Array of all watchdog nodes.
+     Each watchdog <acronym>JSON</acronym> node contains the
+     <literal>"ID"</literal>, <literal>"NodeName"</literal>,
+     <literal>"HostName"</literal>, <literal>"DelegateIP"</literal>,
+     <literal>"WdPort"</literal> and <literal>"PgpoolPort"</literal>
+     for each node.
+    </para>
+    <para>
+     <programlisting>
+      -- The example JSON data contained in "NODES LIST DATA"
+
+      {
+      "NodeCount":3,
+      "WatchdogNodes":
+      [
+      {
+      "ID":0,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9999",
+      "HostName":"watchdog-host1",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9999
+      },
+      {
+      "ID":1,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9991",
+      "HostName":"watchdog-host2",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9991
+      },
+      {
+      "ID":2,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9992",
+      "HostName":"watchdog-host3",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9992
+      }
+      ]
+      }
+
+      -- Note that ID 0 is always reserved for local watchdog node
+
+     </programlisting>
+    </para>
+    <para>
+     After getting the configured watchdog nodes information from the
+     watchdog the external lifecheck system can proceed with the
+     health checking of watchdog nodes, and when it detects some status
+     change of any node it can inform that to watchdog using the
+     "NODE STATUS CHANGE" IPC messages of watchdog.
+     The data in the message should contain the <acronym>JSON</acronym>
+     with the node ID of the node whose status is changed
+     (The node ID must be same as returned by watchdog for that node
+     in WatchdogNodes list) and the new status of node.
+    </para>
+    <para>
+     <programlisting>
+      -- The example JSON to inform pgpool-II watchdog about health check
+      failed on node with ID 1 will look like
+
+      {
+      "NodeID":1,
+      "NodeStatus":1,
+      "Message":"optional message string to log by watchdog for this event"
+      "IPCAuthKey":"wd_authkey configuration parameter value"
+      }
+
+      -- NodeStatus values meanings are as follows
+      NODE STATUS DEAD  =  1
+      NODE STATUS ALIVE =  2
+
+     </programlisting>
+    </para>
+   </sect3>
+  </sect2>
+ </sect1>
+ <sect1 id="tutorial-watchdog-restrictions">
+  <title>Restrictions on watchdog</title>
+
+  <indexterm zone="tutorial-watchdog-restrictions">
+   <primary>WATCHDOG</primary>
+  </indexterm>
+
+  <sect2 id="tutorial-watchdog-restrictions-query-mode">
+   <title>Watchdog restriction with query mode lifecheck</title>
+   <indexterm zone="tutorial-watchdog-restrictions-query-mode">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+
+   <para>
+    In query mode, when all the DB nodes are detached from a
+    <productname>Pgpool-II</productname> due to PostgreSQL server
+    failure or pcp_detach_node issued, watchdog regards that the
+    <productname>Pgpool-II</productname> service is in the down
+    status and brings the virtual IP assigned to watchdog down.
+    Thus clients of <productname>Pgpool-II</productname> cannot
+    connect to <productname>Pgpool-II</productname> using the
+    virtual IP any more. This is necessary to avoid split-brain,
+    that is, situations where there are multiple active
+    <productname>Pgpool-II</productname>.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-down-watchdog-mode">
+   <title>Connecting to <productname>Pgpool-II</productname> whose watchdog status is down</title>
+   <indexterm zone="tutorial-watchdog-restrictions-down-watchdog-mode">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    Don't connect to <productname>Pgpool-II</productname> in down
+    status using the real IP. Because a <productname>Pgpool-II</productname>
+    in down status can't receive information from other
+    <productname>Pgpool-II</productname> watchdogs so it's backend status
+    may be different from other the <productname>Pgpool-II</productname>.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-down-watchdog-require-restart">
+   <title><productname>Pgpool-II</productname> whose watchdog status is down requires restart</title>
+   <indexterm zone="tutorial-watchdog-restrictions-down-watchdog-require-restart">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <productname>Pgpool-II</productname> in down status can't become active
+    nor the standby <productname>Pgpool-II</productname>.
+    Recovery from down status requires the restart of <productname>Pgpool-II</productname>.
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-active-take-time">
+   <title>Watchdog promotion to active takes few seconds</title>
+   <indexterm zone="tutorial-watchdog-restrictions-active-take-time">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    After the active <productname>Pgpool-II</productname> stops,
+    it will take a few seconds until the standby <productname>Pgpool-II</productname>
+    promote to new active, to make sure that the former virtual IP is
+    brought down before a down notification packet is sent to other
+    <productname>Pgpool-II</productname>.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="tutorial-advanced-arch">
+  <title>Architecture of the watchdog</title>
+
+  <para>
+   Watchdog is a sub process of <productname>Pgpool-II</productname>,
+   which adds the high availability and resolves the single point of
+   failure by coordinating multiple <productname>Pgpool-II</productname>.
+   The watchdog process automatically starts (if enabled) when the
+   <productname>Pgpool-II</productname> starts up and consists of two
+   main components, Watchdog core and the lifecheck system.
+  </para>
+
+  <sect2 id="tutorial-advanced-arch-wd-core">
+   <title>Watchdog Core</title>
+   <para>
+    Watchdog core referred as a "watchdog" is a
+    <productname>Pgpool-II</productname> child process that
+    manages all the watchdog related communications with the
+    <productname>Pgpool-II</productname> nodes present in the
+    cluster and also communicates with the <productname>Pgpool-II</productname>
+    parent and lifecheck processes.
+   </para>
+   <para>
+    The heart of a watchdog process is a state machine that starts
+    from its initial state (<literal>WD_LOADING</literal>) and transit
+    towards either standby (<literal>WD_STANDBY</literal>) or
+    leader/coordinator (<literal>WD_COORDINATOR</literal>) state.
+    Both standby and leader/coordinator states are stable states of the
+    watchdog state machine and the node stays in standby or
+    leader/coordinator state until some problem in local
+    <productname>Pgpool-II</productname> node is detected or a
+    remote <productname>Pgpool-II</productname> disconnects from the cluster.
+   </para>
+   <para>
+    The watchdog process performs the following tasks:
+   </para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      Manages and coordinates the local node watchdog state.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Interacts with built-in or external lifecheck system
+      for the of local and remote <productname>Pgpool-II</productname>
+      node health checking.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Interacts with <productname>Pgpool-II</productname> main
+      process and provides the mechanism to
+      <productname>Pgpool-II</productname> parent process for
+      executing the cluster commands over the watchdog channel.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Communicates with all the participating <productname>Pgpool-II
+      </productname> nodes to coordinate the selection of
+      leader/coordinator node and to ensure the quorum in the cluster.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Manages the Virtual-IP on the active/coordinator node and
+      allow the users to provide custom scripts for
+      escalation and de-escalation.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Verifies the consistency of <productname>Pgpool-II</productname>
+      configurations across the participating <productname>Pgpool-II
+      </productname> nodes in the watchdog cluster.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Synchronize the status of all PostgreSQL backends at startup.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Provides the distributed locking facility to
+      <productname>Pgpool-II</productname> main process
+      for synchronizing the different failover commands.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+   <sect3 id="tutorial-advanced-arch-wd-core-comm">
+    <title>Communication with other nodes in the Cluster</title>
+    <para>
+     Watchdog uses TCP/IP sockets for all the communication with other nodes.
+     Each watchdog node can have two sockets opened with each node. One is the
+     outgoing (client) socket which this node creates and initiate the
+     connection to the remote node and the second socket is the one which
+     is listening socket for inbound connection initiated by remote
+     watchdog node. As soon as the socket connection to remote node succeeds
+     watchdog sends the ADD NODE (<literal>WD_ADD_NODE_MESSAGE</literal>)
+     message on that socket. And upon receiving the ADD NODE message the
+     watchdog node verifies the node information encapsulated in the message
+     with the Pgpool-II configurations for that node, and if the node passes
+     the verification test it is added to the cluster otherwise the connection
+     is dropped.
+    </para>
+   </sect3>
+
+   <sect3 id="tutorial-advanced-arch-wd-ipc-data">
+    <title>IPC and data format</title>
+    <para>
+     Watchdog process exposes a <acronym>UNIX</acronym> domain socket
+     for IPC communications, which accepts and provides the data in
+     <acronym>JSON</acronym> format. All the internal <productname>Pgpool-II
+     </productname> processes, including <productname>Pgpool-II's</productname>
+     built-in lifecheck and <productname>Pgpool-II</productname> main process
+     uses this IPC socket interface to interact with the watchdog.
+     This IPC socket can also be used by any external/3rd party system
+     to interact with watchdog.
+    </para>
+    <para>
+     See <xref linkend="tutorial-watchdog-integrating-external-lifecheck"> for details
+      on how to use watchdog IPC interface for integrating external/3rd party systems.
+    </para>
+   </sect3>
+  </sect2>
+
+  <sect2 id="tutorial-advanced-arch-wd-lifecheck">
+   <title>Watchdog Lifecheck</title>
+   <para>
+    Watchdog lifecheck is the sub-component of watchdog that monitors the health
+    of <productname>Pgpool-II</productname> nodes participating in the watchdog
+    cluster. <productname>Pgpool-II</productname> watchdog provides three built-in
+    methods of remote node health checking, "heartbeat", "query" and "external" mode.
+   </para>
+   <para>
+    In "heartbeat" mode, The lifecheck process sends and receives the data over
+    <acronym>UDP</acronym> socket to check the availability of remote nodes and
+    for each node the parent lifecheck process spawns two child process one for
+    sending the heartbeat signal and another for receiving the heartbeat.
+    While in "query" mode, The lifecheck process uses the PostgreSQL libpq
+    interface for querying the remote <productname>Pgpool-II</productname>.
+    And in this mode the lifecheck process creates a new thread for each health
+    check query which gets destroyed as soon as the query finishes.
+    While in "external" mode, this mode disables the built in lifecheck of
+    <productname>Pgpool-II</productname>, and expects that the external system
+    will monitor local and remote node instead.
+   </para>
+   <para>
+    Apart from remote node health checking watchdog lifecheck can also check the
+    health of node it is installed on by monitoring the connection to upstream servers.
+    For monitoring the connectivity to the upstream server <productname>Pgpool-II
+    </productname> lifecheck uses <literal>execv()</literal> function to executes
+    <command>'ping -q -c3 hostname'</command> command.
+    So a new child process gets spawned for executing each ping command.
+    This means for each health check cycle a child process gets created and
+    destroyed for each configured upstream server.
+    For example, if two upstream servers are configured in the lifecheck and it is
+    asked to health check at ten second intervals, then after each ten second
+    lifecheck will spawn two child processes, one for each upstream server,
+    and each process will live until the ping command is finished.
+   </para>
+  </sect2>
+
+ </sect1>
+
+</chapter>

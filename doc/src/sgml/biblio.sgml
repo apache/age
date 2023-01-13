@@ -1,0 +1,34 @@
+<!-- doc/src/sgml/biblio.sgml -->
+
+ <bibliography id="biblio">
+  <title>Bibliography</title>
+
+  <bibliodiv>
+   <title>Proceedings and Articles</title>
+
+   <biblioentry id="mishima2009">
+   <biblioset relation="article">
+    <title><ulink
+    url="http://www.vldb.org/pvldb/vol2/vldb09-694.pdf">Pangea: An
+    Eager Database Replication Middleware guaranteeing Snapshot
+    Isolation without modification of Database Servers</ulink></title>
+    <authorgroup>
+     <author>
+      <firstname>Takeshi</firstname>
+      <surname>Mishima</surname>
+     </author>
+     <author>
+      <firstname>Hiroshi</firstname>
+      <surname>Nakamura</surname>
+     </author>
+    </authorgroup>
+    </biblioset>
+    <confgroup>
+     <conftitle>VLDB Conference</conftitle>
+     <confdates>Aug. 2009</confdates>
+     <address>Lyon, France</address>
+    </confgroup>
+   </biblioentry>
+
+  </bibliodiv>
+ </bibliography>

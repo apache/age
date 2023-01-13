@@ -1,0 +1,51 @@
+This directory includes test suites using pgproto.
+https://github.com/tatsuo-ishii/pgproto
+
+Overview:
+
+The objective of the test suites is testing behaviors of Pgpool-II
+running in streaming replication with extended queries. The reason
+pgproto used here is, it is very difficult to implement that kind of
+tests using standard drivers such as libpq and Java because no low
+level APIs are provided in the drivers.
+
+How to run the test:
+
+./test.sh
+
+The script runs each pgproto test data under "tests" directory using
+pgproto command. The each result is compared with data under
+"expected" directory. Pgpool-II used for this test is installed
+temporarily under "temp/installed".
+
+Optional argument can be specified if you want to run only some of
+tests. The argument should be the test file name under "tests"
+directory. You can only specify part of the name, or you can use
+regular expressions.
+
+How to add tests:
+
+Add pgproto data under "tests" directory. File names do not matter. By
+a historical reason, ".data" is used but you can choose arbitrary
+names. Next you need to add expected output of pgproto to "expected"
+directory. The file name must be identical to the file name added to
+the tests directory. Note that source files lines like "1186" below <=
+BE ErrorResponse(S ERROR V ERROR C 42P01 M relation
+"non_existing_table" does not exist P 15 F parse_relation.c L 1186 R
+parserOpenTable ) will be replaced with "xxx" to avoid the source code
+version differences.
+
+If you need to add special directives to pgpool.conf, include those
+configuration directives to the pgproto data starting with "##". You
+can see examples in parse-before-bind.data.
+
+Optional tests:
+
+An optional extra test script can be added to "extra_scripts"
+directory. The file name must be identical to the file name added to
+the tests directory. Those files must be executable and are executed
+after pgproto run. The test only succeeds when both pgproto test is ok
+and the extra script returns 0 status. Typical usage of the script is
+checking the load balance behavior by looking at Pgpool-II log. Note
+that the log file name is exported as an environment variable
+"$PGPOOLLOG".

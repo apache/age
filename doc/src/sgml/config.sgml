@@ -1,0 +1,195 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<chapter id="runtime-config">
+ <title>Server Configuration</title>
+
+ <indexterm>
+  <primary>configuration</primary>
+  <secondary>of the server</secondary>
+ </indexterm>
+
+ <para>
+  There are many configuration parameters that affect the behavior of
+  <productname>Pgpool-II</productname>. In the first section of this chapter we
+  describe how to interact with configuration parameters. The subsequent sections
+  discuss each parameter in detail.
+ </para>
+
+ <sect1 id="config-setting">
+  <title>Setting Parameters</title>
+
+  <sect2 id="config-setting-names-values">
+   <title>Parameter Names and Values</title>
+
+   <para>
+    All parameter names are case-insensitive. Every parameter takes a
+    value of one of five types: boolean, string, integer, floating point,
+    or enumerated (enum).  The type determines the syntax for setting the
+    parameter:
+   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      <emphasis>Boolean:</emphasis>
+      Values can be written as
+      <literal>on</literal>,
+      <literal>off</literal>,
+      <literal>true</literal>,
+      <literal>false</literal>,
+      <literal>yes</literal>,
+      <literal>no</literal>,
+      <literal>1</literal>,
+      <literal>0</literal>
+      (all case-insensitive) or any unambiguous prefix of one of these.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <emphasis>String:</emphasis>
+      In general, enclose the value in single quotes, doubling any single
+      quotes within the value.  Quotes can usually be omitted if the value
+      is a simple number or identifier, however.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <emphasis>Numeric (integer and floating point):</emphasis>
+      A decimal point is permitted only for floating-point parameters.
+      Do not use thousands separators.  Quotes are not required.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <emphasis>Numeric with Unit:</emphasis>
+	  The numeric parameters that describe the quantities of
+	  memory or time have an implicit unit.
+	  The unit might be kilobytes, megabytes,  milliseconds,
+	  seconds, or minutes.
+	  For example:
+
+	 <programlisting>
+	  search_primary_node_timeout = 6min
+	  memqcache_total_size = 64MB
+	  </programlisting>
+	  An unadorned numeric value for one of these settings will use
+	  the parameter's default unit.
+	  </para>
+	  <para>
+	  The unit name is case-sensitive, and there can be whitespace between the numeric value and the unit.
+	  </para>
+	  <para>Valid memory units are kB (kilobytes), MB (megabytes), GB (gigabytes), and TB (terabytes).</para>
+	  <para>Valid time units are ms (milliseconds), s (seconds), min (minutes), h (hours), and d (days).</para>
+
+    </listitem>
+
+    <listitem>
+     <para>
+      <emphasis>Enumerated:</emphasis>
+      Enumerated-type parameters are written in the same way as string
+      parameters, but are restricted to have one of a limited set of
+      values. Enum parameter values are case-insensitive.
+     </para>
+    </listitem>
+   </itemizedlist>
+  </sect2>
+
+  <sect2 id="config-setting-configuration-file">
+   <title>Parameter Interaction via the Configuration File</title>
+
+   <para>
+    The most fundamental way to set these parameters is to edit the file
+    <filename>pgpool.conf</><indexterm><primary>pgpool.conf</></>,
+    which is located in <literal>$prefix/etc/pgpool.conf</literal>, if it
+    installed from source code. An example of what this file might look like is:
+    <programlisting>
+     # This is a comment
+     listen_addresses = 'localhost'
+     port = 9999
+     serialize_accept = off
+     reset_query_list = 'ABORT; DISCARD ALL'
+    </programlisting>
+
+    One parameter is specified per line. The equal sign between name and
+    value is optional. Whitespace is insignificant (except within a quoted
+    parameter value) and blank lines are
+    ignored. Hash marks (<literal>#</literal>) designate the remainder
+    of the line as a comment.  Parameter values that are not simple
+    identifiers or numbers must be single-quoted.  To embed a single
+    quote in a parameter value, write either two quotes (preferred)
+    or backslash-quote.
+   </para>
+
+   <para>
+    Parameters set in this way provide default values for the cluster.
+    The settings seen by active sessions will be these values unless they
+    are overridden.  The following sections describe ways in which the
+    administrator or user can override these defaults.
+   </para>
+
+   <para>
+    <indexterm>
+     <primary>SIGHUP</primary>
+    </indexterm>
+    The configuration file is reread whenever the main server process
+    receives a <systemitem>SIGHUP</> signal; this signal is most easily
+    sent by running <literal>pgpool reload</> from the command line. The main
+    pgpool process also propagates this signal to all its child
+    processes, so that next sessions also adopt the new values.
+    Some parameters can only be set at server start; any changes to their
+    entries in the configuration file will be ignored until the server is restarted.
+    Invalid parameter settings in the configuration file are likewise
+    ignored (but logged) during <systemitem>SIGHUP</> processing.
+   </para>
+  </sect2>
+
+  <sect2 id="config-setting-includes">
+   <title>Managing Configuration File Contents</title>
+
+   <para>
+    <productname>Pgpool-II</productname> provides a feature for breaking down
+    <filename>pgpool.conf</filename> files into sub-files. This feature is
+    especially useful when managing multiple servers or dividing by features.
+    <literal>include</literal> directive can be used like this:
+
+    <programlisting>
+     include = 'filename'
+    </programlisting>
+
+    If the file name is not an absolute path, it is taken as relative
+    to the directory containing the referencing configuration file.
+    Inclusions can be nested.
+   </para>
+  </sect2>
+
+  <sect2 id="config-setting-sql-command-interaction">
+   <title>Parameter Interaction via SQL Clients</title>
+
+   <para>
+    <productname>Pgpool-II</productname> also provides two SQL style
+    commands to interact with session-local configuration settings.
+   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      The <xref linkend="SQL-PGPOOL-SHOW"> command allows inspection of the
+       current value of all parameters.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      The <xref linkend="SQL-PGPOOL-SET"> command allows modification of the
+       current value of those parameters that can be set locally to a
+       session; it has no effect on other sessions.
+     </para>
+    </listitem>
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+

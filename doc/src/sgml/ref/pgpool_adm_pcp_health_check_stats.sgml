@@ -1,0 +1,162 @@
+<!--
+doc/src/sgml/ref/pgpool_adm_pcp_health_check_stats.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-ADM-PCP-HEAlTH-CHECK-STATS">
+ <indexterm zone="pgpool-adm-pcp-health-check-stats">
+  <primary>pgpool_adm_pcp_health_check_stats</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_adm_pcp_health_check_stats</refentrytitle>
+  <manvolnum>3</manvolnum>
+  <refmiscinfo>pgpool_adm extension</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_adm_pcp_health_check_stats</refname>
+  <refpurpose>
+   a function to display health check statistics data on given node ID</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <funcsynopsis>
+   <funcprototype>
+    <funcdef><function>pcp_health_check_stats</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>text <parameter>host</parameter></paramdef>
+    <paramdef>integer <parameter>port</parameter></paramdef>
+    <paramdef>text <parameter>username</parameter></paramdef>
+    <paramdef>text <parameter>password</parameter></paramdef>
+    <paramdef>out <parameter>node_id integer</parameter></paramdef>
+    <paramdef>out <parameter>host text</parameter></paramdef>
+    <paramdef>out <parameter>port integer</parameter></paramdef>
+    <paramdef>out <parameter>status text</parameter></paramdef>
+    <paramdef>out <parameter>role text</parameter></paramdef>
+    <paramdef>out <parameter>last_status_change timestamp</parameter></paramdef>
+    <paramdef>out <parameter>total_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>success_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>fail_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>skip_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>average_retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>max_retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>max_health_check_duration bigint</parameter></paramdef>
+    <paramdef>out <parameter>min_health_check_duration bigint</parameter></paramdef>
+    <paramdef>out <parameter>average_health_check_duration float4</parameter></paramdef>
+    <paramdef>out <parameter>last_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_successful_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_skip_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_failed_health_check timestamp</parameter></paramdef>
+   </funcprototype>
+
+   <funcprototype>
+    <funcdef><function>pcp_health_check_stats</function> returns record</funcdef>
+    <paramdef>integer <parameter>node_id</parameter></paramdef>
+    <paramdef>text <parameter>pcp_server</parameter></paramdef>
+    <paramdef>out <parameter>node_id integer</parameter></paramdef>
+    <paramdef>out <parameter>host text</parameter></paramdef>
+    <paramdef>out <parameter>port integer</parameter></paramdef>
+    <paramdef>out <parameter>status text</parameter></paramdef>
+    <paramdef>out <parameter>role text</parameter></paramdef>
+    <paramdef>out <parameter>last_status_change timestamp</parameter></paramdef>
+    <paramdef>out <parameter>total_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>success_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>fail_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>skip_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>average_retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>max_retry_count bigint</parameter></paramdef>
+    <paramdef>out <parameter>max_health_check_duration bigint</parameter></paramdef>
+    <paramdef>out <parameter>min_health_check_duration bigint</parameter></paramdef>
+    <paramdef>out <parameter>average_health_check_duration float4</parameter></paramdef>
+    <paramdef>out <parameter>last_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_successful_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_skip_health_check timestamp</parameter></paramdef>
+    <paramdef>out <parameter>last_failed_health_check timestamp</parameter></paramdef>
+   </funcprototype>
+
+  </funcsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R3-PCP-HEALTH-CHECK-STATS-3">
+  <title>Description</title>
+  <para>
+   <function>pcp_health_check_stats</function>
+   displays health check statistics data on given node ID.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Arguments</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><replaceable class="parameter">node_id</replaceable></term>
+     <listitem>
+      <para>
+       The index of backend node to get information of.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable class="parameter">pcp_server</replaceable></term>
+     <listitem>
+      <para>
+       The foreign server name for pcp server.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other arguments </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+test=# select * from pcp_health_check_stats(node_id => 0, host => '', port => 11001, username => 't-ishii', password => 't-ishii');
+-[ RECORD 1 ]-----------------+--------------------
+node_id                       | 0
+host                          | /tmp
+port                          | 11002
+status                        | up
+role                          | primary
+last_status_change            | 2020-02-25 16:05:29
+total_count                   | 3
+success_count                 | 3
+fail_count                    | 0
+skip_count                    | 0
+retry_count                   | 0
+average_retry_count           | 0
+max_retry_count               | 0
+max_health_check_duration     | 5
+min_health_check_duration     | 3
+average_health_check_duration | 4.333333
+last_health_check             | 2020-02-25 16:05:47
+last_successful_health_check  | 2020-02-25 16:05:47
+last_skip_health_check        | 
+last_failed_health_check      | 
+   </programlisting>
+  </para>
+
+  <para>
+   See <xref linkend="health-check-stats-data-table"> for details of data.
+  </para>
+
+ </refsect1>
+
+</refentry>

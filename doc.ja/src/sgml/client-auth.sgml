@@ -1,0 +1,1736 @@
+<!-- doc/src/sgml/client-auth.sgml -->
+
+<chapter id="client-authentication">
+ <!--
+ <title>Client Authentication</title>
+ -->
+ <title>クライアント認証</title>
+
+ <indexterm zone="client-authentication">
+  <!--
+  <primary>client authentication</primary>
+  -->
+  <primary>クライアント認証</primary>
+ </indexterm>
+
+ <para>
+  <!--
+  Since <productname>Pgpool-II</productname> is a middleware that works between
+  <productname>PostgreSQL</> servers and a <productname>PostgreSQL</> database client, so when a client application
+  connects to the <productname>Pgpool-II</productname>, <productname>Pgpool-II</productname>
+  inturn connects to the <productname>PostgreSQL</> servers using the same credentials to serve the incoming
+  client connection. Thus, all the access privileges and restrictions defined for the user in <productname>PostgreSQL</>
+  gets automatically applied to all <productname>Pgpool-II</productname> clients, with an exceptions of
+  the authentications on <productname>PostgreSQL</> side that depends on the client's IP addresses or hostnames.
+  Reason being the connections to the <productname>PostgreSQL</> server are made by <productname>Pgpool-II</productname>
+  on behalf of the connecting clients and <productname>PostgreSQL</> server can only see the IP address of the
+  <productname>Pgpool-II</productname> server and not that of the actual client.
+  Therefore, for the client host based authentications <productname>Pgpool-II</productname> has the
+  <literal>pool_hba</literal> mechanism similar to the <literal>pg_hba</literal> mechanism for
+  authenticating the incoming client connections.
+  -->
+  <productname>Pgpool-II</productname>は<productname>PostgreSQL</>サーバと<productname>PostgreSQL</>データベースクライアントの間で動作するミドルウェアであるため、クライアントアプリケーションが<productname>Pgpool-II</productname>に接続したときには、今度は<productname>Pgpool-II</productname>がクライアントが提供したのと同じ認証情報を使って<productname>PostgreSQL</>サーバに接続します。
+  したがって、<productname>PostgreSQL</>のユーザに対し定義された全てのアクセス権限と制約が、自動的に全ての<productname>Pgpool-II</productname>クライアントに適用されます。
+  例外はクライアントのIPアドレスやホスト名に依存する<productname>PostgreSQL</>側での認証です。
+  それは、<productname>PostgreSQL</>サーバへの接続は<productname>Pgpool-II</productname>によって作られ、<productname>PostgreSQL</>サーバは実際のクライアントではなく<productname>Pgpool-II</productname>のIPアドレスしか見ることができないからです。
+  このため、クライアントホストに基づく認証のため、<productname>Pgpool-II</productname>は<literal>pg_hba</literal>と同様にクライアント接続の認証処理を行う<literal>pool_hba</literal>のメカニズムを持っています。
+ </para>
+
+ <sect1 id="auth-pool-hba-conf">
+  <!--
+  <title>The <filename>pool_hba.conf</filename> File</title>
+  -->
+  <title><filename>pool_hba.conf</filename>ファイル</title>
+
+  <indexterm zone="auth-pool-hba-conf">
+   <primary>pool_hba.conf</primary>
+  </indexterm>
+
+  <para>
+   <!--
+   Just like the <filename>pg_hba.conf</filename> file for <productname>PostgreSQL</>,
+   <productname>Pgpool-II</productname> supports a similar client authentication
+   function using a configuration file called <filename>pool_hba.conf</filename>.
+   If <productname>Pgpool-II</productname> is installed from source code, it also includes the sample
+   <filename>pool_hba.conf.sample</filename> file in the default configuration directory
+   (<literal>"/usr/local/etc"</literal>).
+   By default, pool_hba authentication is disabled, and setting <varname>enable_pool_hba</varname>
+   to <literal>on</literal> enables it. see the <xref linkend="guc-enable-pool-hba"> configuration parameter.
+   -->
+   <productname>PostgreSQL</productname>の<filename>pg_hba.conf</filename>と同じように<productname>Pgpool-II</productname>でも<filename>pool_hba.conf</filename>とよばれる設定ファイルを使った同様のクライアント認証機能をサポートしています。
+   <productname>Pgpool-II</productname>をソースコードからインストールした場合、デフォルトインストール先の設定ファイルディレクトリ（<literal>"/usr/local/etc"</literal>）にサンプルの<filename>pool_hba.conf.sample</filename>が含まれています。
+   デフォルトではpool_hbaによる認証は無効になっており、<varname>enable_pool_hba</varname>を<literal>on</literal>に設定することで有効になります。
+   <xref linkend="guc-enable-pool-hba">設定パラメータをご覧ください。
+  </para>
+
+  <note>
+   <para>
+    <productname>PostgreSQL</productname>の数が1台のみ、あるいはraw mode(<xref linkend="running-mode">参照)では、<filename>pool_hba.conf</filename>は必要なく、<varname>enable_pool_hba</varname>はoffのままで構いません。
+     この場合、クライアントの認証方式は<productname>PostgreSQL</productname>に完全に任されます。
+     <productname>PostgreSQL</productname>の数が複数台、あるいはraw mode以外の場合でも、<productname>PostgreSQL</productname>での認証方式が<literal>trust</literal>なら、やはり<filename>pool_hba.conf</filename>は必要なく、<varname>enable_pool_hba</varname>はoffのままで構いません。
+   </para>
+  </note>
+
+  <para>
+   <!--
+   The format of the <filename>pool_hba.conf</filename> file follows very closely <productname>PostgreSQL</>'s <filename>pg_hba.conf</filename> format.
+
+   The general format of the <filename>pool_hba.conf</filename> file is
+   a set of records, one per line. Blank lines are ignored, as is any
+   text after the <literal>#</literal> comment character.
+   Records cannot be continued across lines.
+   A record is made
+   up of a number of fields which are separated by spaces and/or tabs.
+   Fields can contain white space if the field value is double-quoted.
+   Quoting one of the keywords in a database, user, or address field (e.g.,
+   <literal>all</> or <literal>replication</>) makes the word lose its special
+   meaning, and just match a database, user, or host with that name.
+   -->
+   <filename>pool_hba.conf</filename>のフォーマットは<productname>PostgreSQL</>の<filename>pg_hba.conf</filename>のものとほとんど同じです。
+   <filename>pool_hba.conf</filename>ファイルの一般的な書式は、1行につき1つのレコードというレコードの集合です。
+   空行はコメント用の<literal>#</literal>文字以降の文字と同じく無視されます。
+   レコードは行をまたいで続けることはできません。
+   レコードはスペースもしくはタブ、もしくはその両方で区切られた、複数のフィールドで構成されています。
+   フィールドには、フィールド値が二重引用符付きの場合空白文字を含むことができます。
+   データベース、ユーザもしくはアドレスフィールド内のキーワード(例：<literal>all</>または<literal>replication</>)の一つを引用符で囲むとその特別な意味が失われ、その名称のデータベース、ユーザもしくはホストと一致するようになります。
+  </para>
+
+  <para>
+   <!--
+   Each record specifies a connection type, a client IP address range
+   (if relevant for the connection type), a database name, a user name,
+   and the authentication method to be used for connections matching
+   these parameters. The first record with a matching connection type,
+   client address, requested database, and user name is used to perform
+   authentication. There is no <quote>fall-through</> or
+   <quote>backup</>: if one record is chosen and the authentication
+   fails, subsequent records are not considered. If no record matches,
+   access is denied.
+   -->
+   それぞれのレコードは接続形式、（接続形式に対して意味を持つのであれば）クライアントのIPアドレス範囲、データベースの名前、ユーザ名およびこれらのパラメータに一致する接続で使用される認証方法を指定します。
+   接続形式、クライアントアドレス、要求されたデータベース、およびユーザ名に一致する最初のレコードが認証処理に使用されます。
+   「失敗時の継続」や、 あるいは「バックアップ」はありません。
+   これは、もしあるレコードが選択されて認証に失敗した場合、後続のレコードは考慮されないということです。
+   どのレコードも一致しない時はアクセスが拒否されます。
+  </para>
+
+  <para>
+   <!--
+   A record can have one of the following formats
+   -->
+   レコードは以下の書式のうちの1つの形式を取ります。
+   <synopsis>
+    local      <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+
+    host       <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostssl    <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostnossl  <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+
+    host       <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostssl    <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostnossl  <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+   </synopsis>
+   <!--
+   The meaning of the fields is as follows:
+   -->
+   フィールドの意味は以下のようになっています。
+
+   <variablelist>
+    <varlistentry>
+     <term><literal>local</literal></term>
+     <listitem>
+      <para>
+       <!--
+       This record matches connection attempts using Unix-domain
+       sockets.  Without a record of this type, Unix-domain socket
+       connections are disallowed.
+       -->
+       このレコードはUnixドメインソケットを使用する接続に対応します。
+       この種類のレコードを使用しないと、Unixドメインソケット経由の接続は拒否されます
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>host</literal></term>
+     <listitem>
+      <para>
+       <!--
+       This record matches connection attempts made using TCP/IP.
+       <literal>host</literal> records match either
+       <acronym>SSL</acronym> or non-<acronym>SSL</acronym> connection
+       attempts.
+       -->
+       このレコードは、TCP/IPを使用した接続に対応します。
+       <literal>host</literal>レコードは、<acronym>SSL</acronym>もしくは非<acronym>SSL</acronym>接続のいずれかに対応します。
+      </para>
+      <note>
+       <para>
+	<!--
+	Remote TCP/IP connections will not be possible unless
+	the server is started with an appropriate value for the
+	<xref linkend="guc-listen-addresses"> configuration parameter,
+	since the default behavior is to listen for TCP/IP connections
+	only on the local loopback address <literal>localhost</>.
+	-->
+	サーバのデフォルトの動作は、ローカルループバックアドレスである<literal>localhost</literal>のみTCP/IP接続を監視しています。
+	よってサーバにおいて<xref linkend="guc-listen-addresses">パラメータが適切な値に設定された状態で起動されていない限り、リモートのTCP/IP接続はできません。
+       </para>
+      </note>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>hostssl</literal></term>
+     <listitem>
+      <para>
+       <!--
+       This record matches connection attempts made using TCP/IP, but only
+       when the connection is made with <acronym>SSL</acronym> encryption.
+       -->
+       このレコードは、接続が<acronym>SSL</acronym>で暗号化されている場合にのみTCP/IPを使用する接続に対応します。
+      </para>
+      <para>
+       <!--
+       To make use of this option the <productname>Pgpool-II</productname> must be
+       built with SSL support. Furthermore, SSL must be enabled by setting the <xref linkend="guc-ssl">
+       configuration parameter. Otherwise, the hostssl record is ignored.
+       -->
+       このオプションを使用するには、<productname>Pgpool-II</productname>は<acronym>SSL</acronym>サポートでビルドする必要があります。
+       また、<acronym>SSL</acronym>は<xref linkend="guc-ssl">設定パラメータを設定することによって有効にする必要があります。
+	そうしなければ、hostsslレコードは無視されます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>hostnossl</literal></term>
+     <listitem>
+      <para>
+       <!--
+       This record type has the opposite behavior of hostssl; it only matches connection
+       attempts made over TCP/IP that do not use SSL.
+       -->
+       このレコードは、hostsslと反対の動作で、<acronym>SSL</acronym>を使用していないTCP/IPの接続のみに対応します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>database</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies which database name(s) this record matches.  The value
+       <literal>all</literal> specifies that it matches all databases.
+       -->
+       このレコードで対応するデータベース名を指定します。
+       <literal>all</literal>という値は、全てのデータベースと対応することを指定します。
+       <note>
+	<para>
+	 <!--
+	 <literal>"samegroup"</literal> for database field is not supported:
+	 -->
+	 databaseフィールド値として<literal>"samegroup"</literal>はサポートされません
+	</para>
+	<para>
+	 <!--
+	 Since <productname>Pgpool-II</productname> does not know anything about
+	 users in the <productname>PostgreSQL</> backend server, the database name is simply
+	 compared against the entries in the database field of <filename>pool_hba.conf</filename>.
+	 -->
+	 <productname>Pgpool-II</productname>は<productname>PostgreSQL</>バックエンドサーバにあるユーザ情報を事前に知る事ができないため、データベース名は<filename>pool_hba.conf</filename>にあるdatabaseフィールドの項目のみと比較されます。
+	</para>
+       </note>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>user</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies which database user name(s) this record
+       matches. The value <literal>all</literal> specifies that it
+       matches all users.  Otherwise, this is the name of a specific
+       database user
+       -->
+       このレコードで対応するデータベースユーザ名を指定します。
+       <literal>all</literal>という値は、すべてのユーザが対応することを指定します。
+       それ以外の場合には特定のデータベースユーザの名前となります。
+       <note>
+	<para>
+	 <!--
+	 group names following <literal>"+"</literal> for user field is not supported:
+	 -->
+	 userフィールド値として"+"を使ったグループ指定はサポートされません
+
+	</para>
+	<para>
+	 <!--
+	 This is for the same reason as for the <literal>"samegroup"</literal> of database field.
+	 A user name is simply checked against the entries in the user field of
+	 <filename>pool_hba.conf</filename>.
+	 -->
+	 上記の<literal>"samegroup"</literal>と同じ理由で、ユーザ名は単純に<filename>pool_hba.conf</filename>にあるuserフィールドの項目のみ対してチェックされます。
+	</para>
+       </note>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>address</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the client machine address(es) that this record matches.
+       This field can contain either a host name, an IP address range,
+       or one of the special key words mentioned below.
+       -->
+       このレコードに対応しているクライアントマシンのアドレスを指定します。
+       このフィールドはホスト名、IPアドレスの範囲、もしくは下記の特別なキーワードのいずれかを含むことができます。
+      </para>
+
+      <para>
+       <!--
+       An IP address range is specified using standard numeric notation for
+       the range's starting address, then a slash (<literal>/</literal>)
+       and a <acronym>CIDR</acronym> mask length.
+       The mask length indicates the number of high-order bits of the client
+       IP address that must match. Bits to the right of this should be zero
+       in the given IP address. There must not be any white space between the
+       IP address, the <literal>/</literal>, and the CIDR mask length.
+       -->
+       IPアドレスの範囲は、範囲の開始アドレス、スラッシュ (<literal>/</literal>) および<acronym>CIDR</acronym>マスク長という標準数値表記を使用して指定します。
+       CIDRマスク長は、クライアントIPアドレスが一致しなければならない、上位のビット数を表すものです。
+       指定するIPアドレスの右側のビットには、0を指定しなければなりません。
+       IPアドレス、 <literal>/</literal>、およびCIDRマスク長の間に空白を入れてはいけません。
+      </para>
+
+      <para>
+       <!--
+       Typical examples of an IPv4 address range specified this way are
+       <literal>172.20.143.89/32</literal> for a single host, or
+       <literal>172.20.143.0/24</literal> for a small network, or
+       <literal>10.6.0.0/16</literal> for a larger one.
+       An IPv6 address range might look like <literal>::1/128</literal> for
+       a single host (in this case the IPv6 loopback address) or
+       <literal>fe80::7a31:c1ff:0000:0000/96</literal> for a small network.
+       <literal>0.0.0.0/0</literal> represents all IPv4 addresses, and
+       <literal>::0/0</literal> represents all IPv6 addresses. To specify a
+       single host, use a mask length of 32 for IPv4 or 128 for IPv6.
+       In a network address, do not omit trailing zeroes.
+       -->
+       典型的なIPv4アドレス範囲の例は、単一のホストの場合は<literal>172.20.143.89/32</literal>、小規模ネットワークの場合は<literal>172.20.143.0/24</literal>、大規模ネットワークの場合は<literal>10.6.0.0/16</literal>です。
+       IPv6アドレスの範囲は、単一のホストの場合は<literal>::1/128</literal>(この場合はIPv6ループバックアドレス)、小規模ネットワークの場合は<literal>fe80::7a31:c1ff:0000:0000/96</literal>です。
+       <literal>0.0.0.0/0</literal>はすべてのIPv4アドレス、<literal>::0/0</literal>はすべてのIPv6アドレスを意味しています。
+       単一ホストを指定するには、IPv4の場合は32、IPv6の場合は128のマスク長を使用します。ネットワークアドレスでは、末尾の0を省略できません。
+      </para>
+
+      <para>
+       <!--
+       An entry given in IPv4 format will match only IPv4 connections, and
+       an entry given in IPv6 format will match only IPv6 connections, even
+       if the represented address is in the IPv4-in-IPv6 range.
+       Note that entries in IPv6 format will be rejected if the system's C
+       library does not have support for IPv6 addresses.
+       -->
+       IPv4書式で指定されたエントリは、IPv4接続のみに対応し、IPv6書式で指定されたエントリは、たとえそのアドレスがIPv6内のIPv4の範囲内であったとしてもIPv6接続のみに対応します。
+       IPv6書式のエントリは、システムのCライブラリがIPv6アドレスをサポートしていない場合拒否されることに注意してください。 
+      </para>
+
+      <para>
+       <!--
+       You can also write all to match any IP address, samehost to match any
+       of the server's own IP addresses, or samenet to match any address in
+       any subnet that the server is directly connected to.
+       -->
+       すべてのIPアドレスに一致するように<literal>all</literal>と書くこともできますし、サーバ自身のどのIPアドレスにも一致するように<literal>samehost</literal>と書くこともできます。
+       もしくは、サーバが直接接続されているサブネット内のどのアドレスにも一致するように<literal>samenet</literal>と書くこともできます。 
+      </para>
+
+      <para>
+       <!--
+       If a host name is specified (anything that is not an IP address range or
+       a special key word is treated as a host name), that name is compared with
+       the result of a reverse name resolution of the client's IP address
+       (e.g., reverse DNS lookup, if DNS is used). Host name comparisons are
+       case insensitive. If there is a match, then a forward name resolution
+       (e.g., forward DNS lookup) is performed on the host name to check whether
+       any of the addresses it resolves to are equal to the client's IP address.
+       If both directions match, then the entry is considered to match.
+       (The host name that is used in <filename>pool_hba.conf</filename> should be the one that
+       address-to-name resolution of the client's IP address returns, otherwise
+       the line won't be matched. Some host name databases allow associating an
+       IP address with multiple host names, but the operating system will only
+       return one host name when asked to resolve an IP address.)
+       -->
+       もし、ホスト名が指定されている場合 (IPアドレス範囲以外の場合、もしくはホスト名として処理される特別なキーワード)、その名前は、クライアントのIPアドレスの逆引き名前解決の結果 (例えば、もしDNSが使用されている場合は、逆引きDNS検索により解決されるもの) と比較されます。
+       ホスト名の比較では、大文字と小文字を区別しません。
+       もし一致するものがあった場合は、ホスト名に対して正引き解決 (例えば正引きDNS検索) が実行され、解決されたアドレスのいずれかがクライアントのIPアドレスと等しいかどうかがチェックされます。
+       もし両方が一致した場合、エントリは一致するものとみなされます。
+       (<filename>pool_hba.conf</filename>で使用されているホスト名は、クライアントのIPアドレスの正引き名前解決が返すホスト名の1つでなければなりません。
+       そうでなければ、この行は一致しません。 
+       1つのIPアドレスを複数のホスト名に関連付けるホスト名データベースもありますが、IPアドレスの解決を要求された場合にオペレーティングシステムは1つのホスト名のみを返します。)
+      </para>
+
+      <para>
+       <!--
+       A host name specification that starts with a dot (.) matches a suffix of
+       the actual host name. So <literal>.example.com</literal> would match
+       <literal>foo.example.com</literal> (but not just <literal>example.com</literal>).
+       -->
+       ドット (<literal>.</literal>) で始まるホスト名の指定は実際のホスト名のサフィックスに一致します。
+       したがって、<literal>.example.com</literal>は<literal>foo.example.com</literal>に一致します (<literal>example.com</literal>だけでは一致しません)。 
+      </para>
+
+      <para>
+       <!--
+       When host names are specified in <filename>pool_hba.conf</filename>, you should
+       make sure that name resolution is reasonably fast. It can be of advantage to
+       set up a local name resolution cache such as <acronym>nscd</acronym>.
+       -->
+       <filename>pool_hba.conf</filename>にホスト名が指定されている場合は、名前解決が十分に高速であることを確認する必要があります。
+       <acronym>nscd</acronym>のようなローカル名前解決のキャッシュを設定することは有利かもしれません。
+      </para>
+
+      <para>
+       <!--
+       This field only applies to host, hostssl, and hostnossl records.
+       -->
+       このフィールドは<literal>host</literal>、<literal>hostssl</literal>、<literal>hostnossl</literal>レコードにのみ適用されます。
+      </para>
+      <para>
+       <!--
+       Specifying the host name in address field is not supported prior to
+       <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>.
+       -->
+       アドレスフィールドにホスト名を指定することは、 <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>より前では利用できません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>IP-address</replaceable></term>
+     <term><replaceable>IP-mask</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       These two fields can be used as an alternative to the 
+       <replaceable>IP-address</><literal>/</><replaceable>mask-length</> notation.
+       Instead of specifying the mask length, the actual mask is specified in a separate column.
+       For example, <literal>255.0.0.0</literal> represents an IPv4 <acronym>CIDR</acronym> mask
+       length of <literal>8</literal>, and <literal>255.255.255.255</literal> represents a
+       <acronym>CIDR</acronym> mask length of 32.
+       -->
+       この2つのフィールドは<replaceable>IP-address</><literal>/</><replaceable>mask-length</>表記の代替として使用可能です。
+       マスク長を指定する代わりに、実際のマスクを分離した列で指定します。 
+       例えば、<literal>255.0.0.0</literal>はIPv4の<acronym>CIDR</acronym>マスク長8を意味し、<literal>255.255.255.255</literal>は<acronym>CIDR</acronym>マスク長32を意味しています。 
+      </para>
+
+      <para>
+       <!--
+       This field only applies to host, hostssl, and hostnossl records.
+       -->
+       このフィールドは<literal>host</literal>、<literal>hostssl</literal>、<literal>hostnossl</literal>レコードにのみ適用されます。
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>auth-method</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the authentication method to use when a connection matches
+       this record. The possible choices are summarized here; details
+       are in <xref linkend="auth-methods">.
+       -->
+       接続がこのレコードに一致する場合に使用する認証方式を指定します。
+       使用できる選択肢は以下にまとめていますが、詳しく<xref linkend="auth-methods">を参照してください。
+
+	<variablelist>
+	 <varlistentry>
+	  <term><literal>trust</></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Allow the connection unconditionally. This method
+	    allows anyone that can connect to the
+	    <productname>Pgpool-II</productname>.
+	    -->
+	    接続を無条件で許可します。
+	    この方式は、<productname>Pgpool-II</productname>に接続できる全てのユーザを許可します。
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>reject</></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Reject the connection unconditionally. This is useful for
+	    <quote>filtering out</> certain hosts, for example a
+	    <literal>reject</> line could block a specific host from connecting.
+	    -->
+	    接続を無条件に拒否します。
+	    特定のホストをあるグループから「除外」するために便利です。
+	    例えば、1行の<literal>reject</literal>は特定のホストが接続することを拒否します。
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>md5</></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Require the client to supply a double-MD5-hashed password for
+	    authentication.
+	    -->
+	    クライアントに対して認証時に二重MD5ハッシュ化パスワードを要求します。
+
+	    <note>
+	     <para>
+	      <!--
+	      To use <literal>md5</literal> authentication, you need to register
+	      the user name and password in <xref linkend="guc-pool-passwd"> file.
+	      See <xref linkend="auth-md5"> for more details.
+	      -->
+	      <literal>md5</literal>認証を使うには、ユーザ名とパスワードを<xref linkend="guc-pool-passwd">というパスワードファイルに登録する必要があります。
+	       詳細は<xref linkend="auth-md5">を参照してください。
+		なお、<filename>pool_passwd</filename>でパスワードを管理したくない場合は、<xref linkend="guc-allow-clear-text-frontend-auth">を使うこともできます。
+	     </para>
+	    </note>
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>scram-sha-256</literal></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Perform SCRAM-SHA-256 authentication to verify the user's password.
+	    -->
+	    ユーザのパスワードを確認するため、SCRAM-SHA-256認証を行います。
+            <note>
+	     <para>
+	      <!--
+	      To use <literal>scram-sha-256</literal> authentication, you need to register
+	      the user name and password in <xref linkend="guc-pool-passwd"> file.
+	      See <xref linkend="auth-scram"> for more details.
+	      -->
+	      <literal>scram-sha-256</literal>認証を使用するためには、<xref linkend="guc-pool-passwd">ファイルにユーザ名とパスワードを登録する必要があります。
+	       詳細は<xref linkend="auth-scram">を参照してください。
+		なお、<filename>pool_passwd</filename>でパスワードを管理したくない場合は、<xref linkend="guc-allow-clear-text-frontend-auth">を使うこともできます。
+	     </para>
+            </note>
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>cert</literal></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Authenticate using SSL client certificates.
+	    See <xref linkend="auth-cert"> for more details.
+	    -->
+	    SSLクライアント証明書を使って認証します。
+	    詳細は<xref linkend="auth-cert">を参照してください。
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+
+	 <varlistentry>
+	  <term><literal>pam</></term>
+	  <listitem>
+	   <para>
+	    <!--
+	    Authenticate using the Pluggable Authentication Modules
+	    (PAM) service provided by the operating system.
+	    See <xref linkend="auth-pam"> for details.
+	    -->
+	    オペレーティングシステムによって提供されるPAM（Pluggable Authentication Modules）サービスを使用した認証です。
+	    詳細は<xref linkend="auth-pam">を参照してください
+	   </para>
+	   <para>
+	    <!--
+	    PAM authentication is supported using user information on the host
+	    where <productname>Pgpool-II</productname> is running.
+	    To enable PAM support the <productname>Pgpool-II</productname>
+	    must be configured with <command>"&#045;&#045;with-pam"</command>
+	    -->
+	    <productname>Pgpool-II</productname>が稼働するホスト上のユーザ情報を使ったPAM認証を利用することができます。
+	    PAMサポートを有効にするには、<productname>Pgpool-II</productname>が<command>"--with-pam"</command>をつけてconfigureされていなければなりません。
+	   </para>
+	   <para>
+	    <!--
+	    To enable PAM authentication, you must create a service-configuration file
+	    for <productname>Pgpool-II</productname> in the system's PAM configuration
+	    directory (that is usually located at <literal>"/etc/pam.d"</literal>).
+	    A sample service-configuration file is also installed as <literal>"share/pgpool.pam"</literal>
+	    under the install directory.
+	    -->
+	    PAM認証を有効にするには、<productname>Pgpool-II</productname>のサービス設定ファイルをシステムのPAM設定ディレクトリ（通常は<literal>"/etc/pam.d"</literal>にあります）に作成しなければなりません。
+	    サービス設定ファイルのサンプルはインストールディレクトリ下に<literal>"share/pgpool.pam"</literal>としてインストールされています。
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+     <varlistentry>
+      <term><literal>ldap</literal></term>
+      <listitem>
+       <para>
+	    <!--
+	    Authenticate using LDAP server.
+	    See <xref linkend="auth-cert"> for more details.
+	    -->
+	    LDAPサーバを使って認証します。
+	    詳細は<xref linkend="auth-ldap">を参照してください。
+       </para>
+       <para>
+	    <!--
+	    To enable LDAP support the <productname>Pgpool-II</productname>
+	    must be configured with <command>"&#045;&#045;with-ldap"</command>
+	    -->
+	    LDAPサポートを有効にするには、<productname>Pgpool-II</productname>が<command>"--with-ldap"</command>をつけてconfigureされていなければなりません。
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+  </listitem>
+ </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>auth-options</replaceable></term>
+     <listitem>
+      <para>
+       <!--
+       After the <replaceable>auth-method</> field, there can be field(s) of
+       the form <replaceable>name</><literal>=</><replaceable>value</> that
+       specify options for the authentication method.
+       -->
+       <replaceable>auth-method</>フィールドの後ろに、認証方式のオプションを指定する、<replaceable>name</>=<replaceable>value</>の形式のフィールドが存在する可能性があります。
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+
+  <para>
+   <!--
+   Since the <filename>pool_hba.conf</filename> records are examined
+   sequentially for each connection attempt, the order of the records is
+   significant. Typically, earlier records will have tight connection
+   match parameters and weaker authentication methods, while later
+   records will have looser match parameters and stronger authentication
+   methods. For example, one might wish to use <literal>trust</>
+   authentication for local TCP/IP connections but require a password for
+   remote TCP/IP connections. In this case a record specifying
+   <literal>trust</> authentication for connections from 127.0.0.1 would
+   appear before a record specifying password authentication for a wider
+   range of allowed client IP addresses.
+   -->
+   <filename>pool_hba.conf</filename>レコードは接続が試みられる度に順番に検査されますので、レコードの順序はとても大切です。
+   典型的には、始めの方のレコードには厳しい接続照合パラメータと緩い認証方式があるのに対し、終わりの方のレコードにはより緩い照合パラメータとより厳しい認証方式があります。
+   例えば、ローカルTCP接続では<literal>trust</>認証方式、リモートTCP接続に対してはパスワードを要求したいとします。
+   この場合、広範囲にわたって許可されるクライアントのIPアドレスに対するパスワード認証を指定するレコードの前に127.0.0.1からの接続に対する<literal>trust</>認証指定のレコードが置かれなければなりません。
+  </para>
+
+  <tip>
+   <para>
+    <!--
+    All pool_hba authentication options described in this section are
+    about the authentication taking place between a client and the
+    <productname>Pgpool-II</productname>.
+    A client still has to go through the <productname>PostgreSQL</>'s authentication
+    process and must have the <literal>CONNECT</> privilege for the
+    database on the backend <productname>PostgreSQL</> server.
+    -->
+    ここで説明された全てのpool_hba認証のオプションはクライアントと<productname>Pgpool-II</productname>の間についてだということに注意してください。
+    クラインアントは依然として、<productname>PostgreSQL</>による認証を通過しなければなりませんし、バックエンド<productname>PostgreSQL</>サーバ上のデータベースに対して<literal>CONNECT</>権限を持っていなければなりません。
+   </para>
+   <para>
+    <!--
+    As far as pool_hba is concerned, it does not matter if a user name
+    and/or database name given by a client
+    (i.e. <command>psql -U testuser testdb</command>)
+    really exists in the backend. pool_hba only cares if a match in the
+    <filename>pool_hba.conf</filename> can be found or not.
+    -->
+    pool_hbaにとってはクライアントに指定されたユーザ名やデータベース名(例. psql -U testuser testdb)が実際にバックエンド上に存在するかどうかは問題ではありません。
+    pool_hbaは<filename>pool_hba.conf</filename>の値とマッチするかどうかのみを気にします。
+   </para>
+  </tip>
+
+  <para>
+   <!--
+   Some examples of <filename>pool_hba.conf</filename> entries are below.
+   See the next section for details on the different authentication methods.
+   -->
+   <filename>pool_hba.conf</filename>ファイルの例をいくつか以下に示します。
+   各種認証方式の詳細については次の節をご覧ください。
+  </para>
+
+  <example id="example-pg-hba.conf">
+   <!--
+   <title>Example <filename>pool_hba.conf</filename> Entries</title>
+   -->
+   <title><filename>pool_hba.conf</filename>の項目の例</title>
+   <programlisting>
+    # Allow any user on the local system to connect to any database with
+    # any database user name using Unix-domain sockets (the default for local
+    # connections).
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+
+    # The same using local loopback TCP/IP connections.
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    host    all             all             127.0.0.1/32            trust
+
+    # Allow any user from host 192.168.12.10 to connect to database
+    # "postgres" if the user's password is correctly supplied.
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    host    postgres        all             192.168.12.10/32        md5
+   </programlisting>
+  </example>
+ </sect1>
+
+ <sect1 id="auth-methods">
+  <!--
+  <title>Authentication Methods</title>
+  -->
+  <title>認証方式</title>
+  <para>
+   <!--
+   The following subsections describe the authentication methods in more detail.
+   -->
+   以下の小節では、認証方式について詳細に説明します。
+  </para>
+
+  <sect2 id="auth-trust">
+   <!--
+   <title>Trust Authentication</title>
+   -->
+   <title>trust認証</title>
+
+   <para>
+    <!--
+    When <literal>trust</> authentication is specified,
+    <productname>Pgpool-II</productname> assumes that anyone who can
+    connect to the server is authorized to access connect with
+    whatever database user name they specify.
+    -->
+    <literal>trust</literal>認証が指定されると<productname>Pgpool-II</productname>は、サーバに接続できる全ての人に対してその人が指定する任意のデータベースユーザ名としてのアクセス権限が付与されていると想定します
+   </para>
+  </sect2>
+
+  <sect2 id="auth-password">
+   <title>Clear Text Password Authentication</title>
+
+   <para>
+<!--
+    The method <literal>password</literal> sends the password in
+    clear-text and is therefore vulnerable to password
+    <quote>sniffing</quote> attacks. It should always be avoided if
+    possible. If the connection is protected by SSL encryption then
+    <literal>password</literal> can be used safely, though. For this
+    sake, it is recommended to use <literal>hostssl</literal> in
+    <filename>pool_hba.conf</filename> so that clients are enforced to
+    use SSL encryption.
+-->
+    <literal>password</literal>方式は、パスワードを平文で送信するので、パスワード<quote>盗聴</quote>攻撃に対して脆弱です。
+    可能ならば、常に避けるようにしてください。
+    しかし、接続がSSL暗号で保護されていれば、passwordは安全に使用できます。
+    クライアントがSSL暗号を使うことを強制するために、<filename>pool_hba.conf</filename>で<literal>hostssl</literal>を指定することをおすすめします。
+   </para>
+   <para>
+<!--
+    A benefit to use the method is, the password for authentication is
+    provided by client side and <filename>pool_passwd</filename> is
+    not consulted. So you can avoid maintaining
+    <filename>pool_passwd</filename> file.
+-->
+    この方式を使う利点は、認証のためのパスワードがクライアント側から提供され、<filename>pool_passwd</filename>は使われないことです。
+    ですから<filename>pool_passwd</filename>の保守を避けることができます。
+   </para>
+   <para>
+<!--
+    You can avoid maintaining <filename>pool_passwd</filename> by
+    using <xref linkend="guc-allow-clear-text-frontend-auth"> as well
+    but it does not enforce to use SSL encryption because
+    <filename>pool_hba.conf</filename> cannot be used with the
+    parameter.
+-->
+    <xref linkend="guc-allow-clear-text-frontend-auth">を使っても<filename>pool_passwd</filename>の保守を避けることができますが、SSL暗号を強制することはできません。<filename>pool_hba.conf</filename>をこのパラメータと一緒に使うことができないからです。
+   </para>
+  </sect2>
+
+  <sect2 id="auth-md5">
+   <!--
+   <title>MD5 Password Authentication</title>
+   -->
+   <title>MD5パスワード認証</title>
+
+   <indexterm>
+    <primary>MD5</>
+   </indexterm>
+
+   <para>
+    <!--
+    This authentication method is the password-based authentication
+    methods in which MD-5-hashed password is sent by client.
+    Since <productname>Pgpool-II</productname> does not has the visibility
+    of <productname>PostgreSQL</>'s database user password and client application only sends
+    the MD5-hash of the password, so <literal>md5</literal> authentication
+    in <productname>Pgpool-II</productname> is supported using the
+    <xref linkend="guc-pool-passwd"> authentication file.
+    -->
+    この認証方法はMD-5ハッシュ化されたパスワードがクライアントから送信されるパスワードベースの認証方法です。
+    <productname>Pgpool-II</productname>は<productname>PostgreSQL</>データベースユーザパスワードを見ることができず、クライアントプリケーションはMD5ハッシュ化されたパスワードを送るのみです。
+    そのため、<productname>Pgpool-II</productname>の<literal>md5</literal>認証は<xref linkend="guc-pool-passwd">認証ファイルを使ってサポートしています。
+   </para>
+
+   <note>
+    <para>
+     <!--
+     If <productname>Pgpool-II</productname> is operated in raw
+     mode or there's only 1 backend configured, you don't need to
+     setup <xref linkend="guc-pool-passwd">.
+     -->
+     <productname>Pgpool-II</productname>をrawモードで使用している場合、あるいはバックエンドが1つしかない場合は、<xref linkend="guc-pool-passwd">を設定する必要はありません。
+    </para>
+   </note>
+
+   <sect3 id="md5-authentication-file-format">
+    <!--
+    <title>Authentication file format</title>
+    -->
+    <title>認証ファイル形式</title>
+    <para>
+     <!--
+     To use the <literal>md5</literal> authentication
+     <xref linkend="guc-pool-passwd"> authentication file
+     must contain the user password in either plain text
+     <literal>md5</literal> or <literal>AES</literal> encrypted format.
+     -->
+     <literal>md5</literal>認証を使用するには、<xref linkend="guc-pool-passwd">認証ファイルに平文、<literal>md5</literal>または<literal>AES</literal>暗号化形式のいずれかのユーザのパスワード
+      が含まれている必要があります。
+    </para>
+    <para>
+     <!--
+     The <xref linkend="guc-pool-passwd"> file should contain lines in the following format:
+     -->
+     <literal>pool_passwd</literal>ファイルは以下の形式の行を含みます。
+     <programlisting>
+      "username:plain_text_passwd"
+     </programlisting>
+     <programlisting>
+      "username:encrypted_passwd"
+     </programlisting>
+    </para>
+   </sect3>
+
+   <sect3 id="setting-md5-authentication">
+    <!--
+    <title>Setting md5 Authentication</title>
+    -->
+    <title>md5認証の設定</title>
+    <indexterm zone="setting-md5-authentication">
+     <primary>MD5</primary>
+    </indexterm>
+
+    <para>
+     <!--
+     here are the steps to enable <literal>md5</literal> authentication:
+     -->
+     以下が<literal>md5</literal>認証を有効にする手順です。
+    </para>
+    <para>
+     <!--
+     1- Login as the database's operating system user and type
+     <command>"pg_md5 &#045;&#045;md5auth &#045;&#045;username=username password"</command>
+     user name and <literal>md5</literal> encrypted password are registered
+     into <xref linkend="guc-pool-passwd">.
+     If pool_passwd does not exist yet, pg_md5 command will automatically create it for you.
+     -->
+     1. データベースのOSユーザとしてログインし、<command>"pg_md5 --config-file=pgpool.confへのパス --md5auth --username=ユーザ名 パスワード"</command> を実行します。
+     <xref linkend="guc-pool-passwd">がまだ存在していなかった場合は、pg_md5コマンドが自動的にこれを生成します。
+      <note>
+       <para>
+	<!--
+        user name and password must be identical to those registered in <productname>PostgreSQL</> server
+	-->
+	ユーザ名とパスワードは、<productname>PostgreSQL</>に登録したものと完全に同じでなければなりません。
+       </para>
+      </note>
+    </para>
+
+    <para>
+     <!--
+     2- Add an appropriate md5 entry to <filename>pool_hba.conf</filename>.
+     See <xref linkend="auth-pool-hba-conf"> for more details.
+     -->
+     2. <filename>pool_hba.conf</filename>にmd5認証のエントリを作成します。
+     詳細については<xref linkend="auth-pool-hba-conf">を参照してください。
+    </para>
+    <para>
+     <!--
+     3- After changing md5 password(in both pool_passwd and <productname>PostgreSQL</> of course),
+     reload the <productname>Pgpool-II</> configurations.
+     -->
+     3. （もちろんpool_passwdと<productname>PostgreSQL</>の両方で）md5パスワードを変更したら、<productname>Pgpool-II</>設定の再読み込みを実行してください。
+    </para>
+   </sect3>
+
+  </sect2>
+
+  <sect2 id="auth-scram">
+   <!--
+   <title>scram-sha-256 Authentication</title>
+   -->
+   <title>scram-sha-256認証</title>
+
+   <indexterm zone="auth-scram">
+    <primary>SCRAM</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    This authentication method also known as SCRAM is a
+    challenge-response based authentication that prevents the
+    password sniffing on untrusted connections.
+    Since <productname>Pgpool-II</productname> does not has the
+    visibility of <productname>PostgreSQL</productname>'s database user
+    password, so <literal>SCRAM</literal> authentication is supported using the
+    <xref linkend="guc-pool-passwd"> authentication file.
+    -->
+    SCRAMとも呼ばれるこの認証方式は、信頼できない接続におけるパスワードの盗聴を防ぐチャレンジレスポンス認証です。
+    <productname>Pgpool-II</productname>は、<productname>PostgreSQL</productname>データベースユーザのパスワードの可視性を持たないため、<literal>SCRAM</literal>認証は<xref linkend="guc-pool-passwd">認証ファイルを使用してサポートされています。
+   </para>
+
+   <sect3 id="scram-authentication-file-format">
+    <!--
+    <title>Authentication file entry for SCRAM</title>
+    -->
+    <title>SCRAMの認証ファイルエントリ</title>
+
+    <para>
+     <!--
+     To use the <literal>SCRAM</literal> authentication
+     <xref linkend="guc-pool-passwd"> authentication file
+     must contain the user password in either plain text
+     or <literal>AES</literal> encrypted format.
+     -->
+     <literal>SCRAM</literal>認証を使用する場合、<xref linkend="guc-pool-passwd">認証ファイルは平文もしくは<literal>AES</literal>暗号化ファーマットのユーザパスワードを含んでる必要があります。
+
+      <programlisting>
+       "username:plain_text_passwd"
+      </programlisting>
+      <programlisting>
+       "username:AES_encrypted_passwd"
+      </programlisting>
+      <note>
+       <para>
+	<!--
+	<literal>md5</literal> type user passwords in
+	<xref linkend="guc-pool-passwd"> file can't be used for
+	<literal>scram</literal> authentication
+	-->
+	<xref linkend="guc-pool-passwd">ファイル内の<literal>md5</literal>形式のユーザパスワードは<literal>SCRAM</literal>認証に使用できません。
+       </para>
+      </note>
+    </para>
+   </sect3>
+
+   <sect3 id="setting-scram-sha-256-authentication">
+    <!--
+    <title>Setting scram-sha-256 Authentication</title>
+    -->
+    <title>scram-sha-256認証の設定</title>
+    <indexterm zone="setting-scram-sha-256-authentication">
+     <primary>SCRAM</primary>
+    </indexterm>
+
+    <para>
+     <!--
+     Here are the steps to enable <literal>scram-sha-256</literal>
+     authentication:
+     -->
+     以下が<literal>scram-sha-256</literal>認証を有効にする手順です。
+    </para>
+    <para>
+     <!--
+     1- Create <xref linkend="guc-pool-passwd"> file entry
+     for database user and password in plain text or <literal>AES</literal>
+     encrypted format.
+     The <xref linkend="PG-ENC"> utility that comes with <productname>Pgpool-II</productname>
+     can be used to create the <literal>AES</literal> encrypted password
+     entries in the <xref linkend="guc-pool-passwd"> file.
+     -->
+     1- 平文または<literal>AES</literal>暗号化フォーマットのデータベースユーザとパスワードの<xref linkend="guc-pool-passwd">ファイルエントリを作成します。
+      <productname>Pgpool-II</productname>付属の<xref linkend="PG-ENC">コマンドで<xref linkend="guc-pool-passwd">ファイル内に<literal>AES</literal>暗号化パスワードエントリを作成することができます。
+	<note>
+	 <para>
+	  <!--
+	  User name and password must be identical to those registered
+	  in the <productname>PostgreSQL</productname> server.
+	  -->
+	  ユーザ名とパスワードは<productname>PostgreSQL</productname>サーバに登録されているものと一致している必要があります。
+	 </para>
+	</note>
+    </para>
+
+    <para>
+     <!--
+     2- Add an appropriate scram-sha-256 entry to <filename>pool_hba.conf</filename>.
+     See <xref linkend="auth-pool-hba-conf"> for more details.
+     -->
+     2- <filename>pool_hba.conf</filename>に適切なscram-sha-256エントリを追加します。
+     詳細は<xref linkend="auth-pool-hba-conf">を参照してください。
+    </para>
+    <para>
+     <!--
+     3- After changing SCRAM password (in both pool_passwd
+     and <productname>PostgreSQL</productname> of course), reload
+     the <productname>Pgpool-II</productname> configuration.
+     -->
+     3- （もちろんpool_passwdと<productname>PostgreSQL</productname>の両方で）SCRAMパスワードを変更したら、<productname>Pgpool-II</productname>の設定の再読み込みを実行してください。
+    </para>
+   </sect3>
+
+  </sect2>
+
+  <sect2 id="auth-cert">
+   <!--
+   <title>Certificate Authentication</title>
+   -->
+   <title>証明書認証</title>
+
+   <indexterm zone="auth-cert">
+    <primary>Certificate</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    This authentication method uses <literal>SSL</literal> client certificates
+    to perform authentication. It is therefore only available for SSL connections.
+    When using this authentication method, the <productname>Pgpool-II</productname>
+    will require that the client provide a valid certificate.
+    No password prompt will be sent to the client.
+    The <literal>cn</literal> (Common Name) attribute of the certificate will be
+    compared to the requested database user name, and if they match the login will
+    be allowed.
+    -->
+    この認証方式は認証を実施するために<literal>SSL</literal>クライアント証明書を使用します。
+    この認証方式を使っている場合、<productname>Pgpool-II</productname>はクライアントが提供する有効な証明書を要求します。
+    パスワードプロンプトがクライアントに送信されません。
+
+    証明書の<literal>cn</literal>（コモンネーム）の属性は要求されたデータベースユーザ名と比較され、一致した場合ログインが許可されます。
+   </para>
+
+   <note>
+    <para>
+     <!--
+     The certificate authentication works between only client and
+     <productname>Pgpool-II</productname>. The certificate
+     authentication does not work between
+     <productname>Pgpool-II</productname> and
+     <productname>PostgreSQL</productname>.  For backend
+     authentication you can use any other authentication method.
+     -->
+     証明書認証はクライアントと<productname>Pgpool-II</productname>の間でのみ使用できます。
+     証明書認証は<productname>Pgpool-II</productname>と<productname>PostgreSQL</productname>の間では使用できません。
+     バックエンド認証にはその他の認証方式を使用できます。
+    </para>
+   </note>
+
+  </sect2>
+
+  <sect2 id="auth-pam">
+   <!--
+   <title>PAM Authentication</title>
+   -->
+   <title>PAM認証</title>
+
+   <indexterm zone="auth-pam">
+    <primary>PAM</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    This authentication method uses PAM (Pluggable
+    Authentication Modules) as the authentication mechanism. The
+    default PAM service name is <literal>pgpool</literal>.
+    PAM authentication is supported using user information on
+    the host where <productname>Pgpool-II</productname> is executed.
+    For more
+    information about PAM, please read the
+    <ulink url="http://www.kernel.org/pub/linux/libs/pam/">
+    <productname>Linux-PAM</> Page</ulink>.
+    -->
+    この認証方式は認証機構としてPAM（Pluggable Authentication Modules）を使用します。
+    デフォルトのPAMサービス名は<literal>pgpool</literal>です。
+    <productname>Pgpool-II</productname>が稼働するホスト上のユーザ情報を使ったPAM認証を利用することができます。
+    PAMについての詳細は<ulink url="http://www.kernel.org/pub/linux/libs/pam/">Linux-PAM</>ページを読んでください
+   </para>
+
+   <para>
+    <!--
+    To enable PAM authentication, you need to create a service-configuration
+    file for <productname>Pgpool-II</productname> in the system's
+    PAM configuration directory (which is usually at <literal>"/etc/pam.d"</literal>).
+    A sample service-configuration file is installed as
+    <filename>"share/pgpool-II/pgpool.pam"</filename> under the install directory.
+    -->
+    PAM認証を有効にするには、<productname>Pgpool-II</productname>のサービス設定ファイルをシステムのPAM設定ディレクトリ（通常は<literal>"/etc/pam.d"</literal>にあります）に作成しなければなりません。
+    サービス設定ファイルのサンプルはインストールディレクトリ下に<literal>"share/pgpool-II/pgpool.pam"</literal>としてインストールされています。
+   </para>
+
+   <note>
+    <para>
+     <!--
+     To enable PAM support the <productname>Pgpool-II</productname>
+     must be configured with <command>"&#045;&#045;with-pam"</command>
+     -->
+     PAMサポートを有効にするには、<productname>Pgpool-II</productname>が<command>"--with-pam"</command>をつけてconfigureされていなければなりません。
+    </para>
+   </note>
+  </sect2>
+
+  <sect2 id="auth-ldap">
+   <!--
+   <title>LDAP Authentication</title>
+   -->
+   <title>LDAP認証</title>
+
+   <indexterm zone="auth-ldap">
+    <primary>LDAP</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    This authentication method uses LDAP as the password certification method.
+    LDAP is used only to validate the user name/password pairs. Therefore the user must
+    already exist in the database before LDAP can be used for authentication.
+    -->
+この認証方式はパスワード確認にLDAPを使用します。
+LDAPはユーザの名前とパスワードの組み合わせのみに使用されます。
+そのため、LDAPを使用して認証を行うようにする前に、ユーザはデータベースに存在しなければなりません。
+   </para>
+
+   <para>
+    <!--
+    LDAP authentication can operate in two modes. In the first mode, which we
+    will call the simple bind mode, the server will bind to the distinguished
+    name constructed as
+    <replaceable>prefix</replaceable> <replaceable>username</replaceable> <replaceable>suffix</replaceable>.
+    Typically, the <replaceable>prefix</replaceable> parameter is used to specify
+    <literal>cn=</literal>, or <replaceable>DOMAIN</replaceable><literal>\</literal>
+    in an Active Directory environment.  <replaceable>suffix</replaceable> is used
+    to specify the remaining part of the DN in a non-Active Directory environment.
+   -->
+LDAP認証は2つのモードで動作します。1つ目のモードでは、それは単なるバインド・モードを呼び出すものですが、サーバは<replaceable>prefix</replaceable> <replaceable>username</replaceable> <replaceable>suffix</replaceable>として区別された名前にバインドします。
+一般的に、<replaceable>prefix</replaceable>パラメータはActive Directory環境での<literal>cn=</literal>や<replaceable>DOMAIN</replaceable><literal>\</literal>を特定するために使用されます。
+<replaceable>suffix</replaceable>は、Active Directory環境ではない場合でのDNの残りの部分を特定するために使用されます。
+   </para>
+
+   <para>
+    <!--
+    In the second mode, which we will call the search+bind mode, the server first
+    binds to the LDAP directory with a fixed user name and password, specified
+    with <replaceable>ldapbinddn</replaceable> and <replaceable>ldapbindpasswd</replaceable>,
+    and performs a search for the user trying to log in to the database. If no
+    user and password is configured, an anonymous bind will be attempted to the
+    directory. The search will be performed over the subtree at
+    <replaceable>ldapbasedn</replaceable>, and will try to do an exact match of
+    the attribute specified in <replaceable>ldapsearchattribute</replaceable>.
+    Once the user has been found in this search, the server disconnects and
+    re-binds to the directory as this user, using the password specified by the
+    client, to verify that the login is correct. This mode is the same as that
+    used by LDAP authentication schemes in other software, such as Apache
+    <literal>mod_authnz_ldap</literal> and <literal>pam_ldap</literal>. This
+    method allows for significantly more flexibility in where the user objects
+    are located in the directory, but will cause two separate connections to the
+    LDAP server to be made.
+    -->
+2つ目のモードでは、それはsearch/bindモードを呼び出すもので、サーバは最初に<replaceable>ldapbinddn</replaceable>と<replaceable>ldapbindpasswd</replaceable>で指定された、固定されたユーザ名とパスワードを使用してLDAPディレクトリにバインドします。
+それからデータベースにログインしようとしているユーザを検索します。
+もしユーザとパスワードが指定されていなかった場合、ディレクトリに対して匿名でバインドします。
+検索は<replaceable>ldapbasedn</replaceable>のサブツリーまで行われ、<replaceable>ldapsearchattribute</replaceable>で指定された属性に正確に一致するかどうかまで行われます。
+この検索において、一度ユーザが見つかるとサーバは切断して、クライアントで指定されたパスワードを使用してこのユーザとして再度ディレクトリにバインドします。
+これはそのログインが正しいかどうかを検証するためです。
+このモードはApache <literal>mod_authzn_heap</literal>および<literal>pam_ldap</literal>のように他のソフトウェアと同じように、LDAP認証の仕組みで使用されるものと同じです。
+この方法は、ユーザオブジェクトがディレクトリに配置されている場合に、かなりの柔軟性があります。
+しかし、LDAPサーバへの2つの分離した接続が作成されます。
+   </para>
+
+   <para>
+    <!--
+    The following configuration options are used in both modes:
+    -->
+次の設定オプションは両方のモードで使用されます。
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapserver</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Names or IP addresses of LDAP servers to connect to. Multiple servers
+        may be specified, separated by spaces.
+        -->
+接続するLDAPサーバの名称もしくはIPアドレスの名称。空白で区切ることで複数のサーバを指定できます。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapport</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Port number on LDAP server to connect to. If no port is specified, the
+        LDAP library's default port setting will be used.
+        -->
+LDAPサーバに接続するためのポート番号。
+もしポートが指定されていない場合はLDAPライブラリ内のデフォルトポート設定が使用されます。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapscheme</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Set to <literal>ldaps</literal> to use LDAPS.  This is a non-standard
+        way of using LDAP over SSL, supported by some LDAP server implementations.
+        See also the <literal>ldaptls</literal> option for an alternative.
+        -->
+<literal>ldaps</literal>に設定するとLDAPSを使用します。
+これはいくつかのLDAPサーバーの実装でサポートされている、SSL経由のLDAPを使用する非標準の方法です。
+代替方法については、<literal>ldaptls</literal>オプションを参照してください。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldaptls</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Set to 1 to make the connection between Pgpool-II and the LDAP server
+        use TLS encryption. This uses the <literal>StartTLS</literal> operation
+        per RFC 4513. See also the <literal>ldapscheme</literal> option for an alternative.
+        -->
+1に設定すると、Pgpool-IIとLDAPサーバ間の接続にTLSによる暗号化を使用します。
+これはRFC 4513の<literal>StartTLS</literal>操作を使用します。
+代替方法については、<literal>ldapscheme</literal>オプションを参照して下さい。
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    <!--
+    Note that using <literal>ldapscheme</literal> or
+    <literal>ldaptls</literal> only encrypts the traffic between the
+    Pgpool-II server and the LDAP server.  The connection between the
+    Pgpool-II server and the client will still be unencrypted
+    unless SSL is used there as well.
+    -->
+<literal>ldapscheme</literal>や<literal>ldaptls</literal>を使うときにはPgpool-IIサーバとLDAPサーバ間のトラフィックのみが暗号化されることに注意して下さい。
+SSLがそこでも使用されていない限り、Pgpool-IIサーバとクライアントとの接続は、暗号化されません。
+   </para>
+
+   <para>
+    <!--
+    The following options are used in simple bind mode only:
+     -->
+以下のオプションは単純バインド・モードのみで使用されます。
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapprefix</literal></term>
+      <listitem>
+       <para>
+        <!--
+        String to prepend to the user name when forming the DN to bind as,
+        when doing simple bind authentication.
+        -->
+単純なバインド認証を行う場合のDNを生成する際にユーザ名の前に追加する文字列
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsuffix</literal></term>
+      <listitem>
+       <para>
+        <!--
+        String to append to the user name when forming the DN to bind as,
+        when doing simple bind authentication.
+        -->
+単純なバインド認証を行う場合のDNを生成する際にユーザ名の後に追加する文字列
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    <!--
+    The following options are used in search+bind mode only:
+    -->
+以下のオプションはsearch/bindモードのみで使用されます。
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapbasedn</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Root DN to begin the search for the user in, when doing search+bind
+        authentication.
+        -->
+検索とバインドの認証を行う場合のユーザ名がログインするための検索を始めるためのルートDN
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapbinddn</literal></term>
+      <listitem>
+       <para>
+        <!--
+        DN of user to bind to the directory with to perform the search when
+        doing search+bind authentication.
+        -->
+検索とバインドの認証を行う場合のディレクトリと検索をバインドするためのユーザのDN
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapbindpasswd</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Password for user to bind to the directory with to perform the search
+        when doing search+bind authentication.
+        -->
+検索とバインドの認証を行う場合のディレクトリと検索をバインドするためのユーザのパスワード
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsearchattribute</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Attribute to match against the user name in the search when doing
+        search+bind authentication. If no attribute is specified, the
+        <literal>uid</literal> attribute will be used.
+        -->
+検索とバインドの認証を行う場合の検索時のユーザ名に対して一致させる属性。
+属性が指定されない場合、属性<literal>uid</literal>が使用されます。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsearchfilter</literal></term>
+      <listitem>
+       <para>
+        <!--
+        The search filter to use when doing search+bind authentication.
+        Occurrences of <literal>$username</literal> will be replaced with the
+        user name.  This allows for more flexible search filters than
+        <literal>ldapsearchattribute</literal>.
+        -->
+search/bind認証を行うときに使用する検索フィルタです。
+<literal>$username</literal>の出現はユーザ名に置き換えられます。
+これにより<literal>ldapsearchattribute</literal>よりも柔軟な検索フィルタが可能になります。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapurl</literal></term>
+      <listitem>
+       <para>
+        <!--
+        An RFC 4516 LDAP URL.  This is an alternative way to write some of the
+        other LDAP options in a more compact and standard form.  The format is
+        -->
+RFC 4516 LDAP URL。これはその他いくつかのLDAPオプションをより簡潔、かつ一般的な形式で記述する別の方法です。
+フォーマットは以下のようになっています。
+<synopsis>
+ldap[s]://<replaceable>host</replaceable>[:<replaceable>port</replaceable>]/<replaceable>basedn</replaceable>[?[<replaceable>attribute</replaceable>][?[<replaceable>scope</replaceable>][?[<replaceable>filter</replaceable>]]]]
+</synopsis>
+        <!--
+        <replaceable>scope</replaceable> must be one of <literal>base</literal>,
+        <literal>one</literal>, <literal>sub</literal>, typically the last.
+        (The default is <literal>base</literal>, which is normally not useful
+        in this application.) <replaceable>attribute</replaceable> can nominate
+        a single attribute, in which case it is used as a value for <literal>ldapsearchattribute</literal>.
+        If <replaceable>attribute</replaceable> is empty then <replaceable>filter</replaceable>
+        can be used as a value for <literal>ldapsearchfilter</literal>.
+        -->
+<replaceable>scope</replaceable>は<literal>base</literal>、<literal>one</literal>、<literal>sub</literal>のいずれかでなくてはならず、一般的には最後のものです。
+ （デフォルトは<literal>base</literal>です。これは通常このアプリケーションでは役に立ちません。）
+<replaceable>attribute</replaceable>は単一の属性を指定できます。その場合、それは<literal>ldapsearchattribute</literal>の値として使用されます。
+もし<replaceable>attribute</replaceable>が空の場合は、<literal>ldapsearchfilter</literal>の値として<replaceable>filter</replaceable>を使用することができます。
+       </para>
+
+       <para>
+        <!--
+        The URL scheme <literal>ldaps</literal> chooses the LDAPS method for
+        making LDAP connections over SSL, equivalent to using <literal>ldapscheme=ldaps</literal>.
+        To use encrypted LDAP connections using the <literal>StartTLS</literal>
+        operation, use the normal URL scheme <literal>ldap</literal> and specify the
+        <literal>ldaptls</literal> option in addition to <literal>ldapurl</literal>.
+        -->
+ URLスキーム<literal>ldaps</literal>は、<literal>ldapscheme=ldaps</literal>を使用するのと同じ、SSL上のLDAP接続をするLDAPS方式を選択します。
+<literal>StartTLS</literal>操作による暗号化されたLDAP接続を使用するには、通常のURLスキーム<literal>ldap</literal>を使用し、<literal>ldapurl</literal>に加え<literal>ldaptls</literal>オプションを使用しなければなりません。
+       </para>
+
+       <para>
+        <!--
+        For non-anonymous binds, <literal>ldapbinddn</literal> and
+        <literal>ldapbindpasswd</literal> must be specified as separate options.
+        -->
+非匿名バインド（non-anonymous bind）に対し、<literal>ldapbinddn</literal>および<literal>ldapbindpasswd</literal>は個別のオプションとして指定されなければなりません。
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>backend_use_passwd</literal></term>
+      <listitem>
+       <para>
+        <!--
+        Set to 1 to make the password used for LDAP authentication use authentication
+        between <productname>Pgpool-II</productname> and backend.
+        -->
+1に設定すると、LDAP認証で使用されたパスワードを<productname>Pgpool-II</productname>とバックエンド間の認証に使用します。
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    <!--
+    It is an error to mix configuration options for simple bind with options
+    for search+bind.
+    -->
+search/bindオプションと単純バインドに対するオプションの設定を混在させるのはエラーです。
+   </para>
+
+   <para>
+    <!--
+    When using search+bind mode, the search can be performed using a single
+    attribute specified with <literal>ldapsearchattribute</literal>, or using
+    a custom search filter specified with
+    <literal>ldapsearchfilter</literal>.
+    Specifying <literal>ldapsearchattribute=foo</literal> is equivalent to
+    specifying <literal>ldapsearchfilter="(foo=$username)"</literal>.  If neither
+    option is specified the default is
+    <literal>ldapsearchattribute=uid</literal>.
+    -->
+search/bindモードを使用するときは、<literal>ldapsearchattribute</literal>で指定される単一の属性を使って、あるいは<literal>ldapsearchfilter</literal>で指定されるカスタム検索フィルターを使って、検索を実行できます。
+<literal>ldapsearchattribute=foo</literal>の指定は、<literal>ldapsearchfilter="(foo=$username)"</literal>と同等です。
+どちらのオプションもない場合は、<literal>ldapsearchattribute=uid</literal>がデフォルトです。
+   </para>
+
+   <para>
+     <!--
+     If <productname>Pgpool-II</productname> was compiled with
+     <productname>OpenLDAP</productname> as the LDAP client library, the
+     <literal>ldapserver</literal> setting may be omitted.  In that case, a
+     list of host names and ports is looked up via RFC 2782 DNS SRV records.
+     The name <literal>_ldap._tcp.DOMAIN</literal> is looked up, where
+     <literal>DOMAIN</literal> is extracted from <literal>ldapbasedn</literal>.
+     -->
+<productname>Pgpool-II</productname>が、LDAPクライアントライブラリとして<productname>OpenLDAP</productname>を使用するようにコンパイルされていた場合、<literal>ldapserver</literal>の設定は省略出来ます。
+その場合、ホスト名とポート番号のリストは、RFC 2782 DNS SRVレコードを使用して検索されます。
+<literal>_ldap._tcp.DOMAIN</literal>という名前が検索され、<literal>ldapbasedn</literal>から<literal>DOMAIN</literal>が抽出されます。
+   </para>
+
+   <para>
+    <!--
+    Here is an example for a simple-bind LDAP configuration:
+    -->
+以下に単純バインドLDAP設定の例を示します。
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapprefix="cn=" ldapsuffix=", dc=example, dc=net"
+</programlisting>
+    <!--
+    When a connection to the database server as database
+    user <literal>foo</literal> is requested, Pgpool-II will attempt to
+    bind to the LDAP server using the DN <literal>cn=foo, dc=example,
+    dc=net</literal> and the password provided by the client.  If that connection
+    succeeds, the database access is granted.
+    -->
+データベースのユーザ、<literal>foo</literal>からデータベースサーバに接続を要求された場合、Pgpool-IIはDN <literal>cn=foo, dc=example, dc=net</literal>およびクライアントから提供されたパスワードを用いてLDAPサーバにバインドを試みます。
+その接続が成功すればデータベースへのアクセスが認められます。
+   </para>
+
+   <para>
+    <!--
+    Here is an example for a search+bind configuration:
+    -->
+以下はsearch/bind設定の例です。
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapbasedn="dc=example, dc=net" ldapsearchattribute=uid
+</programlisting>
+    <!--
+    When a connection to the database server as database
+    user <literal>foo</literal> is requested, Pgpool-II will attempt to
+    bind anonymously (since <literal>ldapbinddn</literal> was not specified) to
+    the LDAP server, perform a search for <literal>(uid=foo)</literal>
+    under the specified base DN.  If an entry is found, it will then attempt to
+    bind using that found information and the password supplied by the client.
+    If that second connection succeeds, the database access is granted.
+    -->
+データベースユーザ<literal>foo</literal>としてデータベースに接続するとき、Pgpool-IIは（<literal>ldapbinddn</literal>が指定されていないので）匿名的にバインドを試み、指定されたベースDNの基で<literal>(uid=foo)</literal>の検索を行います。あるエントリが見つかると、見つかった情報とクライアントから与えられたパスワードを用いて、その結果バインドを試みます。その二番目の接続が成功するとデータベースアクセスが認められます。
+   </para>
+
+   <para>
+    <!--
+    Here is the same search+bind configuration written as a URL:
+    -->
+URLとして記述した同じsearch/bind設定の例です。
+<programlisting>
+host ... ldap ldapurl="ldap://ldap.example.net/dc=example,dc=net?uid?sub"
+</programlisting>
+    <!--
+    Some other software that supports authentication against LDAP uses the
+    same URL format, so it will be easier to share the configuration.
+    -->
+LDAPに対し認証をサポートする幾つかの他のソフトウェアは同じURLフォーマットを使用します。
+従って、設定をより簡易に共有することができます。
+   </para>
+
+   <para>
+    <!--
+    Here is an example for a search+bind configuration that uses
+    <literal>ldapsearchfilter</literal> instead of
+    <literal>ldapsearchattribute</literal> to allow authentication by
+    user ID or email address:
+    -->
+<literal>ldapsearchattribute</literal>の代わりに<literal>ldapsearchfilter</literal>を使用してユーザーIDまたは電子メールアドレスによる認証を可能にするsearch/bind設定の例です。
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapbasedn="dc=example, dc=net" ldapsearchfilter="(|(uid=$username)(mail=$username))"
+</programlisting>
+   </para>
+
+   <para>
+    <!--
+    Here is an example for a search+bind configuration that uses DNS SRV
+    discovery to find the host name(s) and port(s) for the LDAP service for the
+    domain name <literal>example.net</literal>:
+    -->
+DNS SRV検出を使用してドメイン名<literal>example.net</literal>のLDAPサービスのホスト名とポート番号を検索する、search/bind設定の例です。
+<programlisting>
+host ... ldap ldapbasedn="dc=example,dc=net"
+</programlisting>
+   </para>
+
+   <tip>
+    <para>
+     <!--
+     Since LDAP often uses commas and spaces to separate the different
+     parts of a DN, it is often necessary to use double-quoted parameter
+     values when configuring LDAP options, as shown in the examples.
+     -->
+LDAPはDNの異なる構成要素を区別するため往々にしてコンマとスペースを使用します。
+例で示されたように、LDAPオプションを設定する場合、二重引用符で括られたパラメータ値を使用することが必須となることがしばしば必須となります。
+    </para>
+   </tip>
+
+   <note>
+    <para>
+     <!--
+     To enable LDAP support the <productname>Pgpool-II</productname>
+     must be configured with <command>"&#045;&#045;with-ldap"</command>
+     -->
+     LDAPサポートを有効にするには、<productname>Pgpool-II</productname>が<command>"--with-ldap"</command>をつけてconfigureされていなければなりません。
+    </para>
+   </note>
+  </sect2>
+
+  <sect2 id="auth-gssapi">
+   <!--
+   <title>GSSAPI Authentication</title>
+   -->
+   <title>GSSAPI認証</title>
+
+   <indexterm zone="auth-gssapi">
+    <primary>GSSAPI</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    GSSAPI is an industry-standard protocol for secure authentication
+    defined in RFC 2743.  Currently
+    <productname>Pgpool-II</productname> does not support GSSAPI.
+    Clients should not use GSSAPI authentication, or should use
+    "prefer GSSAPI authentication if possible" option (this is the
+    default setting of <productname>PostgreSQL</productname> clients).
+    If latter is chosen, <productname>Pgpool-II</productname> requests
+    non-GSSAPI authentication to client, and the clients will fall
+    back to non-GSSAPI authentication method. Thus, usually users do
+    not need to worry about that <productname>Pgpool-II</productname>
+    does not accept GSSAPI authentication.
+    -->
+    GSSAPIは、RFC 2743で定義されている安全な認証のための業界標準のプロトコルです。
+    今の所<productname>Pgpool-II</productname>はGSSAPIをサポートしていません。
+    クライアントはGSSAPI認証要求を行わないようにするか、「可能ならばGSSAPI認証を使う」オプションを選択しなければなりません（これは<productname>PostgreSQL</productname>クライアントのデフォルト設定です)。
+    後者を選択した場合、<productname>Pgpool-II</productname>はGSSAPIを使わない認証方式をクライアントにリクエストし、その結果クライアントはGSSAPIを使わない認証方式を使用するので、通常ユーザはGSSAPI認証方式を<productname>Pgpool-II</productname>が受け入れないことを意識する必要はありません。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="auth-different-auth-method">
+  <!--
+  <title>Using different methods for frontend and backend authentication</title>
+  -->
+  <title>フロンエンドとバックエンド認証に対する異なる認証方式の使用</title>
+
+  <indexterm zone="auth-different-auth-method">
+   <primary>AUTH</primary>
+  </indexterm>
+
+  <para>
+   <!--
+   Since <productname>Pgpool-II</productname><emphasis>V4.0</emphasis>
+   it possible to use different authentication for client application
+   and backend <productname>PostgreSQL</productname> servers.
+   For example, a client application can use <literal>scram-sha-256</literal>
+   to connect to <productname>Pgpool-II</productname> which
+   in turn can use <literal>trust</literal> or <literal>md5</literal>
+   authentication to connect to <productname>PostgreSQL</productname>
+   backend for the same session.
+   -->
+   <productname>Pgpool-II</productname><emphasis>V4.0</emphasis>以降では、クライアントアプリケーションとバックエンドの<productname>PostgreSQL</productname>サーバに対して異なる認証を使用することが可能です。
+   例えば、クライアントアプリケーションは<productname>Pgpool-II</productname>への接続に<literal>scram-sha-256</literal>を使用し、次に同じセッションの<productname>PostgreSQL</productname>バックエンドへの接続に<literal>trust</literal>または<literal>md5</literal>認証を使用できます。
+  </para>
+ </sect1>
+
+ <sect1 id="auth-aes-encrypted-password">
+  <!--
+  <title>Using AES256 encrypted passwords in pool_passwd</title>
+  -->
+  <title>pool_passwdにおけるAES256暗号化パスワードの使用</title>
+
+  <indexterm zone="auth-aes-encrypted-password">
+   <primary>AUTH</primary>
+  </indexterm>
+
+  <para>
+   <!--
+   <literal>SCRAM</literal> authentication guards against the man-in-the-middle
+   type of attack, so <productname>Pgpool-II</productname> requires the user password
+   to authenticate with the <productname>PostgreSQL</productname> backend.
+   -->
+   <literal>SCRAM</literal>認証は中間者攻撃から保護します。
+   そのため、<productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>バックエンドの認証のためにユーザパスワードを要求します。
+  </para>
+
+  <para>
+   <!--
+   However, storing the clear text passwords in the <filename>"pool_passwd"</filename> file
+   is not a good idea.
+   -->
+   しかしながら、<filename>"pool_passwd"</filename>ファイルにクリアテキストパスワードを保存するのは良い案ではありません。
+  </para>
+  <para>
+   <!--
+   You can instead store AES256 encrypted passwords, which will be used for authentication.
+   The password is first encrypted using the AES256 encryption with the user provided key
+   and then the encrypted password is <literal>base64</literal> encoded and
+   an <literal>AES</literal> prefix is added to the encoded string.
+   -->
+   代わりにAES256で暗号化されたパスワードを保存し認証に使用することができます。
+   パスワードは、最初にユーザが提供した鍵を使ってAES暗号で暗号化され、暗号化されたパスワードを<literal>base64</literal>でエンコードし、エンコードされた文字列の接頭に<literal>AES</literal>を追加します。
+   <note>
+    <para>
+     <!--
+     You can use the <xref linkend="PG-ENC"> utility to create the properly
+     formatted AES256 encrypted password.
+     -->
+     適切にフォーマットされたAES256暗号化パスワードを作成するために <xref linkend="PG-ENC">コマンドを使用できます。
+    </para>
+   </note>
+  </para>
+
+  <sect2 id="auth-create-aes-passwords">
+   <!--
+   <title>Creating encrypted password entries</title>
+   -->
+   <title>暗号化パスワードエントリの作成</title>
+   <para>
+    <!--
+    <xref linkend="PG-ENC"> can be used to create <literal>AES</literal>
+    encrypted password entries in <xref linkend="guc-pool-passwd"> file.
+    <xref linkend="PG-ENC"> requires the key for encrypting the password entries.
+    Later that same key will be required by <productname>Pgpool-II</productname>
+    to decrypt the passwords to use for authentication.
+    -->
+    <xref linkend="PG-ENC"> は<xref linkend="guc-pool-passwd">ファイル上に<literal>AES</literal>暗号化パスワードエントリを作成するために使用できます。
+      <xref linkend="PG-ENC">はパスワードエントリ暗号化のための鍵を要求します。
+       その後、認証に使うパスワードを復号化するため、<productname>Pgpool-II</productname>で同じ鍵が必要になります。
+       <note>
+	<para>
+	 <!--
+	 <productname>Pgpool-II</productname> must be built with SSL
+	 (&#045;&#045;with-openssl) support to use the encrypted password feature.
+	 -->
+	 暗号化パスワード機能を使うためにSSL(--with-openssl)サポート付で<productname>Pgpool-II</productname>をビルドする必要があります。
+	</para>
+       </note>
+   </para>
+  </sect2>
+
+  <sect2 id="auth-aes-decryption-key">
+   <!--
+   <title>Providing decryption key to <productname>Pgpool-II</productname></title>
+   -->
+   <title><productname>Pgpool-II</productname>への復号鍵の提供</title>
+
+   <para>
+    <!--
+    If you have <literal>AES</literal> encrypted passwords stored in the
+    <xref linkend="guc-pool-passwd"> file, then <productname>Pgpool-II</productname>
+    will require the decryption key to decrypt the passwords before using them,
+    <productname>Pgpool-II</productname> tries to read the decryption key at
+    startup from the <filename>pgpoolkey</filename> file.
+    -->
+    もし、<xref linkend="guc-pool-passwd"> ファイルに<literal>AES</literal>暗号化パスワードが保存されていた場合、<productname>Pgpool-II</productname>はそれらのパスワードを復号化するために復号鍵が必要となり、<productname>Pgpool-II</productname>は起動時に<filename>.pgpoolkey</filename>ファイルから復号鍵を読み込もうとします。
+     <indexterm><primary>pgpoolkey</primary></indexterm>
+     <indexterm><primary>PGPOOLKEYFILE</primary></indexterm>
+     <filename>.pgpoolkey</filename>は復号鍵の文字列を格納した単純なテキストファイルです。
+   </para>
+   <para>
+    <!--
+    By default the <productname>Pgpool-II</productname> will look for the
+    <filename>pgpoolkey</filename> file in the user's home directory or the file
+    referenced by environment variable <literal>PGPOOLKEYFILE</literal>.
+    You can also specify the key file using the (-k, &#045;&#045;key-file=KEY_FILE)
+    command line argument to the <productname>Pgpool-II</productname> command.
+    The permissions on .pgpoolkey must disallow any access to world or group.
+    Change file permissions by the command <command>chmod 0600 ~/.pgpoolkey</command>.
+    -->
+    デフォルトでは、<productname>Pgpool-II</productname>はユーザのホームディレクトリの<filename>.pgpoolkey</filename>もしくは<literal>PGPOOLKEYFILE</literal>環境変数により設定されるファイルを探します。
+    <xref linkend="PGPOOL">コマンドの(-k, --key-file=KEY_FILE)オプションを使用し、鍵ファイルを指定をすることもできます。
+     <filename>.pgpoolkey</filename>の権限はグループ、他者へのアクセスをすべて拒否しなければなりませんので、<command>chmod 0600 ~/.pgpoolkey</command>コマンドによって設定します。
+   </para>
+  </sect2>
+
+ </sect1>
+
+ </chapter>

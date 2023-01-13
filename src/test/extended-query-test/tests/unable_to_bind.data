@@ -1,0 +1,34 @@
+# Test data for FATAL: unable to bind DETAIL: cannot get parse message
+# "S1". This caused hang up of Pgpool-II.
+
+##backend_weight0 = 1
+##backend_weight1 = 0
+
+# Create test table
+'Q'	"DROP TABLE IF EXISTS pgproto_test1"
+'Y'
+'Q'	"CREATE TABLE pgproto_test1(i INT)"
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue INSERT
+'P'	""	"INSERT INTO pgproto_test1 VALUES(1)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# DROP test table
+'Q'	"DROP TABLE pgproto_test1"
+'Y'
+
+'X'

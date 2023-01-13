@@ -1,0 +1,31 @@
+GRANT select, insert, update, delete, rule, references, trigger ON "t1","t2" TO "x"
+GRANT select, insert, update, delete, rule, references, trigger ON "t1","t2" TO "x" WITH GRANT OPTION
+GRANT select, insert, update, delete, rule, references, trigger ON "t1","t2" TO "x" WITH GRANT OPTION
+GRANT select, insert, update, delete, rule, references, trigger ON "t1","t2" TO PUBLIC
+GRANT ALL ON "t1","t2" TO "x"
+GRANT create ON DATABASE "db1", "db2" TO "x","y"
+GRANT temporary ON DATABASE "db1", "db2" TO "x","y"
+GRANT temp ON DATABASE "db1", "db2" TO "x","y"
+GRANT execute ON FUNCTION "func"(int4,"text") TO "x","y"
+GRANT usage ON LANGUAGE "lang" TO "x","y"
+GRANT create ON SCHEMA "s" TO "x","y"
+GRANT usage ON SCHEMA "s" TO "x","y"
+GRANT create ON TABLESPACE "tblspc" TO "x","y"
+GRANT "role1" TO "role2"
+REVOKE select, insert, update, delete, rule, references, trigger ON "t1","t2" FROM "x","y"
+REVOKE select, insert, update, delete, rule, references, trigger ON "t1","t2" FROM "x","y" CASCADE
+REVOKE select, insert, update, delete, rule, references, trigger ON "t1","t2" FROM "x","y"
+REVOKE ALL ON "t1","t2" FROM "x","y"
+REVOKE ALL ON "t1","t2" FROM PUBLIC
+REVOKE GRANT OPTION FOR ALL ON "t1","t2" FROM PUBLIC
+REVOKE GRANT OPTION FOR create ON DATABASE "db1", "db2" FROM "x","y"
+REVOKE create ON DATABASE "db1", "db2" FROM "x","y"
+REVOKE temporary ON DATABASE "db1", "db2" FROM "x","y"
+REVOKE temp ON DATABASE "db1", "db2" FROM "x","y"
+syntax error: REVOKE EXECUTE on FUNCTION foo(int,text) db1,db2 FROM x,y;
+REVOKE usage ON LANGUAGE "lang" FROM "x","y"
+REVOKE create ON SCHEMA "s1", "s2" FROM "x","y"
+REVOKE usage ON SCHEMA "s1", "s2" FROM "x","y"
+REVOKE create ON TABLESPACE "tblspc" FROM "x","y"
+REVOKE ADMIN OPTION FOR "role1", "role2" FROM "x", "y"
+REVOKE "role1", "role2" FROM "x", "y"

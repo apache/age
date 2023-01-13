@@ -1,0 +1,199 @@
+<!--
+doc/src/sgml/ref/pcp_node_info.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-NODE-INFO">
+ <indexterm zone="pcp-node-info">
+  <primary>pcp_node_info</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_node_info</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_node_info</refname>
+  <refpurpose>
+   displays the information on the given node ID</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_node_info</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-NODE-INFO-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_node_info</command>
+   displays the information on the given node ID.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       The index of backend node to get information of.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-a</option></term>
+     <term><option>--all</option></term>
+     <listitem>
+      <para>
+       Display all backend nodes information.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+$ pcp_node_info -w -p 11001 -n 1
+/tmp 11003 1 0.500000 waiting up standby standby 0 streaming async 2021-02-27 14:51:30
+   </programlisting>
+  </para>
+  <para>
+   The result is in the following order:
+   <literallayout class="monospaced">
+1. hostname
+2. port number
+3. status
+4. load balance weight
+5. status name
+6. actual backend status
+7. backend role
+8. actual backend role (taken from pg_is_in_recovery. Pgpool-II 4.3 or later)
+9. replication delay
+10. replication state (taken from pg_stat_replication. Pgpool-II 4.1 or later)
+11. sync replication state (taken from pg_stat_replication. Pgpool-II 4.1 or later)
+12. last status change time
+   </literallayout>
+  </para>
+  <para>
+   3 (status) is represented by a digit from [0 to 3].
+   <itemizedlist>
+    <listitem><para>0 - This state is only used during the initialization. PCP will never display it. </para></listitem>
+    <listitem><para>1 - Node is up. No connections yet. </para></listitem>
+    <listitem><para>2 - Node is up. Connections are pooled. </para></listitem>
+    <listitem><para>3 - Node is down. </para></listitem>
+   </itemizedlist>
+  </para>
+  <para>
+   4 (load balance weight) is displayed in normalized format (0 - 1).
+  </para>
+  <para>
+   6 shows the backend status in real time.  The info is obtained by
+   calling <function>PQpingParams</function> at the time when the
+   command is invoked. <function>PQpingParams</function> is only
+   available in <productname>PostgreSQL</productname> 9.1 or later. If
+   <productname>Pgpool-II</productname> was built with
+   <productname>PostgreSQL</productname> 9.0 or earlier, the column
+   shows "unknown". When a backend node is detached by <xref
+   linkend="pcp-detach-node">, the status managed by
+   <productname>Pgpool-II</productname> will be "down", while the
+   actual backend status is "up". Thus it is possible that 5 does not
+   match with 6. However it should not happen that 5 is "up" while 6
+   is "down".
+  </para>
+  <para>
+   8 shows the backend status in real time. The result will be either
+   "primary" or "standby", and possibly "unknown" if information
+   retrieval failed. Since <productname>Pgpool-II</productname>
+   searches backend nodes in the node id order and assumes the last
+   found node is primary, it is possible that 7 does not match 8 when
+   there are multiple nodes that are not standby by erroneous
+   operations (this command is useful to find such that situation).
+   In other than streaming replication mode, the status will be either
+   "main" or "replica". Unlike streaming replication mode
+   <function>pg_is_in_recovery</function> is not called and value for
+   7 and 8 will be always the same.
+  </para>
+  <para>
+   To correctly 9, 10, 11 are displayed, <xref linkend="guc-sr-check-period"> must not
+   be 0.  10, 11 will not be displayed
+   if <xref linkend="guc-sr-check-user"> is
+   not <productname>PostgreSQL</productname> super user nor it's not
+   in "pg_monitor" group.
+   <note>
+    <para>
+     To make <xref linkend="guc-sr-check-user"> in pg_monitor
+     group, execute following SQL command
+     by <productname>PostgreSQL</productname> super user (replace
+     "sr_check_user" with the setting of <xref linkend="guc-sr-check-user">):
+     <programlisting>
+GRANT pg_monitor TO sr_check_user;
+     </programlisting>
+     For <productname>PostgreSQL</productname> 9.6, there's no
+     pg_monitor group and <xref linkend="guc-sr-check-user"> must
+     be <productname>PostgreSQL</productname> super user.
+    </para>
+   </note>
+  </para>
+
+  <para>
+    From <productname>Pgpool-II</productname> 4.4, 9 (replication
+    delay) is displayed in either bytes or
+    seconds. See <xref linkend="guc-delay-threshold-by-time"> for more
+    details.
+  </para>
+    
+  <para>
+   The <option>-a</option> or <option>--all</option> option lists all backend nodes information.
+  </para>
+  <programlisting>
+$ pcp_node_info -w -p 11001 -a
+/tmp 11002 1 0.500000 waiting up primary primary 0 none none 2021-02-27 14:51:30
+/tmp 11003 1 0.500000 waiting up standby standby 0 streaming async 2021-02-27 14:51:30
+  </programlisting>
+
+  <para>
+   The <option>--verbose</option> option can help understand the output. For example:
+  </para>
+  <programlisting>
+$ pcp_node_info -w -p 11001 --verbose 1
+Hostname               : /tmp
+Port                   : 11003
+Status                 : 1
+Weight                 : 0.500000
+Status Name            : waiting
+Backend Status Name    : up
+Role                   : standby
+Backend Role           : standby
+Replication Delay      : 0
+Replication State      : streaming
+Replication Sync State : async
+Last Status Change     : 2021-02-27 14:51:30
+  </programlisting>
+ </refsect1>
+
+</refentry>

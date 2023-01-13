@@ -1,0 +1,41 @@
+This memo explains the rule how to build pgpool-II source tree using
+autotools and need to push derived files such as Makefile.in into
+pgpool-II official source repository.
+
+So the rule does not apply to:
+
+- users who just run configure and make.
+- developers who just change source files (*.[chl])
+
+Developers need to follow following rules if they want to add/remove
+source files since it requires to change Makefile.am.
+
+Since pgpool-II uses autotools to create Makefiles, it is very
+important to fix the tool chain versions. To ensure this, all
+developers who need to use autotools *and* push the changes to the
+source repository *must* use following platform:
+
+Ubuntu 14.04 LTS
+
+More precisely required tool chain versions are following:
+
+autoconf 2.69
+automake 1.14.1
+libtool 2.4.2
+
+If you could prepare the same tool chain version, maybe you don't need
+to use Ubuntu 14.04 LTS, but I have not tested yet.
+
+This may be changed in the future but for now, please use it as the
+reference platform.
+
+To ensure rebuild does not run, configure.ac has the lines:
+
+dnl Disallow to rebuild configure.
+AM_MAINTAINER_MODE(disable)
+
+If you need to rebuild, you can remove this or run configure with
+"--enable-maintainer-mode" option.
+
+November 20, 2014
+Tatsuo Ishii

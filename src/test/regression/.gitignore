@@ -1,0 +1,4 @@
+clean
+regression.log
+log/
+temp/

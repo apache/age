@@ -1,0 +1,15 @@
+# Test for FunctionCall protocol
+
+#
+# Test data example
+#
+
+# Function call (lo_creat)
+# from PostgreSQL's src/include/catalog/pg_proc.data
+# { oid => '957', descr => 'large object create',
+#  proname => 'lo_creat', provolatile => 'v', proparallel => 'u',
+#  prorettype => 'oid', proargtypes => 'int4', prosrc => 'be_lo_creat' },
+
+'F'	957	1	0	1	1	"0"	0
+'Y'
+'X'

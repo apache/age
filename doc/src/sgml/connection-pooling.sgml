@@ -1,0 +1,991 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-config-connection-pooling">
+ <title>Connection Pooling</title>
+
+ <para>
+  <productname>Pgpool-II</productname> maintains established
+  connections to the PostgreSQL servers, and reuses them whenever a
+  new connection with the same properties (i.e. user name, database,
+  protocol version) comes in. It reduces the connection overhead,
+  and improves system's overall throughput.
+ </para>
+
+ <sect2 id="runtime-config-connection-pooling-settings">
+  <title>Connection Pooling Settings</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-connection-cache" xreflabel="connection_cache">
+    <term><varname>connection_cache</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>connection_cache</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Caches connections to backends when set to on. Default is on.
+      <emphasis>However, connections to <literal>template0</>, <literal>template1</>,
+       <literal>postgres</> and <literal>regression</> databases are not cached even if
+       <varname>connection_cache</> is on.</emphasis>
+     </para>
+     <para>
+      You need to restart <productname>Pgpool-II</productname>
+      if you change this value.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-max-pool" xreflabel="max_pool">
+    <term><varname>max_pool</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>max_pool</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      The maximum number of cached connections
+      in each <productname>Pgpool-II</productname> child
+      process.  <productname>Pgpool-II</productname> reuses the
+      cached connection if an incoming connection is connecting
+      to the same database with the same user name and the same
+      run-time parameters.  If not,
+      <productname>Pgpool-II</productname> creates a new
+      connection to the backend.  If the number of cached
+      connections exceeds max_pool, the oldest connection will
+      be discarded, and uses that slot for the new connection.
+     </para>
+     <para>
+      Default value is 4. Please be aware that the number of
+      connections from <productname>Pgpool-II</productname> processes to the backends may reach
+      num_init_children * max_pool in total.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-listen-backlog-multiplier" xreflabel="listen_backlog_multiplier">
+    <term><varname>listen_backlog_multiplier</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>listen_backlog_multiplier</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the length of connection queue from frontend to
+      <productname>Pgpool-II</productname>. The queue length (actually
+      <literal>"backlog"</literal> parameter of <literal>listen()</literal>
+      system call) is defined as
+      <varname>listen_backlog_multiplier</varname> * <xref linkend="guc-num-init-children">.
+     </para>
+     <note>
+      <para>
+       Some systems have the upper limit of the backlog parameter of
+       <literal>listen()</literal> system call.
+       See <xref linkend="guc-num-init-children"> for more details.
+      </para>
+     </note>
+     <para>
+      Default is 2.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-serialize-accept" xreflabel="serialize_accept">
+    <term><varname>serialize_accept</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>serialize_accept</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      When set to on, <productname>Pgpool-II</productname> enables the serialization
+      on incoming client connections.
+      Without serialization the OS kernel wakes up all of the <productname>
+       Pgpool-II</productname> children processes to execute <literal>accept()</> and one of them
+      actually gets the incoming connection. The problem here is, because so my child
+      process wake up at a same time, heavy context switching occurs and the
+      performance is affected.
+     </para>
+     <para>
+      This phenomena is a well known classic problem called
+      "the thundering herd problem". This can be solved by the
+      serialization of the <literal>accept()</> calls, so that only one
+      <productname>Pgpool-II</productname> process gets woken up
+      for incoming connection to execute the <literal>accept()
+      </literal>.
+     </para>
+
+     <para>
+      But serialization has its own overheads, and it is recommended
+      to be used only with the larger values of <xref linkend="guc-num-init-children">.
+       For the small number of <xref linkend="guc-num-init-children">,
+	the serialize accept can degrade the performance because of
+	serializing overhead.
+     </para>
+
+     <note>
+      <para>
+       It is recommended to do a benchmark before deciding whether to use
+       <varname>serialize_accept</varname> or not, because the correlation
+       of <xref linkend="guc-num-init-children"> and <varname>serialize_accept</varname>
+	can be different on different environments.
+      </para>
+     </note>
+
+     <example id="example-serialize-accept-pgbench">
+      <title>Using pgbench to decide if serialize_accept should be used</title>
+      <para>
+       To run the <command>pgbench</command> use the following
+       command.
+       <programlisting>
+	pgbench -n -S -p 9999 -c 32 -C -S -T 300 test
+       </programlisting>
+       Here, <literal>-C</literal> tells <command>pgbench</command> to connect
+       to database each time a transaction gets executed. <literal>-c 32</literal>
+       specifies the number of the concurrent sessions to <productname>Pgpool-II</productname>.
+       You should change this according to your system's requirement.
+       After <command>pgbench</command> finishes, check the number from
+       "including connections establishing".
+      </para>
+     </example>
+
+     <note>
+      <para>
+       When <xref linkend="guc-child-life-time"> is enabled, <varname>serialize_accept</varname>
+	has no effect. Make sure that you set <xref linkend="guc-child-life-time"> to 0 if you intend
+	 to turn on the <varname>serialize_accept</varname>.
+	 And if you are worried about <productname>Pgpool-II</productname> process memory leaks
+	 or whatever potential issue, you could use <xref linkend="guc-child-max-connections"> instead.
+	  This is purely an implementation limitation and may be removed in the future.
+      </para>
+     </note>
+
+     <para>
+      Default is off.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-child-life-time" xreflabel="child_life_time">
+    <term><varname>child_life_time</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>child_life_time</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the time in seconds to terminate a <productname>Pgpool-II
+      </productname> child process if it remains idle. The new child process
+      is immediately spawned by <productname>Pgpool-II</productname> when it
+      is terminated because of <varname>child_life_time</varname>.
+      <varname>child_life_time</varname> is a measure to prevent the
+      memory leaks and other unexpected errors in <productname>Pgpool-II
+      </productname> children.
+     </para>
+     <note>
+      <para>
+       <varname>child_life_time</varname> does not apply to
+       processes that have not accepted any connection yet.
+      </para>
+     </note>
+     <note>
+      <para>
+       <xref linkend="guc-serialize-accept"> becomes ineffective when
+	<varname>child_life_time</varname> is enabled.
+      </para>
+     </note>
+     <para>
+      Default is 300 (5 minutes) and setting it to 0 disables the feature.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-client-idle-limit" xreflabel="client_idle_limit">
+    <term><varname>client_idle_limit</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>client_idle_limit</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the time in seconds to disconnect a client if it remains idle
+      since the last query.
+      This is useful for preventing the <productname>Pgpool-II</productname>
+      children from being occupied by a lazy clients or broken TCP/IP
+      connection between client and <productname>Pgpool-II</productname>.
+     </para>
+     <note>
+      <para>
+       <varname>client_idle_limit</varname> is ignored in
+       the second stage of online recovery.
+      </para>
+     </note>
+     <para>
+      The default is 0, which turns off the feature.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-child-max-connections" xreflabel="child_max_connections">
+    <term><varname>child_max_connections</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>child_max_connections</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the lifetime of a <productname>Pgpool-II</productname>
+      child process in terms of the number of client connections it can receive.
+      <productname>Pgpool-II</productname> will terminate the child process
+      after it has served <varname>child_max_connections</varname> client
+      connections and will immediately spawn a new child process to take its place.
+     </para>
+     <para>
+      <varname>child_max_connections</varname> is useful on a very busy server,
+      where <xref linkend="guc-child-life-time"> and <xref linkend="guc-connection-life-time">
+	never gets triggered. It is also useful to prevent the <productname>PostgreSQL</> servers from getting
+	too big.
+     </para>
+     <para>
+      The default is 0, which turns off the feature.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-connection-life-time" xreflabel="connection_life_time">
+    <term><varname>connection_life_time</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>connection_life_time</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the time in seconds to terminate the cached connections
+      to the PostgreSQL backend. This serves as the cached connection expiration time.
+     </para>
+     <para>
+      The default is 0, which means the cached connections will not be disconnected.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-reset-query-list" xreflabel="reset_query_list">
+    <term><varname>reset_query_list</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>reset_query_list</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the <acronym>SQL</acronym> commands to be sent to reset the backend connection
+      when exiting the user session. Multiple commands can be specified by delimiting each
+      by <literal>";"</literal>.
+     </para>
+
+     <para>
+      The available commands differ among <productname>PostgreSQL</> versions.
+      Below are some recommended settings for <varname>reset_query_list</varname>
+      on different <productname>PostgreSQL</> versions.
+      Note, however, that <literal>ABORT</literal> command should be always included.
+     </para>
+
+     <table id="reset-query-list-suggestions-table">
+      <title>Recommended setting for <varname>reset_query_list</varname>
+       on different PostgreSQL versions</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <entry>PostgreSQL version</entry>
+	 <entry>reset_query_list</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry>7.1 or earlier</entry>
+	 <entry><literal>'ABORT'</literal></entry>
+	</row>
+
+	<row>
+	 <entry>7.2 to 8.2</entry>
+	 <entry><literal>'ABORT; RESET ALL; SET SESSION AUTHORIZATION DEFAULT'</literal></entry>
+	</row>
+
+	<row>
+	 <entry>8.3 or later</entry>
+	 <entry><literal>'ABORT; DISCARD ALL'</literal></entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <note>
+      <para>
+       <literal>"ABORT"</literal> is not issued when not in a transaction block for 7.4 or later
+       <productname>PostgreSQL</> versions.
+      </para>
+     </note>
+     <para>
+      Default is <literal>'ABORT; DISCARD ALL'</literal>.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+</sect1>
+
+<sect1 id="runtime-config-logging">
+ <title>Error Reporting and Logging</title>
+
+ <sect2 id="runtime-config-logging-where-to-log">
+  <title>Where To Log</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-log-destination" xreflabel="log_destination">
+    <term><varname>log_destination</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>log_destination</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> supports two destinations
+      for logging the <productname>Pgpool-II</productname> messages.
+      The supported log destinations are <literal>stderr</literal>
+      and <literal>syslog</literal>. You can also set this parameter to a list
+      of desired log destinations separated by commas if you want the log messages
+      on the multiple destinations.
+      <programlisting>
+       #for example to log on both syslog and stderr
+       log_destination = 'syslog,stderr'
+      </programlisting>
+      The default is to log to <literal>stderr</literal> only.
+     </para>
+     <note>
+      <para>
+       On some systems you will need to alter the configuration of your
+       system's <application>syslog</application> daemon in order to make use of the
+       <literal>syslog</literal> option
+       for <varname>log_destination</varname>. <productname>Pgpool-II</productname>
+       can log to <application>syslog</application> facilities LOCAL0 through LOCAL7
+       (see <xref linkend="guc-syslog-facility">), but the default
+	<application>syslog</application>
+	configuration on most platforms will discard all such messages.
+	You will need to add something like:
+	<programlisting>
+	 local0.*    /var/log/pgpool.log
+	</programlisting>
+	to the syslog daemon's configuration file to make it work.
+      </para>
+     </note>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-logging-collector" xreflabel="logging_collector">
+    <term><varname>logging_collector</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>logging_collector</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 This parameter enables the logging collector, which is a background process that captures
+	 log messages sent to stderr and redirects them into log files.
+     </para>
+	 <note>
+	 <para>
+	 It is possible to log to stderr without using the logging collector; the log messages will
+	 just go to wherever the server's stderr is directed. However, that method is only suitable
+	 for low log volumes, since it provides no convenient way to rotate log files.
+	 </para>
+	 </note>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+     <para>
+      <varname>logging_collector</varname> is not available prior to
+      <productname>Pgpool-II </productname><emphasis>V4.2</emphasis>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-directory" xreflabel="log_directory">
+    <term><varname>log_directory</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>log_directory</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 When <xref linkend="guc-logging-collector"> is enabled, this parameter determines
+	 the directory in which log files will be created.
+     </para>
+	 <para>The default is <literal>/tmp/pgpool_logs</literal>.</para>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-filename" xreflabel="log_filename">
+    <term><varname>log_filename</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>log_filename</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 When <xref linkend="guc-logging-collector"> is enabled, this parameter sets the
+	 file names of the created log files. The value is treated as a
+	 <literal>strftime</literal> pattern, so %-escapes can be used to specify time-varying
+	 file names.
+	 The supported %-escapes are similar to those listed in the Open Group's
+	 <ulink url="https://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html">strftime</ulink>specification.
+     </para>
+	 <para>
+	 If you specify a file name without escapes, you should plan to use a log rotation
+	 utility to avoid eventually filling the entire disk.
+	 </para>
+	 <para>
+	 The default is <literal>pgpool-%Y-%m-%d_%H%M%S.log</literal>.
+	 </para>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-file-mode" xreflabel="log_file_mode">
+    <term><varname>log_file_mode</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>log_file_mode</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 This parameter sets the permissions for log files when <xref linkend="guc-logging-collector">
+	 is enabled. The parameter value is expected to be a numeric mode specified in the format
+	 accepted by the <literal>chmod</literal> and <literal>umask</literal> system calls.
+	 </para>
+
+	 <note>
+	 <para>
+	 To use the customary octal format the number must start with a 0 (zero).
+	 </para>
+	 </note>
+
+	<para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-rotation-age" xreflabel="log_rotation_age">
+    <term><varname>log_rotation_age</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>log_rotation_age</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 When <xref linkend="guc-logging-collector"> is enabled, this parameter determines
+	 the maximum amount of time to use an individual log file, after which a new log
+	 file will be created. If this value is specified without units,
+	 it is taken as minutes. The default is 24 hours.
+     </para>
+	 <para>
+	 Set to zero to disable time-based creation of new log files.
+     </para>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-rotation-size" xreflabel="log_rotation_size">
+    <term><varname>log_rotation_size</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>log_rotation_size</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 When <xref linkend="guc-logging-collector"> is enabled, this parameter determines
+	 the maximum size of an individual log file. After this many kilobytes have been
+	 emitted into a log file, a new log file will be created.
+     </para>
+	 <para>
+	 Set to zero to disable size-based creation of new log files.
+     </para>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-truncate-on-rotation" xreflabel="log_truncate_on_rotation">
+    <term><varname>log_truncate_on_rotation</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_truncate_on_rotation</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+	 When <xref linkend="guc-logging-collector"> is enabled,
+	 this parameter will cause <productname>Pgpool-II</> to truncate (overwrite),
+	 rather than append to, any existing log file of the same name.
+	 However, truncation will occur only when a new file is being opened due to
+	 time-based rotation, not during the startup or size-based rotation.
+	 When off, pre-existing files will be appended to in all cases.
+	 For example, using this setting in combination with a <xref linkend="guc-log-filename">
+	 like pgpool-%H.log would result in generating twenty-four hourly log
+	 files and then cyclically overwriting them.
+     </para>
+	 <para>
+	 This parameter can only be set at the Pgpool-II start.
+	 </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-syslog-facility" xreflabel="syslog_facility">
+    <term><varname>syslog_facility</varname> (<type>enum</type>)
+     <indexterm>
+      <primary><varname>syslog_facility</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      See also the documentation of your system's syslog daemon.
+      When logging to <application>syslog</application> is enabled,
+      this parameter determines the <application>syslog</application>
+      <literal>"facility"</literal> to be used.
+      You can choose from <literal>LOCAL0</>, <literal>LOCAL1</>,
+      <literal>LOCAL2</>, <literal>LOCAL3</>, <literal>LOCAL4</>,
+      <literal>LOCAL5</>, <literal>LOCAL6</>, <literal>LOCAL7</>;
+      the default is <literal>LOCAL0</>.
+      See also the documentation of your system's <application>syslog</> daemon.
+     </para>
+
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-syslog-ident" xreflabel="syslog_ident">
+    <term><varname>syslog_ident</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>syslog_ident</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      When logging to <application>syslog</> is enabled, this parameter determines
+      the program name used to identify <productname>Pgpool-II</productname>
+      messages in <application>syslog</> logs. The default is <literal>pgpool</literal>.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-config-logging-when-to-log">
+  <title>When To Log</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-client-min-messages" xreflabel="client_min_messages">
+    <term><varname>client_min_messages</varname> (<type>enum</type>)
+     <indexterm>
+      <primary><varname>client_min_messages</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Controls which minimum message levels are sent to the client.
+      Valid values are <literal>DEBUG5</>, <literal>DEBUG4</>,
+      <literal>DEBUG3</>, <literal>DEBUG2</>, <literal>DEBUG1</>,
+      <literal>LOG</>, <literal>NOTICE</>, <literal>WARNING</> and
+      <literal>ERROR</>. Each level includes
+      all the levels that follow it. The default is <literal>NOTICE</>.
+     </para>
+
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-min-messages" xreflabel="log_min_messages">
+    <term><varname>log_min_messages</varname> (<type>enum</type>)
+     <indexterm>
+      <primary><varname>log_min_messages</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      The default is WARNING.
+      Controls which minimum message levels are emitted to log.
+      Valid values are <literal>DEBUG5</>, <literal>DEBUG4</>,
+      <literal>DEBUG3</>, <literal>DEBUG2</>, <literal>DEBUG1</>,
+      <literal>INFO</>, <literal>NOTICE</>, <literal>WARNING</>,
+      <literal>ERROR</>, <literal>LOG</>, <literal>FATAL</>,
+      and <literal>PANIC</>.
+      Each level includes all the levels that follow it.
+      The default is <literal>WARNING</>.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-config-logging-what-to-log">
+  <title>What To Log</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-log-statement" xreflabel="log_statement">
+    <term><varname>log_statement</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_statement</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, prints all SQL statements to the log.
+     </para>
+
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-per-node-statement" xreflabel="log_per_node_statement">
+    <term><varname>log_per_node_statement</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_per_node_statement</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Similar to <xref linkend="guc-log-statement">, except that it print the
+       logs for each DB node separately. It can be useful to make sure that
+       replication or load-balancing is working.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-client-messages" xreflabel="log_client_messages">
+    <term><varname>log_client_messages</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_client_messages</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, prints client messages to the log.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-hostname" xreflabel="log_hostname">
+    <term><varname>log_hostname</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_hostname</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, prints the hostname instead of IP address
+      in the <command>ps</> command result, and connection logs
+      (when <xref linkend="guc-log-connections"> is on).
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-connections" xreflabel="log_connections">
+    <term><varname>log_connections</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_connections</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, prints all client connections from to the log.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-disconnections" xreflabel="log_disconnections">
+    <term><varname>log_disconnections</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>log_disconnections</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, prints all client connection terminations to the log.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-error-verbosity" xreflabel="log_error_verbosity">
+    <term><varname>log_error_verbosity</varname> (<type>enum</type>)
+     <indexterm>
+      <primary><varname>log_error_verbosity</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Controls the amount of detail emitted for each message that is logged.
+      Valid values are <literal>TERSE</>, <literal>DEFAULT</>, and <literal>VERBOSE</>,
+      each adding more fields
+      to displayed messages. <literal>TERSE</> excludes the logging of <literal>DETAIL</>,
+      <literal>HINT</>, <literal>QUERY</>
+      and <literal>CONTEXT</> error information.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+       this parameter for a current session.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-log-line-prefix" xreflabel="log_line_prefix">
+    <term><varname>log_line_prefix</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>log_line_prefix</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      This is a <function>printf</>-style string that is output at the beginning of
+      each log line.
+      <literal>%</literal> characters begin <quote>escape sequences</> that are replaced
+      with information outlined below.
+      All unrecognized escapes are ignored. Other characters are copied straight to
+      the log line. Default is '%m: %a pid %p: ', which prints timestamp, application name and process id.
+     </para>
+
+     <table id="log-line-prefix-table">
+      <title>log_line_prefix escape options</title>
+
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <entry>Escape</entry>
+	 <entry>Effect</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry>%a</entry>
+	 <entry>
+	  Application name. The initial value for child (session
+	  process) is "child". If Clients set application name
+	  (either in the startup message or by using SET command),
+	  application name will be changed accordingly. In other types
+	  of process, application name is a hard coded string. see
+	  <xref linkend="application-name-table">.
+	 </entry>
+	</row>
+
+	<row>
+	 <entry>%p</entry>
+	 <entry>Process ID (PID)</entry>
+	</row>
+
+	<row>
+	 <entry>%P</entry>
+	 <entry>Process name</entry>
+	</row>
+
+	<row>
+	 <entry>%t</entry>
+	 <entry>Time stamp without milliseconds</entry>
+	</row>
+
+	<row>
+	 <entry>%m</entry>
+	 <entry>Time stamp with milliseconds</entry>
+	</row>
+
+	<row>
+	 <entry>%d</entry>
+	 <entry>Database name</entry>
+	</row>
+
+	<row>
+	 <entry>%u</entry>
+	 <entry>User name</entry>
+	</row>
+
+	<row>
+	 <entry>%l</entry>
+	 <entry>Log line number for each process</entry>
+	</row>
+
+	<row>
+	 <entry>%%</entry>
+	 <entry>'%' character</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <table id="application-name-table">
+      <title>application names in various process</title>
+
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <entry>Process type</entry>
+	 <entry>application name</entry>
+	</row>
+       </thead>
+
+       <tbody>
+
+	<row>
+	 <entry>main</entry>
+	 <entry>main</entry>
+	</row>
+
+	<row>
+	 <entry>child</entry>
+	 <entry>child</entry>
+	</row>
+
+	<row>
+	 <entry>streaming replication delay check worker</entry>
+	 <entry>sr_check_worker</entry>
+	</row>
+
+	<row>
+	 <entry>watchdog heart beat sender</entry>
+	 <entry>heart_beat_sender</entry>
+	</row>
+
+	<row>
+	 <entry>watchdog heart beat receiver</entry>
+	 <entry>heart_beat_receiver</entry>
+	</row>
+
+	<row>
+	 <entry>watchdog</entry>
+	 <entry>watchdog</entry>
+	</row>
+
+	<row>
+	 <entry>watchdog life check</entry>
+	 <entry>life_check</entry>
+	</row>
+
+	<row>
+	 <entry>follow primary child</entry>
+	 <entry>follow_child</entry>
+	</row>
+
+	<row>
+	 <entry>watchdog utility</entry>
+	 <entry>watchdog_utility</entry>
+	</row>
+
+	<row>
+	 <entry>pcp main</entry>
+	 <entry>pcp_main</entry>
+	</row>
+
+	<row>
+	 <entry>pcp child</entry>
+	 <entry>pcp_child</entry>
+	</row>
+
+	<row>
+	 <entry>health check process</entry>
+	 <entry>health_check%d (%d is replaced with backend node id)</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+</sect1>

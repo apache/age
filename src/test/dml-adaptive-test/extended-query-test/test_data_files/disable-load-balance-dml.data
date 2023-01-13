@@ -1,0 +1,258 @@
+# Test for disable_load_balance_on_write feature (dml_adaptive).
+#
+
+# Force load balance node to 1.
+##backend_weight0 = 0
+##backend_weight1 = 1
+##disable_load_balance_on_write = 'dml_adaptive'
+
+# Create test data
+
+# for test dml -------------------------------------------------
+
+# Create test table tb_dml_insert
+'Q'	"DROP TABLE IF EXISTS tb_dml_insert"
+'Y'
+'Q'	"CREATE TABLE tb_dml_insert(a INT)"
+'Y'
+'Q'	"INSERT INTO tb_dml_insert VALUES(1)"
+'Y'
+
+# Create test table tb_dml_update
+'Q'	"DROP TABLE IF EXISTS tb_dml_update"
+'Y'
+'Q'	"CREATE TABLE tb_dml_update(a INT)"
+'Y'
+'Q'	"INSERT INTO tb_dml_update VALUES(1)"
+'Y'
+
+# Create test table tb_dml_delete
+'Q'	"DROP TABLE IF EXISTS tb_dml_delete"
+'Y'
+'Q'	"CREATE TABLE tb_dml_delete(a INT)"
+'Y'
+'Q'	"INSERT INTO tb_dml_delete VALUES(1)"
+'Y'
+
+# for test trigger -------------------------------------------------
+
+# Create test table tb_t1
+'Q'	"DROP TABLE IF EXISTS tb_t1"
+'Y'
+'Q'	"CREATE TABLE tb_t1(a INT)"
+'Y'
+
+# Create test table tb_t2
+'Q'	"DROP TABLE IF EXISTS tb_t2"
+'Y'
+'Q'	"CREATE TABLE tb_t2(b INT)"
+'Y'
+
+# Create test FUNCTION insert_tb_t2_func
+'Q'	"CREATE OR REPLACE FUNCTION insert_tb_t2_func() RETURNS TRIGGER AS $example_table$ BEGIN INSERT INTO tb_t2 VALUES (1); RETURN NEW; END; $example_table$ LANGUAGE plpgsql"
+'Y'
+
+# Create test TRIGGER insert_tb_t2_trigger
+'Q'	"CREATE TRIGGER insert_tb_t2_trigger AFTER INSERT ON tb_t1 FOR EACH ROW EXECUTE PROCEDURE insert_tb_t2_func()"
+'Y'
+
+# for test function -------------------------------------------------
+
+# Create test table tb_f
+'Q'	"DROP TABLE IF EXISTS tb_f"
+'Y'
+'Q'	"CREATE TABLE tb_f(f INT)"
+'Y'
+
+# Create test FUNCTION insert_tb_f_func
+'Q'	"DROP FUNCTION IF EXISTS insert_tb_f_func"
+'Y'
+'Q'	"CREATE FUNCTION insert_tb_f_func(integer) RETURNS void AS $$ INSERT INTO tb_f VALUES ($1); $$ LANGUAGE SQL"
+'Y'
+
+# for test view -------------------------------------------------
+
+# Create test table tb_t2
+'Q'	"DROP TABLE IF EXISTS tb_v CASCADE"
+'Y'
+'Q'	"CREATE TABLE tb_v(v INT)"
+'Y'
+
+# Create test view tb_v_view
+'Q'	"DROP VIEW IF EXISTS tb_v_view"
+'Y'
+'Q'	"CREATE VIEW tb_v_view AS SELECT * FROM tb_v"
+'Y'
+
+# start test -------------------------------------------------
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S1"	"SELECT * FROM tb_dml_insert"	0
+'P'	"S_SELECT_1"	"SELECT 1"	0
+
+# Issue INSERT
+'P'	""	"INSERT INTO tb_dml_insert VALUES(1)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S2"	"SELECT * FROM tb_dml_update"	0
+
+# Issue UPDATE
+'P'	""	"UPDATE tb_dml_update SET a = 2"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S2"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S3"	"SELECT * FROM tb_dml_delete"	0
+
+# Issue DELETE
+'P'	""	"DELETE FROM tb_dml_delete"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S3"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S4"	"SELECT * FROM tb_t2"	0
+
+# Issue INSERT
+'P'	""	"INSERT INTO tb_t1 VALUES(1)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S4"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S5"	"SELECT * FROM tb_f"	0
+
+# Issue SELECT FUNCTION
+'P'	""	"SELECT insert_tb_f_func(6)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S5"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to standby node.
+'P'	"S6"	"SELECT * FROM tb_v_view"	0
+
+# Issue INSERT
+'P'	""	"INSERT INTO tb_v VALUES(8)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to Primary node.
+'B'	""	"S6"	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S_SELECT_1"	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+'X'

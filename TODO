@@ -1,0 +1,103 @@
+$Header$
+
+* General
+
+- Reset application name to "pgpool" when client disconnects(3.1. why
+  not use set command?) -> Done.
+  - Use reset_query_list to reset to "pgpool" for client disconnection
+  - Reset to client specified application name when reusing existing
+    connection.
+
+- Allow to call pcp commands/show commands as a stored procedures of
+  PostgreSQL(3.1 SRAOSS)
+
+- Allow client encoding conversion. This was possible in pgpool-I
+
+- Avoid cross pgpool process deadlock situation. This is a long
+  standing problem since pgpool-II was born (pgpool-I avoids this by
+  setting timeout)
+
+- If DISCARD ALL is specified in the reset_query_list and transaction
+  is not closed when client disconnects, automatically issue ABORT
+  before issuing DISCARD ALL
+
+- Allow to specify queries issued when starting sessions
+
+- Audit functionality?
+
+- Make accept queue
+
+- Graceful attaching a node
+
+* Query handling
+
+- Allow multi statement
+
+- Enhance DROP DATABASE handling (not disconnect all idle connections)
+
+* Replication
+
+- Allow per table replication
+
+- Allow per session level and query level load balancing
+
+- More reliable way to replicate SEQUENCES
+
+- Allow to replicate OIDs, XIDs
+
+* Master/slave mode
+
+- Allow to use more than 1 standbys(3.1)
+
+* On line recovery
+
+* Query cache
+
+- Cache invalidation
+
+- More efficient cache (memcache?)
+
+* Log
+
+- Multiple log levels(3.1, but low priority)
+
+- Multiple log destinations(3.1, but low priority)
+
+* Parallel query
+
+- Performance enhance for more complex queries
+
+- Allow to handle transaction
+
+- Allow to handle extended queries
+
+- process alias in FROM clause
+
+db=# select * from data1 as d1 inner join data2 as d2 on d1.id=d2.id;
+ERROR:  sql error
+DETAIL:  ERROR:  missing FROM-clause entry for table "d1"
+LINE 1: SELECT pool_parallel("SELECT d1.id, d1.aaaa, d1.bbbb...
+               ^
+2008-03-11 10:28:17 LOG:   pid 6186: statement: SELECT pool_parallel("SELECT d1.id, d1.aaaa, d1.bbbb, a.cccc FROM data1")
+
+- process USING clause in JOIN
+
+* pgpoolAdmin
+
+- Allow to use double quotation in reset_query_list
+
+- German messages
+
+- Allow to run pgpoolAdmin on a host different from a host which
+  pgpool-II is running on(3.2?)
+
+- Allow to stop PostgreSQL from pgpoolAdmin to make the on-line
+  recovery more convenient(pgpool_stop()?)
+
+* Docs
+
+- Write libpcp API docs
+
+- French documentations(3.1)
+
+- German documentations(3.1)

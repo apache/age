@@ -1,0 +1,62 @@
+#! /usr/bin/env ruby
+
+# $Header$
+
+#
+# Usage¡§./run-test schedule
+#         ignore a line at the beginning of '#'
+#
+
+INPUT_DIRECTORY="input"
+EXPECTED_DIRECTORY="expected"
+RESULT_DIRECTORY="result"
+TEST_PROGRAM="./parser-test"
+DIFF_FILE="test.diff"
+
+if ARGV.size != 1
+  STDERR.puts "run-test schedule_file"
+  exit 1
+end
+
+file = ARGV.shift
+if !(File.exists? file)
+  STDERR.puts "run-test: file does not exist: #{file}"
+  exit 1
+end
+
+if !(File.exists? RESULT_DIRECTORY)
+  Dir.mkdir RESULT_DIRECTORY
+else
+  Dir["#{RESULT_DIRECTORY}/*.out"].each do |f|
+    File.unlink f
+  end
+end
+
+File.unlink DIFF_FILE if File.exists? DIFF_FILE
+
+begin
+  IO.foreach(file) do |testcase|
+    testcase.chomp!
+    if (/^\#/ =~ testcase or testcase == "")
+      next
+    end
+
+    print "testcase #{testcase}:\t"
+    begin
+      system("#{TEST_PROGRAM} < #{INPUT_DIRECTORY}/#{testcase}.sql > #{RESULT_DIRECTORY}/#{testcase}.out\n")
+
+      system("diff -c #{EXPECTED_DIRECTORY}/#{testcase}.out #{RESULT_DIRECTORY}/#{testcase}.out >> #{DIFF_FILE}")
+
+      if ($? == 0)
+        print "OK\n"
+      else
+        print "FAILED\n"
+      end
+    rescue
+      print "FAILED\n"
+    end
+  end
+
+rescue
+  STDERR.puts "NG"
+end 

@@ -1,0 +1,112 @@
+<!-- doc/src/sgml/pgpool-en.sgml -->
+
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook V4.2//EN" [
+
+<!ENTITY % version SYSTEM "version.sgml">
+%version;
+<!ENTITY % filelist SYSTEM "filelist.sgml">
+%filelist;
+
+<!ENTITY reference  SYSTEM "reference.sgml">
+
+]>
+
+<book id="Pgpool-II" lang="ja">
+
+ <!--
+ <title>pgpool-II &version; Documentation</title>
+ -->
+ <title>Pgpool-II &version; 文書</title>
+
+
+ <bookinfo>
+  <corpauthor>The Pgpool Global Development Group</corpauthor>
+  <productname>Pgpool-II</productname>
+  <productnumber>&version;</productnumber>
+  &legal;
+ </bookinfo>
+
+ &intro;
+
+ <part id="tutorial">
+  <!--
+  <title>Tutorial</title>
+  -->
+  <title>チュートリアル</title>
+
+  <partintro>
+   <para>
+    <!--
+    This chapter explains how to get start with <productname>Pgpool-II</productname>.
+    -->
+    この章では、<productname>Pgpool-II</productname>を使いはじめる方法を説明します。
+   </para>
+
+  </partintro>
+
+  &start;
+
+ </part>
+
+ <part id="admin">
+  <!--
+  <title>Server Administration</title>
+  -->
+  <title>サーバ管理</title>
+
+  <partintro>
+   <para>
+    <!--
+    This part covers topics that are of interest
+    to <productname>Pgpool-II</productname> administrators.
+    -->
+    ここでは<productname>Pgpool-II</productname>管理者にとって関心のある事項を扱います。
+   </para>
+  </partintro>
+
+  &installation;
+  &runtime;
+  &advanced;
+  &config;
+   &connection-settings;
+   &connection-pooling;
+   &loadbalance;
+   &healthcheck;
+   &failover;
+   &online-recovery;
+   &stream-check;
+   &memcache;
+   &ssl;
+   &watchdog;
+   &misc-config;
+   &config-last;
+  &client-auth;
+  &performance;
+ </part>
+
+ &examples;
+
+ &reference;
+
+ <part id="appendixes">
+  <!--
+  <title>Appendixes</title>
+  -->
+  <title>付録</title>
+
+  <partintro>
+   <para>
+    something...
+   </para>
+  </partintro>
+
+  &release;
+
+ </part>
+
+ &biblio;
+
+ <![%include-index;[&bookindex;]]>
+ <![%include-xslt-index;[<index id="bookindex"></index>]]>
+
+</book>

@@ -1,0 +1,190 @@
+<!--
+doc/src/sgml/ref/pg_md5.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PG-MD5">
+ <indexterm zone="pg-md5">
+  <primary>pg_md5</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pg_md5</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pg_md5</refname>
+  <refpurpose>
+   <!--
+   produces encrypted password in md5</refpurpose>
+   -->
+   md5 暗号化したパスワードを生成する</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pg_md5</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>-p</replaceable></arg>
+  </cmdsynopsis>
+  <cmdsynopsis>
+   <command>pg_md5</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>password</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PG-MD5-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pg_md5</command>
+   <!--
+   produces encrypted password in md5.
+   -->
+   md5 暗号化したパスワードを生成します。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-p</option></term>
+     <term><option>--prompt</option></term>
+     <listitem>
+      <para>
+       <!--
+       Prompt password using standard input.
+       -->
+       パスワードを引数に渡したくない場合は <command>pg_md5 -p</command> を実行すると標準入力からパスワードを読み込みます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-m</option></term>
+     <term><option>--md5auth</option></term>
+     <listitem>
+      <para>
+       <!--
+       Produce md5 authentication password.
+       -->
+       <filename>pool_passwd</filename> 認証ファイルに <literal>md5</literal> 認証パスワードを生成します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-u <replaceable class="parameter">your_username</replaceable></option></term>
+     <term><option>--username=<replaceable class="parameter">your_username</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       When producing a md5 authentication password, create the pool_passwd entry for <literal>your_username</literal>.
+       -->
+       md5 認証パスワードを生成する際、<filename>pool_passwd</filename> に <literal>your_username</literal> の md5 認証のエントリが登録されます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">config_file</replaceable></option></term>
+     <term><option>--config-file=<replaceable class="parameter">config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specify the path to the <literal>pgpool.conf</literal> configuration file.
+       -->
+       設定ファイル <literal>pgpool.conf</literal>へのパスを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-i <replaceable class="parameter">INPUT_FILE</replaceable></option></term>
+     <term><option>--input-file=<replaceable class="parameter">INPUT_FILE</replaceable></option></term>
+     <listitem>
+      <para>
+       ユーザ名とパスワードのペアを含むファイルを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>例</title>
+  <para>
+   <!--
+   The following are examples to encrypt your password into md5 hash format for <filename>pcp.conf</filename>.
+   -->
+   以下は <filename>pcp.conf</filename> に登録する <literal>md5</literal> 暗号化されたパスワードを生成する例です。
+   <programlisting>
+$ pg_md5 -p
+password: [your password]
+   </programlisting>
+  </para>
+  <para>
+   または
+  </para>
+  <programlisting>
+$ pg_md5 [your password]
+acbd18db4cc2f85cedef654fccc4a4d8
+  </programlisting>
+
+  <para>
+   <!--
+   <literal>pg_md5</literal> can also be used for adding an entry of user name and 
+   <literal>md5</literal> encrypted password to 
+   <filename>pool_passwd</filename> authentication file.
+   -->
+   また、<command>pg_md5</command> は、<xref linkend="guc-pool-passwd"> に
+    ユーザー名と<literal>md5</literal> 暗号化されたパスワードのエントリを生成するためにも使用できます。
+    <programlisting>
+$ pg_md5 -m -f /path/to/pgpool.conf -u username -p
+password: [your password]
+
+$ cat /path/to/pool_passwd 
+username:md55a231fcdb710d73268c4f44283487ba2
+    </programlisting>
+
+   パスワードの入力が促されたりコマンド引数の中でパスワードを指定するのを避けたい場合は<literal>pg_md5</literal>は名前:パスワードのペアをファイルから読むことができます。
+   すべてのユーザ名と暗号化されたパスワードが<xref linkend="guc-pool-passwd">認証ファイルに追加されます。
+    <programlisting>
+$ cat users.txt
+username1:secretpassword1
+username2:secretpassword2
+
+$ pg_md5 -m -f /path/to/pgpool.conf -i users.txt
+trying to read username:password pairs from file users.txt
+
+$ cat /path/to/pool_passwd
+username1:md533314126ba0b187df1e37f5ce6a489a8
+username2:md58ae92c6e1d6a48d80e2583fe715e2b36
+    </programlisting>
+
+    <xref linkend="guc-pool-passwd"> にエントリを登録せず、md5ハッシュされた文字列だけを表示させるには、引数としてパスワードとユーザ名を連結した文字列を渡します。
+     例として、パスワードに"password"、ユーザ名に"user"を渡す例を示します。
+     <programlisting>
+$ pg_md5 passworduser
+4d45974e13472b5a0be3533de4666414
+     </programlisting>
+     実際に<xref linkend="guc-pool-passwd">に登録するエントリは、先頭に"md5"を挿入してください。つまり、"md54d45974e13472b5a0be3533de4666414"となることに注意してください。
+  </para>
+ </refsect1>
+</refentry>

@@ -1,0 +1,109 @@
+<!--
+doc/src/sgml/ref/pcp_detach_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-DETACH-NODE">
+ <indexterm zone="pcp-detach-node">
+  <primary>pcp_detach_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_detach_node</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_detach_node</refname>
+  <refpurpose>
+   <!--
+   detaches the given node from Pgpool-II. Existing connections to Pgpool-II are forced to be disconnected.</refpurpose>
+   -->
+   <productname>Pgpool-II</productname> からノードを切り離す</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_detach_node</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+   <arg><replaceable>gracefully</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-DETACH-NODE-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pcp_detach_node</command> は <productname>Pgpool-II</productname> のノードを切り離します。
+   <xref linkend="guc-failover-command"> あるいは <xref linkend="guc-follow-primary-command">が指定されていれば、それらも実行されます。
+   すでに <productname>Pgpool-II</productname> に接続しているセッションは強制的に切断されます。
+  </para>
+  <para>
+   <command>pcp_detach_node</command>は単にノードを切り離すだけで、そのノードで背後で稼働しているバックエンドには触りません。
+   このコマンドは、管理者が<productname>PostgreSQL</productname>ノードを保守する際に有用です。
+   管理者は好きなだけそのバックエンドを停止したり起動できます。
+  </para>
+  <para>
+   切り離したノードは、バックエンドを停止した上で<xref linkend="pcp-recovery-node">で復帰させるのが安全ですが、レプリケーション遅延がない（もしくは後でレプリケーション遅延を回復できる）ことが確実で、ノードの役割(プライマリ/スタンバイ)の変更を伴わないことが確実なら、<xref linkend="pcp-attach-node">で復帰させることもできます。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node_id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       The index of backend node to detach.
+       -->
+       切り離すバックエンドノードのインデックスを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-g</option></term>
+     <term><option>--gracefully</option></term>
+     <listitem>
+      <para>
+       <!--
+       wait until all clients are disconnected (unless client_idle_limit_in_recovery is -1 or recovery_timeout is expired).
+       -->
+       すべてのクライアントが接続を終了するまで待機します。
+       （ただし、<xref linkend="guc-client-idle-limit-in-recovery"> が -1 あるいは、<xref linkend="guc-recovery-timeout"> が設定されている場合を除く）
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <!--
+     <term><option>Other options </option></term>
+     -->
+     <term><option>その他 </option></term>
+     <listitem>
+      <para>
+       <!--
+       See <xref linkend="pcp-common-options">.
+       -->
+       <xref linkend="pcp-common-options"> を参照してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

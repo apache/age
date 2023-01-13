@@ -1,0 +1,359 @@
+<!--
+    doc/src/sgml/ref/show_pool_pools.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-POOLS">
+ <indexterm zone="sql-show-pool-pools">
+  <primary>SHOW POOL_POOLS</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_POOLS</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_POOLS</refname>
+  <refpurpose>
+   <!--
+   sends back a list of pools handled
+   by <productname>Pgpool-II</productname>.
+   -->
+   <productname>Pgpool-II</productname> のコネクションプールの状態を表示する
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_POOLS
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+
+  <para>
+   <command>SHOW POOL_POOLS</command>
+   <!--
+   sends back a list of pools handled by <productname>Pgpool-II</productname>
+   -->
+   は <productname>Pgpool-II</productname> のコネクションプールの状態を表示します。
+  </para>
+  <para>
+   <!--
+   It has 17 columns:
+   -->
+   17のカラムがあります。
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_pid</literal> is the PID of the
+      displayed <productname>Pgpool-II</productname> process.
+      -->
+      <literal>pool_pid</literal> は <productname>Pgpool-II</productname> プロセスのプロセス ID です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>start_time</literal> is the timestamp of when
+      this process was launched.
+      -->
+      <literal>start_time</literal> はこのプロセスが起動された時刻です。
+      <itemizedlist>
+       <listitem>
+        <para>
+         <!--
+         If <xref linkend="guc-child-life-time"> is set not 0,
+         the time before process restarting is displayed.
+         -->
+         <xref linkend="guc-child-life-time"> が0でない場合
+         プロセスが再起動されるまでの時間が表示されます。
+        </para>
+       </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+     <!--
+      <literal>client_connection_count</literal> counts the number of times
+      this process has been used by clients.
+      -->
+      <literal>client_connection_count</literal> はこのプロセスが使用された回数です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_id</literal> is the pool identifier (should
+      be between 0 and <xref linkend="guc-max-pool"> - 1)
+      -->
+      <literal>pool_id</literal> はコネクションプール ID です。(0 から <xref linkend="guc-max-pool"> - 1 の値です)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>backend_id</literal> is the backend identifier (should
+      be between 0 and the number of configured backends minus one)
+      -->
+      <literal>backend_id</literal> は <productname>PostgreSQL</productname>
+      バックエンドの識別子です(0 からバックエンド数 - 1 の値です)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>database</literal> is the database name for this
+      process's pool id connection.
+      -->
+      <literal>database</literal> はこのプロセスが接続しているデータベース名です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>username</literal> is the user name for this
+      process's pool id connection.
+      -->
+      <literal>username</literal> はこのプロセスの接続で使用しているユーザ名です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>backend_connection_time</literal> is the creation time and
+      date of the connection.
+      -->
+      <literal>backend_connection_time</literal> はこの接続が作成された時刻です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>client_connection_time</literal> is the date when a client
+      last used this connection.
+      -->
+      <literal>client_connection_time</literal> は最後にクライアントが接続した時刻です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>client_disconnection_time</literal> is the date when a client
+      last disconnected from this connection.
+      -->
+      <literal>client_disconnection_time</literal> は最後にクライアントが切断した時刻です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>client_idle_duration</literal> is the time (sec) that a client
+      is in idle.
+      -->
+      <literal>client_idle_duration</literal> はクライアントからのコマンドを待機している時間(秒)です。
+     </para>
+      <itemizedlist>
+       <listitem>
+        <para>
+        <!--
+          If <xref linkend="guc-client-idle-limit"> is set not 0,
+          the time before client disconnected is displayed.
+        -->
+        <xref linkend="guc-client-idle-limit"> が0でない場合
+        クライアントが切断されるまでの時間が表示されます。
+        </para>
+       </listitem>
+      </itemizedlist>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>majorversion</literal>
+      and <literal>minorversion</literal> are the protocol
+      version numbers used in this connection.
+      -->
+      <literal>majorversion</literal> と <literal>minorversion</literal>
+      はこの接続で使用されているプロトコルバージョン番号です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_counter</literal> counts the number of times
+      this pool of connections (process) has been used by
+      clients.
+      -->
+      <literal>pool_counter</literal> はこの接続が使用された回数です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_backendpid</literal> is the PID of the
+      PostgreSQL process.
+      -->
+      <literal>pool_backendpid</literal> は <productname>PostgreSQL</productname>
+      のバックエンドプロセスのプロセス ID です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_connected</literal> is true (1) if a
+      frontend is currently using this backend.
+      -->
+      <literal>pool_connected</literal> は真偽値で、0 ならフロントエンドからの接続無し、1 なら接続ありを表します。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <literal>status</literal> is current status of this process. Possible values are:
+      -->
+      <literal>status</literal> は現在のプロセスの状態です。以下のいずれかの値を取ります:
+        <itemizedlist>
+          <listitem>
+            <para>
+              <!--
+              <literal>Execute command</literal>: Executing a command.
+              -->
+              <literal>Execute command</literal>: コマンドを実行中です。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Idle</literal>: The process is waiting for a new client command.
+              -->
+              <literal>Idle</literal>: クライアントからのコマンドを待機しています。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Idle in transaction</literal>: The process is waiting for a new client command
+              in a transaction.
+              -->
+              <literal>Idle in transaction</literal>: トランザクション中にクライアントからのコマンドを待機しています。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Wait for connection</literal>: The process is waiting for a new client connection.
+              -->
+              <literal>Wait for connection</literal>: クライアントからの接続を待機しています。
+            </para>
+          </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+
+   </itemizedlist>
+  </para>
+  <para>
+   <!--
+   It'll always return <xref linkend="guc-num-init-children"> * <xref linkend="guc-max-pool"> *
+   number_of_backends lines.  Here is an example session:
+   -->
+   返却行数は常に <xref linkend="guc-num-init-children"> * <xref linkend="guc-max-pool"> * 「バックエンドの数」になります。
+     ここでは例を示します。
+     <programlisting>
+test=# show pool_pools;
+ pool_pid |     start_time      | client_connection_count | pool_id | backend_id | database | username | backend_connection_time | client_connection_time | client_disconnection_time |         client_idle_duration         | majorversion | minorversion | pool_counter | pool_backendpid | pool_connected |       status
+----------+---------------------+-------------------------+---------+------------+----------+----------+-------------------------+------------------------+---------------------------+--------------------------------------+--------------+--------------+--------------+-----------------+----------------+---------------------
+ 32641    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32641    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32642    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32643    | 2021-09-28 04:40:45 | 0                       | 0       | 0          | test     | kawamoto | 2021-09-28 04:40:48     | 2021-09-28 04:40:48    |                           | 41 (4:19 before client disconnected) | 3            | 0            | 1            | 32660           | 1              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 0       | 1          | test     | kawamoto | 2021-09-28 04:40:48     | 2021-09-28 04:40:48    |                           | 41 (4:19 before client disconnected) | 3            | 0            | 1            | 32661           | 1              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32643    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Idle
+ 32644    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32644    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32645    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32646    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 0       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 0       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 1       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 1       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32647    | 2021-09-28 04:40:45 | 0                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Wait for connection
+ 32648    | 2021-09-28 04:40:45 | 1                       | 0       | 0          | test     | postgres | 2021-09-28 04:40:52     | 2021-09-28 04:40:52    | 2021-09-28 04:40:59       | 0                                    | 3            | 0            | 1            | 32681           | 0              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 0       | 1          | test     | postgres | 2021-09-28 04:40:52     | 2021-09-28 04:40:52    | 2021-09-28 04:40:59       | 0                                    | 3            | 0            | 1            | 32682           | 0              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 1       | 0          | test     | kawamoto | 2021-09-28 04:41:30     | 2021-09-28 04:41:30    |                           | 0 (5:00 before client disconnected)  | 3            | 0            | 1            | 32746           | 1              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 1       | 1          | test     | kawamoto | 2021-09-28 04:41:30     | 2021-09-28 04:41:30    |                           | 0 (5:00 before client disconnected)  | 3            | 0            | 1            | 32747           | 1              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 2       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 2       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 3       | 0          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Execute command
+ 32648    | 2021-09-28 04:40:45 | 1                       | 3       | 1          |          |          |                         |                        |                           | 0                                    | 0            | 0            | 0            | 0               | 0              | Execute command
+(64 rows)
+     </programlisting>
+
+  </para>
+ </refsect1>
+
+</refentry>

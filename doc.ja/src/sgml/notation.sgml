@@ -1,0 +1,51 @@
+<!-- doc/src/sgml/notation.sgml -->
+
+<sect1 id="notation">
+ <!--
+ <title>Conventions</title>
+ -->
+ <title>規約</title>
+
+ <para>
+  <!--
+  The following conventions are used in the synopsis of a command:
+  brackets (<literal>[</literal> and <literal>]</literal>) indicate
+  optional parts.  (In the synopsis of a Tcl command, question marks
+  (<literal>?</>) are used instead, as is usual in Tcl.)  Braces
+  (<literal>{</literal> and <literal>}</literal>) and vertical lines
+  (<literal>|</literal>) indicate that you must choose one
+  alternative.  Dots (<literal>...</>) mean that the preceding element
+  can be repeated.
+  -->
+  以下の規約はコマンドの概要に対して適用されます。
+  大括弧（<literal>[</literal>および<literal>]</literal>）はオプションである部分を示します。
+  （Tcl コマンドの概要では疑問符（<literal>?</>）をTclのしきたりとして代わりに使います。）
+  中括弧（<literal>{</literal>および<literal>}</literal>）そして縦線（<literal>|</literal>）はいずれか1つを選択しなければならないことを意味します。
+  点々（<literal>...</>）は前にある要素が繰り返されるという意味です。
+ </para>
+
+ <para>
+  <!--
+  Where it enhances the clarity, SQL commands are preceded by the
+  prompt <literal>=&gt;</>, and shell commands are preceded by the
+  prompt <literal>$</>.  Normally, prompts are not shown, though.
+  -->
+  明確性を強調する場面では、SQLコマンドの前には<literal>=&gt;</>を付け、シェルコマンドの前には<literal>$</>を付けます。
+  とは言っても通常プロンプトは示しません。
+ </para>
+
+ <para>
+  <!--
+  An <firstterm>administrator</firstterm> is generally a person who is
+  in charge of installing and running the server.  A <firstterm>user</firstterm>
+  could be anyone who is using, or wants to use, any part of the
+  <productname>Pgpool-II</productname> system.  These terms should not
+  be interpreted too narrowly; this book does not have fixed
+  presumptions about system administration procedures.
+  -->
+  一般的に<firstterm>管理者</firstterm>とは、サーバのインストールと運営の責にあたる人のことです。
+  <firstterm>ユーザ</firstterm>とは、<productname>Pgpool-II</productname>システムの一部でも活用したり、もしくはこれから使用する誰もがその対象です。
+  これらの用語は厳密に解釈されるものではありません。
+  本書はシステム管理の手順について特定の固定観念を想定していません。
+ </para>
+</sect1>

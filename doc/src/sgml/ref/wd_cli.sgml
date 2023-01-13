@@ -1,0 +1,284 @@
+<!--
+doc/src/sgml/ref/wd_cli.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="WD-CLI">
+ <indexterm zone="wd-cli">
+  <primary>wd_cli</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>wd_cli</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>wd_cli</refname>
+  <refpurpose>
+   Watchdog Command Line Interface (CLI) utility for the
+   external health-check system integration.
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>wd_cli</command>
+   <arg rep="repeat"><replaceable>operation</replaceable></arg>
+   <arg rep="repeat"><replaceable>node search option</replaceable></arg>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-WD-CLI-1">
+  <title>Description</title>
+  <para>
+   <command>wd_cli</command>
+   Provides a convenient and easy to use interface to interact with
+   watchdog and perform health check related node operations.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Operations</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-i</option></term>
+     <term><option>--info</option></term>
+     <listitem>
+      <para>
+       Get the node status for node(s) based on node search criteria
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-I <replaceable class="parameter">NEW_STATUS</replaceable></option></term>
+     <term><option>--inform=<replaceable class="parameter">NEW_STATUS</replaceable></option></term>
+     <listitem>
+      <para>
+       Update the watchdog node status.
+	   Allowed values are <literal>DEAD</literal> and <literal>ALIVE</literal>
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Node Search Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-a </option></term>
+     <term><option>--all</option></term>
+     <listitem>
+      <para>
+       Select all nodes (only available with <literal>--info</literal> operation)
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">WATCHDOG_NODE_ID</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">WATCHDOG_NODE_ID</replaceable></option></term>
+     <listitem>
+      <para>
+       Select watchdog node by node_id.
+      </para>
+     </listitem>
+    </varlistentry>
+
+	<varlistentry>
+     <term><option>-N <replaceable class="parameter">NODE_NAME</replaceable></option></term>
+     <term><option>--node-name=<replaceable class="parameter">NODE_NAME</replaceable></option></term>
+     <listitem>
+      <para>
+       Select watchdog node by name.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-H <replaceable class="parameter">HOSTNAME</replaceable></option></term>
+     <term><option>--node-host=<replaceable class="parameter">HOSTNAME</replaceable></option></term>
+     <listitem>
+      <para>
+       Select watchdog node by hostname.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-P <replaceable class="parameter">PORT_NO</replaceable></option></term>
+     <term><option>--node-port=<replaceable class="parameter">PORT_NO</replaceable></option></term>
+     <listitem>
+      <para>
+       Select watchdog node by port number.
+      </para>
+     </listitem>
+    </varlistentry>
+
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-k <replaceable class="parameter">KEY</replaceable></option></term>
+     <term><option>--auth-key=<replaceable class="parameter">KEY</replaceable></option></term>
+     <listitem>
+      <para>
+       Watchdog auth key.
+       Specifying auth-key over rides the <literal>pgpool.conf->wd_authkey</literal> value.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">CONFIG_FILE</replaceable></option></term>
+     <term><option>--config-file=<replaceable class="parameter">CONFIG_FILE</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the <literal>pgpool.conf</literal> file.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s <replaceable class="parameter">SOCKET_DIR</replaceable></option></term>
+     <term><option>--socket-dir=<replaceable class="parameter">SOCKET_DIR</replaceable></option></term>
+     <listitem>
+      <para>
+       Path to the watchdog IPC socket directory.
+       Specifying socket-dir over rides the <literal>pgpool.conf->wd_ipc_socket_dir</literal> value.
+      </para>
+     </listitem>
+    </varlistentry>
+
+	<varlistentry>
+     <term><option>-p <replaceable class="parameter">PORT_NO</replaceable></option></term>
+     <term><option>--ipc-port=<replaceable class="parameter">PORT_NO</replaceable></option></term>
+     <listitem>
+      <para>
+       Port number of watchdog IPC socket.
+       Specifying ipc-port over rides the <literal>pgpool.conf->wd_port</literal> value.
+      </para>
+     </listitem>
+    </varlistentry>
+
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">message_string</replaceable></option></term>
+     <term><option>--message=<replaceable class="parameter">message_string</replaceable></option></term>
+     <listitem>
+      <para>
+       Optional message string to be passed to <productname>Pgpool-II</productname> along with the node status.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-v</option></term>
+     <term><option>--verbose</option></term>
+     <listitem>
+      <para>
+       Enable verbose messages.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-V</option></term>
+     <term><option>--version</option></term>
+     <listitem>
+      <para>
+       Prints version information.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <term><option>--debug</option></term>
+     <listitem>
+      <para>
+       Enable debug output.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-h</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       Prints the help for <literal>wd_cli</literal>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   When some external health-check system is configured
+   to monitor the health of <productname>Pgpool-II</productname> cluster
+   and it detects a node failure. <literal>wd_cli</literal> utility can
+   be used to pass this information to <productname>Pgpool-II</productname>
+   cluster so that it can take the appropriate actions.
+
+   <programlisting>
+    #inform Pgpool-II about node named RN-110 failure
+    wd_cli --inform DEAD -N 'RN-110' -p 9001 -m 'Pgpool node with name RN-110 is not reachable'
+   </programlisting>
+   <programlisting>
+    #inform Pgpool-II about node-id 10 failure
+    wd_cli --inform DEAD -n 10 -m 'Pgpool node with ID 10 is not responding'
+   </programlisting>
+   Similarly to inform Pgpool-II about the node is alive again.
+   <programlisting>
+    #inform Pgpool-II about node-id 10 re-joining
+    wd_cli --inform ALIVE -n 10 -m 'Pgpool node with ID 10 is reachable again'
+   </programlisting>
+
+    wd_cli can also be used to get the current status of cluster nodes.
+   <programlisting>
+    wd_cli -f simple_conf/watchdog/pgpool_wd1.conf --info -v --all
+
+	Total Watchdog nodes configured for lifecheck:  2
+	*****************
+	Node ID:           0
+	Node Status code   4
+	Node Status:       LEADER
+	Node Name:         localhost:9991 Linux localhost.localdomain
+	Node Host:         localhost
+	Node WD Port:      9001
+	Node Pgpool Port:  9991
+
+	Node ID:           1
+	Node Status code   7
+	Node Status:       STANDBY
+	Node Name:         localhost:9992 Linux localhost.localdomain
+	Node Host:         localhost
+	Node WD Port:      9002
+	Node Pgpool Port:  9992
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

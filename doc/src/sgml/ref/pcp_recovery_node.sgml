@@ -1,0 +1,68 @@
+<!--
+doc/src/sgml/ref/pcp_recovery_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-RECOVERY-NODE">
+ <indexterm zone="pcp-recovery-node">
+  <primary>pcp_recovery_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_recovery_node</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_recovery_node</refname>
+  <refpurpose>
+   attaches the given backend node with recovery</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_recovery_node</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-RECOVERY-NODE-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_recovery_node</command>
+   attaches the given backend node with recovery.
+   See <xref linkend="runtime-online-recovery"> to set up necessary parameters of pgpool.conf.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       The index of backend node.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

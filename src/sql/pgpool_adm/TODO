@@ -1,0 +1,7 @@
+* pcp_proc_count
+* pcp_proc_info
+* pcp_promote_node
+* pcp_recovery_node
+* pcp_stop_pgpool
+* pcp_systemdb_info
+* anything else ?

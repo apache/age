@@ -1,0 +1,98 @@
+*** src/sample/pgpool.conf.sample	2022-02-10 12:49:15.079700949 +0900
+--- pgpool.conf.sample	2022-02-22 11:05:17.073517397 +0900
+***************
+*** 186,192 ****
+  
+  # - Where to log -
+  
+! #log_destination = 'stderr'
+                                     # Where to log
+                                     # Valid values are combinations of stderr,
+                                     # and syslog. Default to stderr.
+--- 186,192 ----
+  
+  # - Where to log -
+  
+! log_destination = 'stderr'
+                                     # Where to log
+                                     # Valid values are combinations of stderr,
+                                     # and syslog. Default to stderr.
+***************
+*** 252,268 ****
+                                          #   panic
+  
+  # This is used when logging to stderr:
+! #logging_collector = off
+                                          # Enable capturing of stderr
+                                          # into log files.
+                                          # (change requires restart)
+  
+  # -- Only used if logging_collector is on ---
+  
+! #log_directory = '/tmp/pgpool_logs'
+                                          # directory where log files are written,
+                                          # can be absolute
+! #log_filename = 'pgpool-%Y-%m-%d_%H%M%S.log'
+                                          # log file name pattern,
+                                          # can include strftime() escapes
+  
+--- 252,268 ----
+                                          #   panic
+  
+  # This is used when logging to stderr:
+! logging_collector = on
+                                          # Enable capturing of stderr
+                                          # into log files.
+                                          # (change requires restart)
+  
+  # -- Only used if logging_collector is on ---
+  
+! log_directory = '/var/log/pgpool_log'
+                                          # directory where log files are written,
+                                          # can be absolute
+! log_filename = 'pgpool-%a.log'
+                                          # log file name pattern,
+                                          # can include strftime() escapes
+  
+***************
+*** 270,276 ****
+                                          # creation mode for log files,
+                                          # begin with 0 to use octal notation
+  
+! #log_truncate_on_rotation = off
+                                          # If on, an existing log file with the
+                                          # same name as the new log file will be
+                                          # truncated rather than appended to.
+--- 270,276 ----
+                                          # creation mode for log files,
+                                          # begin with 0 to use octal notation
+  
+! log_truncate_on_rotation = on
+                                          # If on, an existing log file with the
+                                          # same name as the new log file will be
+                                          # truncated rather than appended to.
+***************
+*** 280,290 ****
+                                          # off, meaning append to existing files
+                                          # in all cases.
+  
+! #log_rotation_age = 1d
+                                          # Automatic rotation of logfiles will
+                                          # happen after that (minutes)time.
+                                          # 0 disables time based rotation.
+! #log_rotation_size = 10MB
+                                          # Automatic rotation of logfiles will
+                                          # happen after that much (KB) log output.
+                                          # 0 disables size based rotation.
+--- 280,290 ----
+                                          # off, meaning append to existing files
+                                          # in all cases.
+  
+! log_rotation_age = 1d
+                                          # Automatic rotation of logfiles will
+                                          # happen after that (minutes)time.
+                                          # 0 disables time based rotation.
+! log_rotation_size = 0 
+                                          # Automatic rotation of logfiles will
+                                          # happen after that much (KB) log output.
+                                          # 0 disables size based rotation.

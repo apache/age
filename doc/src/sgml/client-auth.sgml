@@ -1,0 +1,1241 @@
+<!-- doc/src/sgml/client-auth.sgml -->
+
+<chapter id="client-authentication">
+ <title>Client Authentication</title>
+
+ <indexterm zone="client-authentication">
+  <primary>client authentication</primary>
+ </indexterm>
+
+ <para>
+  Since <productname>Pgpool-II</productname> is a middleware that works between
+  <productname>PostgreSQL</productname> servers and
+  a <productname>PostgreSQL</productname> database client, so when a
+  client application connects to
+  the <productname>Pgpool-II</productname>, <productname>Pgpool-II</productname>
+  in turn connects to the <productname>PostgreSQL</productname> servers
+  using the same credentials to serve the incoming client
+  connection. Thus, all the access privileges and restrictions defined
+  for the user in <productname>PostgreSQL</productname> gets
+  automatically applied to all <productname>Pgpool-II</productname>
+  clients, with an exceptions of the authentications
+  on <productname>PostgreSQL</productname> side that depends on the
+  client's IP addresses or host names.  Reason being the connections
+  to the <productname>PostgreSQL</productname> server are made
+  by <productname>Pgpool-II</productname> on behalf of the connecting
+  clients and <productname>PostgreSQL</productname> server can only
+  see the IP address of the
+  <productname>Pgpool-II</productname> server and not that of the actual client.
+  Therefore, for the client host based authentications <productname>Pgpool-II</productname> has the
+  <literal>pool_hba</literal> mechanism similar to the <literal>pg_hba</literal> mechanism for
+  authenticating the incoming client connections.
+ </para>
+
+ <sect1 id="auth-pool-hba-conf">
+  <title>The <filename>pool_hba.conf</filename> File</title>
+
+  <indexterm zone="auth-pool-hba-conf">
+   <primary>pool_hba.conf</primary>
+  </indexterm>
+
+  <para>
+   Just like the <filename>pg_hba.conf</filename> file for <productname>PostgreSQL</productname>,
+   <productname>Pgpool-II</productname> supports a similar client authentication
+   function using a configuration file called <filename>pool_hba.conf</filename>.
+   If <productname>Pgpool-II</productname> is installed from source code, it also includes the sample
+   <filename>pool_hba.conf.sample</filename> file in the default
+   configuration directory (<literal>"/usr/local/etc"</literal>).
+   By default, pool_hba authentication is disabled, and
+   setting <varname>enable_pool_hba</varname>
+   to <literal>on</literal> enables it. see
+   the <xref linkend="guc-enable-pool-hba"> configuration
+    parameter.
+  </para>
+
+  <note>
+   <para>
+    If number of <productname>PostgreSQL</productname> servers is
+    only one, or when running in raw mode
+    (see <xref linkend="running-mode">),
+     <filename>pool_hba.conf</filename> is not necessary
+     thus <varname>enable_pool_hba</varname> may be being set to off.
+     In this case the client authentication method is completely
+     managed by <productname>PostgreSQL</productname>. Also number
+     of <productname>PostgreSQL</productname> servers is more than
+     one, or not running in raw
+     mode, <varname>enable_pool_hba</varname> may be being set to off
+     as long as the authentication method defined
+     by <productname>PostgreSQL</productname>
+     is <literal>trust</literal>.
+   </para>
+  </note>
+
+  <para>
+   The format of the <filename>pool_hba.conf</filename> file
+   follows very
+   closely <productname>PostgreSQL</productname>'s <filename>pg_hba.conf</filename>
+   format.
+  </para>
+  <para>
+   The general format of the <filename>pool_hba.conf</filename> file is
+   a set of records, one per line. Blank lines are ignored, as is any
+   text after the <literal>#</literal> comment character.
+   Records cannot be continued across lines.
+   A record is made
+   up of a number of fields which are separated by spaces and/or tabs.
+   Fields can contain white space if the field value is double-quoted.
+   Quoting one of the keywords in a database, user, or address field (e.g.,
+   <literal>all</literal> or <literal>replication</literal>) makes
+   the word lose its special meaning, and just match a database, user, or
+   host with that name.
+  </para>
+
+  <para>
+   Each record specifies a connection type, a client IP address
+   range (if relevant for the connection type), a database name, a
+   user name, and the authentication method to be used for
+   connections matching these parameters. The first record with a
+   matching connection type, client address, requested database,
+   and user name is used to perform authentication. There is
+   no <quote>fall-through</quote> or
+   <quote>backup</quote>: if one record is chosen and the authentication
+   fails, subsequent records are not considered. If no record matches,
+   access is denied.
+  </para>
+
+  <para>
+   A record can have one of the following formats
+   <synopsis>
+    local      <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+
+    host       <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostssl    <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostnossl  <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>IP-address</replaceable> <replaceable>IP-mask</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+
+    host       <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostssl    <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+    hostnossl  <replaceable>database</replaceable>  <replaceable>user</replaceable>  <replaceable>address</replaceable>  <replaceable>auth-method</replaceable>  <optional><replaceable>auth-options</replaceable></optional>
+   </synopsis>
+   The meaning of the fields is as follows:
+
+   <variablelist>
+    <varlistentry>
+     <term><literal>local</literal></term>
+     <listitem>
+      <para>
+       This record matches connection attempts using Unix-domain
+       sockets.  Without a record of this type, Unix-domain socket
+       connections are disallowed.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>host</literal></term>
+     <listitem>
+      <para>
+       This record matches connection attempts made using TCP/IP.
+       <literal>host</literal> records match either
+       <acronym>SSL</acronym> or non-<acronym>SSL</acronym> connection
+       attempts.
+      </para>
+      <note>
+       <para>
+	Remote TCP/IP connections will not be possible unless
+	the server is started with an appropriate value for the
+	<xref linkend="guc-listen-addresses"> configuration parameter,
+	 since the default behavior is to listen for TCP/IP connections
+	 only on the local loopback address <literal>localhost</literal>.
+       </para>
+      </note>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>hostssl</literal></term>
+     <listitem>
+      <para>
+       This record matches connection attempts made using TCP/IP, but only
+       when the connection is made with <acronym>SSL</acronym> encryption.
+      </para>
+      <para>
+       To make use of this option the <productname>Pgpool-II</productname> must be
+       built with SSL support. Furthermore, SSL must be enabled by setting the <xref linkend="guc-ssl">
+	configuration parameter. Otherwise, the hostssl record is ignored.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><literal>hostnossl</literal></term>
+     <listitem>
+      <para>
+       This record type has the opposite behavior of hostssl; it only matches connection
+       attempts made over TCP/IP that do not use <acronym>SSL</acronym>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>database</replaceable></term>
+     <listitem>
+      <para>
+       Specifies which database name(s) this record matches.  The value
+       <literal>all</literal> specifies that it matches all databases.
+       <note>
+	<para>
+	 <literal>"samegroup"</literal> for database field is not supported:
+	</para>
+	<para>
+	 Since <productname>Pgpool-II</productname> does not know anything about
+	 users in the <productname>PostgreSQL</productname> backend server, the database name is simply
+	 compared against the entries in the database field of <filename>pool_hba.conf</filename>.
+	</para>
+       </note>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>user</replaceable></term>
+     <listitem>
+      <para>
+       Specifies which database user name(s) this record
+       matches. The value <literal>all</literal> specifies that it
+       matches all users.  Otherwise, this is the name of a specific
+       database user
+       <note>
+	<para>
+	 group names following <literal>"+"</literal> for user field is not supported:
+	</para>
+	<para>
+	 This is for the same reason as for the <literal>"samegroup"</literal> of database field.
+	 A user name is simply checked against the entries in the user field of
+	 <filename>pool_hba.conf</filename>.
+	</para>
+       </note>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>address</replaceable></term>
+     <listitem>
+      <para>
+       Specifies the client machine address(es) that this record matches.
+       This field can contain either a host name, an IP address range,
+       or one of the special key words mentioned below.
+      </para>
+
+      <para>
+       An IP address range is specified using standard numeric notation for
+       the range's starting address, then a slash (<literal>/</literal>)
+       and a <acronym>CIDR</acronym> mask length.
+       The mask length indicates the number of high-order bits of the client
+       IP address that must match. Bits to the right of this should be zero
+       in the given IP address. There must not be any white space between the
+       IP address, the <literal>/</literal>, and the CIDR mask length.
+      </para>
+
+      <para>
+       Typical examples of an IPv4 address range specified this way are
+       <literal>172.20.143.89/32</literal> for a single host, or
+       <literal>172.20.143.0/24</literal> for a small network, or
+       <literal>10.6.0.0/16</literal> for a larger one.
+       An IPv6 address range might look like <literal>::1/128</literal> for
+       a single host (in this case the IPv6 loopback address) or
+       <literal>fe80::7a31:c1ff:0000:0000/96</literal> for a small network.
+       <literal>0.0.0.0/0</literal> represents all IPv4 addresses, and
+       <literal>::0/0</literal> represents all IPv6 addresses. To specify a
+       single host, use a mask length of 32 for IPv4 or 128 for IPv6.
+       In a network address, do not omit trailing zeroes.
+      </para>
+
+      <para>
+       An entry given in IPv4 format will match only IPv4 connections, and
+       an entry given in IPv6 format will match only IPv6 connections, even
+       if the represented address is in the IPv4-in-IPv6 range.
+       Note that entries in IPv6 format will be rejected if the system's C
+       library does not have support for IPv6 addresses.
+      </para>
+
+      <para>
+       You can also write <literal>all</literal> to match any IP address, 
+       <literal>samehost</literal> to match any
+       of the server's own IP addresses, or samenet to match any address in
+       any <literal>subnet</literal> that the server is directly connected to.
+      </para>
+
+      <para>
+       If a host name is specified (anything that is not an IP address range or
+       a special key word is treated as a host name), that name is compared with
+       the result of a reverse name resolution of the client's IP address
+       (e.g., reverse DNS lookup, if DNS is used). Host name comparisons are
+       case insensitive. If there is a match, then a forward name resolution
+       (e.g., forward DNS lookup) is performed on the host name to check whether
+       any of the addresses it resolves to are equal to the client's IP address.
+       If both directions match, then the entry is considered to match.
+       (The host name that is used in <filename>pool_hba.conf</filename> should be the one that
+       address-to-name resolution of the client's IP address returns, otherwise
+       the line won't be matched. Some host name databases allow associating an
+       IP address with multiple host names, but the operating system will only
+       return one host name when asked to resolve an IP address.)
+      </para>
+
+      <para>
+       A host name specification that starts with a dot (<literal>.</literal>) matches 
+       a suffix of the actual host name. So <literal>.example.com</literal> would match
+       <literal>foo.example.com</literal> (but not just <literal>example.com</literal>).
+      </para>
+
+      <para>
+       When host names are specified in <filename>pool_hba.conf</filename>, you should
+       make sure that name resolution is reasonably fast. It can be of advantage to
+       set up a local name resolution cache such as <acronym>nscd</acronym>.
+      </para>
+
+      <para>
+       This field only applies to host, hostssl, and hostnossl records.
+      </para>
+      <para>
+       Specifying the host name in address field is not supported prior to
+       <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>IP-address</replaceable></term>
+     <term><replaceable>IP-mask</replaceable></term>
+     <listitem>
+      <para>
+       These two fields can be used as an alternative to the 
+       <replaceable>IP-address</replaceable><literal>/</literal>
+       <replaceable>mask-length</replaceable> notation.
+       Instead of specifying the mask length, the actual mask
+       is specified in a separate column.  For
+       example, <literal>255.0.0.0</literal> represents an
+       IPv4 <acronym>CIDR</acronym> mask length
+       of <literal>8</literal>,
+       and <literal>255.255.255.255</literal> represents a
+       <acronym>CIDR</acronym> mask length of 32.
+      </para>
+
+      <para>
+       This field only applies to host, hostssl, and hostnossl records.
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>auth-method</replaceable></term>
+     <listitem>
+      <para>
+       Specifies the authentication method to use when a connection matches
+       this record. The possible choices are summarized here; details
+       are in <xref linkend="auth-methods">.
+
+	<variablelist>
+	 <varlistentry>
+	  <term><literal>trust</literal></term>
+	  <listitem>
+	   <para>
+	    Allow the connection unconditionally. This method
+	    allows anyone that can connect to the
+	    <productname>Pgpool-II</productname>.
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>reject</literal></term>
+	  <listitem>
+	   <para>
+	    Reject the connection unconditionally. This is useful for
+	    <quote>filtering out</quote> certain hosts, for example a
+	    <literal>reject</literal> line could block a specific
+	    host from connecting.
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>md5</literal></term>
+	  <listitem>
+	   <para>
+	    Require the client to supply a double-MD5-hashed password for
+	    authentication.
+
+	    <note>
+	     <para>
+	      To use <literal>md5</literal>
+	      authentication, you need to register the
+	      user name and password
+	      in <xref linkend="guc-pool-passwd"> file.
+	       See <xref linkend="auth-md5"> for more
+		details.  If you don't want to manage
+		password by
+		using <filename>pool_passwd</filename>,
+		you could
+		use <xref linkend="guc-allow-clear-text-frontend-auth">.
+	     </para>
+	    </note>
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>scram-sha-256</literal></term>
+	  <listitem>
+	   <para>
+	    Perform SCRAM-SHA-256 authentication to verify the user's password.
+	    <note>
+	     <para>
+	      To use <literal>scram-sha-256</literal>
+	      authentication, you need to register the
+	      user name and password
+	      in <xref linkend="guc-pool-passwd"> file.
+	       See <xref linkend="auth-scram"> for more
+		details.  If you don't want to manage
+		password by
+		using <filename>pool_passwd</filename>,
+		you could
+		use <xref linkend="guc-allow-clear-text-frontend-auth">.
+	     </para>
+	    </note>
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>cert</literal></term>
+	  <listitem>
+	   <para>
+	    Authenticate using SSL client certificates.
+	    See <xref linkend="auth-cert"> for more details.
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+	 <varlistentry>
+	  <term><literal>pam</literal></term>
+	  <listitem>
+	   <para>
+	    Authenticate using the Pluggable Authentication Modules
+	    (PAM) service provided by the operating system.
+	    See <xref linkend="auth-pam"> for details.
+	   </para>
+	   <para>
+	    PAM authentication is supported using user information on the host
+	    where <productname>Pgpool-II</productname> is running.
+	    To enable PAM support the <productname>Pgpool-II</productname>
+	    must be configured with <command>"--with-pam"</command>
+	   </para>
+	   <para>
+	    To enable PAM authentication, you must create a
+	    service-configuration file
+	    for <productname>Pgpool-II</productname> in the system's PAM
+	    configuration directory (that is usually located
+	    at <literal>"/etc/pam.d"</literal>).  A sample
+	    service-configuration file is also installed
+	    as <literal>"share/pgpool.pam"</literal> under the install
+	    directory.
+	   </para>
+	  </listitem>
+	 </varlistentry>
+
+     <varlistentry>
+      <term><literal>ldap</literal></term>
+      <listitem>
+       <para>
+	    Authenticate using LDAP server.
+	    See <xref linkend="auth-ldap"> for more details.
+       </para>
+       <para>
+	    To enable LDAP support the <productname>Pgpool-II</productname>
+	    must be configured with <command>"&#045;&#045;with-ldap"</command>
+       </para>
+      </listitem>
+     </varlistentry>
+	</variablelist>
+   </para>
+  </listitem>
+ </varlistentry>
+
+    <varlistentry>
+     <term><replaceable>auth-options</replaceable></term>
+     <listitem>
+      <para>
+       After the <replaceable>auth-method</replaceable> field,
+       there can be field(s) of the
+       form <replaceable>name</replaceable><literal>=</literal>
+       <replaceable>value</replaceable>
+       that specify options for the authentication method.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+
+  <para>
+   Since the <filename>pool_hba.conf</filename> records are examined
+   sequentially for each connection attempt, the order of the records
+   is significant. Typically, earlier records will have tight
+   connection match parameters and weaker authentication methods, while
+   later records will have looser match parameters and stronger
+   authentication methods. For example, one might wish to
+   use <literal>trust</literal> authentication for local TCP/IP
+   connections but require a password for remote TCP/IP connections. In
+   this case a record specifying
+   <literal>trust</literal> authentication for connections from 127.0.0.1 would
+   appear before a record specifying password authentication for a wider
+   range of allowed client IP addresses.
+  </para>
+
+  <tip>
+   <para>
+    All pool_hba authentication options described in this section are
+    about the authentication taking place between a client and the
+    <productname>Pgpool-II</productname>.  A client still has to go
+    through the <productname>PostgreSQL</productname>'s authentication
+    process and must have the <literal>CONNECT</literal> privilege for
+    the database on the backend <productname>PostgreSQL</productname>
+    server.
+   </para>
+   <para>
+    As far as pool_hba is concerned, it does not matter if a user name
+    and/or database name given by a client
+    (i.e. <command>psql -U testuser testdb</command>)
+    really exists in the backend. pool_hba only cares if a match in the
+    <filename>pool_hba.conf</filename> can be found or not.
+   </para>
+  </tip>
+
+  <para>
+   Some examples of <filename>pool_hba.conf</filename> entries.
+   See the next section for details on the different authentication methods.
+  </para>
+
+  <example id="example-pg-hba.conf">
+   <title>Example <filename>pool_hba.conf</filename> Entries</title>
+   <programlisting>
+    # Allow any user on the local system to connect to any database with
+    # any database user name using Unix-domain sockets (the default for local
+    # connections).
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+
+    # The same using local loopback TCP/IP connections.
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    host    all             all             127.0.0.1/32            trust
+
+    # Allow any user from host 192.168.12.10 to connect to database
+    # "postgres" if the user's password is correctly supplied.
+    #
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    host    postgres        all             192.168.12.10/32        md5
+   </programlisting>
+  </example>
+ </sect1>
+
+ <sect1 id="auth-methods">
+  <title>Authentication Methods</title>
+  <para>
+   The following subsections describe the authentication methods in more detail.
+  </para>
+
+  <sect2 id="auth-trust">
+   <title>Trust Authentication</title>
+
+   <para>
+    When <literal>trust</literal> authentication is specified,
+    <productname>Pgpool-II</productname> assumes that anyone who can
+    connect to the server is authorized to access connect with
+    whatever database user name they specify.
+   </para>
+  </sect2>
+
+  <sect2 id="auth-password">
+   <title>Clear Text Password Authentication</title>
+
+   <para>
+    The method <literal>password</literal> sends the password in
+    clear-text and is therefore vulnerable to password
+    <quote>sniffing</quote> attacks. It should always be avoided if
+    possible. If the connection is protected by SSL encryption then
+    <literal>password</literal> can be used safely, though. For this
+    sake, it is recommended to use <literal>hostssl</literal> in
+    <filename>pool_hba.conf</filename> so that clients are enforced to
+    use SSL encryption.
+   </para>
+   <para>
+    A benefit to use the method is, the password for authentication is
+    provided by client side and <filename>pool_passwd</filename> is
+    not consulted. So you can avoid maintaining
+    <filename>pool_passwd</filename> file.
+   </para>
+   <para>
+    You can avoid maintaining <filename>pool_passwd</filename> by
+    using <xref linkend="guc-allow-clear-text-frontend-auth"> as well
+    but it does not enforce to use SSL encryption because
+    <filename>pool_hba.conf</filename> cannot be used with the
+    parameter.
+   </para>
+  </sect2>
+
+  <sect2 id="auth-md5">
+   <title>MD5 Password Authentication</title>
+
+   <indexterm>
+    <primary>MD5</primary>
+   </indexterm>
+
+   <para>
+    This authentication method is the password-based authentication
+    methods in which MD-5-hashed password is sent by client.
+    Since <productname>Pgpool-II</productname> does not has the
+    visibility of <productname>PostgreSQL</productname>'s database
+    user password and client application only sends the MD5-hash of
+    the password, so <literal>md5</literal> authentication
+    in <productname>Pgpool-II</productname> is supported using the
+    <xref linkend="guc-pool-passwd"> authentication file.
+   </para>
+
+   <note>
+    <para>
+     If <productname>Pgpool-II</productname> is operated in raw
+     mode or there's only 1 backend configured, you don't need to
+     setup <xref linkend="guc-pool-passwd">.
+    </para>
+   </note>
+
+   <sect3 id="md5-authentication-file-format">
+    <title>Authentication file format</title>
+    <para>
+     To use the <literal>md5</literal> authentication
+     <xref linkend="guc-pool-passwd"> authentication file
+      must contain the user password in either plain text
+      <literal>md5</literal> or <literal>AES</literal> encrypted format.
+    </para>
+    <para>
+     The <xref linkend="guc-pool-passwd"> file should contain lines in the following format:
+      <programlisting>
+       "username:plain_text_passwd"
+      </programlisting>
+      <programlisting>
+       "username:encrypted_passwd"
+      </programlisting>
+    </para>
+   </sect3>
+
+   <sect3 id="setting-md5-authentication">
+    <title>Setting md5 Authentication</title>
+    <indexterm zone="setting-md5-authentication">
+     <primary>MD5</primary>
+    </indexterm>
+
+    <para>
+     here are the steps to enable <literal>md5</literal>
+     authentication:
+    </para>
+    <para>
+     1- Login as the database's operating system user and type
+     <command>"pg_md5 --config-file=path_to_pgpool.conf --md5auth --username=username password"</command> user name
+     and <literal>md5</literal> encrypted password are registered
+     into <xref linkend="guc-pool-passwd">.  If pool_passwd does not exist yet, pg_md5
+      command will automatically create it for you.
+      <note>
+       <para>
+	user name and password must be identical to those registered
+	in <productname>PostgreSQL</productname> server.
+       </para>
+      </note>
+    </para>
+
+    <para>
+     2- Add an appropriate md5 entry to <filename>pool_hba.conf</filename>.
+     See <xref linkend="auth-pool-hba-conf"> for more details.
+    </para>
+    <para>
+     3- After changing md5 password (in both pool_passwd
+     and <productname>PostgreSQL</productname> of course), reload
+     the pgpool configurations.
+    </para>
+   </sect3>
+
+  </sect2>
+
+  <sect2 id="auth-scram">
+   <title>scram-sha-256 Authentication</title>
+
+   <indexterm zone="auth-scram">
+    <primary>SCRAM</primary>
+   </indexterm>
+
+   <para>
+    This authentication method also known as SCRAM is a
+    challenge-response based authentication that prevents the
+    password sniffing on untrusted connections.
+    Since <productname>Pgpool-II</productname> does not has the
+    visibility of <productname>PostgreSQL</productname>'s database user
+    password, so <literal>SCRAM</literal> authentication is supported using the
+    <xref linkend="guc-pool-passwd"> authentication file.
+   </para>
+
+   <sect3 id="scram-authentication-file-format">
+    <title>Authentication file entry for SCRAM</title>
+
+    <para>
+     To use the <literal>SCRAM</literal> authentication
+     <xref linkend="guc-pool-passwd"> authentication file
+      must contain the user password in either plain text
+      or <literal>AES</literal> encrypted format.
+
+      <programlisting>
+       "username:plain_text_passwd"
+      </programlisting>
+      <programlisting>
+       "username:AES_encrypted_passwd"
+      </programlisting>
+      <note>
+       <para>
+	<literal>md5</literal> type user passwords in
+	<xref linkend="guc-pool-passwd"> file can't be used for
+	 <literal>scram</literal> authentication
+       </para>
+      </note>
+    </para>
+   </sect3>
+
+   <sect3 id="setting-scram-sha-256-authentication">
+    <title>Setting scram-sha-256 Authentication</title>
+    <indexterm zone="setting-scram-sha-256-authentication">
+     <primary>SCRAM</primary>
+    </indexterm>
+
+    <para>
+     Here are the steps to enable <literal>scram-sha-256</literal>
+     authentication:
+    </para>
+    <para>
+     1- Create <xref linkend="guc-pool-passwd"> file entry
+      for database user and password in plain text or <literal>AES</literal>
+      encrypted format.
+      The <xref linkend="PG-ENC"> utility that comes with <productname>Pgpool-II</productname>
+       can be used to create the <literal>AES</literal> encrypted password
+       entries in the <xref linkend="guc-pool-passwd"> file.
+	<note>
+	 <para>
+	  User name and password must be identical to those registered
+	  in the <productname>PostgreSQL</productname> server.
+	 </para>
+	</note>
+    </para>
+
+    <para>
+     2- Add an appropriate scram-sha-256 entry to <filename>pool_hba.conf</filename>.
+     See <xref linkend="auth-pool-hba-conf"> for more details.
+    </para>
+    <para>
+     3- After changing SCRAM password (in both pool_passwd
+     and <productname>PostgreSQL</productname> of course), reload
+     the <productname>Pgpool-II</productname> configuration.
+    </para>
+   </sect3>
+
+  </sect2>
+
+  <sect2 id="auth-cert">
+   <title>Certificate Authentication</title>
+
+   <indexterm zone="auth-cert">
+    <primary>Certificate</primary>
+   </indexterm>
+
+   <para>
+    This authentication method uses <literal>SSL</literal> client certificates
+    to perform authentication. It is therefore only available for SSL connections.
+    When using this authentication method, the <productname>Pgpool-II</productname>
+    will require that the client provide a valid certificate.
+    No password prompt will be sent to the client.
+    The <literal>cn</literal> (Common Name) attribute of the certificate will be
+    compared to the requested database user name, and if they match the login will
+    be allowed.
+   </para>
+
+   <note>
+    <para>
+     The certificate authentication works between only client and
+     <productname>Pgpool-II</productname>. The certificate
+     authentication does not work between
+     <productname>Pgpool-II</productname> and
+     <productname>PostgreSQL</productname>.  For backend
+     authentication you can use any other authentication method.
+    </para>
+   </note>
+
+  </sect2>
+
+  <sect2 id="auth-pam">
+   <title>PAM Authentication</title>
+
+   <indexterm zone="auth-pam">
+    <primary>PAM</primary>
+   </indexterm>
+
+   <para>
+    This authentication method uses PAM (Pluggable
+    Authentication Modules) as the authentication mechanism. The
+    default PAM service name is <literal>pgpool</literal>.
+    PAM authentication is supported using user information on
+    the host where <productname>Pgpool-II</productname> is executed.
+    For more
+    information about PAM, please read the
+    <ulink url="http://www.kernel.org/pub/linux/libs/pam/">
+     <productname>Linux-PAM</productname> Page</ulink>.
+   </para>
+
+   <para>
+    To enable PAM authentication, you need to create a service-configuration
+    file for <productname>Pgpool-II</productname> in the system's
+    PAM configuration directory (which is usually at <literal>"/etc/pam.d"</literal>).
+    A sample service-configuration file is installed as
+    <filename>"share/pgpool-II/pgpool.pam"</filename> under the install directory.
+   </para>
+
+   <note>
+    <para>
+     To enable PAM support the <productname>Pgpool-II</productname>
+     must be configured with <command>"--with-pam"</command>
+    </para>
+   </note>
+  </sect2>
+
+  <sect2 id="auth-ldap">
+   <title>LDAP Authentication</title>
+
+   <indexterm zone="auth-ldap">
+    <primary>LDAP</primary>
+   </indexterm>
+
+   <para>
+    This authentication method uses LDAP as the password certification method.
+    LDAP is used only to validate the user name/password pairs. Therefore the user must
+    already exist in the database before LDAP can be used for authentication.
+   </para>
+
+   <para>
+    LDAP authentication can operate in two modes. In the first mode, which we
+    will call the simple bind mode, the server will bind to the distinguished
+    name constructed as
+    <replaceable>prefix</replaceable> <replaceable>username</replaceable> <replaceable>suffix</replaceable>.
+    Typically, the <replaceable>prefix</replaceable> parameter is used to specify
+    <literal>cn=</literal>, or <replaceable>DOMAIN</replaceable><literal>\</literal>
+    in an Active Directory environment.  <replaceable>suffix</replaceable> is used
+    to specify the remaining part of the DN in a non-Active Directory environment.
+   </para>
+
+   <para>
+    In the second mode, which we will call the search+bind mode, the server first
+    binds to the LDAP directory with a fixed user name and password, specified
+    with <replaceable>ldapbinddn</replaceable> and <replaceable>ldapbindpasswd</replaceable>,
+    and performs a search for the user trying to log in to the database. If no
+    user and password is configured, an anonymous bind will be attempted to the
+    directory. The search will be performed over the subtree at
+    <replaceable>ldapbasedn</replaceable>, and will try to do an exact match of
+    the attribute specified in <replaceable>ldapsearchattribute</replaceable>.
+    Once the user has been found in this search, the server disconnects and
+    re-binds to the directory as this user, using the password specified by the
+    client, to verify that the login is correct. This mode is the same as that
+    used by LDAP authentication schemes in other software, such as Apache
+    <literal>mod_authnz_ldap</literal> and <literal>pam_ldap</literal>. This
+    method allows for significantly more flexibility in where the user objects
+    are located in the directory, but will cause two separate connections to the
+    LDAP server to be made.
+   </para>
+
+   <para>
+    The following configuration options are used in both modes:
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapserver</literal></term>
+      <listitem>
+       <para>
+        Names or IP addresses of LDAP servers to connect to. Multiple servers
+        may be specified, separated by spaces.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapport</literal></term>
+      <listitem>
+       <para>
+        Port number on LDAP server to connect to. If no port is specified, the
+        LDAP library's default port setting will be used.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapscheme</literal></term>
+      <listitem>
+       <para>
+        Set to <literal>ldaps</literal> to use LDAPS.  This is a non-standard
+        way of using LDAP over SSL, supported by some LDAP server implementations.
+        See also the <literal>ldaptls</literal> option for an alternative.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldaptls</literal></term>
+      <listitem>
+       <para>
+        Set to 1 to make the connection between Pgpool-II and the LDAP server
+        use TLS encryption. This uses the <literal>StartTLS</literal> operation
+        per RFC 4513. See also the <literal>ldapscheme</literal> option for an alternative.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    Note that using <literal>ldapscheme</literal> or
+    <literal>ldaptls</literal> only encrypts the traffic between the
+    Pgpool-II server and the LDAP server.  The connection between the
+    Pgpool-II server and the client will still be unencrypted
+    unless SSL is used there as well.
+   </para>
+
+   <para>
+    The following options are used in simple bind mode only:
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapprefix</literal></term>
+      <listitem>
+       <para>
+        String to prepend to the user name when forming the DN to bind as,
+        when doing simple bind authentication.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsuffix</literal></term>
+      <listitem>
+       <para>
+        String to append to the user name when forming the DN to bind as,
+        when doing simple bind authentication.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    The following options are used in search+bind mode only:
+    <variablelist>
+     <varlistentry>
+      <term><literal>ldapbasedn</literal></term>
+      <listitem>
+       <para>
+        Root DN to begin the search for the user in, when doing search+bind
+        authentication.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapbinddn</literal></term>
+      <listitem>
+       <para>
+        DN of user to bind to the directory with to perform the search when
+        doing search+bind authentication.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapbindpasswd</literal></term>
+      <listitem>
+       <para>
+        Password for user to bind to the directory with to perform the search
+        when doing search+bind authentication.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsearchattribute</literal></term>
+      <listitem>
+       <para>
+        Attribute to match against the user name in the search when doing
+        search+bind authentication. If no attribute is specified, the
+        <literal>uid</literal> attribute will be used.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapsearchfilter</literal></term>
+      <listitem>
+       <para>
+        The search filter to use when doing search+bind authentication.
+        Occurrences of <literal>$username</literal> will be replaced with the
+        user name.  This allows for more flexible search filters than
+        <literal>ldapsearchattribute</literal>.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>ldapurl</literal></term>
+      <listitem>
+       <para>
+        An RFC 4516 LDAP URL.  This is an alternative way to write some of the
+        other LDAP options in a more compact and standard form.  The format is
+<synopsis>
+ldap[s]://<replaceable>host</replaceable>[:<replaceable>port</replaceable>]/<replaceable>basedn</replaceable>[?[<replaceable>attribute</replaceable>][?[<replaceable>scope</replaceable>][?[<replaceable>filter</replaceable>]]]]
+</synopsis>
+        <replaceable>scope</replaceable> must be one of <literal>base</literal>,
+        <literal>one</literal>, <literal>sub</literal>, typically the last.
+        (The default is <literal>base</literal>, which is normally not useful
+        in this application.) <replaceable>attribute</replaceable> can nominate
+        a single attribute, in which case it is used as a value for <literal>ldapsearchattribute</literal>.
+        If <replaceable>attribute</replaceable> is empty then <replaceable>filter</replaceable>
+        can be used as a value for <literal>ldapsearchfilter</literal>.
+       </para>
+
+       <para>
+        The URL scheme <literal>ldaps</literal> chooses the LDAPS method for
+        making LDAP connections over SSL, equivalent to using <literal>ldapscheme=ldaps</literal>.
+        To use encrypted LDAP connections using the <literal>StartTLS</literal>
+        operation, use the normal URL scheme <literal>ldap</literal> and specify the
+        <literal>ldaptls</literal> option in addition to <literal>ldapurl</literal>.
+       </para>
+
+       <para>
+        For non-anonymous binds, <literal>ldapbinddn</literal> and
+        <literal>ldapbindpasswd</literal> must be specified as separate options.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term><literal>backend_use_passwd</literal></term>
+      <listitem>
+       <para>
+        Set to 1 to make the password used for LDAP authentication use authentication
+        between <productname>Pgpool-II</productname> and backend.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+   </para>
+
+   <para>
+    It is an error to mix configuration options for simple bind with options
+    for search+bind.
+   </para>
+
+   <para>
+    When using search+bind mode, the search can be performed using a single
+    attribute specified with <literal>ldapsearchattribute</literal>, or using
+    a custom search filter specified with
+    <literal>ldapsearchfilter</literal>.
+    Specifying <literal>ldapsearchattribute=foo</literal> is equivalent to
+    specifying <literal>ldapsearchfilter="(foo=$username)"</literal>.  If neither
+    option is specified the default is
+    <literal>ldapsearchattribute=uid</literal>.
+   </para>
+
+   <para>
+     If <productname>Pgpool-II</productname> was compiled with
+     <productname>OpenLDAP</productname> as the LDAP client library, the
+     <literal>ldapserver</literal> setting may be omitted.  In that case, a
+     list of host names and ports is looked up via RFC 2782 DNS SRV records.
+     The name <literal>_ldap._tcp.DOMAIN</literal> is looked up, where
+     <literal>DOMAIN</literal> is extracted from <literal>ldapbasedn</literal>.
+   </para>
+
+   <para>
+    Here is an example for a simple-bind LDAP configuration:
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapprefix="cn=" ldapsuffix=", dc=example, dc=net"
+</programlisting>
+    When a connection to the database server as database
+    user <literal>foo</literal> is requested, Pgpool-II will attempt to
+    bind to the LDAP server using the DN <literal>cn=foo, dc=example,
+    dc=net</literal> and the password provided by the client.  If that connection
+    succeeds, the database access is granted.
+   </para>
+
+   <para>
+    Here is an example for a search+bind configuration:
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapbasedn="dc=example, dc=net" ldapsearchattribute=uid
+</programlisting>
+    When a connection to the database server as database
+    user <literal>foo</literal> is requested, Pgpool-II will attempt to
+    bind anonymously (since <literal>ldapbinddn</literal> was not specified) to
+    the LDAP server, perform a search for <literal>(uid=foo)</literal>
+    under the specified base DN.  If an entry is found, it will then attempt to
+    bind using that found information and the password supplied by the client.
+    If that second connection succeeds, the database access is granted.
+   </para>
+
+   <para>
+    Here is the same search+bind configuration written as a URL:
+<programlisting>
+host ... ldap ldapurl="ldap://ldap.example.net/dc=example,dc=net?uid?sub"
+</programlisting>
+    Some other software that supports authentication against LDAP uses the
+    same URL format, so it will be easier to share the configuration.
+   </para>
+
+   <para>
+    Here is an example for a search+bind configuration that uses
+    <literal>ldapsearchfilter</literal> instead of
+    <literal>ldapsearchattribute</literal> to allow authentication by
+    user ID or email address:
+<programlisting>
+host ... ldap ldapserver=ldap.example.net ldapbasedn="dc=example, dc=net" ldapsearchfilter="(|(uid=$username)(mail=$username))"
+</programlisting>
+   </para>
+
+   <para>
+    Here is an example for a search+bind configuration that uses DNS SRV
+    discovery to find the host name(s) and port(s) for the LDAP service for the
+    domain name <literal>example.net</literal>:
+<programlisting>
+host ... ldap ldapbasedn="dc=example,dc=net"
+</programlisting>
+   </para>
+
+   <tip>
+    <para>
+     Since LDAP often uses commas and spaces to separate the different
+     parts of a DN, it is often necessary to use double-quoted parameter
+     values when configuring LDAP options, as shown in the examples.
+    </para>
+   </tip>
+
+   <note>
+    <para>
+     To enable LDAP support the <productname>Pgpool-II</productname>
+     must be configured with <command>"&#045;&#045;with-ldap"</command>
+    </para>
+   </note>
+  </sect2>
+  <sect2 id="auth-gssapi">
+   <title>GSSAPI Authentication</title>
+   <indexterm zone="auth-gssapi">
+    <primary>GSSAPI</primary>
+   </indexterm>
+
+   <para>
+    GSSAPI is an industry-standard protocol for secure authentication
+    defined in RFC 2743.  Currently
+    <productname>Pgpool-II</productname> does not support GSSAPI.
+    Clients should not use GSSAPI authentication, or should use
+    "prefer GSSAPI authentication if possible" option (this is the
+    default setting of <productname>PostgreSQL</productname> clients).
+    If latter is chosen, <productname>Pgpool-II</productname> requests
+    non-GSSAPI authentication to client, and the clients will fall
+    back to non-GSSAPI authentication method. Thus, usually users do
+    not need to worry about that <productname>Pgpool-II</productname>
+    does not accept GSSAPI authentication.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="auth-different-auth-method">
+  <title>Using different methods for frontend and backend authentication</title>
+
+  <indexterm zone="auth-different-auth-method">
+   <primary>AUTH</primary>
+  </indexterm>
+
+  <para>
+   Since <productname>Pgpool-II</productname><emphasis>V4.0</emphasis>
+   it possible to use different authentication for client application
+   and backend <productname>PostgreSQL</productname> servers.
+   For example, a client application can use <literal>scram-sha-256</literal>
+   to connect to <productname>Pgpool-II</productname> which
+   in turn can use <literal>trust</literal> or <literal>md5</literal>
+   authentication to connect to <productname>PostgreSQL</productname>
+   backend for the same session.
+
+  </para>
+ </sect1>
+
+ <sect1 id="auth-aes-encrypted-password">
+  <title>Using AES256 encrypted passwords in <xref linkend="guc-pool-passwd"></title>
+
+  <indexterm zone="auth-aes-encrypted-password">
+   <primary>AUTH</primary>
+  </indexterm>
+
+  <para>
+   <literal>SCRAM</literal> authentication guards against the man-in-the-middle
+   type of attack, so <productname>Pgpool-II</productname> requires the user password
+   to authenticate with the <productname>PostgreSQL</productname> backend.
+  </para>
+
+  <para>
+   However, storing the clear text passwords in the <filename>"pool_passwd"</filename> file
+   is not a good idea.
+  </para>
+  <para>
+   You can instead store AES256 encrypted passwords, which will be used for authentication.
+   The password is first encrypted using the AES256 encryption with the user provided key
+   and then the encrypted password is <literal>base64</literal> encoded and
+   an <literal>AES</literal> prefix is added to the encoded string.
+   <note>
+    <para>
+     You can use the <xref linkend="PG-ENC"> utility to create the properly
+      formatted AES256 encrypted password.
+    </para>
+   </note>
+  </para>
+
+  <sect2 id="auth-create-aes-passwords">
+   <title>Creating encrypted password entries</title>
+   <para>
+    <xref linkend="PG-ENC"> can be used to create <literal>AES</literal>
+     encrypted password entries in <xref linkend="guc-pool-passwd"> file.
+      <xref linkend="PG-ENC"> requires the key for encrypting the password entries.
+       Later that same key will be required by <productname>Pgpool-II</productname>
+       to decrypt the passwords to use for authentication.
+       <note>
+	<para>
+	 <productname>Pgpool-II</productname> must be built with SSL
+	 (--with-openssl) support to use the encrypted password feature.
+	</para>
+       </note>
+   </para>
+  </sect2>
+
+  <sect2 id="auth-aes-decryption-key">
+   <title>Providing decryption key to <productname>Pgpool-II</productname></title>
+
+   <para>
+    If you have <literal>AES</literal> encrypted passwords stored in the
+    <xref linkend="guc-pool-passwd"> file, then <productname>Pgpool-II</productname>
+     will require the decryption key to decrypt the passwords before using them,
+     <productname>Pgpool-II</productname> tries to read the decryption key at
+     startup from the <filename>.pgpoolkey</filename> file.
+     <indexterm><primary>pgpoolkey</primary></indexterm>
+     <indexterm><primary>PGPOOLKEYFILE</primary></indexterm>
+     <filename>.pgpoolkey</filename> is a plain text file which
+     contains the decryption key string.
+   </para>
+   <para>
+    By default the <productname>Pgpool-II</productname> will look for the
+    <filename>.pgpoolkey</filename> file in the user's home directory or the file
+    referenced by environment variable <literal>PGPOOLKEYFILE</literal>.
+    You can also specify the key file using the (-k, --key-file=KEY_FILE)
+    command line argument to the <xref linkend="PGPOOL"> command.
+     The permissions on .pgpoolkey must disallow any access to world or group.
+     Change the file permissions by the command <command>chmod 0600 ~/.pgpoolkey</command>.
+   </para>
+  </sect2>
+
+ </sect1>
+
+</chapter>

@@ -1,0 +1,160 @@
+<!--
+doc/src/sgml/ref/pcp_watchdog_info.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-WATCHDOG-INFO">
+ <indexterm zone="pcp-watchdog-info">
+  <primary>pcp_watchdog_info</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_watchdog_info</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_watchdog_info</refname>
+  <refpurpose>
+   displays the watchdog status of the Pgpool-II</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_watchdog_info</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>watchdog_id</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-WATCHDOG-INFO-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_watchdog_info</command>
+   displays the information on the given node ID.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">watchdog_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">watchdog_id</replaceable></option></term>
+     <listitem>
+      <para>
+       The index of other Pgpool-II to get information for.
+      </para>
+      <para>
+       Index 0 gets one's self watchdog information.
+      </para>
+      <para>
+       If omitted then gets information of all watchdog nodes.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+$ pcp_watchdog_info -h localhost -p 9898 -U postgres 
+Password: 
+3 3 YES server1:9999 Linux server1.localdomain server1
+
+server1:9999 Linux server1.localdomain server1 9999 9000 4 LEADER 0 MEMBER
+server2:9999 Linux server2.localdomain server2 9999 9000 7 STANDBY 0 MEMBER
+server3:9999 Linux server3.localdomain server3 9999 9000 7 STANDBY 0 MEMBER
+   </programlisting>
+  </para>
+  <para>
+   The result is in the following order:
+   <literallayout class="monospaced">
+    The first output line describes the watchdog cluster information:
+
+    1. Total watchdog nodes in the cluster
+    2. Total watchdog nodes in the cluster with active membership
+    3. Local node's escalation status
+    4. Leader node name
+    5. Leader node host
+   </literallayout>
+   <literallayout class="monospaced">
+    Next is the list of watchdog nodes:
+
+    1. node name
+    2. hostname
+    3. pgpool port
+    4. watchdog port
+    5. current node state
+    6. current node state name
+    7. current cluster membership status
+    8. current cluster membership status name
+   </literallayout>
+  </para>
+  <para>
+   The <option>--verbose</option> option can help understand the output. For example:
+  </para>
+  <programlisting>
+$ pcp_watchdog_info -h localhost -p 9898 -U pgpool -v
+Password:
+Watchdog Cluster Information 
+Total Nodes              : 3
+Remote Nodes             : 2
+Member Remote Nodes      : 2
+Alive Remote Nodes       : 2
+Nodes required for quorum: 2
+Quorum state             : QUORUM EXIST
+Local node escalation    : YES
+Leader Node Name         : server1:9999 Linux server1.localdomain
+Leader Host Name         : server1
+
+Watchdog Node Information 
+Node Name         : server1:9999 Linux server1.localdomain
+Host Name         : server1
+Delegate IP       : 192.168.56.150
+Pgpool port       : 9999
+Watchdog port     : 9000
+Node priority     : 1
+Status            : 4
+Status Name       : LEADER
+Membership Status : MEMBER
+
+Node Name         : server2:9999 Linux server2.localdomain
+Host Name         : server2
+Delegate IP       : 192.168.56.150
+Pgpool port       : 9999
+Watchdog port     : 9000
+Node priority     : 1
+Status            : 7
+Status Name       : STANDBY
+Membership Status : MEMBER
+
+Node Name         : server3:9999 Linux server3.localdomain
+Host Name         : server3
+Delegate IP       : 192.168.56.150
+Pgpool port       : 9999
+Watchdog port     : 9000
+Node priority     : 1
+Status            : 7
+Status Name       : STANDBY
+Membership Status : MEMBER
+  </programlisting>
+ </refsect1>
+
+</refentry>

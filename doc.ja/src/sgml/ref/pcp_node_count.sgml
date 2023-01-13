@@ -1,0 +1,82 @@
+<!--
+doc/src/sgml/ref/pcp_node_count.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-NODE-COUNT">
+ <indexterm zone="pcp-node-count">
+  <primary>pcp_node_count</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_node_count</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_node_count</refname>
+  <!--
+  <refpurpose>
+  displays the total number of database nodes</refpurpose>
+  -->
+  <refpurpose>
+   <productname>Pgpool-II</productname> の <filename>pgpool.conf</filename> で定義されたノードの総数を表示する</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_node_count</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-NODE-COUNT-1">
+  <title>
+   <!--
+   Description
+   -->
+   説明
+  </title>
+  <para>
+   <command>pcp_node_count</command>
+   <!--
+   displays the total number of database nodes defined in <filename>pgpool.conf</filename>. It does
+   not distinguish between nodes status, ie attached/detached. ALL nodes are counted.
+   -->
+   は <productname>Pgpool-II</productname> の <filename>pgpool.conf</filename>
+   で定義されたノードの総数を表示します。 切り離されているノードの区別はしません。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <!--
+   See <xref linkend="pcp-common-options">.
+   -->
+   <xref linkend="pcp-common-options"> を参照してください。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>例</title>
+  <para>
+   <!--
+   Here is an example output:
+   -->
+   ここでは例を示します。
+   <programlisting>
+    $ pcp_node_count -p 11001
+    Password:
+    2
+   </programlisting>
+  </para>
+ </refsect1>
+</refentry>

@@ -1,0 +1,17 @@
+# Aborted transaction case.
+#
+
+# Start a transaction
+'P'	"S1"	"BEGIN"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+# Issue an error command
+'P'	"S1"	"aaa"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+'S'
+'Y'
+'X'

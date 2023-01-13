@@ -1,0 +1,17 @@
+*** src/include/pcp/pcp_stream.h	2020-07-31 09:24:10.835496879 +0900
+--- pcp_stream.h	2020-07-31 09:24:02.598396128 +0900
+***************
+*** 49,54 ****
+  extern int	pcp_write(PCP_CONNECTION * pc, void *buf, int len);
+  extern int	pcp_flush(PCP_CONNECTION * pc);
+  
+! #define UNIX_DOMAIN_PATH "/tmp"
+  
+  #endif							/* PCP_STREAM_H */
+--- 49,54 ----
+  extern int	pcp_write(PCP_CONNECTION * pc, void *buf, int len);
+  extern int	pcp_flush(PCP_CONNECTION * pc);
+  
+! #define UNIX_DOMAIN_PATH "/var/run/postgresql"
+  
+  #endif							/* PCP_STREAM_H */

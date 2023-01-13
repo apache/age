@@ -1,0 +1,76 @@
+<!--
+    doc/src/sgml/ref/show_pool_nodes.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-NODES">
+ <indexterm zone="sql-show-pool-nodes">
+  <primary>SHOW POOL_NODES</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL NODES</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_NODES</refname>
+  <refpurpose>
+   sends back a list of all configured nodes
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_NODES
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>SHOW POOL_NODES</command> displays the node id, the
+   hostname, the port, the status, the weight (only meaningful if
+   you use the load balancing mode), the role, the SELECT query
+   counts issued to each backend, whether each node is the load
+   balance node or not, the replication delay (only if in streaming
+   replication mode) and last status change time. In addition to
+   this replication state and sync state are shown for standby nodes
+   in <productname>Pgpool-II</productname> 4.1 or after.
+   Also actual node status and node role are shown in
+   <productname>Pgpool-II</productname> 4.3 or after.
+  </para>
+  <para>
+   The
+   possible values in the status column are explained in
+   the <xref linkend="pcp-node-info"> reference.
+  </para>
+  <para> 
+    If the hostname is
+    something like "/tmp", that means
+    <productname>Pgpool-II</productname> is connecting to backend by
+    using UNIX domain sockets. The SELECT count does not include
+    internal queries used
+    by <productname>Pgpool-II</productname>. Also the counters are
+    reset to zero upon starting up
+    of <productname>Pgpool-II</productname>.  The last status change
+    time is initially set to the
+    time <productname>Pgpool-II</productname> starts.  After that
+    whenever "status" or "role" is changed, it is updated.
+  </para>
+  <para>
+   Here is an example session:
+   <programlisting>
+test=# show pool_nodes;
+ node_id | hostname | port  | status | pg_status | lb_weight |  role   | pg_role | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+-----------+---------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | up        | 0.500000  | primary | primary | 0          | false             | 0                 |                   |                        | 2021-02-27 15:10:19
+ 1       | /tmp     | 11003 | up     | up        | 0.500000  | standby | standby | 0          | true              | 0                 | streaming         | async                  | 2021-02-27 15:10:19
+(2 rows)
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

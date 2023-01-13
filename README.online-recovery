@@ -1,0 +1,62 @@
+/*
+ * $Header$
+ *
+ * pgpool: a language independent connection pool server for PostgreSQL 
+ * written by Tatsuo Ishii
+ *
+ * Copyright (c) 2003-2010	PgPool Global Development Group
+ *
+ * Permission to use, copy, modify, and distribute this software and
+ * its documentation for any purpose and without fee is hereby
+ * granted, provided that the above copyright notice appear in all
+ * copies and that both that copyright notice and this permission
+ * notice appear in supporting documentation, and that the name of the
+ * author not be used in advertising or publicity pertaining to
+ * distribution of the software without specific, written prior
+ * permission. The author makes no representations about the
+ * suitability of this software for any purpose.  It is provided "as
+ * is" without express or implied warranty.
+ *
+ */
+
+How does online recovery work?
+
+pcp_recovery_node calls pcp_recovery_node() API
+
+pcp_recovery_node(int node_id) does:
+
+  pcp_recovery_node sends "O" to pcp_child process requesting online
+  recovery
+
+    pcp_child calls start_recovery() and waits for its completion
+
+	  start_recovery() sets Req_info->kind to NODE_RECOVERY_REQUEST
+	    start_recovery calls execute_checkpoint() execute CHECKPOINT
+	    command
+	    start_recovery calls exec_recovery
+	      exec_recovery executes SELECT pgpool_recovery()
+		  execute 1st stage command		
+
+		/* start 2nd stage */
+		sets InRecovery to 1
+		wait_connection_closed() to wait for all frontend exits
+	    calls execute_checkpoint() execute CHECKPOINT
+	    calls exec_recovery to execute 2nd stage script
+		calls exec_remote_start to start postmaster
+		calls check_postmaster_started to wait for postmaster starts
+		up
+		set pcp_wakeup request to 0
+		calls send_failback_request()
+		waits for failback completion every 1 second until
+		pcp_wakeup_request becomes non 0.
+		set pcp_wakeup request to 0
+
+	  start_recovery calls finish_recovery()
+	    finish_recovery sets InRecovery to 0
+		sends SIGUSR2 signal to parent
+
+		  Upon receiving SIGUSR2 pgpool parent calls
+		  kill_all_children() which sends SIGUSR2 to all pgpool
+		  children
+
+		  child pgpool processes wake up from pause()

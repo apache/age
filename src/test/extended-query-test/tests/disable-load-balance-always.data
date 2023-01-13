@@ -1,0 +1,105 @@
+# Test for disable_load_balance_on_write feature (always).
+#
+
+# Force load balance node to 1.
+##backend_weight0 = 0
+##backend_weight1 = 1
+##disable_load_balance_on_write = 'always'
+
+# Always disable load balance.
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to node 1.
+'P'	"S1"	"SELECT 1"	0
+
+# Issue query treaed as write query
+'P'	""	"SET debug_print_parse = off"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to primary node.
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue another SELECT. This should be sent to primary node.
+'P'	""	"SELECT 2"
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Issue another SELECT. This should be sent to primay node.
+'P'	""	"SELECT 3"
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to primary node because
+# disable_load_balance_on_write = 'always.
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue another SELECT. This should be sent to primary node.
+'P'	""	"SELECT 4"
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+'S'
+'Y'
+
+# Test for disable_load_balance_on_write = always feature
+# using simple queries.
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue Parse SELECT. This should be sent to node 0.
+'Q'	"SELECT 1"
+'Y'
+
+# Issue another SELECT. This should be sent to primary node.
+'Q'	"SELECT 2"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+# Issue another SELECT. This should be sent to primary node.
+'Q'	"SELECT 3"
+'Y'
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue another SELECT. This should be sent to primary node.
+'Q'	"SELECT 4"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+'X'

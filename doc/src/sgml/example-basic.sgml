@@ -1,0 +1,351 @@
+<!-- doc/src/sgml/example-basic.sgml -->
+<sect1 id="example-basic">
+ <title>Basic Configuration Example</title>
+
+ <sect2 id="example-configs-begin">
+  <title>Let's Begin!</title>
+  <para>
+   First, we must learn how to install and configure <productname>Pgpool-II</productname> and database nodes before using replication.
+  </para>
+
+  <sect3 id="example-configs-begin-installing">
+   <title>Installing <productname>Pgpool-II</productname></title>
+   <para>
+    Installing <productname>Pgpool-II</productname> is very easy.
+    In the directory which you have extracted the source tar ball,
+    execute the following commands.
+    <programlisting>
+     $ ./configure
+     $ make
+     $ make install
+    </programlisting>
+    <command>configure</command> script collects your system information
+    and use it for the compilation procedure. You can pass command
+    line arguments to <command>configure</command> script to change the default behavior,
+    such as the installation directory. <productname>Pgpool-II</productname>
+    will be installed to <literal>/usr/local</literal> directory by default.
+   </para>
+   <para>
+    <command>make</command> command compiles the source code, and
+    <command>make install</command> will install the executables.
+    You must have write permission on the installation directory.
+    In this tutorial, we will install <productname>Pgpool-II
+    </productname> in the default <literal>/usr/local</literal> directory.
+   </para>
+   <note>
+    <para>
+     <productname>Pgpool-II</productname> requires <literal>libpq</literal>
+     library in <productname>PostgreSQL</productname> 7.4 or later (version 3 protocol).
+    </para>
+   </note>
+   <para>
+    If the <command>configure</command> script displays the following error message, the
+    <literal>libpq</literal> library may not be installed, or it is not of version 3
+    <programlisting>
+     configure: error: libpq is not installed or libpq is old
+    </programlisting>
+    If the library is version 3, but the above message is still displayed, your
+    <literal>libpq</literal> library is probably not recognized by the <command>
+     configure</command> script.
+    The <command>configure</command> script searches for <literal>libpq</literal>
+    library under <literal>/usr/local/pgsql</literal>. If you have installed the
+    <productname>PostgreSQL</productname> in a directory other than <literal>/usr/local/pgsql</literal>, use
+    <literal>--with-pgsql</literal>, or <literal>--with-pgsql-includedir</literal>
+    and <literal>--with-pgsql-libdir</literal> command line options when you
+    execute <command>configure</command>.
+   </para>
+  </sect3>
+
+  <sect3 id="example-configs-begin-config-files">
+   <title>Configuration Files</title>
+   <para>
+    <productname>Pgpool-II</productname> configuration parameters are saved in the
+    <literal>pgpool.conf</literal> file. The file is in <literal>"parameter = value"
+    </literal> per line format. When you install <productname>Pgpool-II</productname>,
+    <literal>pgpool.conf.sample</literal> is automatically created.
+    We recommend copying and renaming it to <literal>pgpool.conf</literal>, and edit
+    it as you like.
+    <programlisting>
+     $ cp /usr/local/etc/pgpool.conf.sample /usr/local/etc/pgpool.conf
+    </programlisting>
+    <productname>Pgpool-II</productname> only accepts connections from the localhost
+    using port 9999 by the default. If you wish to receive connections from other hosts,
+    set <xref linkend="guc-listen-addresses"> to <literal>'*'</literal>.
+     <programlisting>
+      listen_addresses = 'localhost'
+      port = 9999
+     </programlisting>
+     We will use the default parameters in this tutorial.
+   </para>
+  </sect3>
+
+  <sect3 id="example-configs-begin-config-pcp">
+   <title>Configuring <acronym>PCP</acronym> Commands</title>
+   <para>
+    <productname>Pgpool-II</productname> has an interface for administrative
+    purpose to retrieve information on database nodes, shutdown
+    <productname>Pgpool-II</productname>, etc. via network. To use
+    <acronym>PCP</acronym> commands, user authentication is required.
+    This authentication is different from <productname>PostgreSQL</productname>'s user authentication.
+    A user name and password need to be defined in the <literal>pcp.conf</literal>
+    file. In the file, a user name and password are listed as a pair on each line,
+    and they are separated by a colon (:). Passwords are encrypted in
+    <literal>md5</literal> hash format.
+
+    <programlisting>
+     postgres:e8a48653851e28c69d0506508fb27fc5
+    </programlisting>
+
+    When you install <productname>Pgpool-II</productname>, <literal>pcp.conf.sample
+    </literal> is automatically created. We recommend copying and renaming it
+    to <literal>pcp.conf</literal>, and edit it.
+    <programlisting>
+     $ cp /usr/local/etc/pcp.conf.sample /usr/local/etc/pcp.conf
+    </programlisting>
+    To encrypt your password into md5 hash format, use the <command>pg_md5</command>
+    command, which is installed as one of <productname>Pgpool-II</productname>'s
+    executables. <command>pg_md5</command> takes text as a command line argument,
+    and displays its md5-hashed text.
+    For example, give <literal>"postgres"</literal> as the command line argument,
+    and <command>pg_md5</command> displays md5-hashed text on its standard output.
+    <programlisting>
+     $ /usr/local/bin/pg_md5 postgres
+     e8a48653851e28c69d0506508fb27fc5
+    </programlisting>
+    PCP commands are executed via network, so the port number must be configured
+    with <xref linkend="guc-pcp-port"> parameter in <literal>pgpool.conf</literal> file.
+     We will use the default 9898 for <xref linkend="guc-pcp-port"> in this tutorial.
+      <programlisting>
+       pcp_port = 9898
+      </programlisting>
+   </para>
+  </sect3>
+
+  <sect3 id="example-configs-prep-db-nodes">
+   <title>Preparing Database Nodes</title>
+   <para>
+    Now, we need to set up backend <productname>PostgreSQL</productname> servers for <productname>Pgpool-II
+    </productname>. These servers can be placed within the same host as
+    <productname>Pgpool-II</productname>, or on separate machines. If you decide
+    to place the servers on the same host, different port numbers must be assigned
+    for each server. If the servers are placed on separate machines,
+    they must be configured properly so that they can accept network
+    connections from <productname>Pgpool-II</productname>.
+    In this example, we create 3 <productname>PostgreSQL</productname> servers and
+    specify the PostgreSQL information in the following parameters.
+
+    <programlisting>
+     backend_hostname0 = 'localhost'
+     backend_port0 = 5432
+     backend_weight0 = 1
+     backend_hostname1 = 'localhost'
+     backend_port1 = 5433
+     backend_weight1 = 1
+     backend_hostname2 = 'localhost'
+     backend_port2 = 5434
+     backend_weight2 = 1
+    </programlisting>
+
+    For <xref linkend="guc-backend-hostname">, <xref linkend="guc-backend-port">,
+      <xref linkend="guc-backend-weight">, set the node's hostname, port number,
+       and ratio for load balancing. At the end of each parameter string,
+       node ID must be specified by adding positive integers starting with 0 (i.e. 0, 1, 2..).
+   </para>
+   <note>
+    <para>
+     <xref linkend="guc-backend-weight"> parameters for all nodes are
+      set to 1, meaning that SELECT queries are equally distributed among
+      three servers.
+    </para>
+   </note>
+  </sect3>
+
+  <sect3 id="example-configs-start-stop-pgpool">
+   <title>Starting/Stopping <productname>Pgpool-II</productname></title>
+   <para>
+    To fire up <productname>Pgpool-II</productname>, execute the following
+    command on a terminal.
+
+    <programlisting>
+     $ pgpool
+    </programlisting>
+
+    The above command, however, prints no log messages because <productname>
+     Pgpool-II</productname> detaches the terminal. If you want to show
+    <productname>Pgpool-II</productname> log messages, you pass <literal>-n</literal>
+    option to <command>pgpool</command> command so <productname>Pgpool-II</productname>
+    is executed as non-daemon process, and the terminal will not be detached.
+    <programlisting>
+     $ pgpool -n &
+    </programlisting>
+
+    The log messages are printed on the terminal, so it is recommended to use the following options.
+    <programlisting>
+     $ pgpool -n -d > /tmp/pgpool.log 2>&1 &
+    </programlisting>
+
+    The <literal>-d</literal> option enables debug messages to be generated.
+    The above command keeps appending log messages to <literal>/tmp/pgpool.log
+    </literal>. If you need to rotate log files, pass the logs to a external
+    command which has log rotation function.
+    For example, you can use <ulink url="https://httpd.apache.org/docs/2.4/programs/rotatelogs.html">
+     <command>rotatelogs</command></ulink> from Apache2:
+    <programlisting>
+     $ pgpool -n 2>&1 | /usr/local/apache2/bin/rotatelogs \
+     -l -f /var/log/pgpool/pgpool.log.%A 86400 &
+    </programlisting>
+
+    This will generate a log file named <literal>"pgpool.log.Thursday"</literal>
+    then rotate it 00:00 at midnight. Rotatelogs adds logs to a file if it already
+    exists. To delete old log files before rotation, you could use cron:
+    <programlisting>
+     55 23 * * * /usr/bin/find /var/log/pgpool -type f -mtime +5 -exec /bin/rm -f '{}' \;
+    </programlisting>
+
+    Please note that rotatelogs may exist as <literal>/usr/sbin/rotatelogs2</literal>
+    in some distributions. <literal>-f</literal> option generates a log file as soon as
+    <command>rotatelogs</command> starts and is available in apache2 2.2.9 or greater.
+    Also <ulink url="http://www.cronolog.org/">cronolog</ulink> can be used.
+    <programlisting>
+     $ pgpool -n 2>&1 | /usr/sbin/cronolog \
+     --hardlink=/var/log/pgsql/pgpool.log \
+     '/var/log/pgsql/%Y-%m-%d-pgpool.log' &
+    </programlisting>
+
+    To stop <productname>Pgpool-II</productname>  execute the following command.
+    <programlisting>
+     $ pgpool stop
+    </programlisting>
+
+    If any client is still connected, <productname>Pgpool-II</productname>
+    waits for it to disconnect, and then terminates itself. Run the following
+    command instead if you want to shutdown <productname>Pgpool-II</productname>
+    forcibly.
+    <programlisting>
+     $ pgpool -m fast stop
+    </programlisting>
+
+   </para>
+  </sect3>
+ </sect2>
+
+ <sect2 id="example-configs-replication">
+  <title>Your First Replication</title>
+  <para>
+   Replication (see <xref linkend="guc-replication-mode">) enables
+    the same data to be copied to multiple database nodes.
+    In this section, we'll use three database nodes, which we have already set
+    up in <xref linkend="example-configs-begin">, and takes you step by step to
+     create a database replication system.
+     Sample data to be replicated will be generated by the
+     <ulink url="https://www.postgresql.org/docs/current/static/pgbench.html">
+      <command>pgbench</command></ulink> benchmark program.
+  </para>
+
+  <sect3 id="example-configs-config-replication">
+   <title>Configuring Replication</title>
+   <para>
+    To enable the database replication function, set
+    <xref linkend="guc-replication-mode"> to on in <literal>pgpool.conf</literal> file.
+     <programlisting>
+      replication_mode = true
+     </programlisting>
+     When <xref linkend="guc-replication-mode"> is on, <productname>Pgpool-II</productname>
+      will send a copy of a received query to all the database nodes.
+      In addition, when <xref linkend="guc-load-balance-mode"> is set to true,
+       <productname>Pgpool-II</productname> will distribute <acronym>SELECT</acronym> queries
+       among the database nodes.
+       <programlisting>
+	load_balance_mode = true
+       </programlisting>
+       In this section, we will enable both <xref linkend="guc-replication-mode">
+	and <xref linkend="guc-load-balance-mode">.
+   </para>
+  </sect3>
+
+  <sect3 id="example-configs-checking-replication">
+   <title>Checking Replication</title>
+   <para>
+    To reflect the above changes in <literal>pgpool.conf</literal>,
+    <productname>Pgpool-II</productname> must be restarted.
+    Please refer to "Starting/Stopping <productname>Pgpool-II</productname>"
+    <xref linkend="example-configs-start-stop-pgpool">.
+     After configuring <literal>pgpool.conf</literal> and restarting the
+     <productname>Pgpool-II</productname>, let's try the actual replication
+     and see if everything is working.
+     First, we need to create a database to be replicated. We will name it
+     <literal>"bench_replication"</literal>. This database needs to be created
+     on all the nodes. Use the
+     <ulink url="https://www.postgresql.org/docs/current/static/app-createdb.html">
+      <command>createdb</command></ulink> commands through
+     <productname>Pgpool-II</productname>, and the database will be created
+     on all the nodes.
+     <programlisting>
+      $ createdb -p 9999 bench_replication
+     </programlisting>
+     Then, we'll execute <ulink url="https://www.postgresql.org/docs/current/static/pgbench.html">
+      <command>pgbench</command></ulink> with <literal>-i</literal> option.
+     <literal>-i</literal> option initializes the database with pre-defined tables and data.
+     <programlisting>
+      $ pgbench -i -p 9999 bench_replication
+     </programlisting>
+     The following table is the summary of tables and data, which will be created by
+     <ulink url="https://www.postgresql.org/docs/current/static/pgbench.html">
+      <command>pgbench -i</command></ulink>. If, on all the nodes, the listed tables and
+     data are created, replication is working correctly.
+   </para>
+
+   <table id="example-configs-checking-replication-table">
+    <title>data summary</title>
+    <tgroup cols="2">
+     <thead>
+      <row>
+       <entry>Table Name</entry>
+       <entry>Number of Rows</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>pgbench_branches</entry>
+       <entry>1</entry>
+      </row>
+
+      <row>
+       <entry>pgbench_tellers</entry>
+       <entry>10</entry>
+      </row>
+
+      <row>
+       <entry>pgbench_accounts</entry>
+       <entry>100000</entry>
+      </row>
+
+      <row>
+       <entry>pgbench_history</entry>
+       <entry>0</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+
+   <para>
+    Let's use a simple shell script to check the above on all the nodes.
+    The following script will display the number of rows in pgbench_branches,
+    pgbench_tellers, pgbench_accounts, and pgbench_history tables on all the nodes (5432, 5433, 5434).
+    <programlisting>
+     $ for port in 5432 5433 5434; do
+     >     echo $port
+     >     for table_name in pgbench_branches pgbench_tellers pgbench_accounts pgbench_history; do
+     >         echo $table_name
+     >         psql -c "SELECT count(*) FROM $table_name" -p $port bench_replication
+     >     done
+     > done
+    </programlisting>
+
+   </para>
+  </sect3>
+ </sect2>
+
+</sect1>

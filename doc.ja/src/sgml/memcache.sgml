@@ -1,0 +1,783 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-in-memory-query-cache">
+ <!--
+ <title>In Memory Query Cache</title>
+ -->
+ <title>インメモリキャッシュ</title>
+
+ <para>
+  <!--
+  In memory query cache can be used with all modes of
+  <productname>Pgpool-II</productname>. 
+  <productname>Pgpool-II</productname> does not
+  need a restart when the cache gets outdated because of
+  the underlying table updates.
+  -->
+  <productname>Pgpool-II</productname>の全てのモードでインメモリクエリキャッシュを利用することができます。
+  クエリキャッシュはSELECTの結果を保管しておいて再利用するものです。
+  テーブルの更新によりキャッシュが古くなると、自動的にそのテーブルに関連したキャッシュが削除される(<xref linkend="guc-memqcache-auto-cache-invalidation">がonの場合。デフォルトでこの項目はonになっています)ので<productname>Pgpool-II</productname>の再起動の必要はありません。
+ </para>
+
+ <note>
+  <para>
+   <!--
+   Basically following SELECTs will not be cached:
+   <programlisting>
+   SELECTs including non immutable functions
+   SELECTs including temp tables, unlogged tables
+   SELECT result is too large (memqcache_maxcache)
+   SELECT FOR SHARE/UPDATE
+   SELECT starting with "/*NO QUERY CACHE*/" comment
+   SELECT including system catalogs
+   SELECT uses TABLESAMPLE
+  </programlisting>
+   However, VIEWs and SELECTs accessing unlogged tables can be
+   cached by specifying in
+   the <xref linkend="guc-cache-safe-memqcache-table-list">.
+   -->
+   基本的に以下のSELECTはキャッシュされません。
+   <programlisting>
+    immutableでない関数を含むSELECT
+    TIMESTAMP WITH TIMEZONE、TIME WITH TIMEZONEを返す関数を使っているSELECT
+    TIMESTAMP WITH TIMEZONE、TIME WITH TIMEZONEへのキャストを含むSELECT
+    SQLValueFunction (CURRENT_TIME, CURRENT_USERなど)を含むSELECT
+    一時テーブル、unloggedテーブルを使ったSELECT
+    検索結果が memqcache_maxcache を越えるようなSELECT
+    SELECT FOR SHARE/UPDATE
+    /*NO QUERY CACHE*/コメントで始まるSELECT
+    システムカタログを使用しているSELECT
+    TABLESAMPLEを使っているSELECT
+   </programlisting>
+   ただし、VIEWと unloggedテーブルは、cache_safe_memqcache_table_list に記載することでキャッシュされます。
+  </para>
+ </note>
+ <para>
+  <!--
+  In memory cache saves the pair of SELECT statement
+  and its result
+  (along with the Bind parameters, if the SELECT is an
+  extended query). If the same SELECTs comes in,
+  <productname>Pgpool-II</productname> returns the value
+  from cache. Since no <acronym>SQL</acronym> parsing nor
+  access to <productname>PostgreSQL</> are involved, the serving of results
+  from the in memory cache is extremely fast.
+  -->
+  インメモリクエリキャッシュは、SELECT文(拡張問い合わせの場合は更にバインドパラメータ)と 検索結果をペアで記録します。
+  同じSELECT文が発行された場合に、<productname>Pgpool-II</productname>はキャッシュから結果を返します。
+  <acronym>SQL</acronym>の解析も<productname>PostgreSQL</>へのアクセスも行われないため、インメモリキャッシュからの結果の提供は非常に高速です。
+
+ </para>
+ <para>
+  <!--
+  On the other hand, it might be slower than the normal path in some
+  cases, because it adds some overhead to store cache.  Moreover when
+  a table is updated, <productname>Pgpool-II
+ </productname> automatically deletes all the caches related to the
+  table. Therefore, the performance will be degraded by a system with
+  a lot of updates.  If the query cache hit ratio (it can be checked
+  by using <xref linkend="SQL-SHOW-POOL-CACHE">) is lower than 70%,
+  you might want to disable in memory cache.
+  -->
+  反面、キャッシュをストアするオーバヘッドが生じるので、通常の方法より遅くなる場合も有ります。
+  また、あるテーブルが更新された場合、<productname>Pgpool-II</productname>は自動的にそのテーブルに関係する全てのキャッシュを削除します。
+  そのため、更新が多いシステムではパフォーマンスが悪くなります。
+  キャッシュのヒット率(<xref linkend="SQL-SHOW-POOL-CACHE">を使って確認できます)が70%以下の場合は、インメモリクエリキャッシュを無効にしたほうが良いかもしれません。
+ </para>
+
+ <para>
+  クエリキャッシュに<literal>SELECT</literal>結果が登録されるのは、基本的にSELECTが正常終了したときです。
+  明示的なトランザクションを実行中なら、そのトランザクションがコミットされるまではクエリキャッシュには<literal>SELECT</literal>結果は登録されません。
+  また、拡張問い合わせでは、<link linkend="guc-backend-clustering-mode">クラスタリングモード</link>により、キャッシュの登録されるタイミングが異なることに注意してください。
+  <link linkend="runtime-config-streaming-replication-mode">ストリーミングレプリケーションモード</link>と<link linkend="runtime-config-logical-replication-mode">ロジカルレプリケーションモード</link>では、<literal>Sync</literal>メッセージがフロントエンドから送られ、その応答(<literal>Ready for query</literal>メッセージ)がバックエンドから返ってきたタイミングになります。
+  ですから、
+  <programlisting>
+   Parse (SELECT 1)
+   Bind (SELECT 1)
+   Execute (SELECT 1)
+   Parse (SELECT 1)
+   Bind (SELECT 1)
+   Execute (SELECT 1)
+   Sync
+  </programlisting>
+  という順でコマンドがフロントエンドから送信されても、2回目のExecute (SELECT 1)ではクエリキャッシュは利用されません。
+  一方それ以外のクラスタリングモードでは、1回目のExecute (SELECT 1)の結果がクエリキャッシュに登録されるので、2回目のExecute (SELECT 1)ではクエリキャッシュが利用されます。
+ </para>
+
+ <sect2 id="runtime-in-memory-query-cache-enabling">
+  <!--
+  <title>Enabling in memory query cache</title>
+  -->
+  <title>インメモリクエリキャッシュを有効にする</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-memory-cache-enabled" xreflabel="memory_cache_enabled">
+    <term><varname>memory_cache_enabled</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memory_cache_enabled</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memory_cache_enabled</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Setting to on enables the memory cache.
+      Default is off.
+      -->
+      onにするとメモリキャッシュが有効になります。
+      デフォルトはoffです。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       The query cache will also be used by shared relation cache if
+       <xref linkend="guc-enable-shared-relcache"> is set to on. Moreover the
+       query cache is used even if <xref linkend="guc-memory-cache-enabled">
+       parameter is set to off. See <xref linkend="runtime-misc"> for more details to relation cache.
+       -->
+       <xref linkend="guc-enable-shared-relcache">が有効の場合、クエリキャッシュはリレーションキャッシュでも使用されます。
+       その上、たとえ<xref linkend="guc-memory-cache-enabled">パラメータがオフに設定されていたとしても、クエリキャッシュは使用されます。
+       リレーションキャッシュの詳細は<xref linkend="runtime-misc">を参照してください。
+      </para>
+     </note>
+
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-choose-storage">
+  <!--
+  <title>Choosing cache storage</title>
+  -->
+  <title>キャッシュストレージの選択</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-method" xreflabel="memqcache_method">
+    <term><varname>memqcache_method</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_method</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_method</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the storage type to be used for the cache.
+      Below table contains the list of all valid values for the parameter.
+      -->
+      キャッシュに用いるストレージのタイプを指定します。
+      このパラメータで有効な全ての値のリストを以下の表に示します。
+     </para>
+
+     <table id="memqcache-method-table">
+      <title>Memqcache method options</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <!--
+	 <entry>Value</entry>
+	 <entry>Description</entry>
+	 -->
+	 <entry>値</entry>
+	 <entry>説明</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry><literal>'shmem'</literal></entry>
+	 <!--
+	 <entry>Use shared memory</entry>
+	 -->
+	 <entry>共有メモリを使用</entry>
+	</row>
+
+	<row>
+	 <entry><literal>'memcached'</literal></entry>
+	 <!--
+	 <entry>Use <ulink url="http://memcached.org/">memcached</ulink></entry>
+	 -->
+	 <entry><ulink url="http://memcached.org/">memcached</ulink>を使用</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <para>
+<!--
+      In general <varname>shmem</varname> is faster
+      than <varname>memcached</varname> because the former does not
+      involve any network access. However, the upper limit size of
+      <varname>memqcache_total_size</varname> is limited by the total
+      shared memory size defined by the system. The size is large
+      enough in modern Linux systems, but in other systems there maybe
+      smaller upper limit. In this case you need to change the system
+      settings regarding the maximum shared memory size. There's a
+      good explanation about shared memory
+      in <ulink url="https://www.postgresql.org/docs/current/kernel-resources.html#SYSVIPC"><productname>PostgreSQL</productname>
+      documentation</ulink>.
+-->
+      一般的に<varname>shmem</varname>はネットワークアクセスが不要なため、<varname>memcached</varname>より高速です。
+      しかし、<varname>shmem</varname>では、<varname>memqcache_total_size</varname>はシステムで決まっている共有メモリサイズの合計に制限されます。
+      最近のLinuxシステムでは、そのサイズは十分大きいのですが、他のシステムでは制限値が小さいかもしれません。
+      この場合は共有メモリサイズの最大値のシステム設定を変更する必要があるでしょう。
+      <ulink url="https://www.postgresql.org/docs/current/kernel-resources.html#SYSVIPC"><productname>PostgreSQL</productname></ulink>のドキュメントに共有メモリに関する良い記述があります。
+     </para>
+     <para>
+<!--
+      If you are not sure which memqcache_method to be used, start with <varname>shmem</varname>.
+-->
+      どちらのmemqcache_methodを使ったらよいかわからない場合は、まず<varname>shmem</varname>を試してください。
+     </para>
+
+     <para>
+      <!--
+      Default is <literal>'shmem'</literal>.
+      -->
+      デフォルトは<literal>'shmem'</literal>です。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-config">
+  <!--
+  <title>Common configurations</title>
+  -->
+  <title>共通設定</title>
+  <para>
+   <!--
+   These below parameter are valid for both <literal>shmem</literal>
+   and <literal>memcached</literal> type query cache.
+   -->
+   以下は<literal>shmem</literal>と<literal>memcached</literal>の両タイプのクエリキャッシュで有効なパラメータです。
+  </para>
+  <variablelist>
+
+   <varlistentry id="guc-memqcacheexpire" xreflabel="memqcache_expire">
+    <term><varname>memqcache_expire</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_expire</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_expire</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the life time of query cache in seconds.
+      Default is 0. which means no cache expiration and cache remains
+      valid until the table is updated.
+      -->
+      クエリキャッシュの寿命を秒単位で設定します。
+      デフォルト0で、キャッシュの期限はなくなり、関連テーブルが更新されるまではキャッシュが有効になります。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       <varname>memqcache_expire</varname> and
+       <xref linkend="guc-memqcache-auto-cache-invalidation"> are orthogonal to each other.
+       -->
+       <varname>memqcache_expire</varname>と<xref linkend="guc-memqcache-auto-cache-invalidation">は互いに独立です。
+      </para>
+     </note>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-auto-cache-invalidation" xreflabel="memqcache_auto_cache_invalidation">
+    <term><varname>memqcache_auto_cache_invalidation</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_auto_cache_invalidation</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_auto_cache_invalidation</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Setting to on, automatically deletes the cache related to the updated tables.
+      When off, cache is not deleted.
+      -->
+      onに設定した場合、更新されたテーブルに関連するキャッシュを自動で削除します。
+      offならばキャッシュは削除されません。
+     </para>
+     <para>
+      <!--
+      Default is on.
+      -->
+      デフォルト値はonです。
+     </para>
+     <note>
+      <para>
+       <!--
+       <varname>memqcache_auto_cache_invalidation</varname>
+       and <xref linkend="guc-memqcacheexpire"> are orthogonal to each other.
+       -->
+       <varname>memqcache_auto_cache_invalidation</varname>と<xref linkend="guc-memqcacheexpire">は互いに独立です。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-maxcache" xreflabel="memqcache_maxcache">
+    <term><varname>memqcache_maxcache</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_maxcache</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_maxcache</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the maximum size in bytes of the SELECT query result to be cached.
+      The result with data size larger than this value will not be cached by
+      <productname>Pgpool-II</productname>.
+      When the caching of data is rejected because of the size constraint the following
+      message is shown.
+      -->
+      キャッシュされるSELECTクエリ結果の最大サイズをバイト数で指定します。
+      この値より大きいサイズのデータの結果は<productname>Pgpool-II</productname>にキャッシュされません。
+      サイズの制約によりデータのキャッシュができなかった場合、以下のメッセージが表示されます。
+      <programlisting>
+       LOG:   pid 13756: pool_add_temp_query_cache: data size exceeds memqcache_maxcache. current:4095 requested:111 memq_maxcache:4096
+      </programlisting>
+     </para>
+     <note>
+      <para>
+       <!--
+       For the shared memory query(<literal>'shmem'</literal>) cache the
+       <varname>memqcache_maxcache</varname> must be set lower than
+       <xref linkend="guc-memqcache-cache-block-size"> and for <literal>'memcached'</literal>
+       it must be lower than the size of slab (default is 1 MB).
+       -->
+       共有メモリによるクエリキャッシュ（<literal>'shmem'</literal>）の場合は、<varname>memqcache_maxcache</varname>は<xref linkend="guc-memqcache-cache-block-size">を超えないように、<literal>'memcached'</literal>を使用する場合は、slabのサイズ(デフォルトで1MB)を超えないようにしてください。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-cache-safe-memqcache-table-list" xreflabel="cache_safe_memqcache_table_list">
+    <term><varname>cache_safe_memqcache_table_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>cache_safe_memqcache_table_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>cache_safe_memqcache_table_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+
+     <para>
+      <!--
+      Specifies a comma separated list of table names whose
+      SELECT results should be cached by
+      <productname>Pgpool-II</productname>.  This parameter only
+      applies to VIEWs and SELECTs accessing unlogged tables.
+      Regular tables can be cached unless specified
+      by <xref linkend="guc-cache-unsafe-memqcache-table-list">.
+      -->
+      SELECT結果が<productname>Pgpool-II</productname>にキャッシュされるべきテーブル名のリストをカンマ区切りで指定します。
+      このパラメータは、VIEWとunloggedテーブルにのみ適用されます。
+      通常のテーブルは、<xref linkend="guc-cache-unsafe-memqcache-table-list">に記載されていない限りキャッシュされます。
+     </para>
+
+     <para>
+      <!--
+      You can use regular expression into the list to match table name
+      (to which ^ and $ are automatically added).
+      -->
+      テーブル名のマッチングには正規表現も利用できます （指定した各表現に ^ と $ をつけた形で使われます）。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       If the queries can refer the table with and without the schema
+       qualification then you must add both entries(with and without
+       schema name) in the list.
+       -->
+       スキーマ名を付けないテーブル名とスキーマ名を付けた形の両方をクエリの中で使う場合は、両方共リストに登録してください。
+       <programlisting>
+	#For example:
+	#If the queries sometime use "table1" and other times "public.table1"
+	#to refer the table1 then the cache_safe_memqcache_table_list
+	#would be configured as follows.
+
+	cache_safe_memqcache_table_list = "table1,public.table1"
+
+       </programlisting>
+
+      </para>
+     </note>
+     <note>
+      <para>
+       <!--
+       <varname>cache_unsafe_memqcache_table_list</varname> takes
+       precedence over <xref linkend="guc-cache-safe-memqcache-table-list">
+       -->
+       <varname>cache_unsafe_memqcache_table_list</varname>は<xref linkend="guc-cache-safe-memqcache-table-list">より優先されます。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-cache-unsafe-memqcache-table-list" xreflabel="cache_unsafe_memqcache_table_list">
+    <term><varname>cache_unsafe_memqcache_table_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>cache_unsafe_memqcache_table_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>cache_unsafe_memqcache_table_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a comma separated list of table names whose SELECT
+      results should <emphasis>NOT</emphasis> be cached by the <productname>
+      Pgpool-II</productname>.
+      -->
+      SELECT結果が<productname>Pgpool-II</productname>にキャッシュされる<emphasis>べきでない</emphasis>テーブル名のリストをカンマ区切りで指定します。
+     </para>
+
+     <para>
+      <!--
+      You can use regular expression into the list to match table name
+      (to which ^ and $ are automatically added),
+      -->
+      テーブル名のマッチングには正規表現も利用できます （指定した各表現に ^ と $ をつけた形で使われます）。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       If the queries can refer the table with and without the schema
+       qualification then you must add both entries(with and without
+       schema name) in the list.
+       -->
+       スキーマ名を付けないテーブル名とスキーマ名を付けた形の両方をクエリの中で使う場合は、両方共リストに登録してください。
+       <programlisting>
+	#For example:
+	#If the queries sometime use "table1" and other times "public.table1"
+	#to refer the table1 then the cache_unsafe_memqcache_table_list
+	#would be configured as follows.
+
+	cache_unsafe_memqcache_table_list = "table1,public.table1"
+
+       </programlisting>
+
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-oiddir" xreflabel="memqcache_oiddir">
+    <term><varname>memqcache_oiddir</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_oiddir</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_oiddir</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the full path to the directory for storing the
+      <literal>oids</literal> of tables used by SELECT queries.
+      -->
+      SELECTクエリが使用するテーブルに<literal>OID</literal>を格納するディレクトリへのフルパスで指定します。
+
+     </para>
+     <para>
+      <!--
+      <varname>memqcache_oiddir</varname> directory contains the sub directories
+      for the databases. The directory name is the OID of the database. In addition, each
+      database directory contains the files for each table used by SELECT statement.
+      Again the name of the file is the OID of the table.
+      These files contains the pointers to query cache which are used as key for
+      deleting the caches.
+      -->
+      <varname>memqcache_oiddir</varname>には、各データベースのためのディレクトリが格納されます。
+      そのディレクトリ名はデータベースのOIDです。
+      更に、各データベースディレクトリの下には各テーブルのためのファイルが格納されます。
+      そのファイル名は同じくテーブルのOIDです。
+      これらのファイルの中にはクエリキャッシュへのポインタが格納されており、 キャッシュを削除する際のキーとして使われます。
+     </para>
+     <note>
+      <para>
+       <!--
+       Normal restart of <productname>Pgpool-II</productname> does not clear the
+       contents of <varname>memqcache_oiddir</varname>.
+       -->
+       <productname>Pgpool-II</productname>の通常の再起動では<varname>memqcache_oiddir</varname>の中身はクリアされません。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-shmem-config">
+  <!--
+  <title>Configurations to use shared memory</title>
+  -->
+  <title>共有メモリ使用時の設定</title>
+
+  <para>
+   <!--
+   These are the parameters used with shared memory as the cache storage.
+   -->
+   これらはキャッシュストレージとして共有メモリを使用した場合に使われるパラメーターです。
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-total-size" xreflabel="memqcache_total_size">
+    <term><varname>memqcache_total_size</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_total_size</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_total_size</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the shared memory cache size in bytes.
+      -->
+      共有メモリのキャッシュサイズをバイト単位で指定します。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-max-num-cache" xreflabel="memqcache_max_num_cache">
+    <term><varname>memqcache_max_num_cache</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_max_num_cache</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_max_num_cache</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the number of cache entries. This is used to define the size of cache management space.
+      -->
+      キャッシュエントリの数を指定します。
+      この設定項目は、キャッシュの管理領域の大きさを決めるために使用します。
+     </para>
+     <note>
+      <para>
+       <!--
+       The management space size can be calculated by:
+       <varname>memqcache_max_num_cache</varname> * 48 bytes.
+       Too small number will cause an error while registering cache.
+       On the other hand too large number will just waste space.
+       -->
+       管理領域の大きさは、<varname>memqcache_max_num_cache</varname> * 48バイトで計算できます。
+       少なすぎるとキャッシュを登録することができずにエラーになります。
+       逆に多すぎると単に空間の無駄になります。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-cache-block-size" xreflabel="memqcache_cache_block_size">
+    <term><varname>memqcache_cache_block_size</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_cache_block_size</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_cache_block_size</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the cache block size. <productname>Pgpool-II</productname> uses the
+      cache memory arranged in <varname>memqcache_cache_block_size</varname> blocks.
+      SELECT result is packed into the block and must fit in a single block.
+      Therefore, the results larger than <varname>memqcache_cache_block_size</varname> are
+      not cached.
+      -->
+      キャッシュのブロックサイズを指定します。
+      <productname>Pgpool-II</productname>は<varname>memqcache_cache_block_size</varname>のブロックで管理されたキャッシュメモリを利用します。
+      SELECT結果はこのブロックに詰め込まれ、１つのブロックに収まらなければなりません。
+      従って、<varname>memqcache_cache_block_size</varname>を検索結果が超えると、キャッシュされません。
+     </para>
+
+     <para>
+      <!--
+      <varname>memqcache_cache_block_size</varname> must be set to at least 512.
+      -->
+      <varname>memqcache_cache_block_size</varname>は、512以上の値でなければなりません。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-memcached-config">
+  <!--
+  <title>Configurations to use memcached</title>
+  -->
+  <title>memcached使用時の設定</title>
+
+  <para>
+   <!--
+   These are the parameters used with memcached as the cache storage.
+   -->
+   これらはキャッシュストレージとしてmemcachedを使用した場合に使われるパラメーターです。
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-memcached-host" xreflabel="memqcache_memcached_host">
+    <term><varname>memqcache_memcached_host</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_memcached_host</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_memcached_host</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the host name or the IP address on which <literal>memcached</literal>
+      works. You can use <literal>'localhost'</literal> if <literal>memcached</literal>
+      and <productname>Pgpool-II</productname> resides on same server.
+      -->
+      <literal>memcached</literal>が動いているホスト名またはIPアドレスを指定します。
+      <productname>Pgpool-II</productname>と同じマシンで<literal>memcached</literal>を動かす場合は、<literal>'localhost'</literal>が使えます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-memcached-port" xreflabel="memqcache_memcached_port">
+    <term><varname>memqcache_memcached_port</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>memqcache_memcached_port</varname> configuration parameter</primary>
+      -->
+      <primary><varname>memqcache_memcached_port</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the port number of <acronym>memcached</acronym>.
+      Default is 11211.
+      -->
+      <acronym>memcached</acronym>のポート番号を指定します。
+      デフォルトは 11211 です。
+
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+</sect1>

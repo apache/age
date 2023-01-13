@@ -1,0 +1,45 @@
+<!--
+doc/src/sgml/ref/pcp_proc_count.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-PROC-COUNT">
+ <indexterm zone="pcp-proc-count">
+  <primary>pcp_proc_count</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_proc_count</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_proc_count</refname>
+  <refpurpose>
+   displays the list of Pgpool-II children process IDs</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_proc_count</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-PROC-COUNT-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_proc_count</command>
+   displays the list of Pgpool-II children process IDs. If there is more than one process, IDs will be delimited by a white space.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   See <xref linkend="pcp-common-options">.
+  </para>
+ </refsect1>
+
+</refentry>

@@ -1,0 +1,92 @@
+<!-- doc/src/sgml/installation-tips.sgml -->
+
+ <sect1 id="installation-tips">
+ <!--
+ <title>Tips for Installation</title>
+ -->
+ <title>インストールのヒント</title>
+ <para>
+  <!--
+  This chapter gathers random tips for installing <productname>Pgpool-II</productname>.
+  -->
+  この章では、<productname>Pgpool-II</productname>をインストールする際の様々なヒントを集めました。
+ </para>
+
+ <sect2 id="firewall">
+  <!--
+  <title>Firewalls</title>
+  -->
+  <title>ファイアーウォール</title>
+  <para>
+   <!--
+   When <productname>Pgpool-II</productname> connects to
+   other <productname>Pgpool-II</productname> servers
+   or <productname>PostgreSQL</productname> servers, the target port
+   must be accessible by enabling firewall management softwares.
+   -->
+   <productname>Pgpool-II</productname>が他の<productname>Pgpool-II</productname>サーバや<productname>PostgreSQL</productname>サーバに接続する際には、ファイアーウォールの管理ソフトによって目的のポートが開けられていなければなりません。
+  </para>
+
+  <para>
+   <!--
+   First, allow to access port that <productname>Pgpool-II</productname> use.
+   In the example below, let <link linkend="guc-port">Pgpool-II listen
+   port number</link> be 9999, <link linkend="guc-pcp-port">PCP listen
+   port number</link> be 9898, <link linkend="guc-wd-port">watchdog
+   listen port number</link> be 9000 and <link
+   linkend="guc-heartbeat-port">heartbeat listen port number</link> be
+   9694.  Notice that only heartbeat port uses UDP and others use TCP.
+   -->
+   以下の例では、<link linkend="guc-port">Pgpool-IIの受付ポート番号</link>を9999、<link linkend="guc-pcp-port">PCPの受付ポート番号</link>を9898、<link linkend="guc-wd-port">watchdogの受付ポート番号</link>を9000、<link linkend="guc-heartbeat-port">heartbeatの受付ポート番号</link>を9694とします。
+   まず、<productname>Pgpool-II</productname>の使用するポートを開放します。
+   heartbeatのポートのみUDPで、それ以外はすべてTCPであることに注意してください。
+
+   <programlisting>
+    firewall-cmd --permanent --zone=public --add-port=9999/tcp --add-port=9898/tcp --add-port=9000/tcp
+    firewall-cmd --permanent --zone=public --add-port=9694/udp
+    firewall-cmd --reload
+   </programlisting>
+  </para>
+  <para>
+   <!--
+   Here is an example for CentOS/RHEL7 when access
+   to <productname>PostgreSQL</productname> is required.
+   -->
+   CentOS/RHEL7において、<productname>PostgreSQL</productname>にアクセスが必要な場合の例を示します。
+   <programlisting>
+    firewall-cmd --permanent --zone=public --add-service=postgresql
+    firewall-cmd --reload
+   </programlisting>
+   <!--
+   "postgresql" is the service name assigned
+   to <productname>PostgreSQL</productname>. The list of service
+   names can be obtained by:
+   -->
+   "postgresql"は<productname>PostgreSQL</productname>に割り当てられたサービス名です。
+   サービス名の一覧は、以下のようにして得られます。
+   <programlisting>
+    firewall-cmd --get-services
+   </programlisting>
+   <!--
+   Note that you can define your own service name in
+   /usr/lib/firewalld/services/.
+   -->
+   /usr/lib/firewalld/services/にあなた好みのサービス名を定義することもできることに注意してください。
+  </para>
+
+  <para>
+   <!--
+   If <productname>PostgreSQL</productname> is listening on 11002
+   port, rather than the standard 5432 port, you can do:
+   -->
+   <productname>PostgreSQL</productname>が標準の5432ポートではなく、11002をリッスンしている場合は以下のように設定できます。
+   <programlisting>
+    firewall-cmd --zone=public --remove-service=postgresql --permanent
+    firewall-cmd --zone=public --add-port=11002/tcp --permanent
+    firewall-cmd --reload
+   </programlisting>
+  </para>
+
+ </sect2>
+
+ </sect1>

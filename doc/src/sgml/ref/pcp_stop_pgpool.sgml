@@ -1,0 +1,92 @@
+<!--
+doc/src/sgml/ref/pcp_stop_pgpool.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-STOP-PGPOOL">
+ <indexterm zone="pcp-stop-pgpool">
+  <primary>pcp_stop_pgpool</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_stop_pgpool</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_stop_pgpool</refname>
+  <refpurpose>
+   terminates the Pgpool-II process</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_stop_pgpool</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>mode</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-STOP-PGPOOL-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_stop_pgpool</command>
+   terminates the Pgpool-II process.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <term><option>--mode=<replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       Shutdown mode for terminating the Pgpool-II process.
+      </para>
+      <para>
+       The available modes are as follows (The default is "smart"):
+       <itemizedlist>
+	<listitem><para>s, smart : smart mode </para></listitem>
+	<listitem><para>f, fast : fast mode </para></listitem>
+	<listitem><para>i, immediate : immediate mode </para></listitem>
+       </itemizedlist>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s <replaceable class="parameter">scope</replaceable></option></term>
+     <term><option>--scope=<replaceable class="parameter">scope</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the breadth of a command's impact.
+      </para>
+      <para>
+       The supported command scopes are as follows (The default is "local"):
+       <itemizedlist>
+	<listitem><para>c, cluster : terminates all Pgpool-II nodes part of the cluster </para></listitem>
+	<listitem><para>l, local : terminates local Pgpool-II node only </para></listitem>
+       </itemizedlist>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

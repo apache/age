@@ -1,0 +1,17 @@
+COPY "t" FROM 'xxx' 
+COPY "t" FROM STDIN 
+COPY "t"("x", "y") FROM 'xxx' 
+COPY "t" FROM 'xxx' BINARY 
+COPY "t" FROM 'xxx' CSV HEADER QUOTE '#' ESCAPE '$' FORCE NOT NULL "foo", "bar"
+COPY "t" FROM 'xxx' OIDS 
+COPY "t" FROM 'xxx' DELIMITERS ',' 
+COPY "t" FROM 'xxx' NULL 'x' 
+COPY "t" TO 'yyy' 
+COPY "t" TO STDOUT 
+COPY "t"("x", "y") TO 'yyy' 
+COPY "t" TO 'yyy' BINARY 
+COPY "t" FROM 'xxx' CSV HEADER QUOTE '#' ESCAPE '$' FORCE QUOTE "foo", "bar"
+COPY "t" TO 'yyy' OIDS 
+COPY "t" TO 'yyy' DELIMITERS ',' 
+COPY "t" TO 'yyy' NULL 'x' 
+COPY ( SELECT * FROM "t") TO 'xxx' 

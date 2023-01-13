@@ -1,0 +1,510 @@
+<!-- doc/src/sgml/release-4.4.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id="release-4-4-1">
+ <title>リリース 4.4.1</title>
+ <note>
+  <title>リリース日</title>
+  <simpara>2022-12-22</simpara>
+ </note>
+
+ <sect2>
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2022-12-16 [6311565]
+    -->
+    <para>
+     ストリーミングレプリケーションLOGメッセージ"standby_delay: 54"をDEBUG1にダウングレードしました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-12-12 [dfcc21e]
+    -->
+    <para>
+     LOGメッセージ"we have hit the ceiling"をDEBUG5にダウングレードしました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>不具合修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2022-12-20 [f6cbfe2]
+    -->
+    <para>
+     タイムスタンプのリライト処理の不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <productname>Pgpool-II</productname> 4.4のoutfuncsモジュールでは、boolean定数が無視され、空の文字列になり、構文エラーが発生しました。
+    </para>
+    <para>
+     この問題はMichiel van Leeningによって報告されました。
+     議論: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2022-December/008581.html">[pgpool-general: 8521]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-12-20 [7bc3176]
+    -->
+    <para>
+     <xref linkend="guc-failover-require-consensus">の問題を修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     Watchdogクラスタ全体のヘルスチェックパラメータの最大値に基づいて、フェイルオーバコマンドのタイムアウトを動的に設定するように修正しました。
+    </para>
+    <para>
+     Tatsuo Ishiiによってレビューおよびテストされました。
+     議論: <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2022-November/004228.html">[pgpool-hackers: 4227]</ulink>
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>ドキュメント修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2022-12-19 [8e5f5eb]
+    -->
+    <para>
+     Doc: パフォーマンスセクションを強化しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     動的なプロセス管理について言及しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-12-14 [5d5d4a2]
+    -->
+    <para>
+     Doc: Aurora設定例内のタイポを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-12-12 [83dcd83]
+    -->
+    <para>
+     Doc: 動的なプロセス管理ドキュメントを強化しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>回帰テスト修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2022-12-17 [2985853]
+    -->
+    <para>
+     環境変数を使ってPGPOOLDIRを定義できるようにしました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=766">bug 766</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-4-4-0">
+ <title>リリース 4.4.0</title>
+ <note>
+  <title>リリース日</title>
+  <simpara>2022-12-06</simpara>
+ </note>
+
+ <sect2>
+  <title>概要</title>
+  <para>
+   このバージョンには、設定と管理を容易にするために多くの機能拡張が追加されています。
+   動的スペアプロセス管理機能を追加しました。
+   ストリーミングレプリケーションの遅延は、バイト単位だけでなく時間単位で制御できるようにしました。
+   <productname>Pgpool-II</productname>とPCPが複数のIPアドレスをリッスンできるようになりました。
+   Unixドメインソケットディレクトリの完全な設定が可能になりました。
+   <varname>trusted_servers</varname>が上位接続を確認するために使用するコマンドを指定できるようになりました。
+   新しい<productname>PostgreSQL</productname> 15の<literal>SQL</literal>パーサが取り込まれました。
+   クエリキャッシュのパフォーマンスも向上しました。
+  </para>
+
+  <para>
+   以下は主な機能拡張です。
+  </para>
+
+  <itemizedlist>
+   <listitem>
+    <para>
+     新たに動的スペアプロセス管理機能を追加しました。
+     この機能により、静的プロセス管理モードと動的プロセス管理モードを選択することができます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     ストリーミングレプリケーションモードで、レプリケーションの遅延を時間で指定できるようにしました。
+     この目的のために、新しいパラメータ<xref linkend="guc-delay-threshold-by-time">を追加しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     Pgpool-IIはPostgreSQLと同じように<xref linkend="guc-unix-socket-directories">、
+     <xref linkend="guc-unix-socket-group">および<xref linkend="guc-unix-socket-permissions">
+     をサポートするようになり、UNIXドメインソケットをより柔軟かつ正確に制御できるようになりました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="guc-listen-addresses">および<xref linkend="guc-pcp-listen-addresses">で、カンマ区切りの複数のリッスンIPアドレスを設定できるようになりました。
+     これにより、接続を受け付けるネットワークインターフェイスを制御でき、安全でないネットワークインターフェイスで悪意のある接続要求が繰り返されるのを防ぐことができます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="guc-trusted-servers">が上位接続を確認するために使用するコマンドを指定できるようになりました。
+     この目的のために、新しいパラメータ<xref linkend="guc-trusted-server-command">を追加しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     PostgreSQL 15 のSQLパーサを取り込みました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     ロックの競合を減らして、<link linkend="runtime-in-memory-query-cache">クエリキャッシュ</link>を高速化しました。これにより、同時実行中のクライアントは、キャッシュの内容をより迅速に取得できるようになりました。
+    </para>
+   </listitem>
+  </itemizedlist>
+
+ </sect2>
+
+ <sect2 id="migration-4-4-0">
+  <title>バージョン 4.4 への移行</title>
+  <itemizedlist>
+
+   <listitem>
+    <para>
+     設定パラメータ<varname>socket_dir</varname>を<xref linkend="guc-unix-socket-directories">に名前変更しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     設定パラメータ<varname>delegate_IP</varname>を<xref linkend="guc-delegate-ip">に名前変更しました。
+     古いバージョンとの互換性のために、古いパラメータ<varname>delegate_IP</varname>は引き続き使用できますが、
+     <varname>delegate_ip</varname>に変換され、警告メッセージが出力されます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     バックエンドからのパラメータステータスメッセージがフロントエンドに転送されるようになりました。
+     これまでは、バックエンドからパラメータステータスメッセージが届くと、<productname>Pgpool-II</productname>はそれを記憶していましたが、フロントエンドには転送しませんでした。
+     この変更により、それらのメッセージはフロントエンドに転送されます。
+     <productname>Pgpool-II</productname>を使用するアプリケーションでは、これらのメッセージを受け入れる準備をする必要があります。
+     しかし、<productname>PostgreSQL</productname>はフロントエンドに既に送信しているため、<productname>PostgreSQL</productname>を使用しているアプリケーションはこの変更の影響を受けないはずです。
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>変更点</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2022-11-09 [ce5e529c]
+    -->
+    <para>
+     新たに動的スペア（アイドル状態）プロセス管理機能を追加しました。(Jianshen Zhou、Muhammad Usama)
+    </para>
+    <para>
+     この機能により、静的プロセス管理モードと動的プロセス管理モードを選択することができます。
+     静的プロセス管理は、<productname>Pgpool-II</productname>の既存の動作と同じで、起動時にすべての子プロセスを生成します。
+     新しい動的モードは、アイドル状態のプロセスを追跡し、この数を指定された範囲内に維持するためにプロセスをforkまたはkillします。
+    </para>
+    <para>
+     プロセス管理の動作を設定するために、<xref linkend="guc-process-management-mode">、<xref linkend="guc-process-management-strategy">、<xref linkend="guc-min-spare-children">、および<xref linkend="guc-max-spare-children">という4つの新しい設定パラメータが追加され、<varname>process_management_strategy</varname>では3つのスケーリングダウン戦略を選択できます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-01-28 [832212b2]
+    2022-01-29 [515860f3]
+      -->
+    <para>
+     レプリケーションの遅延を時間で指定できるようにしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <xref linkend="guc-delay-threshold">では、レプリケーション遅延の上限をバイト単位で指定します。
+     今回は<xref linkend="guc-delay-threshold-by-time">というパラメータを追加して、レプリケーション遅延の上限を時間（秒）で指定できるようにしました。
+     新しいパラメータが0より大きい場合に有効になります。
+     この場合は、<xref linkend="SQL-SHOW-POOL-NODES">と<xref linkend="pcp-node-info">のレプリケーションの遅延は秒単位で表示します。
+     このパラメータが0に設定されている場合には、
+     <varname>delay_threshold_by_time</varname>は無視され、delay_thresholdモードに戻ります。
+    </para>
+    <para>
+     この目的のために、共有メモリデータBackendinfoの新しいメンバstandby_delay_by_timeを追加し、レプリケーションの遅延がバイト単位（standby_delay_by_time = false）で測定するか、秒単位（standby_delay_by_time = true）で測定するかを区別します。
+     standby_delay_by_timeがtrueの場合は、standby_delayは秒 * 1000000で測定されるため、精度は小数点以下6桁です。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-07-20 [bc03514b]
+    -->
+    <para>
+     unix_socket_directoriesおよび関連パラメータをサポートするようになりました。(Masaya Kawamoto)
+    </para>
+    <para>
+     設定パラメータ<varname>socket_dir</varname>を<xref linkend="guc-unix-socket-directories">に名前変更し、新しいパラメータ<xref linkend="guc-unix-socket-group">および<xref linkend="guc-unix-socket-permissions">を追加しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-11-04 [b7bcf0d7]
+    -->
+    <para>
+     新しい設定値パラメータ<xref linkend="guc-trusted-server-command">を追加しました。(Takuma Hoshiai)
+    </para>
+    <para>
+     この機能により、<xref linkend="guc-trusted-servers">が上位接続を確認するために使用するコマンドを指定できるようになりました。
+     これまでは、pingコマンドのみが使用され、ハードコーディングされていました。
+    </para>
+    <para>
+     デフォルトは'ping -q -c3 %h'で、以前と同じです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-02-23 [fd0efcea]
+    2022-03-05 [9f727c1e]
+    -->
+    <para>
+     <xref linkend="guc-listen-addresses">および<xref linkend="guc-pcp-listen-addresses">でカンマ区切りの複数のリッスンIPアドレスを設定できるようにしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     これまでは、<xref linkend="guc-listen-addresses">に単一のホスト名/IPアドレス、または'*'しか設定できませんでした。
+     今回は<productname>PostgreSQL</productname>と同じように、パラメータに複数のリッスンIPアドレスを設定できるようになりました。
+    </para>
+    <para>
+     また、<xref linkend="guc-pcp-listen-addresses">もカンマで区切られた複数のリッスンIPアドレスを受け付けるようになりました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-09-22 [424e68c1]
+    -->
+    <para>
+     <productname>PostgreSQL</productname> 15の新しい<literal>SQL</literal>パーサを取り込みました。(Bo Peng, Tatsuo Ishii)
+    </para>
+    <para>
+     PostgreSQL 15パーサのおもな変更点は次のとおりです。
+    </para>
+    <itemizedlist>
+
+     <listitem>
+      <para>
+       新しいSQL MERGE文が追加されました。
+      </para>
+      <programlisting>
+MERGE INTO ... USING ...
+      </programlisting>
+     </listitem>
+
+     <listitem>
+      <para>
+       COPY FROMに新しいオプションHEADER MATCHが追加されました。
+      </para>
+      <programlisting>
+COPY ... FROM stdin WITH (HEADER MATCH);
+      </programlisting>
+     </listitem>
+
+     <listitem>
+      <para>
+       外部キーON DELETE SETアクションを指定できるようになりました。
+      </para>
+      <programlisting>
+CREATE TABLE t1 (
+...
+FOREIGN KEY (c1, c2) REFERENCES t2 ON DELETE SET NULL (c2)
+);
+      </programlisting>
+     </listitem>
+
+     <listitem>
+      <para>
+       ALTER TABLEでSET ACCESS METHODを指定できるようになりました。
+      </para>
+      <programlisting>
+ALTER TABLE ... SET ACCESS METHOD ...;
+      </programlisting>
+     </listitem>
+
+    </itemizedlist>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-09-19 [dc559c07]
+    -->
+    <para>
+     クエリキャッシュにおける排他ロックを共有ロックに置き換えました。(Tatsuo Ishii)
+    </para>
+    <para>
+     これまでは、クエリキャッシュモジュールはセマフォを使用して、クエリキャッシュモジュールの重要な領域を保護していました。
+     ただし、セマフォを使用したロックは排他ロックであるため、これには重大な欠点があります。
+     これにより、多数の同時クライアントが存在する場合に、キャッシュの読み取りに不要な待機が発生し、パフォーマンスが低下します。
+    </para>
+    <para>
+     この問題を解決するには、ロックの実装を共有ロックを許可する<function>flock(2)</function>に置き換えました。
+     これにより、クライアントはキャッシュから読み取る際に、ロックを取得するために待たなくて済むため、同時実行性が向上します。
+    </para>
+    <para>
+     この目的のために、<productname>Pgpool-II</productname>のメインプロセスはダミーファイルを<filename>logdir/memq_lock_file</filename>として作成し、それを開きます。
+     ファイル記述子はすべての子プロセスに継承されるため、ファイルに対して<function>flock(2)</function>を発行できます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+	2022-02-10 [7ec74730]
+      -->
+    <para>
+     <xref linkend="guc-wd-lifecheck-password">および<xref linkend="guc-recovery-password">のパスワード形式を検証する処理を追加しました。(Masaya Kawamoto)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-01-31 [4bcba525]
+    -->
+    <para>
+     パラメータのステータス処理を強化しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     これまでは、バックエンドからパラメータステータスメッセージが届くと、<productname>Pgpool-II</productname>はそれを記憶していましたが、フロントエンドには転送しませんでした。
+     この修正により、パラメータステータスメッセージはフロントエンドに転送されるようになります。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-01-29 [515860f3]
+    -->
+    <para>
+     <xref linkend="guc-delay-threshold-by-time">を指定した場合のレプリケーション遅延の取得方法を変更しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     pg_stat_replication.replay_lagを使用し、レプリケーション遅延を取得します。
+     この方法により、コードがはるかに単純になり、より正確なレプリケーション遅延を取得できます。
+     唯一の欠点は、pg_stat_replication.replay_lagはPostgreSQL 10以降でのみ使用できることです (以前の方法は9.5以降で使用できます)。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+	2022-01-18 [f9521fe4]
+      -->
+    <para>
+     フラッシュ追跡機能を実装しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     フラッシュメッセージがフロントエンドから到着すると、バックエンドからの保留中のメッセージはすべてフラッシュされ、フロントエンドに送信される必要があります。
+     そのために、「フラッシュ追跡」機能を実装しました。
+     つまり、フラッシュメッセージが到着すると、<productname>Pgpool-II</productname>は保留中の各メッセージに「保留中のフラッシュ」フラグを設定します。
+     バックエンドからの応答メッセージが、フラッシュ保留フラグが設定されている保留中のメッセージに対応する場合、
+     メッセージはバッファリングされるのではなく、すぐにフロントエンドにフラッシュされます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2022-01-18 [d9e4bef8]
+    2022-01-12 [a14fe59a]
+    -->
+    <para>
+     pgprotoを強化しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     ParameterStatusのパラメータ名と値を表示できるようにしました。
+    </para>
+    <para>
+    新しいコマンド'z'を追加しました。
+    これは'y'と似ていますが、'z'は 1 つのメッセージのみを読み取り、"ready for query" が到着するまで待機しません（または、1 秒以内にメッセージが到着しない場合はタイムアウトします）。
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2022-12-03 [0b31fdc3]
+    -->
+    <para>
+     LOGメッセージ"new IPC connection received"をDEBUG1にダウングレードしました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=775">bug 775</ulink>) (Bo Peng)
+    </para>
+    <para>
+     これは定期的に出力される正常なメッセージで、LOGとして記録すべきではありません。
+     パッチはpstefによって作成され、Bo Pengによってレビューされます。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>バグ修正</title>
+  <itemizedlist>
+   <listitem>
+    <para>
+     このリリースでは、<productname>Pgpool-II</productname> 4.3.4と同じバグ修正がすでに適用されています。
+     これらの修正の詳細については、<xref linkend="release-4-3-4">を参照してください。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>ドキュメントの変更</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2022-10-27 [89d1235]
+    -->
+    <para>
+     Doc: AWS設定例のドキュメントを更新し、AWS向けのサンプルスクリプトを追加しました。(Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+</sect1>

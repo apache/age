@@ -1,0 +1,98 @@
+#!/bin/bash
+# This script is executed by "recovery_1st_stage" to recovery a Standby node.
+
+set -o xtrace
+
+MAIN_NODE_PGDATA="$1"
+DEST_NODE_HOST="$2"
+DEST_NODE_PGDATA="$3"
+MAIN_NODE_PORT="$4"
+DEST_NODE_ID="$5"
+DEST_NODE_PORT="$6"
+MAIN_NODE_HOST="$7"
+
+PGHOME=/usr/pgsql-15
+ARCHIVEDIR=/var/lib/pgsql/archivedir
+REPLUSER=repl
+MAX_DURATION=60
+POSTGRESQL_STARTUP_USER=postgres
+SSH_KEY_FILE=id_rsa_pgpool
+SSH_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/${SSH_KEY_FILE}"
+
+echo recovery_1st_stage: start: pg_basebackup for Standby node $DEST_NODE_ID
+
+## Test passwordless SSH
+ssh -T ${SSH_OPTIONS} ${POSTGRESQL_STARTUP_USER}@${DEST_NODE_HOST} ls /tmp > /dev/null
+
+if [ $? -ne 0 ]; then
+    echo recovery_1st_stage: passwordless SSH to ${POSTGRESQL_STARTUP_USER}@${DEST_NODE_HOST} failed. Please setup passwordless SSH.
+    exit 1
+fi
+
+## Get PostgreSQL major version
+PGVERSION=`${PGHOME}/bin/initdb -V | awk '{print $3}' | sed 's/\..*//' | sed 's/\([0-9]*\)[a-zA-Z].*/\1/'`
+if [ $PGVERSION -ge 12 ]; then
+    RECOVERYCONF=${DEST_NODE_PGDATA}/myrecovery.conf
+else
+    RECOVERYCONF=${DEST_NODE_PGDATA}/recovery.conf
+fi
+
+## Execute pg_basebackup to recovery Standby node
+ssh -T ${SSH_OPTIONS} ${POSTGRESQL_STARTUP_USER}@${DEST_NODE_HOST} "
+
+    set -o errexit
+
+    [ -d \"${DEST_NODE_PGDATA}\" ] && rm -rf ${DEST_NODE_PGDATA}
+    [ -d \"${ARCHIVEDIR}\" ] && rm -rf ${ARCHIVEDIR}/*
+
+    ${PGHOME}/bin/pg_basebackup -h ${MAIN_NODE_HOST} -U ${REPLUSER} -p ${MAIN_NODE_PORT} -D ${DEST_NODE_PGDATA} -X stream
+
+    cat > ${RECOVERYCONF} << EOT
+primary_conninfo = 'host=${MAIN_NODE_HOST} port=${MAIN_NODE_PORT} user=${REPLUSER} application_name=${DEST_NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
+recovery_target_timeline = 'latest'
+restore_command = 'scp ${SSH_OPTIONS} ${MAIN_NODE_HOST}:${ARCHIVEDIR}/%f %p'
+EOT
+
+    if [ ${PGVERSION} -ge 12 ]; then
+        sed -i -e \"\\\$ainclude_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'\" \
+               -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${DEST_NODE_PGDATA}/postgresql.conf
+        touch ${DEST_NODE_PGDATA}/standby.signal
+    else
+        echo \"standby_mode = 'on'\" >> ${RECOVERYCONF}
+    fi
+
+    sed -i \
+        -e \"s/#*port = .*/port = ${DEST_NODE_PORT}/\" \
+        -e \"s@#*archive_command = .*@archive_command = 'cp \\\"%p\\\" \\\"${ARCHIVEDIR}/%f\\\"'@\" \
+        ${DEST_NODE_PGDATA}/postgresql.conf
+"
+
+if [ $? -ne 0 ]; then
+
+    echo ERROR: recovery_1st_stage: end: pg_basebackup failed. online recovery failed
+    exit 1
+fi
+
+# start target server as a streaming replication standby server
+ssh -T ${SSH_OPTIONS} ${POSTGRESQL_STARTUP_USER}@$DEST_NODE_HOST "
+	$PGHOME/bin/pg_ctl -l /dev/null -w -D $DEST_NODE_PGDATA start
+"
+
+# wait till the standby catches up primary server or
+# $MAX_DURATION seconds passes
+sec=0
+while [ $sec -lt $MAX_DURATION ]
+do
+  sec=`expr $sec + 1`
+
+  result=`psql -h ${MAIN_NODE_HOST} -p ${MAIN_NODE_PORT} -c "SELECT sent_lsn = replay_lsn FROM pg_stat_replication where application_name = '${DEST_NODE_HOST}'" postgres|sed -n 3p|sed 's/ //'`
+
+  echo "result: $result"
+  if [ "$result" = "t" ];then
+    sec=$MAX_DURATION
+  fi
+  sleep 1
+done 
+
+echo recovery_1st_stage: end: recovery_1st_stage is completed successfully
+exit 0

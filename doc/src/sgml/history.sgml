@@ -1,0 +1,38 @@
+<!-- doc/src/sgml/history.sgml -->
+
+<sect1 id="history">
+ <title>A Brief History of <productname>Pgpool-II</productname></title>
+
+ <indexterm zone="history">
+  <primary>history</primary>
+  <secondary>of Pgpool-II</secondary>
+ </indexterm>
+ <para>
+  <productname>Pgpool-II</productname> started its life as a personal
+  project by Tatsuo Ishii.  In the project it was just a simple
+  connection pooling software. So the
+  name <productname>Pgpool</productname> came from the fact.  The
+  first version was in public in 2003.
+ </para>
+ <para>
+  In 2004, <productname>Pgpool</productname> 1.0 was released with
+  the native replication feature (SQL statement based
+  replication). In the same year 2.0 was released with load
+  balancing, and support for version 3 frontend/backend protocol. In
+  2005, automated fail over and master slave mode support were added.
+ </para>
+ <para>
+  In 2006, <productname>Pgpool</productname>
+  became <productname>Pgpool-II</productname>. The first release 1.0
+  eliminated many of restrictions
+  in <productname>Pgpool</productname>, for example the number
+  of <productname>PostgreSQL</productname> servers was up to 2 in
+  <productname>Pgpool</productname>. Also many new features such as
+  parallel query mode and PCP commands (PCP stands for "Pgpool
+  Control Protocol") were added. Probably the most important change
+  made between <productname>Pgpool</productname>
+  and <productname>Pgpool-II</productname> was that the project was
+  changed from a personal project to a group project owned by the
+  Pgpool Development Group.
+ </para>
+</sect1>

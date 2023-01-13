@@ -1,0 +1,53 @@
+<!-- doc/src/sgml/info.sgml -->
+
+<sect1 id="resources">
+ <title>Further Information</title>
+
+ <para>
+  Besides the documentation, that is, this book, there are other
+  resources about <productname>Pgpool-II</productname>:
+
+  <variablelist>
+
+   <varlistentry>
+    <term>Web Site</term>
+    <listitem>
+     <para>
+      The <productname>Pgpool-II</productname>
+      <ulink url="http://pgpool.net">web site</ulink> is a central place providing official information regarding
+      <productname>Pgpool-II</productname>: downloads, documentation, FAQ, mailing list archives and more.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Mailing Lists</term>
+    <listitem>
+     <para>
+      The mailing lists are a good place to have your questions
+      answered, to share experiences with other users, and to contact
+      the developers.  Consult the <productname>Pgpool-II</> web site
+      for details.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Yourself!</term>
+    <listitem>
+     <para>
+      <productname>pgpool-II</productname> is an open-source project.
+      As such, it depends on the user community for ongoing support.
+      As you begin to use <productname>Pgpool-II</productname>, you
+      will rely on others for help, either through the documentation
+      or through the mailing lists.  Consider contributing your
+      knowledge back. Read the mailing lists and answer questions.  If
+      you learn something which is not in the documentation, write it
+      up and contribute it.  If you add features to the code,
+      contribute them.
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </para>
+</sect1>

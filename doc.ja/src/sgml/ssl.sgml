@@ -1,0 +1,402 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-ssl">
+ <title>Secure Socket Layer (SSL)</title>
+
+ <sect2 id="runtime-ssl-settings">
+
+  <!--
+  <title>SSL Settings</title>
+  -->
+  <title>SSLの設定</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-ssl" xreflabel="ssl">
+    <term><varname>ssl</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, <productname>Pgpool-II</productname> enables the <acronym>SSL</acronym>
+      for both the frontend and backend communications.
+      Default is off.
+      -->
+      onに設定すると，<productname>Pgpool-II</productname>はフロントエンドとバックエンドの両方の通信での<acronym>SSL</acronym>が可能になります。
+      デフォルトはoffです。
+     </para>
+     <note>
+      <para>
+       <!--
+       <xref linkend="guc-ssl-key"> and <xref linkend="guc-ssl-cert"> must also be
+       configured in order for SSL to work with frontend connections.
+       -->
+       フロントエンド接続でSSLを動作させるには、<xref linkend="guc-ssl-key">と<xref linkend="guc-ssl-cert">が設定されてなければなりません。
+      </para>
+     </note>
+     <note>
+      <para>
+       <!--
+       For SSL to work <productname>Pgpool-II</productname> must be build with OpenSSL support.
+       See <xref linkend="install-pgpool"> for details on building the
+       <productname>Pgpool-II</productname>.
+       -->
+       SSLサポートを有効にするためには、<productname>Pgpool-II</productname>をOpenSSLサポート付きでビルドする必要があります。
+       <productname>Pgpool-II</productname>のビルドについて詳細は<xref linkend="install-pgpool">をご覧ください。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-key" xreflabel="ssl_key">
+    <term><varname>ssl_key</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl_key</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl_key</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the private key file to be used for
+      incoming frontend connections. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory.
+      There is no default value for this option, and if left unset
+      <acronym>SSL</acronym> will be disabled for incoming frontend connections.
+      -->
+      フロントエンドとの接続に使用するプライベートキーファイルのパスを指定します。
+      相対パスで指定した場合、<productname>Pgpool-II</productname>の設定ファイルディレクトリが基準となります。
+      このオプションのデフォルト値はありません。
+      設定がない場合は、フロントエンドとの接続で<acronym>SSL</acronym>が使用されなくなります。 
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-cert" xreflabel="ssl_cert">
+    <term><varname>ssl_cert</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl_cert</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl_cert</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the public x509 certificate file to be used
+      for the incoming frontend connections. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory.
+      There is no default value for this option, and if left unset
+      <acronym>SSL</acronym> will be disabled for incoming frontend connections.
+      -->
+      フロントエンドとの接続に使用する公開x509証明書のパスを指定します。 
+      相対パスで指定した場合、<productname>Pgpool-II</productname>の設定ファイルディレクトリが基準となります。
+      このオプションのデフォルト値はありません。
+      設定がない場合は、フロントエンドとの接続で<acronym>SSL</acronym>が使用されなくなります。 
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ca-cert" xreflabel="ssl_ca_cert">
+    <term><varname>ssl_ca_cert</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl_ca_cert</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl_ca_cert</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the path to a <acronym>PEM</acronym>
+      format <acronym>CA</acronym> certificate files, which can be used
+      to verify the backend server certificates. This is analogous to
+      the <command>-CApath</command> option of the
+      <command>OpenSSL verify(1)</command> command.
+      -->
+      <acronym>PEM</acronym>形式の<acronym>CA</acronym>ルート証明書のパスを指定します。
+      これはバックエンドサーバ証明書の検証に用いられます。
+      このオプションは<command>OpenSSL verify(1)</command>コマンドにおける<command>-CAfile</command>オプションと同様の機能を提供します。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ca-cert-dir" xreflabel="ssl_ca_cert_dir">
+    <term><varname>ssl_ca_cert_dir</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl_ca_cert_dir</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl_ca_cert_dir</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a <acronym>PEM</acronym> format <acronym>CA</acronym>
+      certificate file, which can be used to verify the backend server
+      certificates. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory. This is
+      analogous to the <command>-CApath</command> option of the
+      <command>OpenSSL verify(1)</command> command.
+      -->
+      <acronym>PEM</acronym>形式の<acronym>CA</acronym>ルート証明書ファイルが格納されているディレクトリへのパスを指定します。
+      これはバックエンドサーバ証明書の検証に用いられます。
+      相対パスで指定した場合、<productname>Pgpool-II</productname>の設定ファイルディレクトリが基準となります。
+      このオプションは<command>OpenSSL verify(1)</command>コマンドにおける<command>-CApath</command>オプションと同様の機能を提供します。
+     </para>
+     <para>
+      <!--
+      The default value for this option is unset, which means no
+      verification takes place. Verification will still happen if
+      this option is not set but a value is provided for
+      <xref linkend="guc-ssl-ca-cert">.
+      -->
+      デフォルトでは値が設定されておらず検証は行われません。
+      このオプションが設定されていない場合においても、<xref linkend="guc-ssl-ca-cert">オプションが設定されている場合には検証が行われます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-crl-file" xreflabel="ssl_crl_file">
+    <term><varname>ssl_crl_file</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_crl_file</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      SSLサーバ証明書失効リスト（CRL）が入っているファイルのパスを設定します。
+      相対パスで指定した場合、<productname>Pgpool-II</productname>の設定ファイルディレクトリが基準となります。
+      デフォルトは空で、この場合<acronym>CRL</acronym>ファイルは読み込まれません。
+     </para>
+
+     <para>
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ciphers" xreflabel="ssl_ciphers">
+    <term><varname>ssl_ciphers</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ssl_ciphers</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ssl_ciphers</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      SSL接続で使用できる<acronym>SSL</acronym>暗号スイートのリストを指定します。
+      設定構文と使用可能な値のリストについては<application>OpenSSL</application>パッケージの
+      <citerefentry><refentrytitle>ciphers</refentrytitle></citerefentry>マニュアルをご覧ください。
+      TLSバージョン1.2あるいはそれ以下のバージョンのみが影響を受けます。
+      今の所、TLSバージョン1.3接続で使用される暗号の選択を制御する設定はありません。
+      デフォルト値は<literal>HIGH:MEDIUM:+3DES:!aNULL</literal>で、<productname>PostgreSQL</productname>と同じです。
+      この値が選ばれた理由については、<productname>PostgreSQL</productname>のマニュアルをご覧ください。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-prefer-server-ciphers" xreflabel="ssl_prefer_server_ciphers">
+    <term><varname>ssl_prefer_server_ciphers</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>ssl_prefer_server_ciphers</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies whether to use the server's <acronym>SSL</acronym>
+      cipher preferences, rather than the client's.
+      The default value is false.
+      -->
+      クライアントではなく、サーバ指定の<acronym>SSL</acronym>暗号を選択します。
+      デフォルト値はoffです。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ecdh-curve" xreflabel="ssl_ecdh_curve">
+    <term><varname>ssl_ecdh_curve</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_ecdh_curve</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the name of the curve to use in <acronym>ECDH</acronym> key
+      exchange. It needs to be supported by all clients that connect.
+      It does not need to be the same curve used by the server's Elliptic
+      Curve key. The default value is <literal>prime256v1</literal>.
+      -->
+      <acronym>ECDH</acronym>キー交換で使われる曲線の名前を指定します。
+      接続する全てのクライアントがこの設定をサポートしている必要があります。
+      サーバの楕円曲線キーで使用されるのと同じ曲線である必要はありません。
+      デフォルト値は<literal>prime256v1</literal>です。
+     </para>
+     <para>
+      <!--
+      OpenSSL names for the most common curves are:
+      -->
+      よく使われる曲線の OpenSSL 名は、
+      <literal>prime256v1</literal> (NIST P-256),
+      <literal>secp384r1</literal> (NIST P-384),
+      <literal>secp521r1</literal> (NIST P-521) です。
+      <!--
+      The full list of available curves can be shown with the command
+      <command>openssl ecparam -list_curves</command>. Not all of them
+      are usable in <acronym>TLS</acronym> though.
+      -->
+      利用できる曲線の完全なリストは<command>openssl ecparam -list_curves</command>で得られます。
+      ただし、<acronym>TLS</acronym>ではこのすべてが利用できるわけではありません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-dh-params-file" xreflabel="ssl_dh_params_file">
+    <term><varname>ssl_dh_params_file</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_dh_params_file</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the name of the file containing Diffie-Hellman parameters
+      used for so-called ephemeral DH family of SSl ciphers. The default is
+      empty. In which case compiled-in default DH parameters used. Using
+      Custom DH parameters reduces the exposure if an attacker manages to
+      crack the well-known compiled-in DH parameters. You can create your own
+      DH parameters file with the command <command>openssl -out dhparams.pem 2048</command>.
+      -->
+      いわゆる短命DH系SSL暗号で使用するディフィー・ヘルマンパラメータを格納するファイル名を指定します。
+      デフォルトは空で、この場合はコンパイル時に決められたデフォルトのDHパラメータが使用されます。
+      攻撃者が、よく知られたコンパイル時設定のDHパラメータを解読しようとしている場合には、カスタムDHパラメータを使うことでその危険性を低減できます。
+      <command>openssl dhparam -out dhparams.pem 2048</command>を使って、独自のDHパラメータファイルを作ることができます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-passphrase-command" xreflabel="ssl_passphrase_command">
+    <term><varname>ssl_passphrase_command</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_passphrase_command</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      秘密鍵などのSSLファイルを復号する際に、パスフレーズの入手が必要な時に起動される外部コマンドを設定します。
+      デフォルトではこのパラメータは空文字で、この場合はパスフレーズが要求されてもSSLファイルはロードされません。
+     </para>
+     <para>
+      このコマンドは、パスフレーズを標準出力に書き出し、コード0で終了しなければなりません。
+      パラメータの値の<literal>%p</literal>はプロンプト文字列に置き換えられます。
+      （<literal>%</literal>を使いたい場合は<literal>%%</literal>としてください。）
+      プロンプト文字列はおそらく空白文字を含むので、適切に引用符付けするように注意してください。
+      出力の最後に一個の改行があれば、削除されます。
+     </para>
+     <para>
+      このコマンドは実際にはパスフレーズ用にユーザにプロンプトを表示する必要はありません。
+      ファイルからパスフレーズが読めるなら、キーチェーン機構やその他から取得します。
+      選択された仕組みが適切にセキュアかどうかを確認するのはユーザ次第です。
+     </para>
+     <para>
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-ssl-generating-ssl-certificates">
+
+  <!--
+  <title>Generating SSL certificates</title>
+  -->
+  <title>SSL証明書の生成</title>
+
+  <para>
+   <!--
+   Certificate handling is outside the scope of this document. The
+   <ulink url="http://developer.postgresql.org/pgdocs/postgres/ssl-tcp.html">
+   Secure TCP/IP Connections with SSL</> page at postgresql.org has
+   pointers with sample commands for how to generate self-signed
+   certificates. 
+   -->
+   証明書の扱いについてはこのマニュアルの範囲外です。
+   PostgreSQLドキュメント<ulink url="http://www.postgresql.jp/document/current/html/ssl-tcp.html">SSLによる安全なTCP/IP接続</>の章に自分で認証する証明書を作成するコマンドの例があります。
+  </para>
+
+ </sect2>
+
+</sect1>

@@ -1,0 +1,534 @@
+<!-- doc/src/sgml/installation.sgml -->
+
+ <chapter id="installation">
+  <title>Installation of <productname>Pgpool-II</productname></title>
+
+  <indexterm zone="installation">
+   <primary>installation</primary>
+  </indexterm>
+
+  <sect1 id="planning">
+   <title>Planning</title>
+   <para>
+    Since <productname>Pgpool-II</productname> is a tool to manage
+    <productname>PostgreSQL</productname>, we need to decide how to
+    deploy them first. In addition, it is possible to have multiple
+    number of <productname>Pgpool-II</productname> installations to
+    enhance the availability of <productname>Pgpool-II</productname>
+    itself. We need to plan how many installations of
+    <productname>Pgpool-II</productname> is required before hand.  In
+    this chapter we first discuss the running mode of
+    <productname>PostgreSQL</productname> then the deployment of
+    <productname>Pgpool-II</productname>.
+   </para>
+
+   <sect2 id="planning-postgresql">
+    <title>Clustering mode of PostgreSQL</title>
+    <para>
+     It is possible to have more than or equal to one installation of
+     <productname>PostgreSQL</productname>, it is common to have more
+     than 2 installations of it because if there's only one
+     installation, the whole database system goes down if the
+     <productname>PostgreSQL</productname> is not available.  When we
+     use two or more <productname>PostgreSQL</productname> servers, it
+     is necessary to sync the databases in some way.  We call the
+     methods of syncing databases as "clustering running mode".  The
+     most popular mode ever used is "streaming replication mode".
+     Unless there's necessity to have special consideration, it is
+     recommended to use the streaming replication mode. See <xref
+     linkend="running-mode"> for more details of running mode.
+    </para>
+    <para>
+     The next thing we need to consider is how many
+     <productname>PostgreSQL</productname> installations we want. If
+     there are two, we can continue to operate the database
+     system. However it is not uncommon to use more than two
+     <productname>PostgreSQL</productname> if you want to employ read
+     query load balancing by running multiple read quires on multiple
+     servers. <productname>Pgpool-II</productname> provides rich
+     variety of options to tune load balancing. See <xref
+     linkend="runtime-config-load-balancing"> for more details.
+    </para>
+    <para>
+     Since it is possible to add <productname>PostgreSQL</productname>
+     servers later on in <productname>Pgpool-II</productname>, two
+     <productname>PostgreSQL</productname> can be a good starter for
+     you.
+    </para>
+   </sect2>
+
+   <sect2 id="planning-pgpool">
+    <title>Deployment of Pgpool-II</title>
+    <para>
+     Although it is possible to use only one
+     <productname>Pgpool-II</productname>, we recommend to use more
+     than 1 <productname>Pgpool-II</productname> to avoid whole
+     database unavailability due to the
+     <productname>Pgpool-II</productname> being down. Multiple
+     <productname>Pgpool-II</productname> work together and monitor
+     each other. One of them is called "leader" and it has a virtual
+     IP. Clients do not need to aware that there are multiple
+     <productname>Pgpool-II</productname> because they always access
+     the same VIP.  (See <xref linkend="tutorial-watchdog-intro"> for
+     watchdog). If one of <productname>Pgpool-II</productname> goes
+     down, other <productname>Pgpool-II</productname> takes over the
+     leader role.
+    </para>
+    <para>
+     Since it is not allowed to have multiple leader, watchdog votes to
+     decide a new leader. If there are even number of
+     <productname>Pgpool-II</productname>, it is impossible to decide
+     the new leader by voting. Thus we recommend to deploy
+     <productname>Pgpool-II</productname> in more than or equal to 3 odd numbers.
+    </para>
+    <para>
+     Please note that it is possible to have
+     <productname>Pgpool-II</productname> and
+     <productname>PostgreSQL</productname> on a same server. For
+     example you can have only three servers to run both
+     <productname>Pgpool-II</productname> and
+     <productname>PostgreSQL</productname> on each of it.
+    </para>
+    <para>
+     You can find a production level detailed example using three
+     <productname>Pgpool-II</productname> and two
+     <productname>PostgreSQL</productname> in streaming replication
+     mode in <xref linkend="example-cluster"> for those who want to
+     have a production level <productname>Pgpool-II</productname>
+     installation today.
+    </para>
+   </sect2>
+  </sect1>
+
+ <sect1 id="install-source">
+  <title>Installation of Pgpool-II</title>
+  <para>
+   This chapter describes the installation
+   of <productname>Pgpool-II</productname>.  First, installation from
+   source code distribution is explained. Then installation from RPM
+   packages is explained.
+  </para>
+ </sect1>
+
+ <sect1 id="install-requirements">
+  <title>Requirements</title>
+
+  <para>
+   In general, a modern Unix-compatible platform should be able to run
+   <productname>Pgpool-II</>. Windows is not supported.
+  </para>
+
+  <para>
+   The following software packages are required for building
+   <productname>Pgpool-II</>:
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      <indexterm>
+       <primary>make</primary>
+      </indexterm>
+
+      <acronym>GNU</> <application>make</> version 3.80 or newer is required; other
+      <application>make</> programs or older <acronym>GNU</> <application>make</> versions will <emphasis>not</> work.
+      (<acronym>GNU</> <application>make</> is sometimes installed under
+      the name <filename>gmake</filename>.)  To test for <acronym>GNU</acronym>
+      <application>make</application> enter:
+      <screen>
+       <userinput>make --version</userinput>
+      </screen>
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      You need an <acronym>ISO</>/<acronym>ANSI</> C compiler (at least
+      C89-compliant). Recent
+      versions of <productname>GCC</> are recommended, but
+      <productname>Pgpool-II</> is known to build using a wide variety
+      of compilers from different vendors.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <application>tar</> is required to unpack the source
+      distribution, in addition to <application>gzip</>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Several packages of <productname>PostgreSQL</productname> are required to
+      install <productname>Pgpool-II</productname>. You install postgresql-libs
+      and postgresql-devel packages from rpm.
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+
+  <para>
+   If you are building from a <productname>Git</productname> tree instead of
+   using a released source package, or if you want to do server development,
+   you also need the following packages:
+  </para>
+
+  <para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      <indexterm>
+       <primary>flex</primary>
+      </indexterm>
+      <indexterm>
+       <primary>lex</primary>
+      </indexterm>
+      <indexterm>
+       <primary>bison</primary>
+      </indexterm>
+      <indexterm>
+       <primary>yacc</primary>
+      </indexterm>
+
+      <application>Flex</> and <application>Bison</>
+      are needed to build from a Git checkout, or if you changed the actual
+      scanner and parser definition files. If you need them, be sure
+      to get <application>Flex</> 2.5.31 or later and
+      <application>Bison</> 1.875 or later. Other <application>lex</>
+      and <application>yacc</> programs cannot be used.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+  </para>
+
+  <para>
+   If you need to get a <acronym>GNU</acronym> package, you can find
+   it at your local <acronym>GNU</acronym> mirror site (see <ulink
+    url="http://www.gnu.org/order/ftp.html"></>
+   for a list) or at <ulink
+    url="ftp://ftp.gnu.org/gnu/"></ulink>.
+  </para>
+
+  <para>
+   Also check that you have sufficient disk space. You will need about
+   40 MB for the source tree during compilation and about 20 MB for
+   the installation directory. If you are going to
+   run the regression tests you will temporarily need up to an extra
+   4 GB. Use the <command>df</command> command to check free disk
+   space.
+  </para>
+ </sect1>
+
+ <sect1 id="install-getsource">
+  <title>Getting The Source</title>
+
+  <para>
+   The <productname>Pgpool-II</> &version; sources can be obtained
+   from the download section of our
+   website: <ulink url="http://www.pgpool.net"></ulink>.  You should
+   get a file
+   named <filename>pgpool-II-&version;.tar.gz</filename>. After you
+   have obtained the file, unpack it:
+   <screen>
+    <userinput>tar xf pgpool-II-&version;.tar.gz</userinput>
+   </screen>
+   This will create a directory
+   <filename>pgpool-II-&version;</filename> under the current directory
+   with the <productname>Pgpool-II</> sources.
+   Change into that directory for the rest
+   of the installation procedure.
+  </para>
+
+ </sect1>
+
+ <sect1 id="install-pgpool">
+  <title>Installing Pgpool-II</title>
+  <para>
+   After extracting the source tarball, execute the <filename>configure</> script.
+   <programlisting>
+    ./configure
+   </programlisting>
+  </para>
+
+  <para>
+   You can customize the build and installation process by supplying one
+   or more of the following command line options to
+   <filename>configure</filename>:
+  </para>
+
+  <variablelist>
+
+   <varlistentry>
+    <term><option>--prefix=path</option></term>
+    <listitem>
+     <para>
+      Specifies the top directory where <productname>Pgpool-II</> binaries and related
+      files like docs will be installed in. Default value is <filename>/usr/local</filename>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-pgsql=path</option></term>
+    <listitem>
+     <para>
+      Specifies the top directory where <productname>PostgreSQL</>'s client libraries are
+      installed. Default value is the path provided by <command>pg_config</command> command.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-openssl</option></term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> binaries will be built
+      with <productname>OpenSSL</productname>
+      support.  <productname>OpenSSL</productname> support is
+      disabled by default.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--enable-sequence-lock</option></term>
+    <listitem>
+     <para>
+      Use insert_lock compatible
+      with <productname>Pgpool-II</productname> 3.0 series
+      (until 3.0.4).  <productname>Pgpool-II</productname> locks
+      against a row in the sequence
+      table. <productname>PostgreSQL</productname> 8.2 or later
+      which was released after June 2011 cannot use this lock
+      method.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--enable-table-lock</option></term>
+    <listitem>
+     <para>
+      Use insert_lock compatible
+      with <productname>Pgpool-II</productname> 2.2 and 2.3
+      series.  <productname>Pgpool-II</productname> locks
+      against the insert target table.  This lock method is
+      deprecated because it causes a lock conflict
+      with <command>VACUUM</command>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-memcached=path</option></term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> binaries will use <productname>memcached</productname> for in
+      memory query cache.  You have to
+      install <ulink url="http://libmemcached.org/libMemcached.html">libmemcached</ulink>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-pam</option></term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> binaries will be built with PAM authentication support.
+      PAM authentication support is disabled by default.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+
+  <para>
+   <programlisting>
+    make
+    make install
+   </programlisting>
+   This will install <productname>Pgpool-II</>. (If you use <productname>Solaris</> or <productname>FreeBSD</>, replace <command>make</> with <command>gmake</>)
+  </para>
+
+ </sect1>
+
+ <sect1 id="install-pgpool-recovery">
+  <title>Installing pgpool_recovery</title>
+  <para>
+   <productname>Pgpool-II</productname> need function of <function>pgpool_recovery</function>,
+   <function>pgpool_remote_start</function> and <function>pgpool_switch_xlog</function>,
+   when you use the online recovery that describes latter.
+   Also pgpoolAdmin of management tool, stop, restart or reload a
+   <productname>PostgreSQL</productname> on the screen by use <function>pgpool_pgctl</function>.
+   It is enough, if these function installed in template1 first. These
+   function do not needed that install in all databases.
+  </para>
+
+  <para>
+   This is required in all <productname>Pgpool-II</productname>
+   installation.
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql/pgpool-recovery
+    $ make
+    $ make install
+   </programlisting>
+   After this:
+   <programlisting>
+    $ psql template1
+    =# CREATE EXTENSION pgpool_recovery;
+   </programlisting>
+
+   or
+   <programlisting>
+    $ psql -f pgpool-recovery.sql template1
+   </programlisting>
+
+  </para>
+
+  <para>
+   With <productname>Pgpool-II</productname> 3.3 or later, you need
+   to tweak <filename>postgresql.conf</filename>.  Suppose the path
+   to <command>pg_ctl</command>
+   is <filename>/usr/local/pgsql/bin/pg_ctl</filename>. Then you
+   add following to <filename>postgresql.conf</filename>.
+
+   <programlisting>
+    pgpool.pg_ctl = '/usr/local/pgsql/bin/pg_ctl'
+   </programlisting>
+
+   Probably you want to execute following after this:
+   <programlisting>
+    $ pg_ctl reload -D /usr/local/pgsql/data
+   </programlisting>
+
+  </para>
+ </sect1>
+
+ <sect1 id="install-pgpool-regclass">
+  <title>Installing pgpool-regclass</title>
+  <para>
+   If you are using <productname>PostgreSQL</productname> 9.4 or
+   later, you can skip this section.
+  </para>
+
+  <para>
+   If you are using <productname>PostgreSQL</productname> 8.0
+   to <productname>PostgreSQL</productname> 9.3, installing
+   <function>pgpool_regclass</function> function on
+   all <productname>PostgreSQL</productname> to be accessed by
+   <productname>Pgpool-II</productname> is strongly recommended, as
+   it is used internally by <productname>Pgpool-II</productname>.
+   Without this, handling of duplicate table names in different
+   schema might cause trouble (temporary tables aren't a problem).
+   If you are using <productname>PostgreSQL</productname> 9.4 or
+   later, installing <function>pgpool_regclass</function> is not
+   necessary since an equivalent (<function>to_regclass</function>)
+   is included in the <productname>PostgreSQL</productname> core.
+  </para>
+
+  <para>
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql/pgpool-regclass
+    $ make
+    $ make install
+   </programlisting>
+   After this:
+
+   <programlisting>
+    $ psql template1
+    =# CREATE EXTENSION pgpool_regclass;
+   </programlisting>
+
+   or 
+
+   <programlisting>
+    $ psql -f pgpool-regclass.sql template1
+   </programlisting>
+
+   Executing <command>CREATE EXTENSION</command>
+   or <filename>pgpool-regclass.sql</filename> should be performed
+   on every databases accessed
+   via <productname>Pgpool-II</productname>.  However, you do not need to
+   do this for a database created after the execution of
+   <command>CREATE EXTENSION</command> or
+   <command>psql -f pgpool-regclass.sql template1</command>,
+   as this template database will be cloned to create new databases.
+  </para>
+
+ </sect1>
+
+ <sect1 id="create-installlock-table">
+  <title>Creating insert_lock table</title>
+
+  <para>
+   If you are not going to use the native replication mode, you can skip this section.
+  </para>
+
+  <para>
+   If you plan to use native replication mode and insert_lock,
+   creating <structname>pgpool_catalog.insert_lock</structname>
+   table for mutual exclusion is strongly recommended.  Without
+   this, insert_lock works so far. However in that
+   case <productname>Pgpool-II</productname> locks against the
+   insert target table. This behavior is same
+   table lock conflicts with <command>VACUUM</command>, so <command>INSERT</command>
+   processing may be thereby kept waiting for a long time.
+
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql
+    $ psql -f insert_lock.sql template1
+   </programlisting>
+
+  </para>
+
+  <para>
+   Executing <filename>insert_lock.sql</filename> should be
+   performed on every databases accessed
+   via <productname>Pgpool-II</productname>.  You do not need to
+   do this for a database created after the execution of
+   <command>psql -f insert_lock.sql template1</command>, as this
+   template database will be cloned to create new databases.
+  </para>
+ </sect1>
+
+ <sect1 id="install-docs">
+  <title>Compiling and installing documents</title>
+
+  <sect2 id="install-docs-tool-sets">
+   <title>Tool Sets</title>
+
+   <para>
+    <productname>Pgpool-II</productname> documents are written in
+    SGML (more precisely, DocBook, which is a language implemented
+    using SGML). To generate readable HTML documents, you need to
+    compile them using docbook tools. To install Docbook tools on
+    RHEL or similar systems, use:
+    <programlisting>
+     yum install docbook-dtds docbook-style-dsssl docbook-style-xsl libxslt openjade
+    </programlisting>
+   </para>
+  </sect2>
+  
+  <sect2 id="install-docs-make">
+   <title>Compiling docs</title>
+   <para>
+    Once the tool sets are installed on the system, you can compile the docs:
+    <programlisting>
+     $ cd doc
+     $ make
+     $ cd ..
+     $ cd doc.ja
+     $ make
+    </programlisting>
+    You will see English HTML docs under doc/src/sgml/html, and online docs under sgml/man[1-8].
+    Japanese docs can be found under doc.ja/src/sgml/html, and online docs under sgml/man[1-8].
+   </para>
+  </sect2>
+ </sect1>
+
+ &installation-rpm;
+
+ &installation-tips;
+
+</chapter>

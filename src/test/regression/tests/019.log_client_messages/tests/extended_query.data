@@ -1,0 +1,21 @@
+# Test for extended-query protocol
+
+# Start a transaction
+'P'	"S1"	"BEGIN"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+# Issue SELECT
+'P'	"S2"	"SELECT 1 FROM pgbench_accounts"	0
+'B'	"P1"	"S2"	0	0	0
+'E'	"P1"	50000
+'C'	'S'	"S2"
+# Issue COMMIT
+'P'	"S3"	"COMMIT"	0
+'B'	""	"S3"	0	0	0
+'E'	""	0
+'C'	'S'	"S3"
+'S'
+'Y'
+'X'

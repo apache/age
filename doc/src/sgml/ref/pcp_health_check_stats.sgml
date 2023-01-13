@@ -1,0 +1,102 @@
+<!--
+doc/src/sgml/ref/pcp_health_check_stats.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-HEALTH-CHECK-STATS">
+ <indexterm zone="pcp-health-check-stats">
+  <primary>pcp_health_check_stats</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_health_check_stats</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_health_check_stats</refname>
+  <refpurpose>
+   displays health check statistics data on given node ID</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_health_check_stats</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-HEALTH-CHECK-STATS-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_health_check_stats</command>
+   displays health check statistics data on given node ID.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       The index of backend node to get information of.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+$ pcp_health_check_stats -h localhost -p 11001 -w 0
+0 /tmp 11002 up primary 2020-02-24 22:02:42 3 3 0 0 0 0.000000 0 5 1 3.666667 2020-02-24 22:02:47 2020-02-24 22:02:47  
+$ pcp_health_check_stats -h localhost -p 11001 -w -v 0
+Node Id                       : 0
+Host Name                     : /tmp
+Port                          : 11002
+Status                        : up
+Role                          : primary
+Last Status Change            : 2020-02-24 22:02:42
+Total Count                   : 5
+Success Count                 : 5
+Fail Count                    : 0
+Skip Count                    : 0
+Retry Count                   : 0
+Average Retry Count           : 0.000000
+Max Retry Count               : 0
+Max Health Check Duration     : 5
+Minimum Health Check Duration : 1
+Average Health Check Duration : 4.200000
+Last Health Check             : 2020-02-24 22:03:07
+Last Successful Health Check  : 2020-02-24 22:03:07
+Last Skip Health Check        : 
+Last Failed Health Check      : 
+   </programlisting>
+  </para>
+
+  <para>
+   See <xref linkend="health-check-stats-data-table"> for details of data.
+  </para>
+ </refsect1>
+
+</refentry>

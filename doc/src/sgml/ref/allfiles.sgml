@@ -1,0 +1,44 @@
+<!--
+doc/src/sgml/ref/allfiles.sgml
+Pgpool-II documentation
+Complete list of usable sgml source files in this directory.
+-->
+
+<!ENTITY pcpCommonOptions    SYSTEM "pcp_common_options.sgml">
+<!ENTITY pcpNodeCount        SYSTEM "pcp_node_count.sgml">
+<!ENTITY pcpNodeInfo         SYSTEM "pcp_node_info.sgml">
+<!ENTITY pcpHealthCheckStats SYSTEM "pcp_health_check_stats.sgml">
+<!ENTITY pcpWatchdogInfo     SYSTEM "pcp_watchdog_info.sgml">
+<!ENTITY pcpProcCount        SYSTEM "pcp_proc_count.sgml">
+<!ENTITY pcpProcInfo         SYSTEM "pcp_proc_info.sgml">
+<!ENTITY pcpPoolStatus       SYSTEM "pcp_pool_status.sgml">
+<!ENTITY pcpDetachNode       SYSTEM "pcp_detach_node.sgml">
+<!ENTITY pcpAttachNode       SYSTEM "pcp_attach_node.sgml">
+<!ENTITY pcpPromoteNode      SYSTEM "pcp_promote_node.sgml">
+<!ENTITY pcpStopPgpool       SYSTEM "pcp_stop_pgpool.sgml">
+<!ENTITY pcpRecoveryNode     SYSTEM "pcp_recovery_node.sgml">
+<!ENTITY pcpReloadConfig      SYSTEM "pcp_reload_config.sgml">
+<!ENTITY pgMd5               SYSTEM "pg_md5.sgml">
+<!ENTITY pgEnc               SYSTEM "pg_enc.sgml">
+<!ENTITY wdCli               SYSTEM "wd_cli.sgml">
+<!ENTITY pgproto             SYSTEM "pgproto.sgml">
+<!ENTITY pgpool              SYSTEM "pgpool.sgml">
+<!ENTITY pgpoolSetup         SYSTEM "pgpool_setup.sgml">
+<!ENTITY watchdogSetup       SYSTEM "watchdog_setup.sgml">
+<!ENTITY pgpoolShow          SYSTEM "pgpool_show.sgml">
+<!ENTITY pgpoolReset         SYSTEM "pgpool_reset.sgml">
+<!ENTITY pgpoolSet           SYSTEM "pgpool_set.sgml">
+<!ENTITY showPoolStatus      SYSTEM "show_pool_status.sgml">
+<!ENTITY showPoolNodes       SYSTEM "show_pool_nodes.sgml">
+<!ENTITY showPoolProcesses   SYSTEM "show_pool_processes.sgml">
+<!ENTITY showPoolPools       SYSTEM "show_pool_pools.sgml">
+<!ENTITY showPoolVersion     SYSTEM "show_pool_version.sgml">
+<!ENTITY showPoolCache       SYSTEM "show_pool_cache.sgml">
+<!ENTITY showPoolHealthCheckStats SYSTEM "show_pool_health_check_stats.sgml">
+<!ENTITY showPoolBackendStats       SYSTEM "show_pool_backend_stats.sgml">
+<!ENTITY pgpoolAdmPcpNodeInfo SYSTEM "pgpool_adm_pcp_node_info.sgml">
+<!ENTITY pgpoolAdmPcpHealthCheckStats SYSTEM "pgpool_adm_pcp_health_check_stats.sgml">
+<!ENTITY pgpoolAdmPcpPoolStatus SYSTEM "pgpool_adm_pcp_pool_status.sgml">
+<!ENTITY pgpoolAdmPcpNodeCount SYSTEM "pgpool_adm_pcp_node_count.sgml">
+<!ENTITY pgpoolAdmPcpAttachNode SYSTEM "pgpool_adm_pcp_attach_node.sgml">
+<!ENTITY pgpoolAdmPcpDetachNode SYSTEM "pgpool_adm_pcp_detach_node.sgml">

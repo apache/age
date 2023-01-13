@@ -1,0 +1,101 @@
+<!--
+doc/src/sgml/ref/pgpool_adm_pcp_pool_status.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-ADM-PCP-POOL-STATUS">
+ <indexterm zone="pgpool-adm-pcp-pool-status">
+  <primary>pgpool_adm_pcp_pool_status</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_adm_pcp_pool_status</refentrytitle>
+  <manvolnum>3</manvolnum>
+  <refmiscinfo>pgpool_adm extension</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_adm_pcp_pool_status</refname>
+  <refpurpose>
+   a function to retrieves parameters in pgpool.conf.</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <funcsynopsis>
+   <funcprototype>
+    <funcdef><function>pcp_pool_status</function> returns record</funcdef>
+    <paramdef>text <parameter>host</parameter></paramdef>
+    <paramdef>integer <parameter>port</parameter></paramdef>
+    <paramdef>text <parameter>username</parameter></paramdef>
+    <paramdef>text <parameter>password</parameter></paramdef>
+    <paramdef>out <parameter>item text</parameter></paramdef>
+    <paramdef>out <parameter>value text</parameter></paramdef>
+    <paramdef>out <parameter>description text</parameter></paramdef>
+   </funcprototype>
+
+   <funcprototype>
+    <funcdef><function>pcp_pool_status</function> returns record</funcdef>
+    <paramdef>text <parameter>pcp_server</parameter></paramdef>
+    <paramdef>out <parameter>item text</parameter></paramdef>
+    <paramdef>out <parameter>value text</parameter></paramdef>
+    <paramdef>out <parameter>description text</parameter></paramdef>
+   </funcprototype>
+
+  </funcsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R3-PCP-POOL-STATUS-3">
+  <title>Description</title>
+  <para>
+   <function>pcp_pool_status</function> retrieves parameters in
+   pgpool.conf.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Arguments</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><replaceable class="parameter">pcp_server</replaceable></term>
+     <listitem>
+      <para>
+       The foreign server name for pcp server.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other arguments </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+    test=# SELECT * FROM pcp_pool_status(host => 'localhost', port => 11001, username => 't-ishii', password => 't-ishii') WHERE item ~ 'backend.*0';
+    item           |                     value                      |          description
+    -------------------------+------------------------------------------------+-------------------------------
+    backend_hostname0       | /tmp                                           | backend #0 hostname
+    backend_port0           | 11002                                          | backend #0 port number
+    backend_weight0         | 0.500000                                       | weight of backend #0
+    backend_data_directory0 | /home/t-ishii/work/pgpool-II/current/aaa/data0 | data directory for backend #0
+    backend_status0         | 2                                              | status of backend #0
+    backend_flag0           | ALLOW_TO_FAILOVER                              | backend #0 flag
+    (6 rows)
+   </programlisting>
+  </para>
+
+ </refsect1>
+
+</refentry>

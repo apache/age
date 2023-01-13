@@ -1,0 +1,32 @@
+$Header$
+
+1. Parser test program
+
+1.1 How to build
+Parser test program builds with the following command.
+
+  % make
+
+"parser-test" file is created.
+
+1.2 Running program
+You passes a SQL statement to parser-test. If the program accepts the
+statement, it outputs SQL generated from a parse tree.
+
+  % ./parser-test "select 1"
+  SELECT 1
+
+If the program does not accept, it outputs an error.
+
+  % ./parser-test "aaa"
+  syntax error: aaa
+
+
+2. Testing
+2.1 How to test
+You types the following command.
+
+  % make test
+
+If test is failed, you should check test.diff. Then please send
+test.diff to developers.

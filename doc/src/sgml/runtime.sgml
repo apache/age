@@ -1,0 +1,703 @@
+<!-- doc/src/sgml/runtime.sgml -->
+
+<chapter id="runtime">
+ <title>Server Setup and Operation</title>
+
+ <para>
+  This chapter discusses how to set up and run the <productname>Pgpool-II</> server
+  and its interactions with the operating system.
+ </para>
+
+ <sect1 id="pgpool-II-user">
+  <title>The <productname>Pgpool-II</productname> User Account</title>
+
+  <indexterm>
+   <primary>Pgpool-II user</primary>
+  </indexterm>
+
+  <para>
+   As with any server daemon that is accessible to the outside world,
+   it is advisable to run <productname>Pgpool-II</productname> under a
+   separate user account. This user account should only own the data
+   that is managed by the server, and should not be shared with other
+   daemons. (For example, using the user <literal>nobody</literal> is a bad
+   idea.) It is not advisable to install executables owned by this
+   user because compromised systems could then modify their own
+   binaries.
+  </para>
+
+  <para>
+   To add a Unix user account to your system, look for a command
+   <command>useradd</command> or <command>adduser</command>. The user
+   name <systemitem>pgpool</systemitem> is often used, and is assumed
+   throughout this book, but you can use another name if you like.
+  </para>
+ </sect1>
+
+ <sect1 id="configuring-pcp-conf">
+  <title>Configuring pcp.conf</title>
+
+  <indexterm>
+   <primary>pcp configuration</primary>
+  </indexterm>
+
+  <para>
+   <productname>Pgpool-II</productname> provides a interface
+   for administrators to perform management operation, such as
+   getting <productname>Pgpool-II</productname> status or terminating
+   <productname>Pgpool-II</productname> processes
+   remotely. <filename>pcp.conf</filename> is the user/password file
+   used for authentication by this interface. All operation modes
+   require the <filename>pcp.conf</filename> file to be set. A
+   <filename>$prefix/etc/pcp.conf.sample</filename> file is created
+   during the installation
+   of <productname>Pgpool-II</productname>. Copy the file as 
+   <filename>$prefix/etc/pcp.conf</filename> and add your user name and password
+   to it.
+
+   <screen>
+    <prompt>$</> <userinput>cp $prefix/etc/pcp.conf.sample $prefix/etc/pcp.conf</userinput>
+   </screen>
+
+   An empty line or a line starting with <literal>#</literal> is treated as a
+   comment and will be ignored. A user name and its associated
+   password must be written as one line using the following format:
+
+   <synopsis>
+    <replaceable>username</>:<replaceable>[md5 encrypted password]</>
+   </synopsis>
+
+   <replaceable>[md5 encrypted password]</> can be produced with the <filename>$prefix/bin/pg_md5</> command.
+
+   <screen>
+    <prompt>$</> <userinput>pg_md5 your_password</userinput>
+    1060b7b46a3bd36b3a0d66e0127d0517
+   </screen>
+
+   If you don't want pass the password as the argument, execute <command>pg_md5 -p</command>.
+
+   <screen>
+    <prompt>$</> <userinput>pg_md5 -p</userinput>
+    password: <userinput>your_password</userinput>
+   </screen>
+
+   The <filename>pcp.conf</filename> file must be readable by the
+   user who executes <productname>Pgpool-II</productname>.
+  </para>
+
+ </sect1>
+
+ <sect1 id="configuring-pgpool">
+  <title>Configuring Pgpool-II</title>
+
+  <indexterm>
+   <primary>Pgpool-II configuration</primary>
+  </indexterm>
+
+  <sect2 id="configuring-pgpool-conf">
+   <title>Configuring pgpool.conf</title>
+
+   <para>
+    <filename>pgpool.conf</filename> is the main configuration file
+    of <productname>Pgpool-II</productname>. You need to specify the
+    path to the file when
+    starting <productname>Pgpool-II</productname>
+    using <option>-f</option> option.
+    <filename>pgpool.conf</filename> is located
+    at <filename>$prefix/etc/pgpool.conf</filename> by default,
+    if it installed from source code.
+   </para>
+
+   <para>
+    To specify the <productname>Pgpool-II</productname> clustering
+    mode, set <xref linkend="guc-backend-clustering-mode"> parameter
+    to the value explained below.
+   </para>
+
+   <table id="backend-clustering-mode-table">
+    <title><xref linkend="guc-backend-clustering-mode"> value in pgpool.conf</title>
+
+    <tgroup cols="2">
+     <thead>
+      <row>
+       <entry>Clustering mode</entry>
+       <entry>value</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>Streaming replication mode</entry>
+       <entry><literal>streaming_replication</literal></entry>
+      </row>
+      <row>
+       <entry>Replication mode</entry>
+       <entry><literal>native_replication</literal></entry>
+      </row>
+      <row>
+       <entry>Logical replication mode</entry>
+       <entry><literal>logical_replication</literal> </entry>
+      </row>
+      <row>
+       <entry>Slony mode</entry>
+       <entry><literal>slony</literal></entry>
+      </row>
+      <row>
+       <entry>Snapshot isolation mode</entry>
+       <entry><literal>snapshot_isolation</literal></entry>
+      </row>
+      <row>
+       <entry>Raw mode</entry>
+       <entry><literal>raw</literal> </entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
+
+   <para>
+    These configuration files are located at /usr/local/etc with
+    default installation from source code.
+    You can copy one of them as <filename>pgpool.conf</filename>.
+    (probably you need root privilege for this)
+    <programlisting>
+# cd /usr/local/etc
+# cp pgpool.conf.sample pgpool.conf
+    </programlisting>
+   </para>
+  </sect2>
+
+  <sect2 id="running-mode">
+   <title>Clustering mode of Pgpool-II</title>
+
+   <indexterm zone="running-mode">
+    <primary>streaming replication mode</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>native replication mode</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>main replica mode</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>logical replication mode</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>snapshot isolation mode</primary>
+   </indexterm>
+
+   <para>
+    There are six different <link linkend="guc-backend-clustering-mode">clustering modes</link> in
+    <productname>Pgpool-II</>: streaming replication mode, logical
+    replication mode, main replica mode (slony mode), native
+    replication mode, raw mode and snapshot isolation mode. In any
+    mode, <productname>Pgpool-II</> provides connection pooling, and
+    automatic fail over.  Online recovery can be used only with
+    streaming replication mode, snapshot isolation mode and native
+    replication mode.  See <xref linkend="runtime-online-recovery">
+    for more details of online recovery.
+   </para>
+
+   <para>
+    Those modes are exclusive each other and cannot be changed after
+    starting the server. You should make a decision which to use in
+    the early stage of designing the system. If you are not sure, it
+    is recommended to use the streaming replication mode or the
+    snapshot isolation mode.
+   </para>
+
+   <para>
+    The <firstterm>streaming replication mode</firstterm> can be used
+    with <productname>PostgreSQL</> servers operating streaming
+    replication. In this mode, <productname>PostgreSQL</> is
+    responsible for synchronizing databases. This mode is widely used
+    and most recommended way to use <productname>Pgpool-II</>. Load
+    balancing is possible in the mode. visibility consistency among
+    nodes is not guaranteed.
+   </para>
+
+   <para>
+    In the <firstterm>snapshot isolation mode</firstterm>
+    <productname>Pgpool-II</> is responsible for synchronizing
+    databases. The advantage for the mode is the synchronization is
+    done in synchronous way: writing to the database does not return
+    until all of <productname>PostgreSQL</> servers finish the write
+    operation. Also it guarantees the visibility consistency among
+    nodes. To put it simply, it means that the visibility rule of
+    transactions on single server is applied to a cluster consisting
+    of multiple servers as well.  This is a remarkable feature of the
+    snapshot isolation mode in
+    <productname>Pgpool-II</productname>. In fact, the snapshot
+    isolation mode in <productname>Pgpool-II</productname> is the only
+    system which guarantees the visibility consistency among nodes
+    without modifications to <productname>PostgreSQL</> at the moment.
+    Because of this, applications do not need to recognize that they
+    are using a cluster consisting of
+    <productname>PostgreSQL</productname> servers, rather than a
+    single <productname>PostgreSQL</productname> system.  However in
+    this mode the transaction isolation level <emphasis>must be
+    REPEATABLE READ</emphasis>.  You need to set
+    <filename>postgresql.conf</filename> like this:
+    <programlisting>
+default_transaction_isolation = 'repeatable read'
+    </programlisting>
+   </para>
+   <para>
+    Also you need to aware that performance in the mode may be worse
+    than the streaming replication mode and native replication mode
+    due to the overhead to keep the consistency in transactions.
+   </para>
+   
+   <para>
+    In the <firstterm>native replication mode</firstterm>,
+    <productname>Pgpool-II</> is responsible for synchronizing
+    databases. The advantage for the mode is the synchronization is
+    done in synchronous way: writing to the database does not return
+    until all of <productname>PostgreSQL</> servers finish the write
+    operation. As visibility consistency among nodes is not
+    guaranteed, it is recommended to use the snapshot isolation mode
+    except you want to use other than REPEATABLE READ isolation mode.
+    Load balancing is possible in the mode.
+   </para>
+
+   <para>
+    The <firstterm>logical replication mode</firstterm> can be used
+    with <productname>PostgreSQL</> servers operating logical
+    replication. In this mode, <productname>PostgreSQL</> is
+    responsible for synchronizing tables. Load balancing is possible
+    in the mode. Since logical replication does not replicate all
+    tables, it's user's responsibility to replicate the table which
+    could be load balanced. <productname>Pgpool-II</> load balances
+    all tables. This means that if a table is not
+    replicated, <productname>Pgpool-II</> may lookup outdated tables
+    in the subscriber side.
+   </para>
+
+   <para>
+    The <firstterm>main replica mode</firstterm> (slony mode)
+    can be used with <productname>PostgreSQL</> servers
+    operating <productname>Slony</>. In this
+    mode, <productname>Slony</>/<productname>PostgreSQL</> is
+    responsible for synchronizing
+    databases. Since <productname>Slony-I</> is being obsoleted by
+    streaming replication, we do not recommend to use this mode
+    unless you have specific reason to
+    use <productname>Slony</>. Load balancing is possible in the
+    mode.
+   </para>
+
+   <para>
+    In the <firstterm>raw
+     mode</firstterm>, <productname>Pgpool-II</> does not care about
+    the database synchronization. It's user's responsibility to make
+    the whole system does a meaningful thing. Load balancing
+    is <emphasis>not</emphasis> possible in the mode.
+   </para>
+  </sect2>
+
+  <sect2 id="process-management-mode">
+   <title>Process management modes</title>
+
+   <indexterm zone="running-mode">
+    <primary>dynamic process management</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>static process management</primary>
+   </indexterm>
+     <para>
+          <productname>Pgpool-II</> implements a multi-process architecture where
+          each child process can handle exactly one client connection at any time.
+          The total number of concurrent client connections <productname>Pgpool-II</>
+          can handle is configured by the
+           <link linkend="guc-num-init-children">num_init_children</link> config parameter.
+          <productname>Pgpool-II</> supports two child process management modes.
+          <firstterm>Dynamic</firstterm> and <firstterm>Static</firstterm>.
+          In static process management mode, <productname>Pgpool-II</> pre-forks the
+          num_init_children number of child
+          process at startup, and each child process keeps listening for incoming
+          client connection. While with dynamic process management mode,
+          <productname>Pgpool-II</> keeps track of idle processes and forks or kills
+          processes to keep this number within the specified boundaries.
+     </para>
+     <para>
+       <xref linkend="guc-process-management-mode"> is not available prior to
+       <productname>Pgpool-II </productname><emphasis>V4.4</emphasis>.
+      </para>
+  </sect2>
+
+
+ </sect1>
+
+ <sect1 id="configuring-backend-info">
+  <title>Configuring backend information</title>
+
+  <para>
+   For <productname>Pgpool-II</productname> to recognize <productname>PostgreSQL</>
+   backend servers, you need to configure <varname>backend*</varname>
+   in <filename>pgpool.conf</filename>.  For starters, at
+   least <xref linkend="guc-backend-hostname">
+    and <xref linkend="guc-backend-port"> parameters are required to
+     be set up to start <productname>Pgpool-II</> server.
+  </para>
+
+  <sect2 id="backend-settings">
+   <title>Backend Settings</title>
+
+   <para>
+    Backend <productname>PostgreSQL</> used by <productname>Pgpool-II</> must be specified in <filename>pgpool.conf</filename>.
+    See <xref linkend="runtime-config-backend-settings">
+   </para>
+
+   <!--
+   <variablelist>
+
+   <varlistentry id="guc-backend-hostname" xreflabel="backend_hostname">
+   <term><varname>backend_hostname</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_hostname</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_hostname</varname> specifies where to
+   connect to the <productname>PostgreSQL</productname>
+   backend. It is used
+   by <productname>Pgpool-II</productname> to communicate
+   with the server.
+  </para>
+
+   <para>
+   For TCP/IP communication, this parameter can take a hostname
+   or an IP address. If this begins with a slash, it specifies
+   Unix-domain communication rather than TCP/IP; the value is
+   the name of the directory in which the socket file is
+   stored. The default behavior when backend_hostname is empty
+   ('') is to connect to a Unix-domain socket in /tmp.
+  </para>
+
+   <para>
+   Multiple backends can be specified by adding a number at the
+   end of the parameter name (e.g.backend_hostname0). This
+   number is referred to as "DB node ID", and it starts from
+   0. The backend which was given the DB node ID of 0 will be
+   called "Main DB". When multiple backends are defined, the
+   service can be continued even if the Main DB is down (not
+   true in some modes). In this case, the youngest DB node ID
+   alive will be the new Main DB.
+  </para>
+
+   <para>
+   Please note that the DB node which has id 0 has no special
+   meaning if operated in streaming replication mode. Rather,
+   you should care about if the DB node is the "primary node" or
+   not. See Streaming Replication for more details.
+  </para>
+
+   <para>
+   If you plan to use only one PostgreSQL server, specify it by
+   backend_hostname0.
+  </para>
+
+   <para>
+   New nodes can be added in this parameter by reloading a
+   configuration file. However, values cannot be updated so
+   you must restart <productname>Pgpool-II</productname> in
+   that case.
+  </para>
+
+  </listitem>
+
+  </varlistentry>
+
+   <varlistentry id="guc-backend-port" xreflabel="backend_port">
+   <term><varname>backend_port</varname> (<type>integer</type>)
+   <indexterm>
+   <primary><varname>backend_port</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_port</varname> specifies the port number
+   of the backends. Multiple backends can be specified by
+   adding a number at the end of the parameter name
+   (e.g. backend_port0). If you plan to use only one
+   PostgreSQL server, specify it by backend_port0.
+  </para>
+   <para>
+   New backend ports can be added in this parameter by
+   reloading a configuration file. However, values cannot be
+   updated so you must
+   restart <productname>Pgpool-II</productname> in that case.
+  </para>
+  </listitem>
+  </varlistentry>
+
+   <varlistentry id="guc-backend-data-directory" xreflabel="backend_data_directory">
+   <term><varname>backend_data_directory</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_data_directory</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_data_directory</varname> specifies the
+   database directory. Multiple backends can be
+   specified by adding a number at the end of the parameter
+   name (e.g. backend_data_directory0). If you plan to use
+   only one PostgreSQL server, specify it by
+   backend_data_directory0.
+  </para>
+   <para>
+   New backend data_directories can be added in this parameter
+   by reloading a configuration file. However, values cannot
+   be updated so you must
+   restart <productname>Pgpool-II</productname> in that case.
+  </para>
+  </listitem>
+  </varlistentry>
+
+   <varlistentry id="guc-backend-flag" xreflabel="backend_flag">
+   <term><varname>backend_flag</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_flag</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_flag</varname> controls various backend
+   behavior. Multiple backends can be specified by adding a
+   number at the end of the parameter name
+   (e.g. backend_flag0). If you plan to use only one
+   PostgreSQL server, specify it by backend_flag0.
+  </para>
+   <para>
+   New backend flags can be added in this parameter by
+   reloading a configuration file.  Currently followings are
+   allowed. Multiple flags can be specified by using "|".
+  </para>
+
+   <table id="backend-flag-table">
+   <title>Backend flags</title>
+   <tgroup cols="2">
+   <thead>
+   <row>
+   <entry>Flag</entry>
+   <entry>Description</entry>
+  </row>
+  </thead>
+
+   <tbody>
+   <row>
+   <entry><literal>ALLOW_TO_FAILOVER</literal></entry>
+   <entry>Allow to failover or detaching backend. This
+   is the default. You cannot specify with
+   DISALLOW_TO_FAILOVER at a same time.</entry>
+  </row>
+   <row>
+   <entry><literal>DISALLOW_TO_FAILOVER</literal></entry>
+   <entry>This is useful when you protect backend by
+   using HA (High Availability) softwares such as
+   Heartbeat or Pacemaker. You cannot specify with
+   ALLOW_TO_FAILOVER at a same time.
+  </entry>
+  </row>
+  </tbody>
+  </tgroup>
+  </table>
+
+  </listitem>
+  </varlistentry>
+
+  </variablelist>
+
+   -->
+
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="server-start">
+  <title>Starting Pgpool-II and PostgreSQL</title>
+
+  <para>
+   To start <productname>Pgpool-II</productname>, execute:
+<screen>
+$ <userinput>pgpool -f /usr/local/etc/pgpool.conf -F /usr/local/etc/pcp.conf</userinput>
+</screen>
+   which will start the server running in the background. "-f"
+   specifies the path to the main pgpool configuration file and "-F"
+   specifies the path to the configuration file of pcp server, which
+   is the control server for <productname>Pgpool-II</productname>. For
+   other options of the command please take a look at <xref
+   linkend="pgpool"> manual.
+  </para>
+
+  <para>
+   Before starting <productname>Pgpool-II</productname>, you must
+   start <productname>PostgreSQL</productname> because if
+   <productname>PostgreSQL</productname> has not started yet,
+   <productname>Pgpool-II</productname> triggers failover process and
+   makes <productname>PostgreSQL</productname> is in down status.
+  </para>
+
+  <para>
+   If you have difficulty in controlling the startup sequence of
+   <productname>PostgreSQL</productname>, for example
+   <productname>Pgpool-II</productname> and
+   <productname>PostgreSQL</productname> are installed on different
+   servers, you can make <xref
+   linkend="guc-search-primary-node-timeout"> longer (the default is 5
+   minutes) so that <productname>Pgpool-II</productname> waits for
+   <productname>PostgreSQL</productname> starts up until <xref
+   linkend="guc-search-primary-node-timeout"> expires. If
+   <productname>PostgreSQL</productname> starts up before <xref
+   linkend="guc-search-primary-node-timeout"> expires,
+   <productname>Pgpool-II</productname> should start up without
+   problem. If <xref linkend="guc-search-primary-node-timeout">
+   expires before <productname>PostgreSQL</productname> starts up, no
+   primary node will be detected, which means you cannot execute
+   DML/DDL. You need to restart <productname>Pgpool-II</productname>
+   in this case. To confirm that the primary node exists you can use
+   <xref linkend="sql-show-pool-nodes"> command.
+  </para>
+
+  <para>
+   Please note <xref linkend="guc-search-primary-node-timeout"> can
+   only be used in the streaming replication mode because the
+   parameter is only valid in the mode. See <xref
+   linkend="running-mode"> for more details about streaming
+   replication mode. For other mode, tweak the health check (see <xref
+   linkend="runtime-config-health-check">) parameters so that there's
+   enough time before <productname>PostgreSQL</productname> becomes
+   available.
+  </para>
+
+  <para>
+   If health check detects that <productname>PostgreSQL</productname>
+   is not available before <productname>Pgpool-II</productname> starts
+   up, some or all <productname>PostgreSQL</productname> are
+   recognized in "down" status. In this case you need to manually put
+   the <productname>PostgreSQL</productname> server in "up" state by
+   using <xref linkend="pcp-attach-node"> command.  If a client tries
+   to connect to <productname>Pgpool-II</productname> before
+   <productname>PostgreSQL</productname> is available, failover could
+   be triggered. In this case you also need to execute <xref
+   linkend="pcp-attach-node"> command to put the
+   <productname>PostgreSQL</productname> server in "up" state.
+  </para>
+ </sect1>
+
+ <sect1 id="server-stop">
+  <title>Stopping Pgpool-II and PostgreSQL</title>
+
+  <indexterm zone="server-stop">
+   <primary>shutdown</primary>
+  </indexterm>
+
+  <para>
+   To stop <productname>Pgpool-II</productname>, execute:
+<screen>
+$ <userinput>pgpool -f /usr/local/etc/pgpool.conf -F /usr/local/etc/pcp.conf -m fast stop</userinput>
+</screen>
+   "-m" option specifies how gently stops
+   <productname>Pgpool-II</productname>. "fast" means shutdown
+   <productname>Pgpool-II</productname> immediately even if there are
+   existing connections from clients. You can specify "smart" to the
+   option, which force <productname>Pgpool-II</productname> to wait
+   until all clients are disconnected from
+   <productname>Pgpool-II</productname>. But this could make
+   <productname>Pgpool-II</productname> wait forever and this may
+   result in sending SIGKILL signal from the operating system and
+   leaving garbage, which will bring troubles next time when you start
+   <productname>Pgpool-II</productname>.
+  </para>
+
+  <para>
+   After shutting down <productname>Pgpool-II</productname>, you can
+   shutdown <productname>PostgreSQL</productname>.
+  </para>
+ </sect1>
+
+ <sect1 id="server-temporarily-shutdown">
+  <title>Temporarily Shutting Down PostgreSQL</title>
+
+  <indexterm zone="server-temporarily-shutdown">
+   <primary>shutdown</primary>
+  </indexterm>
+
+  <para>
+   Sometimes you want to temporarily stop or restart
+   <productname>PostgreSQL</productname> to maintain or version up
+   it. In this section how to perform the task with minimum downtime.
+  </para>
+
+  <sect2 id="using-pcp-detach-node">
+   <title>Using pcp_detach_node command</title>
+   <para>
+    If you stop <productname>PostgreSQL</productname> by using
+    <command>pg_ctl</command>, failover will not happen until
+    <productname>Pgpool-II</productname> detects it by the health
+    check depending on the health check settings and it will take
+    sometime to detach <productname>PostgreSQL</productname>.
+    Especially if <link linkend="tutorial-watchdog">Watchdog</link> is
+    enabled and <xref linkend="guc-failover-require-consensus"> is on,
+    <productname>Pgpool-II</productname> will not start failover until
+    more than half of watchdog nodes agree that
+    <productname>PostgreSQL</productname> is stopped. If you detach
+    the node by using <xref linkend="pcp-detach-node">, failover will
+    immediately start regardless the settings of health check. Please
+    note that the detached <productname>PostgreSQL</productname> node
+    is not actually stopped and if necessary, you need to manually
+    stop it.
+   </para>
+  </sect2>
+
+  <sect2 id="using-backend-flag">
+   <title>Using backend_flag</title>
+   <para>
+    Stopping or restarting <productname>PostgreSQL</productname>
+    causes failover. If the running mode is not streaming replication
+    mode, or the server is a standby server in streaming replication
+    mode, probably that's not a big deal because clients can always
+    use other servers in the cluster. However if the server is primary
+    server, it will cause change of primary server by promoting one of
+    the standby servers. Moreover if there's only one server remains
+    in the cluster, there are no alternative server or standby server
+    which can be promoted.
+   </para>
+
+   <para>
+    In this case you can use <xref linkend="guc-backend-flag"> to avoid
+     failover.  By setting below in pgpool.conf will avoid failover of
+     backend0.
+     <programlisting>
+backend_flag0 = DISALLOW_TO_FAILOVER
+     </programlisting>
+     This will take effect by reloading or restarting
+     <productname>Pgpool-II</productname>. If this flag is set, failover
+     will not happen if the backend is not available. While the backend
+     is not available, clients will get error message:
+     <programlisting>
+psql: error: could not connect to server: FATAL:  failed to create a backend connection
+DETAIL:  executing failover on backend
+     </programlisting>
+     After restarting the backend, clients can connect as usual.
+     To allow failover on the backend again, you can set:
+     <programlisting>
+backend_flag0 = ALLOW_TO_FAILOVER
+     </programlisting>
+     and reload or restart <productname>Pgpool-II</productname>.
+   </para>
+  </sect2>
+
+ </sect1>
+
+</chapter>

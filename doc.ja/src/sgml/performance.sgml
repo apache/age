@@ -1,0 +1,262 @@
+<!-- doc/src/sgml/performance.sgml -->
+
+<chapter id="performance">
+ <title>性能に関する考慮</title>
+
+ <indexterm>
+  <primary>性能</primary>
+  <secondary>サーバの</secondary>
+ </indexterm>
+
+ <para>
+  <productname>Pgpool-II</productname>の性能に関する数多くのパラメータがあります。
+  この章ではそれらを調整する方法を説明します。
+ </para>
+
+ <sect1 id="resource-requirement">
+  <title>必要リソース</title>
+
+  <para>
+   <productname>Pgpool-II</productname>はさほど多くのリソースを消費しません。
+   しかし、最低限の必要リソースはあります。
+   この節ではそれを順番に説明します。
+  </para>
+
+  <sect2 id="memory-requirement">
+   <title>必要メモリ</title>
+
+   <para>
+    <productname>Pgpool-II</productname>では2種類のメモリの利用方法があります。
+    共有メモリとプロセスのプライベートメモリです。
+    前者は<productname>Pgpool-II</productname>メインサーバプロセスが起動されたときに確保され、<productname>Pgpool-II</productname>全体が終了するまで解放されません。
+    後者は各々の<productname>Pgpool-II</productname>子プロセス内で確保され、そのプロセスが終了した時に解放されます。
+   </para>
+
+   <sect3 id="shared-memory-requirement">
+    <title>必要共有メモリ</title>
+
+    <para>
+     必要共有メモリの計算式を示します。
+     <programlisting>
+      必要共有メモリ(メガバイト) = 10 + <xref linkend="guc-num-init-children"> * <xref linkend="guc-max-pool"> * 0.02
+     </programlisting>
+     例えば<varname>num_init_children</varname> = 32 (デフォルト値です)で、<varname>max_pool</varname> = 4 (デフォルト値です）ならば、必要メモリは10 + 32 * 4 * 0.02 = 12.6 MBです。
+    </para>
+
+    <para>
+     共有メモリでインメモリクエリキャッシュ(詳細は<xref linkend="runtime-in-memory-query-cache">参照)を使う予定があるなら、余分なメモリが必要です。
+      必要メモリ量に関しては<xref linkend="guc-memqcache-total-size">と<xref linkend="guc-memqcache-max-num-cache">を参照してください。
+    </para>
+
+    <para>
+     ただし<productname>Pgpool-II</productname> 4.1以降では、インメモリクエリキャッシュが有効になっていなくても、<xref linkend="guc-enable-shared-relcache">が有効なら(デフォルトで有効です)、追加で128MBの共有メモリを使用することに注意してください。
+    </para>
+
+   </sect3>
+   
+   <sect3 id="process-memory-requirement">
+    <title>必要プロセスメモリ</title>
+    <para>
+     必要プロセスメモリの計算式を示します。
+     <programlisting>
+      合計必要プロセスメモリ(メガバイト単位) = <xref linkend="guc-num-init-children"> * 0.16
+     </programlisting>
+     たとえば<varname>num_init_children</varname> = 32 (デフォルト値です)なら、5.2 MBのメモリが必要です。
+     なお、このメモリ量は<productname>Pgpool-II</productname>子プロセス起動時の最低限の必要メモリで、プロセスが稼働するにしたがって、通信データの大きさなどに応じて更に使用するメモリが増えていきます。
+     実際に<productname>Pgpool-II</productname>を動かして、必要なメモリ量がどのくらいになるのか実運用に入る前に検証することをお勧めします。
+    </para>
+   </sect3>
+  </sect2>
+
+  <sect2 id="disk-requirement">
+   <title>必要ディスク</title>
+   <para>
+    <productname>Pgpool-II</productname>はさほど多くのディスク領域を消費しません。
+    また、<productname>Pgpool-II</productname>によるディスクI/O量は少ないため、高速ディスクの必要もありません。
+    ただし、多くのログを生成する計画があるなら、そのためのディスク領域が必要です。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="managing-client-connections">
+  <title>クライアント接続の管理</title>
+  <para>
+   受け付けるクライアント接続数が増えると、新しい接続を受け付ける<productname>Pgpool-II</productname>子プロセスの数は減少し、ついには0になります。
+   こうなると、子プロセスの一つが空くまでクライアントは待たされます。
+   高負荷状況では、待機状態の待ち行列が長くなり、ついにはシステム設定の上限を超えてしまいます("535 times the listen queue of a socket overflowed"
+   エラーをご覧になったことがあるかも知れません)。
+   この場合、待ち行列の制限を大きくする必要があります。
+   この問題に対処するための方法がいくつかあります。
+  </para>
+
+  <sect2 id="controlling-num-init-children">
+   <title>num_init_childrenの調整</title>
+   <para>
+    この問題に対処するための明らかな方法は、子プロセスの数を増やすことです。
+    <xref linkend="guc-num-init-children">を調整することにより、これは可能です。
+     しかし、子プロセスを増やすと。より多くのCPU、メモリリソースが必要になります。
+     また、ひとたび子プロセスの数がmax_connectionsを超えると、<productname>PostgreSQL</productname>は接続を受け付けなくなり、フェイルオーバが起きるきっかけになるので、<productname>PostgreSQL</productname>のmax_connectionsパラメータについては非常に慎重に検討する必要があります。
+   </para>
+   <para>
+    num_init_childrenを増やすもう一つの欠点は、「大規模な群れ問題(thundering herd problem)」です。
+    新しい接続要求が到達すると、カーネルはaccept()システムコールを発行するために休眠中のプロセスをすべて起こします。
+    これはプロセス同士がソケットを奪い合うきっかけとなり、システムに高負荷を与えます。
+    <xref linkend="guc-serialize-accept">をonにすることにより、接続を受け付けるソケットを確保するプロセスをひとつだけにすることができます。
+    ただし、この方法では、同時に接続するクライアント数が少ない時に、性能が低下する可能性があることに注意してください
+   </para>
+   <para>
+    <productname>Pgpool-II</productname> 4.4以降では、<xref linkend="guc-process-management-mode">を使ってより効果的な対処が可能です。
+    <varname>process-management-mode</varname>を<literal>dynamic</literal>にすることにより、同時に接続するクライアント数が少ない時には<productname>Pgpool-II</productname>の子プロセスの数を削減し、システムのリソースの消費を抑えます。
+    一方、同時に接続するクライアント数が増えてくると、必要に応じて子プロセスの数を増やすので、増大する接続要求にも応えられます。
+    ただし、子プロセスを増やすには新たなプロセスの起動が必要となり、接続に要する時間が増えることに留意してください。
+   </para>
+   <para>
+    <varname>process-management-mode</varname>については、<xref linkend="process-management-mode">もご覧ください。
+   </para>
+  </sect2>
+
+  <sect2 id="controlling-listen-backlog-multiplier">
+   <title>listen_backlog_multiplierの制御</title>
+   <para>
+    別な解決方法は、接続要求待ち行列を長くすることです。
+    <xref linkend="guc-listen-backlog-multiplier">を大きくすることによりこれは可能です。
+   </para>
+  </sect2>
+
+  <sect2 id="when-to-use-reserved-connections">
+   <title>どのような時にreserved_connectionsを使うべきか</title>
+   <para>
+    しかし、上記の方法では待ち行列が満杯にならないことを保証することはできません。
+    クエリを処理する速度を上回ってクライアントからの接続要求が到達すれば、いつかは待ち行列が満杯になります。
+    たとえば、処理に時間を要する重いクエリがあると、容易にこの問題の引き金になります。
+   </para>
+   <para>
+    解決方法は、<xref linkend="guc-reserved-connections">を使って、すでに<productname>PostgreSQL</productname>が行っているように、溢れてしまうような接続要求は拒否することです。
+    これはアプリケーションから見える"Sorry max_connections already"エラーを起こすので、アプリケーションは処理を再実行する必要があります。
+    ですから、この方法はシステムの負荷を事前に予測できないときにだけ使用するべきです。
+   </para>
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="read-query-load-balancing">
+  <title>読み出しクエリの負荷分散</title>
+  <para>
+   複数の<productname>PostgreSQL</productname>ノードがあり、<productname>Pgpool-II</productname>がストリーミングレプリケーションモード、ロジカルレプリケーションモード、slonyモード、レプリケーションモードで動作していると(これらの動作モードについては<xref linkend="running-mode">を参照のこと)、読み出しクエリをこれらのデータベースノードに分散させ、各々のノードにより少ない数のクエリを処理させることによってより高いスループットを得ることができます。
+    この機能を使うためには、<xref linkend="guc-load-balance-mode">をonにする必要があります。
+  </para>
+
+  <para>
+   今の所、非常に多くのシステムがストリーミングレプリケーションモードを使用しているので、以後このモードに焦点を当てて説明します。
+  </para>
+
+  <sect2 id="session-level-load-balancing-vs-statement-level-load-balancing">
+   <title>セッションレベルのロードバランスとステートメントレベルのロードバランス</title>
+   <para>
+    デフォルトではロードバランスモードは「セッションレベル」で、読み出しクエリを送るノードはクライアントが<productname>Pgpool-II</productname>に接続した時に決定されます。
+    たとえば、ノード0、1があると、新しいセッションが作られた時にどちらかのノードがランダムに選択されます。
+    長期的にはどちらのノードが選ばれるかの確率は、<xref linkend="guc-backend-weight">0と<xref linkend="guc-backend-weight">1の比率に近づきます。
+      これらの値が等しければ、どちらかのノードが選ばれるチャンスは同じになるでしょう。
+   </para>
+
+   <para>
+    一方、<xref linkend="guc-statement-level-load-balance">がonなら、
+     ロードバランスノードは各クエリが開始する時に決まります。
+     これは、アプリケーションが自分自身のコネクションプールを持っており、<productname>Pgpool-II</productname>に接続し続けるので、ひとたびアプリケーションが起動するとロードバランスノードが変わらない場合に有効です。
+     他のユースケースはバッチアプリケーションです。たくさんのクエリを発行しますが、セッションは一つです。
+     ステートメントレベルのロードバランスによって、複数のサーバを利用できます。
+   </para>
+  </sect2>
+
+  <sect2 id="creating-specific-purpose-database-node">
+   <title>特定目的のデータベースノードを作る</title>
+   <para>
+    OLAP環境では、特定目的のために大きな読み出し専用のデータベースを持つことが望ましいです。
+    ストリーミングレプリケーションでレプリカデータベースを作ることによって、このようなデータベースを作ることができます。
+    読み出しクエリをそのデータベースに発行する方法は2つあります。
+    データベース名を指定する方法と、アプリケーション名を指定する方法です。
+    前者のためには<xref linkend="guc-database-redirect-preference-list">を、後者のためには<xref linkend="guc-app-name-redirect-preference-list">を使ってください。
+   </para>
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="in-memory-query-caching">
+  <title>インメモリクエリキャッシュ</title>
+  <para>
+   <productname>Pgpool-II</productname>は読み出しクエリの結果をキャッシュし、後で再利用することができます。
+   これは、同じ読み出しクエリを何度も発行するタイプのアプリケーションでは大きなメリットがあります。
+   2つのクエリが文字列として同じで（そしてもしあればプリペアドステートメントのパラメータ）が同じなら、それは「同じ」クエリと見なされます。
+   最初にそのクエリが送信されると、<productname>Pgpool-II</productname>はクエリの結果を保存し、<productname>PostgreSQL</productname>に一切問い合わせることなく2つ目のクエリのために使用します。
+   この技術は<xref linkend="runtime-in-memory-query-cache">で説明されています。
+  </para>
+
+  <sect2 id="when-not-to-use-in-memory-query-caching">
+   <title>インメモリクエリキャッシュを使用すべきでない場合</title>
+   <para>
+    テーブルが更新されると、そのテーブルに対するクエリの結果は変わってしまう可能性があります。
+    不整合を防ぐために、<productname>Pgpool-II</productname>は関連するテーブルが更新されるとクエリキャッシュデータを破棄します。
+    ですから、頻繁に更新されるデータベースはインメモリクエリキャッシュに向いていません。
+    クエリキャッシュを使うのに適したデータベースかどうかを調べるには、<xref linkend="SQL-SHOW-POOL-CACHE">を使ってください。
+     クエリキャッシュのヒット率が70%未満なら、たぶんクエリキャッシュの利用は避けたほうが良いでしょう。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="relation-cache">
+  <title>リレーションキャッシュ</title>
+  <para>
+   raw mode (<xref linkend="running-mode">参照)あるいは<xref linkend="guc-load-balance-mode">がoffに設定されている場合を除き<productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>に時々、テーブルが一時テーブルかどうかなどのメタ情報を問い合わせる必要があります。
+     それらの情報を得るために、<productname>Pgpool-II</productname>はプライマリ<productname>PostgreSQL</productname>にときには10本ものクエリを送信することがあります（4.1以降ではその数は大幅に減っていますが、それでも完全に問い合わせの送信がなくなったわけではありません)。
+     このオーバーヘッドを減らすために、<productname>Pgpool-II</productname>は「リレーションキャッシュ」を保持しています。
+     次にクエリに同じテーブルが含まれていると、<productname>Pgpool-II</productname>はキャッシュからその情報を取り出します。
+  </para>
+  <para>
+   リレーションキャッシュの性能に関する設定を行うためのパラメータがあります。
+   詳細は<xref linkend="guc-relcache-expire">、<xref linkend="guc-relcache-size">、<xref linkend="guc-check-temp-table">、<xref linkend="guc-check-unlogged-table">をご覧ください。
+  </para>
+
+  <sect2 id="shared-relation-cache">
+   <title>共有リレーションキャッシュ</title>
+   <para>
+    リレーションキャッシュは基本的にプロセス内のプライベートメモリにあり、プロセスに結びついています。
+    ですから、あるセッションでテーブルのリレーションキャッシュが作られても、別のプロセスではそのリレーションキャッシュはまだ作られていないかも知れません。
+    結局すべてのプロセスでリレーションキャッシュが作成されるまで、<productname>PostgreSQL</productname>にクエリが送信され続けます。
+    <productname>Pgpool-II</productname> 4.1は共有メモリにリレーションキャッシュを作ることによってこの問題を克服しました。
+    共有メモリにリレーションキャッシュが作られると、他のセッションは共有リレーションキャッシュを検索することによってキャッシュの結果を得ることができます。
+    詳細は<xref linkend="guc-enable-shared-relcache">設定パラメータを見てください。
+     この機能は非常に効果的なので、この機能を有効にすることをお勧めします。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="other-performance-considerations">
+  <title>その他の性能考慮点</title>
+  <para>
+   この節ではその他の性能考慮点を紹介します。
+  </para>
+
+  <sect2 id="thundering-herd-problem">
+   <title>大規模な群れ問題(Thundering Herd Problem)</title>
+   <para>
+    <xref linkend="guc-num-init-children">が大きいと、<productname>Pgpool-II</productname>プロセスが起こされ、その結果重いコンテキストスイッチが引き起こされる可能性があります。
+     これによってシステムに高負荷が生じ、システムの全体的な性能を損ないます。
+     この問題は大規模な群れ問題(Thundering Herd Problem)と呼ばれます。
+     <xref linkend="guc-serialize-accept">を有効にすることによって、この問題を解決できます。
+      小さな<xref linkend="guc-num-init-children">では、<xref linkend="guc-serialize-accept">はシステムの性能を低下させる可能性があることに注意してください。
+	<xref linkend="guc-serialize-accept">節のガイダンスを参照してください。
+   </para>
+  </sect2>
+
+  <sect2 id="disaster-recovery-settings">
+   <title>ディザスタリカバリ設定</title>
+   <para>
+    ディザスタリカバリ設定を行う場合、<productname>Pgpool-II</productname>とプライマリ<productname>PostgreSQL</productname>サーバから地理的に離れた場所に、もう1台の<productname>Pgpool-II</productname>とスタンバイ<productname>PostgreSQL</productname>サーバを設置することが考えられます。
+    そしてスタンバイサーバ側に近いクライアントは、読み出し専用のクエリに関してはスタンバイサーバに近い<productname>Pgpool-II</productname>にアクセスしたいとします。
+    しかしスタンバイ側の<productname>Pgpool-II</productname>は、内部的にシステムカタログへの問い合わせをプライマリ<productname>PostgreSQL</productname>サーバに発行することがあり、性能が低下してしまいます。
+    この問題を回避するために、<xref linkend="guc-relcache-query-target">を使用して、そうした問い合わせをスタンバイサーバ側に送るようにすることができます。
+    詳細は<xref linkend="guc-relcache-query-target">をご覧ください。
+   </para>
+  </sect2>
+ </sect1>
+</chapter>

@@ -1,0 +1,17 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook V4.2//EN"[
+    <!ENTITY % version SYSTEM "version.sgml">
+    %version;
+]>
+
+<book id="pgpool-II-en"><title>pgpool-II english documentation</title>
+    <bookinfo>
+        <productname>pgpool-doc-en</productname>
+        <productnumber>&version;</productnumber>
+        <abstract>
+        <para>
+            Hello pgpool-II!
+        </para>
+    </abstract>
+</bookinfo>
+</book>
+

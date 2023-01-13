@@ -1,0 +1,40 @@
+FE=> Parse(stmt="S1", query="BEGIN")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Parse(stmt="S2", query="SELECT * FROM generate_series(1,10)")
+FE=> Bind(stmt="S2", portal="")
+FE=> Describe(stmt="S2")
+FE=> Execute(portal="")
+FE=> Close(stmt="S2")
+FE=> Parse(stmt="S1", query="COMMIT")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE CloseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE ParameterDescription
+<= BE RowDescription
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE DataRow
+<= BE CommandComplete(SELECT 10)
+<= BE CloseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE CloseComplete
+<= BE ReadyForQuery(I)
+FE=> Terminate
