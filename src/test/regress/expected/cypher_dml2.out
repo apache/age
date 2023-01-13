@@ -1,0 +1,500 @@
+CREATE GRAPH cypher_dml2;
+CREATE VLABEL v1;
+EXPLAIN ( analyze false, verbose true, costs false, buffers false, timing false )
+MATCH (p:v1)
+return max(collect(p.name)) as col;
+ERROR:  aggregate function calls cannot be nested
+LINE 3: return max(collect(p.name)) as col;
+                   ^
+MATCH (p:v1)
+return max(collect(p.name)) as col;
+ERROR:  aggregate function calls cannot be nested
+LINE 2: return max(collect(p.name)) as col;
+                   ^
+MATCH (p:v1)
+with collect(p.name) as col
+RETURN max(col);
+ max 
+-----
+ 
+(1 row)
+
+CREATE ELABEL e1;
+CREATE (a: v1 {id: 1})
+CREATE (b: v1 {id: 2})
+CREATE (a)-[r:e1 {text: 'text'}]->(b)
+RETURN r;
+                r                 
+----------------------------------
+ e1[4.1][3.1,3.2]{"text": "text"}
+(1 row)
+
+CREATE (a: v1 {id: 3})
+CREATE (b: v1 {id: 4})
+CREATE (a)-[r:e1 {id: 5, text: 'text'}]->(b)
+RETURN r;
+                     r                     
+-------------------------------------------
+ e1[4.2][3.3,3.4]{"id": 5, "text": "text"}
+(1 row)
+
+-- AGV2-29, Predicates functions want jsonb, not list
+MATCH p=(n1)-[r:e1*1]->(n2)
+WHERE all(x in r where x.id is null)
+RETURN count(p), p;
+ count |                                  p                                   
+-------+----------------------------------------------------------------------
+ 1     | [v1[3.1]{"id": 1},e1[4.1][3.1,3.2]{"text": "text"},v1[3.2]{"id": 2}]
+(1 row)
+
+MATCH p=(n1)-[r:e1*1]->(n2)
+WHERE all(x in r where x.text is not null)
+RETURN count(p), p;
+ count |                                       p                                       
+-------+-------------------------------------------------------------------------------
+ 1     | [v1[3.1]{"id": 1},e1[4.1][3.1,3.2]{"text": "text"},v1[3.2]{"id": 2}]
+ 1     | [v1[3.3]{"id": 3},e1[4.2][3.3,3.4]{"id": 5, "text": "text"},v1[3.4]{"id": 4}]
+(2 rows)
+
+MATCH (n) DETACH DELETE n;
+-- AGV2-26, head/tail/last returns array
+CREATE(:v_user{name:'userA'});
+CREATE(:v_title{name:'TitleA'});
+CREATE(:v_type{name:'TypeA'});
+CREATE(:v_sub{name:'SubA'});
+MATCH(v1:v_user{name:'userA'}), (v2:v_title{name:'TitleA'})
+CREATE (v1)-[:e_user_title{name:'(1)', val:1}]->(v2);
+MATCH(v1:v_title{name:'TitleA'}), (v2:v_type{name:'TypeA'})
+CREATE (v1)-[:e_title_type{name:'(2)', val:2}]->(v2);
+MATCH(v1:v_type{name:'TypeA'}), (v2:v_sub{name:'SubA'})
+CREATE (v1)-[:e_title_type{name:'(3)', val:3}]->(v2);
+MATCH(n)-[e*3]->(n3) RETURN e;
+                                                                                e                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [e_user_title[9.1][5.1,6.1]{"val": 1, "name": "(1)"},e_title_type[10.1][6.1,7.1]{"val": 2, "name": "(2)"},e_title_type[10.2][7.1,8.1]{"val": 3, "name": "(3)"}]
+(1 row)
+
+MATCH(n)-[e*3]->(n3) RETURN head(e);
+                        head                         
+-----------------------------------------------------
+ e_user_title[9.1][5.1,6.1]{"val": 1, "name": "(1)"}
+(1 row)
+
+MATCH(n)-[e*3]->(n3) RETURN tail(e);
+                                                    tail                                                     
+-------------------------------------------------------------------------------------------------------------
+ [e_title_type[10.1][6.1,7.1]{"val": 2, "name": "(2)"},e_title_type[10.2][7.1,8.1]{"val": 3, "name": "(3)"}]
+(1 row)
+
+MATCH(n)-[e*3]->(n3) RETURN last(e);
+                         last                         
+------------------------------------------------------
+ e_title_type[10.2][7.1,8.1]{"val": 3, "name": "(3)"}
+(1 row)
+
+MATCH (n) DETACH DELETE n;
+CREATE (a:person);
+create (a:person {name: 'Alice', age: 51, eyes: 'brown'}),
+(b:person {name: 'Frank', age: 61, eyes: '', liked_colors: ['blue','green']}),
+(c:person {name: 'Charlie', age: 53, eyes: 'green'}),
+(d:person {name: 'Bob', age: 25, eyes: 'blue'}),
+(e:person {name: 'Daniel', age: 54, eyes: 'brown', liked_colors: ''}),
+(f:person {name: 'Eskil', age: 41, eyes: 'blue', liked_colors: ['pink','yellow','black']}),
+(a)-[:knows]->(c),
+(a)-[:knows]->(d),
+(c)-[:knows]->(e),
+(d)-[:knows]->(e),
+(d)-[:married]->(f);
+-- all(..)
+MATCH p = (a)-[*1..3]->(b)
+WHERE
+a.name = 'Alice'
+AND b.name = 'Daniel'
+AND all(x IN nodes(p) WHERE x.age > 30)
+RETURN [x in nodes(p) | x.age];
+   ?column?   
+--------------
+ [51, 53, 54]
+(1 row)
+
+-- any(..)
+MATCH (n)
+WHERE any(color IN n.liked_colors WHERE color = 'yellow')
+RETURN n ;
+                                                   n                                                   
+-------------------------------------------------------------------------------------------------------
+ person[11.7]{"age": 41, "eyes": "blue", "name": "Eskil", "liked_colors": ["pink", "yellow", "black"]}
+(1 row)
+
+-- exists(..)
+MATCH (n)
+WHERE n.name IS NOT NULL
+RETURN
+n.name AS name,
+exists((n)-[:MARRIED]->()) AS is_married;
+   name    | is_married 
+-----------+------------
+ "Alice"   | f
+ "Frank"   | f
+ "Charlie" | f
+ "Bob"     | t
+ "Daniel"  | f
+ "Eskil"   | f
+(6 rows)
+
+-- isEmpty(..)
+-- List
+MATCH (n)
+WHERE NOT isEmpty(n.liked_colors)
+RETURN n ;
+                                                   n                                                   
+-------------------------------------------------------------------------------------------------------
+ person[11.3]{"age": 61, "eyes": "", "name": "Frank", "liked_colors": ["blue", "green"]}
+ person[11.7]{"age": 41, "eyes": "blue", "name": "Eskil", "liked_colors": ["pink", "yellow", "black"]}
+(2 rows)
+
+-- Map
+MATCH (n)
+WHERE isEmpty(properties(n))
+RETURN n ;
+       n        
+----------------
+ person[11.1]{}
+(1 row)
+
+MATCH (n)
+WHERE NOT isEmpty(properties(n))
+RETURN n ;
+                                                   n                                                   
+-------------------------------------------------------------------------------------------------------
+ person[11.2]{"age": 51, "eyes": "brown", "name": "Alice"}
+ person[11.3]{"age": 61, "eyes": "", "name": "Frank", "liked_colors": ["blue", "green"]}
+ person[11.4]{"age": 53, "eyes": "green", "name": "Charlie"}
+ person[11.5]{"age": 25, "eyes": "blue", "name": "Bob"}
+ person[11.6]{"age": 54, "eyes": "brown", "name": "Daniel", "liked_colors": ""}
+ person[11.7]{"age": 41, "eyes": "blue", "name": "Eskil", "liked_colors": ["pink", "yellow", "black"]}
+(6 rows)
+
+-- String
+MATCH (n)
+WHERE isEmpty(n.eyes)
+RETURN n.age AS age ;
+ age 
+-----
+ 61
+(1 row)
+
+-- none(..)
+MATCH p = (n)-[*1..3]->(b)
+WHERE
+n.name = 'Alice'
+AND none(x IN nodes(p) WHERE x.age = 25)
+RETURN p ;
+                                                                                                                            p                                                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [person[11.2]{"age": 51, "eyes": "brown", "name": "Alice"},knows[12.1][11.2,11.4]{},person[11.4]{"age": 53, "eyes": "green", "name": "Charlie"}]
+ [person[11.2]{"age": 51, "eyes": "brown", "name": "Alice"},knows[12.1][11.2,11.4]{},person[11.4]{"age": 53, "eyes": "green", "name": "Charlie"},knows[12.3][11.4,11.6]{},person[11.6]{"age": 54, "eyes": "brown", "name": "Daniel", "liked_colors": ""}]
+(2 rows)
+
+-- single(..)
+MATCH p = (n)-[]->(b)
+WHERE
+n.name = 'Alice'
+AND single(var IN nodes(p) WHERE var.eyes = 'blue')
+RETURN p ;
+                                                                      p                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------
+ [person[11.2]{"age": 51, "eyes": "brown", "name": "Alice"},knows[12.2][11.2,11.5]{},person[11.5]{"age": 25, "eyes": "blue", "name": "Bob"}]
+(1 row)
+
+MATCH (n) DETACH DELETE n;
+MATCH (n) RETURN n;
+ n 
+---
+(0 rows)
+
+-- Trigger
+CREATE TEMPORARY TABLE _trigger_history(
+    id graphid,
+    is_before boolean,
+    CONSTRAINT pk_history PRIMARY KEY (id, is_before)
+);
+CREATE OR REPLACE FUNCTION v1_test_trigger_func_be()
+returns trigger
+AS $$
+DECLARE
+BEGIN
+    raise notice 'Bf: % %', new, old;
+    CASE WHEN new.id IS NULL
+    THEN
+        DELETE FROM _trigger_history WHERE _trigger_history.id = old.id AND
+            _trigger_history.is_before = true;
+        RETURN old;
+    ELSE
+        INSERT INTO _trigger_history(id, is_before) VALUES (new.id, true);
+        RETURN new;
+    END CASE;
+END; $$
+LANGUAGE 'plpgsql';
+create trigger v1_test_trigger_be
+    before insert or delete or update on cypher_dml2.v1
+	for each row
+    execute procedure v1_test_trigger_func_be();
+CREATE OR REPLACE FUNCTION v1_test_trigger_func_af()
+returns trigger
+AS $$
+DECLARE
+BEGIN
+    raise notice 'Af: % %', new, old;
+    CASE WHEN new.id IS NULL THEN
+        DELETE FROM _trigger_history WHERE _trigger_history.id = old.id AND
+            _trigger_history.is_before = false;
+        RETURN old;
+    ELSE
+        INSERT INTO _trigger_history(id, is_before) VALUES (new.id, false);
+        RETURN new;
+    END CASE;
+END; $$
+LANGUAGE 'plpgsql';
+create trigger v1_test_trigger_af
+    after insert or delete or update on cypher_dml2.v1
+	for each row
+    execute procedure v1_test_trigger_func_af();
+CREATE (v1:v1 {name: 'trigger_item'}) RETURN v1;
+NOTICE:  Bf: (3.5,"{""name"": ""trigger_item""}") <NULL>
+NOTICE:  Af: (3.5,"{""name"": ""trigger_item""}") <NULL>
+               v1                
+---------------------------------
+ v1[3.5]{"name": "trigger_item"}
+(1 row)
+
+SELECT * FROM _trigger_history;
+ id  | is_before 
+-----+-----------
+ 3.5 | t
+ 3.5 | f
+(2 rows)
+
+-- Must fail
+MATCH (n) SET n.name = 'trigger_item_updated' RETURN n;
+NOTICE:  Bf: (3.5,"{""name"": ""trigger_item_updated""}") (3.5,"{""name"": ""trigger_item""}")
+ERROR:  duplicate key value violates unique constraint "pk_history"
+DETAIL:  Key (id, is_before)=(3.5, t) already exists.
+CONTEXT:  SQL statement "INSERT INTO _trigger_history(id, is_before) VALUES (new.id, true)"
+PL/pgSQL function v1_test_trigger_func_be() line 11 at SQL statement
+SELECT * FROM _trigger_history;
+ id  | is_before 
+-----+-----------
+ 3.5 | t
+ 3.5 | f
+(2 rows)
+
+-- Should pass
+DELETE FROM _trigger_history;
+MATCH (n) SET n.name = 'trigger_item_updated' RETURN n;
+NOTICE:  Bf: (3.5,"{""name"": ""trigger_item_updated""}") (3.5,"{""name"": ""trigger_item""}")
+NOTICE:  Af: (3.5,"{""name"": ""trigger_item_updated""}") (3.5,"{""name"": ""trigger_item""}")
+                    n                    
+-----------------------------------------
+ v1[3.5]{"name": "trigger_item_updated"}
+(1 row)
+
+SELECT * FROM _trigger_history;
+ id  | is_before 
+-----+-----------
+ 3.5 | t
+ 3.5 | f
+(2 rows)
+
+-- Must empty
+MATCH (n) DETACH DELETE n;
+NOTICE:  Bf: <NULL> (3.5,"{""name"": ""trigger_item_updated""}")
+NOTICE:  Af: <NULL> (3.5,"{""name"": ""trigger_item_updated""}")
+SELECT * FROM _trigger_history;
+ id | is_before 
+----+-----------
+(0 rows)
+
+DROP GRAPH cypher_dml2 CASCADE;
+NOTICE:  drop cascades to 14 other objects
+DETAIL:  drop cascades to sequence cypher_dml2.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v1
+drop cascades to elabel e1
+drop cascades to vlabel v_user
+drop cascades to vlabel v_title
+drop cascades to vlabel v_type
+drop cascades to vlabel v_sub
+drop cascades to elabel e_user_title
+drop cascades to elabel e_title_type
+drop cascades to vlabel person
+drop cascades to elabel knows
+drop cascades to elabel married
+-- #589 ( Cypher read clauses cannot follow update clauses )
+CREATE GRAPH cypher_dml2;
+SET GRAPH_PATH to cypher_dml2;
+CREATE VLABEL main;
+CREATE ELABEL main2;
+CREATE (n:another {id: 593}) RETURN n.id;
+ id  
+-----
+ 593
+(1 row)
+
+MERGE (n:main {id: 593})
+ON CREATE SET n.id = 593
+WITH n
+MATCH (g: another)
+WHERE g.id = 593
+MERGE (g)-[:main2]->(n);
+MATCH ()-[e:main2]-() RETURN e;
+           e           
+-----------------------
+ main2[4.1][5.1,3.1]{}
+ main2[4.1][5.1,3.1]{}
+(2 rows)
+
+MATCH (g: another) RETURN g;
+            g            
+-------------------------
+ another[5.1]{"id": 593}
+(1 row)
+
+MATCH (g: main) RETURN g;
+          g           
+----------------------
+ main[3.1]{"id": 593}
+(1 row)
+
+DROP GRAPH cypher_dml2 CASCADE;
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to sequence cypher_dml2.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel main
+drop cascades to elabel main2
+drop cascades to vlabel another
+-- fix: Includes necessary JOINs of vertices (#599)
+CREATE GRAPH cypher_dml2;
+SET GRAPH_PATH to cypher_dml2;
+CREATE ({id: 1})-[:e1]->({id: 2})-[:e1]->({id: 3})-[:e1]->({id: 4})
+RETURN *;
+        ?column?         |      ?column?      |        ?column?         |      ?column?      |        ?column?         |      ?column?      |        ?column?         
+-------------------------+--------------------+-------------------------+--------------------+-------------------------+--------------------+-------------------------
+ ag_vertex[1.1]{"id": 1} | e1[3.1][1.1,1.2]{} | ag_vertex[1.2]{"id": 2} | e1[3.2][1.2,1.3]{} | ag_vertex[1.3]{"id": 3} | e1[3.3][1.3,1.4]{} | ag_vertex[1.4]{"id": 4}
+(1 row)
+
+MATCH (a {id: 1}), (b {id: 1})
+CREATE (b)-[:e1]->(a)
+RETURN *;
+            a            |            b            |      ?column?      
+-------------------------+-------------------------+--------------------
+ ag_vertex[1.1]{"id": 1} | ag_vertex[1.1]{"id": 1} | e1[3.4][1.1,1.1]{}
+(1 row)
+
+MATCH (a)
+RETURN *;
+            a            
+-------------------------
+ ag_vertex[1.1]{"id": 1}
+ ag_vertex[1.2]{"id": 2}
+ ag_vertex[1.3]{"id": 3}
+ ag_vertex[1.4]{"id": 4}
+(4 rows)
+
+MATCH (a)-[]-(a) RETURN *;
+            a            
+-------------------------
+ ag_vertex[1.1]{"id": 1}
+ ag_vertex[1.1]{"id": 1}
+(2 rows)
+
+MATCH p=(a)-[]-(a) RETURN *;
+            a            |                                  p                                   
+-------------------------+----------------------------------------------------------------------
+ ag_vertex[1.1]{"id": 1} | [ag_vertex[1.1]{"id": 1},e1[3.4][1.1,1.1]{},ag_vertex[1.1]{"id": 1}]
+ ag_vertex[1.1]{"id": 1} | [ag_vertex[1.1]{"id": 1},e1[3.4][1.1,1.1]{},ag_vertex[1.1]{"id": 1}]
+(2 rows)
+
+EXPLAIN VERBOSE MATCH (a)-[]-(a) RETURN a;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Hash Join  (cost=44.46..71.08 rows=12 width=32)
+   Output: ROW(a.id, a.properties, a.ctid)::vertex
+   Hash Cond: (a.id = ag_edge.start)
+   ->  Seq Scan on cypher_dml2.ag_vertex a  (cost=0.00..22.00 rows=1200 width=46)
+         Output: a.id, a.properties, a.ctid
+   ->  Hash  (cost=44.31..44.31 rows=12 width=16)
+         Output: ag_edge.start, ag_edge."end"
+         ->  Append  (cost=0.00..44.31 rows=12 width=16)
+               ->  Seq Scan on cypher_dml2.ag_edge  (cost=0.00..0.00 rows=1 width=16)
+                     Output: ag_edge.start, ag_edge."end"
+                     Filter: (ag_edge.start = ag_edge."end")
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_1  (cost=0.00..22.12 rows=5 width=16)
+                     Output: ag_edge_1.start, ag_edge_1."end"
+                     Filter: (ag_edge_1.start = ag_edge_1."end")
+               ->  Seq Scan on cypher_dml2.ag_edge ag_edge_2  (cost=0.00..0.00 rows=1 width=16)
+                     Output: ag_edge_2."end", ag_edge_2.start
+                     Filter: (ag_edge_2."end" = ag_edge_2.start)
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_3  (cost=0.00..22.12 rows=5 width=16)
+                     Output: ag_edge_3."end", ag_edge_3.start
+                     Filter: (ag_edge_3."end" = ag_edge_3.start)
+(20 rows)
+
+EXPLAIN VERBOSE MATCH (a)-[]-(a) RETURN *;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Hash Join  (cost=44.46..71.08 rows=12 width=32)
+   Output: ROW(a.id, a.properties, a.ctid)::vertex
+   Hash Cond: (a.id = ag_edge.start)
+   ->  Seq Scan on cypher_dml2.ag_vertex a  (cost=0.00..22.00 rows=1200 width=46)
+         Output: a.id, a.properties, a.ctid
+   ->  Hash  (cost=44.31..44.31 rows=12 width=16)
+         Output: ag_edge.start, ag_edge."end"
+         ->  Append  (cost=0.00..44.31 rows=12 width=16)
+               ->  Seq Scan on cypher_dml2.ag_edge  (cost=0.00..0.00 rows=1 width=16)
+                     Output: ag_edge.start, ag_edge."end"
+                     Filter: (ag_edge.start = ag_edge."end")
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_1  (cost=0.00..22.12 rows=5 width=16)
+                     Output: ag_edge_1.start, ag_edge_1."end"
+                     Filter: (ag_edge_1.start = ag_edge_1."end")
+               ->  Seq Scan on cypher_dml2.ag_edge ag_edge_2  (cost=0.00..0.00 rows=1 width=16)
+                     Output: ag_edge_2."end", ag_edge_2.start
+                     Filter: (ag_edge_2."end" = ag_edge_2.start)
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_3  (cost=0.00..22.12 rows=5 width=16)
+                     Output: ag_edge_3."end", ag_edge_3.start
+                     Filter: (ag_edge_3."end" = ag_edge_3.start)
+(20 rows)
+
+EXPLAIN VERBOSE MATCH p=(a)-[]-(a) RETURN *;
+                                                                                                                                      QUERY PLAN                                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join  (cost=44.46..71.17 rows=12 width=64)
+   Output: ROW(a.id, a.properties, a.ctid)::vertex, ROW((('[]'::vertex[] || ROW(a.id, a.properties, a.ctid)::vertex) || ROW(a.id, a.properties, a.ctid)::vertex), ('[]'::edge[] || ROW(ag_edge.id, ag_edge.start, ag_edge."end", ag_edge.properties, ag_edge.ctid)::edge))::graphpath
+   Hash Cond: (a.id = ag_edge.start)
+   ->  Seq Scan on cypher_dml2.ag_vertex a  (cost=0.00..22.00 rows=1200 width=46)
+         Output: a.id, a.properties, a.ctid
+   ->  Hash  (cost=44.31..44.31 rows=12 width=78)
+         Output: ag_edge.id, ag_edge.start, ag_edge."end", ag_edge.properties, ag_edge.ctid, ag_edge.start, ag_edge."end"
+         ->  Append  (cost=0.00..44.31 rows=12 width=78)
+               ->  Seq Scan on cypher_dml2.ag_edge  (cost=0.00..0.00 rows=1 width=78)
+                     Output: ag_edge.id, ag_edge.start, ag_edge."end", ag_edge.properties, ag_edge.ctid, ag_edge.start, ag_edge."end"
+                     Filter: (ag_edge.start = ag_edge."end")
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_1  (cost=0.00..22.12 rows=5 width=78)
+                     Output: ag_edge_1.id, ag_edge_1.start, ag_edge_1."end", ag_edge_1.properties, ag_edge_1.ctid, ag_edge_1.start, ag_edge_1."end"
+                     Filter: (ag_edge_1.start = ag_edge_1."end")
+               ->  Seq Scan on cypher_dml2.ag_edge ag_edge_2  (cost=0.00..0.00 rows=1 width=78)
+                     Output: ag_edge_2.id, ag_edge_2.start, ag_edge_2."end", ag_edge_2.properties, ag_edge_2.ctid, ag_edge_2."end", ag_edge_2.start
+                     Filter: (ag_edge_2."end" = ag_edge_2.start)
+               ->  Seq Scan on cypher_dml2.e1 ag_edge_3  (cost=0.00..22.12 rows=5 width=78)
+                     Output: ag_edge_3.id, ag_edge_3.start, ag_edge_3."end", ag_edge_3.properties, ag_edge_3.ctid, ag_edge_3."end", ag_edge_3.start
+                     Filter: (ag_edge_3."end" = ag_edge_3.start)
+(20 rows)
+
+DROP GRAPH cypher_dml2 CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence cypher_dml2.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to elabel e1
