@@ -1,0 +1,3491 @@
+--
+-- Cypher Query Language - DML
+--
+-- prepare
+DROP TABLE IF EXISTS history;
+NOTICE:  table "history" does not exist, skipping
+CREATE TABLE history (year, event) AS VALUES
+(1996, 'PostgreSQL'),
+(2016, 'Graph');
+DROP GRAPH graphdb CASCADE;
+ERROR:  graph "graphdb" does not exist
+CREATE GRAPH graphdb;
+--
+-- RETURN
+--
+RETURN 3 + 4, 'hello' + ' graphdb';
+ ?column? |    ?column?     
+----------+-----------------
+ 7        | "hello graphdb"
+(1 row)
+
+RETURN 3 + 4 AS lucky, 'hello' + ' graphdb' AS greeting;
+ lucky |    greeting     
+-------+-----------------
+ 7     | "hello graphdb"
+(1 row)
+
+RETURN (SELECT event FROM history WHERE year = 2016);
+  event  
+---------
+ "Graph"
+(1 row)
+
+SELECT * FROM (RETURN 3 + 4, 'hello' + ' graphdb') AS _(lucky, greeting);
+ lucky |    greeting     
+-------+-----------------
+ 7     | "hello graphdb"
+(1 row)
+
+--
+-- zero-length _vertex, _edge, and graphpath
+--
+SELECT ARRAY[]::_vertex;
+ array 
+-------
+ []
+(1 row)
+
+SELECT ARRAY[]::_edge;
+ array 
+-------
+ []
+(1 row)
+
+SELECT (ARRAY[]::_vertex, ARRAY[]::_edge)::graphpath;
+ row 
+-----
+ []
+(1 row)
+
+--
+-- _vertex, _edge, and graphpath with NULL values
+--
+SELECT ARRAY[NULL, NULL, NULL]::_vertex;
+      array       
+------------------
+ [NULL,NULL,NULL]
+(1 row)
+
+SELECT ARRAY[NULL, NULL]::_edge;
+    array    
+-------------
+ [NULL,NULL]
+(1 row)
+
+SELECT (ARRAY[NULL, NULL, NULL]::_vertex, ARRAY[NULL, NULL]::_edge)::graphpath;
+            row             
+----------------------------
+ [NULL,NULL,NULL,NULL,NULL]
+(1 row)
+
+--
+-- CREATE
+--
+CREATE VLABEL repo;
+CREATE ELABEL lib;
+CREATE ELABEL doc;
+CREATE (g:repo {name: 'graph-database',
+                year: (SELECT year FROM history WHERE event = 'Graph')})
+RETURN properties(g) AS g;
+                    g                     
+------------------------------------------
+ {"name": "graph-database", "year": 2016}
+(1 row)
+
+MATCH (g:repo)
+CREATE (j:repo {name: 'graph-database-jdbc', year: 2016}),
+       (d:repo {name: 'graph-database-docs', year: 2016})
+CREATE (g)-[l:lib {lang: 'java'}]->(j),
+       p=(g)
+         -[:lib {lang: 'c'}]->
+         (:repo {name: 'graph-database-odbc', year: 2016}),
+       (g)-[e:doc {lang: 'en'}]->(d)
+RETURN properties(l) AS lj, properties(j) AS j,
+       properties((edges(p))[0]) AS lc, properties((vertices(p))[1]) AS c,
+       properties(e) AS e, properties(d) AS d;
+        lj        |                       j                       |      lc       |                       c                       |       e        |                       d                       
+------------------+-----------------------------------------------+---------------+-----------------------------------------------+----------------+-----------------------------------------------
+ {"lang": "java"} | {"name": "graph-database-jdbc", "year": 2016} | {"lang": "c"} | {"name": "graph-database-odbc", "year": 2016} | {"lang": "en"} | {"name": "graph-database-docs", "year": 2016}
+(1 row)
+
+CREATE ()-[a:lib]->(a);
+ERROR:  duplicate variable "a"
+LINE 1: CREATE ()-[a:lib]->(a);
+                            ^
+CREATE a=(), (a);
+ERROR:  duplicate variable "a"
+LINE 1: CREATE a=(), (a);
+                      ^
+CREATE (a), (a {});
+ERROR:  duplicate variable "a"
+LINE 1: CREATE (a), (a {});
+                     ^
+CREATE (a), (a);
+ERROR:  there must be at least one relationship
+LINE 1: CREATE (a), (a);
+                     ^
+CREATE (=0);
+ERROR:  jsonb object is expected for property map
+CREATE ()-[]-();
+ERROR:  only directed relationships are allowed in CREATE
+CREATE ()-[]->();
+ERROR:  only one relationship type is allowed for CREATE
+CREATE ()-[:lib|doc]->();
+ERROR:  only one relationship type is allowed for CREATE
+CREATE (a)-[a:lib]->();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE (a)-[a:lib]->();
+                    ^
+CREATE ()-[a:lib]->()-[a:doc]->();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE ()-[a:lib]->()-[a:doc]->();
+                               ^
+CREATE a=(), ()-[a:doc]->();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE a=(), ()-[a:doc]->();
+                         ^
+CREATE ()-[:lib =0]->();
+ERROR:  jsonb object is expected for property map
+CREATE (a), a=();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE (a), a=();
+                    ^
+CREATE ()-[a:lib]->(), a=();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE ()-[a:lib]->(), a=();
+                               ^
+CREATE a=(), a=();
+ERROR:  duplicate variable "a"
+LINE 1: CREATE a=(), a=();
+                     ^
+CREATE (:lib);
+ERROR:  label "lib" is edge label
+LINE 1: CREATE (:lib);
+                 ^
+CREATE ()-[:repo]->();
+ERROR:  label "repo" is vertex label
+LINE 1: CREATE ()-[:repo]->();
+                    ^
+CREATE (:ag_vertex);
+ERROR:  specifying default label is not allowed
+LINE 1: CREATE (:ag_vertex);
+                 ^
+CREATE ()-[:ag_edge]->();
+ERROR:  cannot create edge on default label
+LINE 1: CREATE ()-[:ag_edge]->();
+                    ^
+CREATE (=null)-[:lib =null]->();
+CREATE TABLE t1 (prop jsonb);
+CREATE (=(SELECT prop FROM t1))-[:lib =(SELECT prop FROM t1)]->();
+MATCH (a) WHERE a.name IS NULL DETACH DELETE a;
+DROP TABLE t1;
+CREATE GRAPH g_create;
+SET GRAPH_PATH = g_create;
+CREATE ELABEL e1;
+CREATE p=()-[:e1]->() RETURN p;
+                           p                            
+--------------------------------------------------------
+ [ag_vertex[1.1]{},e1[3.1][1.1,1.2]{},ag_vertex[1.2]{}]
+(1 row)
+
+CREATE (a {name:'graphdb'}), (b {name:a.name});
+DROP GRAPH g_create CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence g_create.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to elabel e1
+--
+-- MATCH
+--
+SET GRAPH_PATH = graphdb;
+MATCH (a) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH (a), (a) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+CREATE ();
+MATCH (a:repo) RETURN a.name AS name, a['year'] AS year;
+         name          | year 
+-----------------------+------
+ "graph-database"      | 2016
+ "graph-database-jdbc" | 2016
+ "graph-database-docs" | 2016
+ "graph-database-odbc" | 2016
+(4 rows)
+
+MATCH p=(a)-[b]-(c)
+RETURN a.name AS a, b.lang AS b, c.name AS c
+       ORDER BY a, b, c;
+           a           |   b    |           c           
+-----------------------+--------+-----------------------
+ "graph-database"      | "c"    | "graph-database-odbc"
+ "graph-database"      | "en"   | "graph-database-docs"
+ "graph-database"      | "java" | "graph-database-jdbc"
+ "graph-database-docs" | "en"   | "graph-database"
+ "graph-database-jdbc" | "java" | "graph-database"
+ "graph-database-odbc" | "c"    | "graph-database"
+(6 rows)
+
+MATCH (a)<-[b]-(c)-[d]->(e)
+RETURN a.name AS a, b.lang AS b, c.name AS c,
+       d.lang AS d, e.name AS e
+       ORDER BY a, b, c, d, e;
+           a           |   b    |        c         |   d    |           e           
+-----------------------+--------+------------------+--------+-----------------------
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc"
+(6 rows)
+
+MATCH (a)<-[b]-(c), (c)-[d]->(e)
+RETURN a.name AS a, b.lang AS b, c.name AS c,
+       d.lang AS d, e.name AS e
+       ORDER BY a, b, c, d, e;
+           a           |   b    |        c         |   d    |           e           
+-----------------------+--------+------------------+--------+-----------------------
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc"
+(6 rows)
+
+MATCH (a)<-[b]-(c) MATCH (c)-[d]->(e)
+RETURN a.name AS a, b.lang AS b, c.name AS c,
+       d.lang AS d, e.name AS e
+       ORDER BY a, b, c, d, e;
+           a           |   b    |        c         |   d    |           e           
+-----------------------+--------+------------------+--------+-----------------------
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-docs" | "en"   | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-jdbc" | "java" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc"
+(9 rows)
+
+MATCH (a)<-[b]-(c), (f)-[g]->(h), (c)-[d]->(e)
+RETURN a.name AS a, b.lang AS b, c.name AS c,
+       d.lang AS d, e.name AS e,
+       f.name AS f, g.lang AS g, h.name AS h
+       ORDER BY a, b, c, d, e, f, g, h;
+           a           |   b    |        c         |   d    |           e           |        f         |   g    |           h           
+-----------------------+--------+------------------+--------+-----------------------+------------------+--------+-----------------------
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-docs" | "en"   | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-docs" | "en"   | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-jdbc" | "java" | "graph-database" | "c"    | "graph-database-odbc" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-jdbc" | "java" | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "en"   | "graph-database-docs" | "graph-database" | "java" | "graph-database-jdbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "c"    | "graph-database-odbc"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "en"   | "graph-database-docs"
+ "graph-database-odbc" | "c"    | "graph-database" | "java" | "graph-database-jdbc" | "graph-database" | "java" | "graph-database-jdbc"
+(18 rows)
+
+MATCH (a {name: 'graph-database'}), (a {year: 2016}) RETURN properties(a) AS a;
+                    a                     
+------------------------------------------
+ {"name": "graph-database", "year": 2016}
+(1 row)
+
+MATCH p=(a)-[]->({name: 'graph-database-jdbc'}) RETURN a.name AS a;
+        a         
+------------------
+ "graph-database"
+(1 row)
+
+MATCH p=()-[:lib]->(a) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database-jdbc"
+ "graph-database-odbc"
+(2 rows)
+
+MATCH p=()-[{lang: 'en'}]->(a) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database-docs"
+(1 row)
+
+MATCH (a {year: (SELECT to_jsonb(year) FROM history WHERE event = 'Graph')})
+WHERE a.name = 'graph-database'
+RETURN a.name AS a;
+        a         
+------------------
+ "graph-database"
+(1 row)
+
+MATCH (a), (a:repo) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH p=({name: 'graph-database'})-[{lang: 'java'}]->(m) RETURN *;
+                           m                            |                                                                      p                                                                       
+--------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+ repo[3.2]{"name": "graph-database-jdbc", "year": 2016} | [repo[3.1]{"name": "graph-database", "year": 2016},lib[4.1][3.1,3.2]{"lang": "java"},repo[3.2]{"name": "graph-database-jdbc", "year": 2016}]
+(1 row)
+
+MATCH ();
+ERROR:  Cypher query must end with RETURN or update clause
+MATCH ()-[a]-(), (a) RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH ()-[a]-(), (a) RETURN *;
+                          ^
+MATCH a=(), (a) RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH a=(), (a) RETURN *;
+                     ^
+MATCH (a =0) RETURN *;
+ a 
+---
+(0 rows)
+
+MATCH ()-[a]-(a) RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH ()-[a]-(a) RETURN *;
+                      ^
+MATCH ()-[a]-()-[a]-() RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH ()-[a]-()-[a]-() RETURN *;
+                         ^
+MATCH a=(), ()-[a]-() RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH a=(), ()-[a]-() RETURN *;
+                        ^
+MATCH p=()-[:lib|doc]->() RETURN *;
+ERROR:  multiple types for relationship not supported
+MATCH ()-[a =0]-() RETURN *;
+ a 
+---
+(0 rows)
+
+MATCH (a), a=() RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH (a), a=() RETURN *;
+                   ^
+MATCH ()-[a]->(), a=() RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH ()-[a]->(), a=() RETURN *;
+                          ^
+MATCH a=(), a=() RETURN *;
+ERROR:  duplicate variable "a"
+LINE 1: MATCH a=(), a=() RETURN *;
+                    ^
+MATCH (:lib) RETURN *;
+ERROR:  label "lib" is edge label
+LINE 1: MATCH (:lib) RETURN *;
+                ^
+MATCH ()-[:repo]->() RETURN *;
+ERROR:  label "repo" is vertex label
+LINE 1: MATCH ()-[:repo]->() RETURN *;
+                   ^
+MATCH (a {name: properties.name}) RETURN *;
+ERROR:  variable does not exist
+LINE 1: MATCH (a {name: properties.name}) RETURN *;
+                        ^
+MATCH (a) RETURN a.properties;
+ properties 
+------------
+ 
+ 
+ 
+ 
+ 
+(5 rows)
+
+-- MATCH ONLY
+CREATE VLABEL vl1;
+CREATE VLABEL vl2 INHERITS(vl1);
+CREATE VLABEL vl3 INHERITS(vl2);
+CREATE ELABEL el1;
+CREATE ELABEL el2 INHERITS(el1);
+CREATE ELABEL el3 INHERITS(el2);
+CREATE (:vl1 {id:1});
+CREATE (:vl2 {id:2});
+CREATE (:vl3 {id:3});
+MATCH (A:vl1 {id:1}), (B:vl2 {id:2}) MERGE (A)-[:el1]->(B);
+MATCH (A:vl1 {id:1}), (C:vl3 {id:3}) MERGE (A)-[:el2]->(C);
+MATCH (B:vl2 {id:2}), (C:vl3 {id:3}) MERGE (B)-[:el3]->(C);
+MATCH (N:vl1) RETURN N;
+         n         
+-------------------
+ vl1[6.1]{"id": 1}
+ vl2[7.1]{"id": 2}
+ vl3[8.1]{"id": 3}
+(3 rows)
+
+MATCH (N:vl2) RETURN N;
+         n         
+-------------------
+ vl2[7.1]{"id": 2}
+ vl3[8.1]{"id": 3}
+(2 rows)
+
+MATCH (N:vl3) RETURN N;
+         n         
+-------------------
+ vl3[8.1]{"id": 3}
+(1 row)
+
+MATCH (N:vl1 ONLY) RETURN N;
+         n         
+-------------------
+ vl1[6.1]{"id": 1}
+(1 row)
+
+MATCH (N:vl2 ONLY) RETURN N;
+         n         
+-------------------
+ vl2[7.1]{"id": 2}
+(1 row)
+
+MATCH (N ONLY) RETURN N;
+ERROR:  ONLY must have one label preceding it
+MATCH (A)-[r:el1]->(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 1  | el1[9.1][6.1,7.1]{}  | 2
+ 1  | el2[10.1][6.1,8.1]{} | 3
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(3 rows)
+
+MATCH (A)-[r:el2]->(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 1  | el2[10.1][6.1,8.1]{} | 3
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(2 rows)
+
+MATCH (A)-[r:el3]->(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(1 row)
+
+MATCH (A)-[r:el1 ONLY]->(B) RETURN A.id, r, B.id;
+ id |          r          | id 
+----+---------------------+----
+ 1  | el1[9.1][6.1,7.1]{} | 2
+(1 row)
+
+MATCH (A)-[r:el2 ONLY]->(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 1  | el2[10.1][6.1,8.1]{} | 3
+(1 row)
+
+MATCH (A)-[r ONLY]->(B) RETURN A.id, r, B.id;
+ERROR:  ONLY must have one label preceding it
+LINE 1: MATCH (A)-[r ONLY]->(B) RETURN A.id, r, B.id;
+                   ^
+MATCH (A)<-[r:el1]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 2  | el1[9.1][6.1,7.1]{}  | 1
+ 3  | el2[10.1][6.1,8.1]{} | 1
+ 3  | el3[11.1][7.1,8.1]{} | 2
+(3 rows)
+
+MATCH (A)<-[r:el2]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el2[10.1][6.1,8.1]{} | 1
+ 3  | el3[11.1][7.1,8.1]{} | 2
+(2 rows)
+
+MATCH (A)<-[r:el3]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el3[11.1][7.1,8.1]{} | 2
+(1 row)
+
+MATCH (A)<-[r:el1 ONLY]-(B) RETURN A.id, r, B.id;
+ id |          r          | id 
+----+---------------------+----
+ 2  | el1[9.1][6.1,7.1]{} | 1
+(1 row)
+
+MATCH (A)<-[r:el2 ONLY]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el2[10.1][6.1,8.1]{} | 1
+(1 row)
+
+MATCH (A)-[r:el1]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 2  | el1[9.1][6.1,7.1]{}  | 1
+ 3  | el2[10.1][6.1,8.1]{} | 1
+ 1  | el1[9.1][6.1,7.1]{}  | 2
+ 3  | el3[11.1][7.1,8.1]{} | 2
+ 1  | el2[10.1][6.1,8.1]{} | 3
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(6 rows)
+
+MATCH (A)-[r:el2]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el2[10.1][6.1,8.1]{} | 1
+ 3  | el3[11.1][7.1,8.1]{} | 2
+ 1  | el2[10.1][6.1,8.1]{} | 3
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(4 rows)
+
+MATCH (A)-[r:el3]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el3[11.1][7.1,8.1]{} | 2
+ 2  | el3[11.1][7.1,8.1]{} | 3
+(2 rows)
+
+MATCH (A)-[r:el1 ONLY]-(B) RETURN A.id, r, B.id;
+ id |          r          | id 
+----+---------------------+----
+ 2  | el1[9.1][6.1,7.1]{} | 1
+ 1  | el1[9.1][6.1,7.1]{} | 2
+(2 rows)
+
+MATCH (A)-[r:el2 ONLY]-(B) RETURN A.id, r, B.id;
+ id |          r           | id 
+----+----------------------+----
+ 3  | el2[10.1][6.1,8.1]{} | 1
+ 1  | el2[10.1][6.1,8.1]{} | 3
+(2 rows)
+
+MATCH (A)-[r:el1 *1..3]->(B) RETURN A.id, r, B.id;
+ id |                     r                      | id 
+----+--------------------------------------------+----
+ 1  | [el1[9.1][6.1,7.1]{}]                      | 2
+ 1  | [el1[9.1][6.1,7.1]{},el3[11.1][7.1,8.1]{}] | 3
+ 1  | [el2[10.1][6.1,8.1]{}]                     | 3
+ 2  | [el3[11.1][7.1,8.1]{}]                     | 3
+(4 rows)
+
+MATCH (A)-[r:el2 *1..3]->(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 1  | [el2[10.1][6.1,8.1]{}] | 3
+ 2  | [el3[11.1][7.1,8.1]{}] | 3
+(2 rows)
+
+MATCH (A)-[r:el3 *1..3]->(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 2  | [el3[11.1][7.1,8.1]{}] | 3
+(1 row)
+
+MATCH (A)-[r:el1 ONLY *1..3]->(B) RETURN A.id, r, B.id;
+ id |           r           | id 
+----+-----------------------+----
+ 1  | [el1[9.1][6.1,7.1]{}] | 2
+(1 row)
+
+MATCH (A)-[r:el2 ONLY *1..3]->(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 1  | [el2[10.1][6.1,8.1]{}] | 3
+(1 row)
+
+MATCH (A)<-[r:el1 *1..3]-(B) RETURN A.id, r, B.id;
+ id |                     r                      | id 
+----+--------------------------------------------+----
+ 2  | [el1[9.1][6.1,7.1]{}]                      | 1
+ 3  | [el2[10.1][6.1,8.1]{}]                     | 1
+ 3  | [el3[11.1][7.1,8.1]{},el1[9.1][6.1,7.1]{}] | 1
+ 3  | [el3[11.1][7.1,8.1]{}]                     | 2
+(4 rows)
+
+MATCH (A)<-[r:el2 *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 3  | [el2[10.1][6.1,8.1]{}] | 1
+ 3  | [el3[11.1][7.1,8.1]{}] | 2
+(2 rows)
+
+MATCH (A)<-[r:el3 *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 3  | [el3[11.1][7.1,8.1]{}] | 2
+(1 row)
+
+MATCH (A)<-[r:el1 ONLY *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r           | id 
+----+-----------------------+----
+ 2  | [el1[9.1][6.1,7.1]{}] | 1
+(1 row)
+
+MATCH (A)<-[r:el2 ONLY *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 3  | [el2[10.1][6.1,8.1]{}] | 1
+(1 row)
+
+MATCH (A)-[r:el1 *1..3]-(B)
+RETURN A.id as aid, r, B.id as bid, id(r[0]) as rid
+ORDER BY aid, bid, rid;
+ aid |                                r                                | bid | rid  
+-----+-----------------------------------------------------------------+-----+------
+ 1   | [el1[9.1][6.1,7.1]{},el3[11.1][7.1,8.1]{},el2[10.1][6.1,8.1]{}] | 1   | 9.1
+ 1   | [el2[10.1][6.1,8.1]{},el3[11.1][7.1,8.1]{},el1[9.1][6.1,7.1]{}] | 1   | 10.1
+ 1   | [el1[9.1][6.1,7.1]{}]                                           | 2   | 9.1
+ 1   | [el2[10.1][6.1,8.1]{},el3[11.1][7.1,8.1]{}]                     | 2   | 10.1
+ 1   | [el1[9.1][6.1,7.1]{},el3[11.1][7.1,8.1]{}]                      | 3   | 9.1
+ 1   | [el2[10.1][6.1,8.1]{}]                                          | 3   | 10.1
+ 2   | [el1[9.1][6.1,7.1]{}]                                           | 1   | 9.1
+ 2   | [el3[11.1][7.1,8.1]{},el2[10.1][6.1,8.1]{}]                     | 1   | 11.1
+ 2   | [el1[9.1][6.1,7.1]{},el2[10.1][6.1,8.1]{},el3[11.1][7.1,8.1]{}] | 2   | 9.1
+ 2   | [el3[11.1][7.1,8.1]{},el2[10.1][6.1,8.1]{},el1[9.1][6.1,7.1]{}] | 2   | 11.1
+ 2   | [el1[9.1][6.1,7.1]{},el2[10.1][6.1,8.1]{}]                      | 3   | 9.1
+ 2   | [el3[11.1][7.1,8.1]{}]                                          | 3   | 11.1
+ 3   | [el2[10.1][6.1,8.1]{}]                                          | 1   | 10.1
+ 3   | [el3[11.1][7.1,8.1]{},el1[9.1][6.1,7.1]{}]                      | 1   | 11.1
+ 3   | [el2[10.1][6.1,8.1]{},el1[9.1][6.1,7.1]{}]                      | 2   | 10.1
+ 3   | [el3[11.1][7.1,8.1]{}]                                          | 2   | 11.1
+ 3   | [el2[10.1][6.1,8.1]{},el1[9.1][6.1,7.1]{},el3[11.1][7.1,8.1]{}] | 3   | 10.1
+ 3   | [el3[11.1][7.1,8.1]{},el1[9.1][6.1,7.1]{},el2[10.1][6.1,8.1]{}] | 3   | 11.1
+(18 rows)
+
+MATCH (A)-[r:el2 *1..3]-(B) RETURN A.id, r, B.id;
+ id |                      r                      | id 
+----+---------------------------------------------+----
+ 2  | [el3[11.1][7.1,8.1]{},el2[10.1][6.1,8.1]{}] | 1
+ 3  | [el2[10.1][6.1,8.1]{}]                      | 1
+ 1  | [el2[10.1][6.1,8.1]{},el3[11.1][7.1,8.1]{}] | 2
+ 3  | [el3[11.1][7.1,8.1]{}]                      | 2
+ 1  | [el2[10.1][6.1,8.1]{}]                      | 3
+ 2  | [el3[11.1][7.1,8.1]{}]                      | 3
+(6 rows)
+
+MATCH (A)-[r:el3 *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 3  | [el3[11.1][7.1,8.1]{}] | 2
+ 2  | [el3[11.1][7.1,8.1]{}] | 3
+(2 rows)
+
+MATCH (A)-[r:el1 ONLY *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r           | id 
+----+-----------------------+----
+ 2  | [el1[9.1][6.1,7.1]{}] | 1
+ 1  | [el1[9.1][6.1,7.1]{}] | 2
+(2 rows)
+
+MATCH (A)-[r:el2 ONLY *1..3]-(B) RETURN A.id, r, B.id;
+ id |           r            | id 
+----+------------------------+----
+ 3  | [el2[10.1][6.1,8.1]{}] | 1
+ 1  | [el2[10.1][6.1,8.1]{}] | 3
+(2 rows)
+
+MATCH (A:vl1) DETACH DELETE A;
+MATCH (B:vl2) DETACH DELETE B;
+MATCH (C:vl3) DETACH DELETE C;
+-- OPTIONAL MATCH
+CREATE GRAPH o;
+SET graph_path = o;
+CREATE VLABEL person;
+CREATE ELABEL knows;
+CREATE (:person {name: 'someone'})-[:knows]->(:person {name: 'somebody'}),
+       (:person {name: 'anybody'})-[:knows]->(:person {name: 'nobody'});
+OPTIONAL MATCH (n)-[r]->(p), (m)-[s]->(q)
+RETURN n.name AS n, type(r) AS r, p.name AS p,
+       m.name AS m, type(s) AS s, q.name AS q
+ORDER BY n, p, m, q;
+     n     |    r    |     p      |     m     |    s    |     q      
+-----------+---------+------------+-----------+---------+------------
+ "anybody" | "knows" | "nobody"   | "anybody" | "knows" | "nobody"
+ "anybody" | "knows" | "nobody"   | "someone" | "knows" | "somebody"
+ "someone" | "knows" | "somebody" | "anybody" | "knows" | "nobody"
+ "someone" | "knows" | "somebody" | "someone" | "knows" | "somebody"
+(4 rows)
+
+MATCH (n:person), (m:person) WHERE id(n) <> id(m)
+OPTIONAL MATCH (n)-[r]->(p), (m)-[s]->(q)
+RETURN n.name AS n, type(r) AS r, p.name AS p,
+       m.name AS m, type(s) AS s, q.name AS q
+ORDER BY n, p, m, q;
+     n      |    r    |     p      |     m      |    s    |     q      
+------------+---------+------------+------------+---------+------------
+ "anybody"  | "knows" | "nobody"   | "someone"  | "knows" | "somebody"
+ "anybody"  |         |            | "nobody"   |         | 
+ "anybody"  |         |            | "somebody" |         | 
+ "nobody"   |         |            | "anybody"  |         | 
+ "nobody"   |         |            | "somebody" |         | 
+ "nobody"   |         |            | "someone"  |         | 
+ "somebody" |         |            | "anybody"  |         | 
+ "somebody" |         |            | "nobody"   |         | 
+ "somebody" |         |            | "someone"  |         | 
+ "someone"  | "knows" | "somebody" | "anybody"  | "knows" | "nobody"
+ "someone"  |         |            | "nobody"   |         | 
+ "someone"  |         |            | "somebody" |         | 
+(12 rows)
+
+MATCH (n:person), (m:person) WHERE id(n) <> id(m)
+OPTIONAL MATCH (n)-[r]->(p), (m)-[s]->(q) WHERE m.name = 'someone'
+RETURN n.name AS n, type(r) AS r, p.name AS p,
+       m.name AS m, type(s) AS s, q.name AS q
+ORDER BY n, p, m, q;
+     n      |    r    |    p     |     m      |    s    |     q      
+------------+---------+----------+------------+---------+------------
+ "anybody"  | "knows" | "nobody" | "someone"  | "knows" | "somebody"
+ "anybody"  |         |          | "nobody"   |         | 
+ "anybody"  |         |          | "somebody" |         | 
+ "nobody"   |         |          | "anybody"  |         | 
+ "nobody"   |         |          | "somebody" |         | 
+ "nobody"   |         |          | "someone"  |         | 
+ "somebody" |         |          | "anybody"  |         | 
+ "somebody" |         |          | "nobody"   |         | 
+ "somebody" |         |          | "someone"  |         | 
+ "someone"  |         |          | "anybody"  |         | 
+ "someone"  |         |          | "nobody"   |         | 
+ "someone"  |         |          | "somebody" |         | 
+(12 rows)
+
+OPTIONAL MATCH (n:person {name: 'unknown'})
+RETURN n.name;
+ name 
+------
+ 
+(1 row)
+
+OPTIONAL MATCH (n:person {name: 'unknown'}) MATCH (m:person {name: 'someone'})
+RETURN n, m.name;
+ERROR:  MATCH right after OPTIONAL MATCH is not allowed
+HINT:  Use a WITH clause between them
+OPTIONAL MATCH (n:person {name: 'unknown'}) WITH n MATCH (m:person {name: 'someone'})
+RETURN n, m.name;
+ n |   name    
+---+-----------
+   | "someone"
+(1 row)
+
+OPTIONAL MATCH (n:person {name: 'unknown'}) WITH n MATCH (m:person {name: 'unknown'})
+RETURN n, m.name;
+ n | name 
+---+------
+(0 rows)
+
+-- Variable Length Relationship
+CREATE GRAPH t;
+SET graph_path = t;
+CREATE VLABEL time;
+CREATE ELABEL goes;
+CREATE (:time {sec: 1})-[:goes]->
+       (:time {sec: 2})-[:goes]->
+       (:time {sec: 3})-[:goes]->
+       (:time {sec: 4})-[:goes]->
+       (:time {sec: 5})-[:goes]->
+       (:time {sec: 6})-[:goes]->
+       (:time {sec: 7})-[:goes]->
+       (:time {sec: 8})-[:goes]->
+       (:time {sec: 9});
+CREATE (:time {sec: 9})-[:goes*1..2]->(:time {sec: 10});
+ERROR:  variable length relationship is not allowed for CREATE
+MATCH (a:time)-[x:goes*3]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a;
+ a | x | b 
+---+---+---
+ 1 | 3 | 4
+ 2 | 3 | 5
+ 3 | 3 | 6
+ 4 | 3 | 7
+ 5 | 3 | 8
+ 6 | 3 | 9
+(6 rows)
+
+MATCH (a:time)-[x:goes*0]->(b:time)
+RETURN a.sec AS a, x, b.sec AS b ORDER BY a;
+ a | x  | b 
+---+----+---
+ 1 | [] | 1
+ 2 | [] | 2
+ 3 | [] | 3
+ 4 | [] | 4
+ 5 | [] | 5
+ 6 | [] | 6
+ 7 | [] | 7
+ 8 | [] | 8
+ 9 | [] | 9
+(9 rows)
+
+MATCH (a:time)-[x:goes*0..1]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a;
+ a | x | b 
+---+---+---
+ 1 | 0 | 1
+ 1 | 1 | 2
+ 2 | 0 | 2
+ 2 | 1 | 3
+ 3 | 0 | 3
+ 3 | 1 | 4
+ 4 | 0 | 4
+ 4 | 1 | 5
+ 5 | 0 | 5
+ 5 | 1 | 6
+ 6 | 0 | 6
+ 6 | 1 | 7
+ 7 | 0 | 7
+ 7 | 1 | 8
+ 8 | 0 | 8
+ 8 | 1 | 9
+ 9 | 0 | 9
+(17 rows)
+
+MATCH (a:time)-[x:goes*..1]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a;
+ a | x | b 
+---+---+---
+ 1 | 1 | 2
+ 2 | 1 | 3
+ 3 | 1 | 4
+ 4 | 1 | 5
+ 5 | 1 | 6
+ 6 | 1 | 7
+ 7 | 1 | 8
+ 8 | 1 | 9
+(8 rows)
+
+MATCH (a:time)-[x:goes*0..]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a;
+ a | x | b 
+---+---+---
+ 1 | 0 | 1
+ 1 | 1 | 2
+ 1 | 2 | 3
+ 1 | 3 | 4
+ 1 | 4 | 5
+ 1 | 5 | 6
+ 1 | 6 | 7
+ 1 | 7 | 8
+ 1 | 8 | 9
+ 2 | 0 | 2
+ 2 | 1 | 3
+ 2 | 2 | 4
+ 2 | 3 | 5
+ 2 | 4 | 6
+ 2 | 5 | 7
+ 2 | 6 | 8
+ 2 | 7 | 9
+ 3 | 0 | 3
+ 3 | 1 | 4
+ 3 | 2 | 5
+ 3 | 3 | 6
+ 3 | 4 | 7
+ 3 | 5 | 8
+ 3 | 6 | 9
+ 4 | 0 | 4
+ 4 | 1 | 5
+ 4 | 2 | 6
+ 4 | 3 | 7
+ 4 | 4 | 8
+ 4 | 5 | 9
+ 5 | 0 | 5
+ 5 | 1 | 6
+ 5 | 2 | 7
+ 5 | 3 | 8
+ 5 | 4 | 9
+ 6 | 0 | 6
+ 6 | 1 | 7
+ 6 | 2 | 8
+ 6 | 3 | 9
+ 7 | 0 | 7
+ 7 | 1 | 8
+ 7 | 2 | 9
+ 8 | 0 | 8
+ 8 | 1 | 9
+ 9 | 0 | 9
+(45 rows)
+
+MATCH (a:time)-[x:goes*3..6]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a;
+ a | x | b 
+---+---+---
+ 1 | 3 | 4
+ 1 | 4 | 5
+ 1 | 5 | 6
+ 1 | 6 | 7
+ 2 | 3 | 5
+ 2 | 4 | 6
+ 2 | 5 | 7
+ 2 | 6 | 8
+ 3 | 3 | 6
+ 3 | 4 | 7
+ 3 | 5 | 8
+ 3 | 6 | 9
+ 4 | 3 | 7
+ 4 | 4 | 8
+ 4 | 5 | 9
+ 5 | 3 | 8
+ 5 | 4 | 9
+ 6 | 3 | 9
+(18 rows)
+
+MATCH (a:time)-[x:goes*2]->(b:time)-[y:goes]->(c:time)-[z:goes*2]->(d:time)
+RETURN a.sec AS a, length(x) AS x,
+       b.sec AS b, type(y) AS y,
+       c.sec AS c, length(z) AS z, d.sec AS d ORDER BY a;
+ a | x | b |   y    | c | z | d 
+---+---+---+--------+---+---+---
+ 1 | 2 | 3 | "goes" | 4 | 2 | 6
+ 2 | 2 | 4 | "goes" | 5 | 2 | 7
+ 3 | 2 | 5 | "goes" | 6 | 2 | 8
+ 4 | 2 | 6 | "goes" | 7 | 2 | 9
+(4 rows)
+
+MATCH (a:time)-[x:goes*2]->(b:time)
+MATCH (b)-[y:goes]->(c:time)
+MATCH (c)-[z:goes*2]->(d:time)
+RETURN a.sec AS a, length(x) AS x,
+       b.sec AS b, type(y) AS y,
+       c.sec AS c, length(z) AS z, d.sec AS d ORDER BY a;
+ a | x | b |   y    | c | z | d 
+---+---+---+--------+---+---+---
+ 1 | 2 | 3 | "goes" | 4 | 2 | 6
+ 2 | 2 | 4 | "goes" | 5 | 2 | 7
+ 3 | 2 | 5 | "goes" | 6 | 2 | 8
+ 4 | 2 | 6 | "goes" | 7 | 2 | 9
+(4 rows)
+
+MATCH (d:time)<-[z:goes*2]-(c:time)<-[y:goes]-(b:time)<-[x:goes*2]-(a:time)
+RETURN d.sec AS d, length(z) AS z,
+       c.sec AS c, type(y) AS y,
+       b.sec AS b, length(x) AS x, a.sec AS a ORDER BY d;
+ d | z | c |   y    | b | x | a 
+---+---+---+--------+---+---+---
+ 6 | 2 | 4 | "goes" | 3 | 2 | 1
+ 7 | 2 | 5 | "goes" | 4 | 2 | 2
+ 8 | 2 | 6 | "goes" | 5 | 2 | 3
+ 9 | 2 | 7 | "goes" | 6 | 2 | 4
+(4 rows)
+
+MATCH (d:time)<-[z:goes*2]-(c:time)
+MATCH (c)<-[y:goes]-(b:time)
+MATCH (b)<-[x:goes*2]-(a:time)
+RETURN d.sec AS d, length(z) AS z,
+       c.sec AS c, type(y) AS y,
+       b.sec AS b, length(x) AS x, a.sec AS a ORDER BY d;
+ d | z | c |   y    | b | x | a 
+---+---+---+--------+---+---+---
+ 6 | 2 | 4 | "goes" | 3 | 2 | 1
+ 7 | 2 | 5 | "goes" | 4 | 2 | 2
+ 8 | 2 | 6 | "goes" | 5 | 2 | 3
+ 9 | 2 | 7 | "goes" | 6 | 2 | 4
+(4 rows)
+
+MATCH (a:time)-[x*0..2]-(b)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b ORDER BY a, b, x;
+ a | x | b 
+---+---+---
+ 1 | 0 | 1
+ 1 | 1 | 2
+ 1 | 2 | 3
+ 2 | 1 | 1
+ 2 | 0 | 2
+ 2 | 1 | 3
+ 2 | 2 | 4
+ 3 | 2 | 1
+ 3 | 1 | 2
+ 3 | 0 | 3
+ 3 | 1 | 4
+ 3 | 2 | 5
+ 4 | 2 | 2
+ 4 | 1 | 3
+ 4 | 0 | 4
+ 4 | 1 | 5
+ 4 | 2 | 6
+ 5 | 2 | 3
+ 5 | 1 | 4
+ 5 | 0 | 5
+ 5 | 1 | 6
+ 5 | 2 | 7
+ 6 | 2 | 4
+ 6 | 1 | 5
+ 6 | 0 | 6
+ 6 | 1 | 7
+ 6 | 2 | 8
+ 7 | 2 | 5
+ 7 | 1 | 6
+ 7 | 0 | 7
+ 7 | 1 | 8
+ 7 | 2 | 9
+ 8 | 2 | 6
+ 8 | 1 | 7
+ 8 | 0 | 8
+ 8 | 1 | 9
+ 9 | 2 | 7
+ 9 | 1 | 8
+ 9 | 0 | 9
+(39 rows)
+
+-- VLE with graph path
+MATCH p = (:time)-[:goes*0]->(:time)
+RETURN properties(nodes(p)[0]) AS first, properties(vertices(p)[1]) AS second, properties(relationships(p)[0]) AS rel;
+   first    | second | rel 
+------------+--------+-----
+ {"sec": 1} |        | 
+ {"sec": 2} |        | 
+ {"sec": 3} |        | 
+ {"sec": 4} |        | 
+ {"sec": 5} |        | 
+ {"sec": 6} |        | 
+ {"sec": 7} |        | 
+ {"sec": 8} |        | 
+ {"sec": 9} |        | 
+(9 rows)
+
+MATCH p = (:time)-[r:goes*0..2]->(:time)
+RETURN properties(nodes(p)[0]) AS first, properties(vertices(p)[1]) AS second, properties(vertices(p)[2]) AS third,
+	   id(nodes(p)[0]) = id(startnode(r[0])) AS check_start_of_first_edge,
+	   id(nodes(p)[1]) = id(endnode(r[0])) AS check_end_of_first_edge,
+	   id(nodes(p)[1]) = id(startnode(r[1])) AS check_start_of_second_edge,
+	   id(nodes(p)[2]) = id(endnode(r[1])) AS check_end_of_second_edge,
+	   length(edges(p));
+   first    |   second   |   third    | check_start_of_first_edge | check_end_of_first_edge | check_start_of_second_edge | check_end_of_second_edge | length 
+------------+------------+------------+---------------------------+-------------------------+----------------------------+--------------------------+--------
+ {"sec": 1} |            |            |                           |                         |                            |                          | 0
+ {"sec": 1} | {"sec": 2} |            | t                         | t                       |                            |                          | 1
+ {"sec": 1} | {"sec": 2} | {"sec": 3} | t                         | t                       | t                          | t                        | 2
+ {"sec": 2} |            |            |                           |                         |                            |                          | 0
+ {"sec": 2} | {"sec": 3} |            | t                         | t                       |                            |                          | 1
+ {"sec": 2} | {"sec": 3} | {"sec": 4} | t                         | t                       | t                          | t                        | 2
+ {"sec": 3} |            |            |                           |                         |                            |                          | 0
+ {"sec": 3} | {"sec": 4} |            | t                         | t                       |                            |                          | 1
+ {"sec": 3} | {"sec": 4} | {"sec": 5} | t                         | t                       | t                          | t                        | 2
+ {"sec": 4} |            |            |                           |                         |                            |                          | 0
+ {"sec": 4} | {"sec": 5} |            | t                         | t                       |                            |                          | 1
+ {"sec": 4} | {"sec": 5} | {"sec": 6} | t                         | t                       | t                          | t                        | 2
+ {"sec": 5} |            |            |                           |                         |                            |                          | 0
+ {"sec": 5} | {"sec": 6} |            | t                         | t                       |                            |                          | 1
+ {"sec": 5} | {"sec": 6} | {"sec": 7} | t                         | t                       | t                          | t                        | 2
+ {"sec": 6} |            |            |                           |                         |                            |                          | 0
+ {"sec": 6} | {"sec": 7} |            | t                         | t                       |                            |                          | 1
+ {"sec": 6} | {"sec": 7} | {"sec": 8} | t                         | t                       | t                          | t                        | 2
+ {"sec": 7} |            |            |                           |                         |                            |                          | 0
+ {"sec": 7} | {"sec": 8} |            | t                         | t                       |                            |                          | 1
+ {"sec": 7} | {"sec": 8} | {"sec": 9} | t                         | t                       | t                          | t                        | 2
+ {"sec": 8} |            |            |                           |                         |                            |                          | 0
+ {"sec": 8} | {"sec": 9} |            | t                         | t                       |                            |                          | 1
+ {"sec": 9} |            |            |                           |                         |                            |                          | 0
+(24 rows)
+
+MATCH p = (:time)-[:goes*0]->(:time)-[:goes*2..4]->(:time)-[:goes*0]-(:time)
+RETURN properties(nodes(p)[0]) AS first, properties(vertices(p)[1]) AS second, properties(vertices(p)[2]) AS third,
+	   properties(nodes(p)[3]) AS fourth, properties(vertices(p)[4]) AS fifth, properties(vertices(p)[5]) AS sixth,
+	   length(edges(p))
+ORDER BY first, second, third, fourth, fifth, sixth;
+   first    |   second   |   third    |   fourth   |   fifth    | sixth | length 
+------------+------------+------------+------------+------------+-------+--------
+ {"sec": 1} | {"sec": 2} | {"sec": 3} | {"sec": 4} | {"sec": 5} |       | 4
+ {"sec": 1} | {"sec": 2} | {"sec": 3} | {"sec": 4} |            |       | 3
+ {"sec": 1} | {"sec": 2} | {"sec": 3} |            |            |       | 2
+ {"sec": 2} | {"sec": 3} | {"sec": 4} | {"sec": 5} | {"sec": 6} |       | 4
+ {"sec": 2} | {"sec": 3} | {"sec": 4} | {"sec": 5} |            |       | 3
+ {"sec": 2} | {"sec": 3} | {"sec": 4} |            |            |       | 2
+ {"sec": 3} | {"sec": 4} | {"sec": 5} | {"sec": 6} | {"sec": 7} |       | 4
+ {"sec": 3} | {"sec": 4} | {"sec": 5} | {"sec": 6} |            |       | 3
+ {"sec": 3} | {"sec": 4} | {"sec": 5} |            |            |       | 2
+ {"sec": 4} | {"sec": 5} | {"sec": 6} | {"sec": 7} | {"sec": 8} |       | 4
+ {"sec": 4} | {"sec": 5} | {"sec": 6} | {"sec": 7} |            |       | 3
+ {"sec": 4} | {"sec": 5} | {"sec": 6} |            |            |       | 2
+ {"sec": 5} | {"sec": 6} | {"sec": 7} | {"sec": 8} | {"sec": 9} |       | 4
+ {"sec": 5} | {"sec": 6} | {"sec": 7} | {"sec": 8} |            |       | 3
+ {"sec": 5} | {"sec": 6} | {"sec": 7} |            |            |       | 2
+ {"sec": 6} | {"sec": 7} | {"sec": 8} | {"sec": 9} |            |       | 3
+ {"sec": 6} | {"sec": 7} | {"sec": 8} |            |            |       | 2
+ {"sec": 7} | {"sec": 8} | {"sec": 9} |            |            |       | 2
+(18 rows)
+
+CREATE (:time {sec: 11})-[:goes {int: 1}]->
+       (:time {sec: 12})-[:goes {int: 1}]->
+       (:time {sec: 13})-[:goes {int: 2}]->
+       (:time {sec: 15})-[:goes {int: 1}]->
+       (:time {sec: 16})-[:goes {int: 1}]->
+       (:time {sec: 17});
+MATCH (a:time)-[x:goes*1..2 {int: 1}]->(b:time)
+RETURN a.sec AS a, length(x) AS x, b.sec AS b;
+ a  | x | b  
+----+---+----
+ 11 | 1 | 12
+ 11 | 2 | 13
+ 12 | 1 | 13
+ 15 | 1 | 16
+ 15 | 2 | 17
+ 16 | 1 | 17
+(6 rows)
+
+CREATE VLABEL person;
+CREATE ELABEL knows;
+-- 1->2->3->4
+CREATE (:person {id: 1})-[:knows]->
+       (:person {id: 2})-[:knows]->
+       (:person {id: 3})-[:knows]->
+       (:person {id: 4});
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person) RETURN a.id, b.id, x;
+ id | id |                       x                       
+----+----+-----------------------------------------------
+ 1  | 2  | [knows[6.1][5.1,5.2]{}]
+ 1  | 3  | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]
+(2 rows)
+
+-- 1->2->3->4
+-- `->5
+MATCH (a:person {id: 1}) CREATE (a)-[:knows]->(:person {id: 5});
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person) RETURN a.id, b.id, x;
+ id | id |                       x                       
+----+----+-----------------------------------------------
+ 1  | 2  | [knows[6.1][5.1,5.2]{}]
+ 1  | 3  | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]
+ 1  | 5  | [knows[6.4][5.1,5.5]{}]
+(3 rows)
+
+-- 1<->2->3->4
+-- `->5
+MATCH (a:person {id: 2}), (b:person {id: 1}) CREATE (a)-[:knows]->(b);
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+RETURN a.id as aid, b.id as bid, x ORDER BY aid, bid;
+ aid | bid |                       x                       
+-----+-----+-----------------------------------------------
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{}]
+ 1   | 2   | [knows[6.1][5.1,5.2]{}]
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]
+ 1   | 5   | [knows[6.4][5.1,5.5]{}]
+(4 rows)
+
+MATCH (a:person {id: 1})-[x:knows*0..0]->(b:person) RETURN a.id, b.id, x;
+ id | id | x  
+----+----+----
+ 1  | 1  | []
+(1 row)
+
+MATCH (a:person {id: 1})-[x:knows*0..1]->(b:person) RETURN a.id, b.id, x;
+ id | id |            x            
+----+----+-------------------------
+ 1  | 1  | []
+ 1  | 2  | [knows[6.1][5.1,5.2]{}]
+ 1  | 5  | [knows[6.4][5.1,5.5]{}]
+(3 rows)
+
+MATCH (a:person {id: 1})-[x:knows*2..2]->(b:person) RETURN a.id as aid, b.id as bid, x ORDER BY aid, bid;
+ aid | bid |                       x                       
+-----+-----+-----------------------------------------------
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{}]
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]
+(2 rows)
+
+MATCH (a:person {id: 2})-[x:knows*1..1]->(b:person) RETURN a.id as aid, b.id as bid, x ORDER BY aid, bid;
+ aid | bid |            x            
+-----+-----+-------------------------
+ 2   | 1   | [knows[6.5][5.2,5.1]{}]
+ 2   | 3   | [knows[6.2][5.2,5.3]{}]
+(2 rows)
+
+MATCH (a:person)-[x:knows*1..1]->(b:person)
+RETURN a.id as aid, b.id as bid, x, id(x[0]) as xid ORDER BY aid, bid, xid;
+ aid | bid |            x            | xid 
+-----+-----+-------------------------+-----
+ 1   | 2   | [knows[6.1][5.1,5.2]{}] | 6.1
+ 1   | 5   | [knows[6.4][5.1,5.5]{}] | 6.4
+ 2   | 1   | [knows[6.5][5.2,5.1]{}] | 6.5
+ 2   | 3   | [knows[6.2][5.2,5.3]{}] | 6.2
+ 3   | 4   | [knows[6.3][5.3,5.4]{}] | 6.3
+(5 rows)
+
+MATCH (a:person)-[x:knows*]->(b:person)
+RETURN a.id as aid, b.id as bid, x, id(x[0]) as xid ORDER BY aid, bid, xid;
+ aid | bid |                                             x                                             | xid 
+-----+-----+-------------------------------------------------------------------------------------------+-----
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{}]                                             | 6.1
+ 1   | 2   | [knows[6.1][5.1,5.2]{}]                                                                   | 6.1
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]                                             | 6.1
+ 1   | 4   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.3][5.3,5.4]{}]                       | 6.1
+ 1   | 5   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{},knows[6.4][5.1,5.5]{}]                       | 6.1
+ 1   | 5   | [knows[6.4][5.1,5.5]{}]                                                                   | 6.4
+ 2   | 1   | [knows[6.5][5.2,5.1]{}]                                                                   | 6.5
+ 2   | 2   | [knows[6.5][5.2,5.1]{},knows[6.1][5.1,5.2]{}]                                             | 6.5
+ 2   | 3   | [knows[6.2][5.2,5.3]{}]                                                                   | 6.2
+ 2   | 3   | [knows[6.5][5.2,5.1]{},knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]                       | 6.5
+ 2   | 4   | [knows[6.2][5.2,5.3]{},knows[6.3][5.3,5.4]{}]                                             | 6.2
+ 2   | 4   | [knows[6.5][5.2,5.1]{},knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.3][5.3,5.4]{}] | 6.5
+ 2   | 5   | [knows[6.5][5.2,5.1]{},knows[6.4][5.1,5.5]{}]                                             | 6.5
+ 3   | 4   | [knows[6.3][5.3,5.4]{}]                                                                   | 6.3
+(14 rows)
+
+MATCH (a:person {id: 1})-[x:knows*0..3]->(b:person)
+RETURN a.id as aid, b.id as bid, x
+ORDER BY length(x), aid, bid DESC;
+ aid | bid |                                  x                                  
+-----+-----+---------------------------------------------------------------------
+ 1   | 1   | []
+ 1   | 5   | [knows[6.4][5.1,5.5]{}]
+ 1   | 2   | [knows[6.1][5.1,5.2]{}]
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{}]
+ 1   | 5   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{},knows[6.4][5.1,5.5]{}]
+ 1   | 4   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.3][5.3,5.4]{}]
+(7 rows)
+
+MATCH (a:person {id: 1})-[x*1..2]-(b:person)
+RETURN a.id as aid, b.id as bid, x, id(x[0]) as xid ORDER BY aid, bid, xid;
+ aid | bid |                       x                       | xid 
+-----+-----+-----------------------------------------------+-----
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.5][5.2,5.1]{}] | 6.1
+ 1   | 1   | [knows[6.5][5.2,5.1]{},knows[6.1][5.1,5.2]{}] | 6.5
+ 1   | 2   | [knows[6.1][5.1,5.2]{}]                       | 6.1
+ 1   | 2   | [knows[6.5][5.2,5.1]{}]                       | 6.5
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}] | 6.1
+ 1   | 3   | [knows[6.5][5.2,5.1]{},knows[6.2][5.2,5.3]{}] | 6.5
+ 1   | 5   | [knows[6.4][5.1,5.5]{}]                       | 6.4
+(7 rows)
+
+-- 1->2->3->4
+-- `->5
+MATCH (a:person {id: 2})-[k:knows]->(b:person {id: 1}) DELETE k;
+-- +<----+
+-- 1->2->3->4
+-- `->5
+MATCH (a:person {id: 3}), (b:person {id: 1}) CREATE (a)-[:knows]->(b);
+MATCH (a:person {id: 1})-[x:knows*1..]->(b:person)
+RETURN a.id as aid, b.id as bid, x, id(x[0]) as xid ORDER BY aid, bid, xid;
+ aid | bid |                                             x                                             | xid 
+-----+-----+-------------------------------------------------------------------------------------------+-----
+ 1   | 1   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.6][5.3,5.1]{}]                       | 6.1
+ 1   | 2   | [knows[6.1][5.1,5.2]{}]                                                                   | 6.1
+ 1   | 3   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{}]                                             | 6.1
+ 1   | 4   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.3][5.3,5.4]{}]                       | 6.1
+ 1   | 5   | [knows[6.1][5.1,5.2]{},knows[6.2][5.2,5.3]{},knows[6.6][5.3,5.1]{},knows[6.4][5.1,5.5]{}] | 6.1
+ 1   | 5   | [knows[6.4][5.1,5.5]{}]                                                                   | 6.4
+(6 rows)
+
+-- 1->2->3->4
+-- `->5
+MATCH (a:person {id: 3})-[k:knows]->(b:person {id: 1}) DELETE k;
+MATCH (a:person {id: 1})-[k:knows]->(b:person {id: 5}) DELETE k;
+CREATE ELABEL friendships INHERITS (knows);
+MATCH (a:person {id: 1}) CREATE (a)-[:friendships {fromdate: '2014-11-24'}]->(:person {id: 5});
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+RETURN a.id, b.id, x[0].fromdate;
+ id | id |   fromdate   
+----+----+--------------
+ 1  | 2  | 
+ 1  | 3  | 
+ 1  | 5  | "2014-11-24"
+(3 rows)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WHERE x[0].fromdate IS NOT NULL
+RETURN a.id, b.id, x[0].fromdate;
+ id | id |   fromdate   
+----+----+--------------
+ 1  | 5  | "2014-11-24"
+(1 row)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH x[0].fromdate AS fromdate
+RETURN fromdate;
+   fromdate   
+--------------
+ 
+ 
+ "2014-11-24"
+(3 rows)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH x[0] AS x1
+RETURN x1.fromdate, x1;
+   fromdate   |                         x1                          
+--------------+-----------------------------------------------------
+              | knows[6.1][5.1,5.2]{}
+              | knows[6.1][5.1,5.2]{}
+ "2014-11-24" | friendships[7.1][5.1,5.6]{"fromdate": "2014-11-24"}
+(3 rows)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WHERE x[1].fromdate IS NOT NULL
+WITH x[0] AS x1, length(x) AS l
+RETURN x1, l;
+ x1 | l 
+----+---
+(0 rows)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH x[0] AS x1, length(x) AS l
+RETURN x1, l;
+                         x1                          | l 
+-----------------------------------------------------+---
+ knows[6.1][5.1,5.2]{}                               | 1
+ knows[6.1][5.1,5.2]{}                               | 2
+ friendships[7.1][5.1,5.6]{"fromdate": "2014-11-24"} | 1
+(3 rows)
+
+MATCH (a:person {id: 1})-[x:knows*1..2]-(b:person)
+WITH x[0] AS x1, length(x) AS l
+RETURN x1, l;
+                         x1                          | l 
+-----------------------------------------------------+---
+ knows[6.1][5.1,5.2]{}                               | 1
+ knows[6.1][5.1,5.2]{}                               | 2
+ friendships[7.1][5.1,5.6]{"fromdate": "2014-11-24"} | 1
+(3 rows)
+
+CREATE ELABEL familyship INHERITS (friendships);
+MATCH (a:person {id: 5}) CREATE (a)-[:familyship {fromdate: '2015-12-24'}]->(:person {id: 6});
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH x[0] AS x1, x[1] AS x2, length(x) AS l
+RETURN x1, x2, l;
+                         x1                          |                         x2                         | l 
+-----------------------------------------------------+----------------------------------------------------+---
+ knows[6.1][5.1,5.2]{}                               |                                                    | 1
+ knows[6.1][5.1,5.2]{}                               | knows[6.2][5.2,5.3]{}                              | 2
+ friendships[7.1][5.1,5.6]{"fromdate": "2014-11-24"} |                                                    | 1
+ friendships[7.1][5.1,5.6]{"fromdate": "2014-11-24"} | familyship[8.2][5.6,5.8]{"fromdate": "2015-12-24"} | 2
+(4 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH x[0] AS x1, x[1] AS x2 ORDER BY x2 RETURN x1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: _.x1
+   ->  Sort
+         Output: (x.edges[1]), (x.edges[2])
+         Sort Key: (x.edges[2])
+         ->  Nested Loop
+               Output: x.edges[1], x.edges[2]
+               Inner Unique: true
+               ->  Nested Loop
+                     Output: x.edges, x."end"
+                     ->  Seq Scan on t.person a
+                           Output: a.id, a.properties
+                           Filter: (a.properties.'id'::text = '1'::jsonb)
+                     ->  Subquery Scan on x
+                           Output: x.start, x."end", x.ids, x.edges
+                           ->  Graph VLE [1..2]
+                                 ->  Result
+                                       Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+               ->  Memoize
+                     Output: b.id
+                     Cache Key: x."end"
+                     Cache Mode: logical
+                     ->  Index Only Scan using person_pkey on t.person b
+                           Output: b.id
+                           Index Cond: (b.id = x."end")
+(25 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH max(b.id::"numeric") AS id, x[0] AS x RETURN *;
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: cypher_to_jsonb(_.id), _.x
+   ->  GroupAggregate
+         Output: max((b.properties.'id'::text)::numeric), (x.edges[1])
+         Group Key: (x.edges[1])
+         ->  Sort
+               Output: (x.edges[1]), b.properties
+               Sort Key: (x.edges[1])
+               ->  Nested Loop
+                     Output: x.edges[1], b.properties
+                     Inner Unique: true
+                     ->  Nested Loop
+                           Output: x.edges, x."end"
+                           ->  Seq Scan on t.person a
+                                 Output: a.id, a.properties
+                                 Filter: (a.properties.'id'::text = '1'::jsonb)
+                           ->  Subquery Scan on x
+                                 Output: x.start, x."end", x.ids, x.edges
+                                 ->  Graph VLE [1..2]
+                                       ->  Result
+                                             Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+                     ->  Memoize
+                           Output: b.properties, b.id
+                           Cache Key: x."end"
+                           Cache Mode: logical
+                           ->  Index Scan using person_pkey on t.person b
+                                 Output: b.properties, b.id
+                                 Index Cond: (b.id = x."end")
+(28 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH DISTINCT x AS path RETURN *;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Unique
+   Output: x.edges
+   ->  Sort
+         Output: x.edges
+         Sort Key: x.edges
+         ->  Nested Loop
+               Output: x.edges
+               Inner Unique: true
+               ->  Nested Loop
+                     Output: x.edges, x."end"
+                     ->  Seq Scan on t.person a
+                           Output: a.id, a.properties
+                           Filter: (a.properties.'id'::text = '1'::jsonb)
+                     ->  Subquery Scan on x
+                           Output: x.start, x."end", x.ids, x.edges
+                           ->  Graph VLE [1..2]
+                                 ->  Result
+                                       Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+               ->  Memoize
+                     Output: b.id
+                     Cache Key: x."end"
+                     Cache Mode: logical
+                     ->  Index Only Scan using person_pkey on t.person b
+                           Output: b.id
+                           Index Cond: (b.id = x."end")
+(25 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH max(b.id::"numeric") AS id, x AS x RETURN *;
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: cypher_to_jsonb(_.id), _.x
+   ->  GroupAggregate
+         Output: max((b.properties.'id'::text)::numeric), x.edges
+         Group Key: x.edges
+         ->  Sort
+               Output: x.edges, b.properties
+               Sort Key: x.edges
+               ->  Nested Loop
+                     Output: x.edges, b.properties
+                     Inner Unique: true
+                     ->  Nested Loop
+                           Output: x.edges, x."end"
+                           ->  Seq Scan on t.person a
+                                 Output: a.id, a.properties
+                                 Filter: (a.properties.'id'::text = '1'::jsonb)
+                           ->  Subquery Scan on x
+                                 Output: x.start, x."end", x.ids, x.edges
+                                 ->  Graph VLE [1..2]
+                                       ->  Result
+                                             Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+                     ->  Memoize
+                           Output: b.properties, b.id
+                           Cache Key: x."end"
+                           Cache Mode: logical
+                           ->  Index Scan using person_pkey on t.person b
+                                 Output: b.properties, b.id
+                                 Index Cond: (b.id = x."end")
+(28 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WITH max(length(x)::"numeric") AS x, b.id AS id RETURN *;
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: cypher_to_jsonb(_.x), _.id
+   ->  GroupAggregate
+         Output: max((length(x.edges))::numeric), (b.properties.'id'::text)
+         Group Key: (b.properties.'id'::text)
+         ->  Sort
+               Output: (b.properties.'id'::text), x.edges
+               Sort Key: (b.properties.'id'::text)
+               ->  Nested Loop
+                     Output: b.properties.'id'::text, x.edges
+                     Inner Unique: true
+                     ->  Nested Loop
+                           Output: x.edges, x."end"
+                           ->  Seq Scan on t.person a
+                                 Output: a.id, a.properties
+                                 Filter: (a.properties.'id'::text = '1'::jsonb)
+                           ->  Subquery Scan on x
+                                 Output: x.start, x."end", x.ids, x.edges
+                                 ->  Graph VLE [1..2]
+                                       ->  Result
+                                             Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+                     ->  Memoize
+                           Output: b.properties, b.id
+                           Cache Key: x."end"
+                           Cache Mode: logical
+                           ->  Index Scan using person_pkey on t.person b
+                                 Output: b.properties, b.id
+                                 Index Cond: (b.id = x."end")
+(28 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+RETURN x, x IS NOT NULL, x[0] IS NULL;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Nested Loop
+   Output: x.edges, (x.edges IS NOT NULL), (x.edges[1] IS NOT DISTINCT FROM NULL)
+   Inner Unique: true
+   ->  Nested Loop
+         Output: x.edges, x."end"
+         ->  Seq Scan on t.person a
+               Output: a.id, a.properties
+               Filter: (a.properties.'id'::text = '1'::jsonb)
+         ->  Subquery Scan on x
+               Output: x.start, x."end", x.ids, x.edges
+               ->  Graph VLE [1..2]
+                     ->  Result
+                           Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+   ->  Memoize
+         Output: b.id
+         Cache Key: x."end"
+         Cache Mode: logical
+         ->  Index Only Scan using person_pkey on t.person b
+               Output: b.id
+               Index Cond: (b.id = x."end")
+(20 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+WHERE x[0] IS NOT NULL RETURN x[0];
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Nested Loop
+   Output: x.edges[1]
+   Inner Unique: true
+   ->  Nested Loop
+         Output: x.edges, x."end"
+         ->  Seq Scan on t.person a
+               Output: a.id, a.properties
+               Filter: (a.properties.'id'::text = '1'::jsonb)
+         ->  Subquery Scan on x
+               Output: x.start, x."end", x.ids, x.edges
+               Filter: (x.edges[1] IS DISTINCT FROM NULL)
+               ->  Graph VLE [1..2]
+                     ->  Result
+                           Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+   ->  Memoize
+         Output: b.id
+         Cache Key: x."end"
+         Cache Mode: logical
+         ->  Index Only Scan using person_pkey on t.person b
+               Output: b.id
+               Index Cond: (b.id = x."end")
+(21 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM (
+  MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+  WHERE x[0] IS NOT NULL RETURN x[0]
+  UNION ALL
+  MATCH (a:person {id: 1})-[x:knows*1..2]->(b:person)
+  RETURN x[1]
+) AS foo;
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Append
+   ->  Nested Loop
+         Output: x.edges[1]
+         Inner Unique: true
+         ->  Nested Loop
+               Output: x.edges, x."end"
+               ->  Seq Scan on t.person a
+                     Output: a.id, a.properties
+                     Filter: (a.properties.'id'::text = '1'::jsonb)
+               ->  Subquery Scan on x
+                     Output: x.start, x."end", x.ids, x.edges
+                     Filter: (x.edges[1] IS DISTINCT FROM NULL)
+                     ->  Graph VLE [1..2]
+                           ->  Result
+                                 Output: a.id, a.id, '{}'::graphid[], '[]'::edge[]
+         ->  Memoize
+               Output: b.id
+               Cache Key: x."end"
+               Cache Mode: logical
+               ->  Index Only Scan using person_pkey on t.person b
+                     Output: b.id
+                     Index Cond: (b.id = x."end")
+   ->  Nested Loop
+         Output: x_1.edges[2]
+         Inner Unique: true
+         ->  Nested Loop
+               Output: x_1.edges, x_1."end"
+               ->  Seq Scan on t.person a_1
+                     Output: a_1.id, a_1.properties
+                     Filter: (a_1.properties.'id'::text = '1'::jsonb)
+               ->  Subquery Scan on x_1
+                     Output: x_1.start, x_1."end", x_1.ids, x_1.edges
+                     ->  Graph VLE [1..2]
+                           ->  Result
+                                 Output: a_1.id, a_1.id, '{}'::graphid[], '[]'::edge[]
+         ->  Memoize
+               Output: b_1.id
+               Cache Key: x_1."end"
+               Cache Mode: logical
+               ->  Index Only Scan using person_pkey on t.person b_1
+                     Output: b_1.id
+                     Index Cond: (b_1.id = x_1."end")
+(42 rows)
+
+-- AG-154, CS-34 - VLE returns incoreect result with sequential scan
+CREATE GRAPH ag154;
+SET graph_path = ag154;
+CREATE ({id:1})-[:rel]->({id:11});
+MATCH (a {id:11}) CREATE (a)-[:rel]->({id:111});
+MATCH (a {id:111}) CREATE (a)-[:rel]->({id:1111});
+MATCH (a {id:111}) CREATE (a)-[:rel]->({id:1112});
+MATCH (a {id:111}) CREATE (a)-[:rel]->({id:1113});
+MATCH (a {id:11}) CREATE (a)-[:rel]->({id:112});
+MATCH (a {id:112}) CREATE (a)-[:rel]->({id:1121});
+MATCH (a {id:112}) CREATE (a)-[:rel]->({id:1122});
+MATCH (a {id:11}) CREATE (a)-[:rel]->({id:113});
+MATCH (a {id:113}) CREATE (a)-[:rel]->({id:1131});
+MATCH (a {id:113}) CREATE (a)-[:rel]->({id:1132});
+SET enable_indexscan = f;
+SET enable_seqscan = t;
+MATCH ({id:1})-[r:rel*]->() RETURN length(r) AS len ORDER BY len;
+ len 
+-----
+ 1
+ 2
+ 2
+ 2
+ 3
+ 3
+ 3
+ 3
+ 3
+ 3
+ 3
+(11 rows)
+
+SET enable_indexscan = t;
+SET enable_seqscan = f;
+MATCH ({id:1})-[r:rel*]->() RETURN length(r) AS len ORDER BY len;
+ len 
+-----
+ 1
+ 2
+ 2
+ 2
+ 3
+ 3
+ 3
+ 3
+ 3
+ 3
+ 3
+(11 rows)
+
+SET enable_indexscan = default;
+SET enable_seqscan = default;
+-- AG-216 VLE throws "btree index keys must be ordered by attribute"
+CREATE GRAPH ag216;
+SET graph_path = ag216;
+CREATE (:v1)-[:e]->(:v2)-[:e]->(:v3);
+SET enable_seqscan = off;
+MATCH p=(:v1)-[*]->(:v3) RETURN p;
+                                  p                                  
+---------------------------------------------------------------------
+ [v1[3.1]{},e[4.1][3.1,5.1]{},v2[5.1]{},e[4.2][5.1,6.1]{},v3[6.1]{}]
+(1 row)
+
+SET enable_seqscan = on;
+CREATE GRAPH ag216a;
+SET graph_path = ag216a;
+CREATE (n:v1)-[:e1]->(:v2 {lv: 1}), (n)-[:e1]->(:v2 {lv: 1});
+MATCH (n:v2)
+CREATE (n)-[:e2]->(:v2 {lv: 2}), (n)-[:e2]->(:v2 {lv: 2});
+MATCH (n:v2 {lv: 2})
+CREATE (n)-[:e3]->(:v3), (n)-[:e3]->(:v3);
+MATCH p=(:v1)-[*3]->() RETURN p;
+                                                        p                                                         
+------------------------------------------------------------------------------------------------------------------
+ [v1[3.1]{},e1[4.1][3.1,5.1]{},v2[5.1]{"lv": 1},e2[6.1][5.1,5.3]{},v2[5.3]{"lv": 2},e3[7.1][5.3,8.1]{},v3[8.1]{}]
+ [v1[3.1]{},e1[4.1][3.1,5.1]{},v2[5.1]{"lv": 1},e2[6.1][5.1,5.3]{},v2[5.3]{"lv": 2},e3[7.2][5.3,8.2]{},v3[8.2]{}]
+ [v1[3.1]{},e1[4.1][3.1,5.1]{},v2[5.1]{"lv": 1},e2[6.2][5.1,5.4]{},v2[5.4]{"lv": 2},e3[7.3][5.4,8.3]{},v3[8.3]{}]
+ [v1[3.1]{},e1[4.1][3.1,5.1]{},v2[5.1]{"lv": 1},e2[6.2][5.1,5.4]{},v2[5.4]{"lv": 2},e3[7.4][5.4,8.4]{},v3[8.4]{}]
+ [v1[3.1]{},e1[4.2][3.1,5.2]{},v2[5.2]{"lv": 1},e2[6.3][5.2,5.5]{},v2[5.5]{"lv": 2},e3[7.5][5.5,8.5]{},v3[8.5]{}]
+ [v1[3.1]{},e1[4.2][3.1,5.2]{},v2[5.2]{"lv": 1},e2[6.3][5.2,5.5]{},v2[5.5]{"lv": 2},e3[7.6][5.5,8.6]{},v3[8.6]{}]
+ [v1[3.1]{},e1[4.2][3.1,5.2]{},v2[5.2]{"lv": 1},e2[6.4][5.2,5.6]{},v2[5.6]{"lv": 2},e3[7.7][5.6,8.7]{},v3[8.7]{}]
+ [v1[3.1]{},e1[4.2][3.1,5.2]{},v2[5.2]{"lv": 1},e2[6.4][5.2,5.6]{},v2[5.6]{"lv": 2},e3[7.8][5.6,8.8]{},v3[8.8]{}]
+(8 rows)
+
+SET graph_path = graphdb;
+--
+-- DISTINCT
+--
+MATCH (a:repo)-[]-() RETURN DISTINCT a.name AS a ORDER BY a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-docs"
+ "graph-database-jdbc"
+ "graph-database-odbc"
+(4 rows)
+
+--
+-- ORDER BY
+--
+MATCH (a:repo) RETURN a.name AS a ORDER BY a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-docs"
+ "graph-database-jdbc"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH (a:repo) RETURN a.name AS a ORDER BY a ASC;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-docs"
+ "graph-database-jdbc"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH (a:repo) RETURN a.name AS a ORDER BY a DESC;
+           a           
+-----------------------
+ "graph-database-odbc"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database"
+(4 rows)
+
+--
+-- SKIP and LIMIT
+--
+MATCH (a:repo) RETURN a.name AS a ORDER BY a SKIP 1 LIMIT 1;
+           a           
+-----------------------
+ "graph-database-docs"
+(1 row)
+
+--
+-- WITH
+--
+MATCH (a:repo) WITH a.name AS name RETURN name;
+         name          
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH (a)
+WITH a WHERE label(a) = 'repo'
+MATCH p=(a)-[]->(b)
+RETURN b.name AS b ORDER BY b;
+           b           
+-----------------------
+ "graph-database-docs"
+ "graph-database-jdbc"
+ "graph-database-odbc"
+(3 rows)
+
+MATCH (a) WITH a RETURN b;
+ERROR:  variable does not exist
+LINE 1: MATCH (a) WITH a RETURN b;
+                                ^
+MATCH (a) WITH a.name RETURN *;
+ERROR:  expression in WITH must be aliased (use AS)
+LINE 1: MATCH (a) WITH a.name RETURN *;
+                       ^
+MATCH () WITH a AS z RETURN a;
+ERROR:  variable does not exist
+LINE 1: MATCH () WITH a AS z RETURN a;
+                      ^
+--
+-- UNION
+--
+MATCH (a:repo)
+RETURN a.name AS a
+UNION ALL
+MATCH ()-[b:lib]->()
+RETURN DISTINCT b.lang AS b
+UNION ALL
+MATCH ()-[c:doc]->()
+RETURN DISTINCT c.lang AS c;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+ "en"
+ "c"
+ "java"
+(7 rows)
+
+MATCH (a)
+RETURN a
+UNION
+MATCH (b)
+RETURN b.name;
+ERROR:  UNION types vertex and jsonb cannot be matched
+--
+-- aggregates
+--
+MATCH (a)-[]-(b) RETURN count(a) AS a, b.name AS b ORDER BY a, b;
+ a |           b           
+---+-----------------------
+ 1 | "graph-database-docs"
+ 1 | "graph-database-jdbc"
+ 1 | "graph-database-odbc"
+ 3 | "graph-database"
+(4 rows)
+
+--
+-- EXISTS
+--
+MATCH (a:repo) WHERE exists((a)-[]->()) RETURN a.name AS a;
+        a         
+------------------
+ "graph-database"
+(1 row)
+
+--
+-- SIZE
+--
+MATCH (a:repo) RETURN a.name AS a, size((a)-[]->()) AS s;
+           a           | s 
+-----------------------+---
+ "graph-database"      | 3
+ "graph-database-jdbc" | 0
+ "graph-database-docs" | 0
+ "graph-database-odbc" | 0
+(4 rows)
+
+--
+-- LOAD
+--
+MATCH (a) LOAD FROM history AS a RETURN *;
+ERROR:  duplicate variable "a"
+CREATE VLABEL feature;
+CREATE ELABEL supported;
+MATCH (a:repo {name: 'graph-database'})
+LOAD FROM history AS h
+CREATE (:feature {name: h.event})-[:supported]->(a);
+MATCH p=(a)-[:supported]->() RETURN properties(a) AS a ORDER BY a;
+           a            
+------------------------
+ {"name": "Graph"}
+ {"name": "PostgreSQL"}
+(2 rows)
+
+--
+-- DELETE
+--
+MATCH (a) DELETE a;
+ERROR:  vertices with edges can not be removed
+MATCH p=()-[:lib]->() DETACH DELETE (vertices(p))[1];
+ERROR:  only direct variable reference is supported
+LINE 1: MATCH p=()-[:lib]->() DETACH DELETE (vertices(p))[1];
+                                             ^
+MATCH (a:repo) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH ()-[a:doc]->() DETACH DELETE end_vertex(a);
+ERROR:  only direct variable reference is supported
+LINE 1: MATCH ()-[a:doc]->() DETACH DELETE end_vertex(a);
+                                           ^
+MATCH (a:repo) RETURN a.name AS a;
+           a           
+-----------------------
+ "graph-database"
+ "graph-database-jdbc"
+ "graph-database-docs"
+ "graph-database-odbc"
+(4 rows)
+
+MATCH (a) DETACH DELETE a;
+MATCH (a) RETURN a;
+ a 
+---
+(0 rows)
+
+SELECT count(*) FROM graphdb.ag_edge;
+ count 
+-------
+     0
+(1 row)
+
+-- attempt to delete null object
+CREATE ({name: 'graphdatabase'})-[:made_by]->({name: 'ageproject'});
+MATCH (a {name: 'graphdatabase'}), (g {name: 'ageproject'})
+OPTIONAL MATCH (a)-[r:made_by]-(g)
+DELETE r;
+MATCH (a {name: 'graphdatabase'}), (g {name: 'ageproject'})
+OPTIONAL MATCH (a)-[r:made_by]-(g)
+DELETE r;
+NOTICE:  skipping deletion of NULL graph element
+MATCH (a) DETACH DELETE a;
+-- AG-163 : DELETE plan passes 'edge' variable to the next plan.
+CREATE ({name:'AG-163'});
+MATCH (a {name:'AG-163'}) DELETE a RETURN *;
+ a 
+---
+ 
+(1 row)
+
+-- AG-160
+CREATE ()-[:AG160]->();
+MATCH ()-[r:AG160]->() DETACH DELETE r;
+MATCH (a) DETACH DELETE a;
+CREATE ({name:'ag-160 left'})-[:AG160]->({name:'ag-160 right'});
+MATCH (a)-[r:AG160]->(b)
+DELETE r
+DELETE a, b;
+MATCH ()-[]->() RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH () RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+CREATE ({name:'ag-160 left'})-[:AG160]->({name:'ag-160 right'});
+MATCH (a)-[r:AG160]->(b)
+DELETE r, a
+DELETE b;
+MATCH ()-[]->() RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH () RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+CREATE ({name:'ag-160 left'})-[:AG160]->({name:'ag-160 right'});
+MATCH (a {name:'ag-160 left'})-[r:AG160]->(b)
+DELETE r
+DELETE a, b;
+MATCH ()-[]->() RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH () RETURN count(*);
+ count 
+-------
+ 0
+(1 row)
+
+-- AG-138
+CREATE ()-[:rel]->()-[:rel]->();
+MATCH (a)-[r:rel]->(b)
+DELETE a, b, r;
+MATCH (a) RETURN count(a);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH ()-[r:rel]->() RETURN count(r);
+ count 
+-------
+ 0
+(1 row)
+
+CREATE ()-[:rel]->()-[:rel]->();
+MATCH (a)-[r:rel]->(b), (c), p=(d)
+DELETE a, b, r, c, d, p;
+MATCH (a) RETURN count(a);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH ()-[r:rel]->() RETURN count(r);
+ count 
+-------
+ 0
+(1 row)
+
+--AG-2 : failed DELETE graph path
+CREATE ()-[:rel]->()-[:rel]->();
+MATCH p = ()-[:rel]->(), ()-[r:rel]->()
+DELETE r
+RETURN *;
+ERROR:  cannot delete a edge in graphpath.
+MATCH p = ()-[:rel]->(), (a)-[:rel]->()
+DELETE a
+RETURN *;
+ERROR:  vertices with edges can not be removed
+MATCH p = ()-[:rel]->()
+DELETE p;
+MATCH (a) RETURN count(a);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH ()-[r:rel]->() RETURN count(r);
+ count 
+-------
+ 0
+(1 row)
+
+CREATE ()-[:rel]->()-[:rel]->();
+MATCH p = ()-[:rel]->(), gp = ()-[:rel]->(), (a)
+DELETE p, gp, a;
+MATCH (a) RETURN count(a);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH ()-[r:rel]->() RETURN count(r);
+ count 
+-------
+ 0
+(1 row)
+
+-- AG-159
+CREATE (:v1), (:v2);
+MATCH p=(a:v1), (b:v2)
+DETACH DELETE a
+RETURN label(b);
+ label 
+-------
+ "v2"
+(1 row)
+
+MATCH p=(a:v2)
+DELETE a
+RETURN p;
+ p 
+---
+ 
+(1 row)
+
+CREATE (:v1);
+MATCH (a:v1)
+DELETE a
+DETACH DELETE a
+DELETE a;
+NOTICE:  skipping deletion of NULL graph element
+MATCH (a:v1) RETURN a;
+ a 
+---
+(0 rows)
+
+--
+-- Uniqueness
+--
+CREATE GRAPH u;
+SET graph_path = u;
+CREATE ELABEL rel;
+CREATE (s {id: 1})-[:rel {p: 'a'}]->({id: 2})-[:rel {p: 'b'}]->(s);
+MATCH (s)-[r1]-(m)-[r2]-(x)
+RETURN s.id AS s, r1.p AS r1, m.id AS m, r2.p AS r2, x.id AS x
+       ORDER BY s, r1, m, r2, x;
+ s | r1  | m | r2  | x 
+---+-----+---+-----+---
+ 1 | "a" | 2 | "b" | 1
+ 1 | "b" | 2 | "a" | 1
+ 2 | "a" | 1 | "b" | 2
+ 2 | "b" | 1 | "a" | 2
+(4 rows)
+
+--
+-- SET/REMOVE
+--
+CREATE GRAPH p;
+SET graph_path = p;
+CREATE ELABEL rel;
+CREATE ({name: 'someone'})-[:rel {k: 'v'}]->({name: 'somebody'});
+MATCH (n)-[r]->(m) SET r.l = 'w', n = m, r.k = NULL
+RETURN properties(n) AS n, properties(r) AS r, properties(m) AS m;
+          n           |     r      |          m           
+----------------------+------------+----------------------
+ {"name": "somebody"} | {"l": "w"} | {"name": "somebody"}
+(1 row)
+
+MATCH (n)-[r]->(m) REMOVE m.name
+RETURN properties(n) AS n, properties(r) AS r, properties(m) AS m;
+          n           |     r      | m  
+----------------------+------------+----
+ {"name": "somebody"} | {"l": "w"} | {}
+(1 row)
+
+MATCH (n)-[r]->(m)
+RETURN properties(n) AS n, properties(r) AS r, properties(m) AS m;
+          n           |     r      | m  
+----------------------+------------+----
+ {"name": "somebody"} | {"l": "w"} | {}
+(1 row)
+
+MATCH (n) DETACH DELETE (n);
+-- overwrite (Standard SQL)
+CREATE ({age: 10});
+MATCH (a) SET a.age = 11, a.age = a.age + 1
+RETURN properties(a);
+ properties  
+-------------
+ {"age": 12}
+(1 row)
+
+MATCH (a) RETURN properties(a);
+ properties  
+-------------
+ {"age": 12}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+-- multiple SET's
+CREATE ({age: 10});
+MATCH (a) SET a.age = 11 SET a.age = a.age + 1
+RETURN properties(a);
+ properties  
+-------------
+ {"age": 12}
+(1 row)
+
+MATCH (a) RETURN properties(a);
+ properties  
+-------------
+ {"age": 12}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+CREATE ()-[:rel {k: 'v'}]->();
+MATCH ()-[r]->() SET r.l = 'x' SET r.l = 'y'
+RETURN properties(r) AS r;
+          r           
+----------------------
+ {"k": "v", "l": "y"}
+(1 row)
+
+MATCH ()-[r]->() RETURN properties(r) AS r;
+          r           
+----------------------
+ {"k": "v", "l": "y"}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+CREATE ({age: 1})-[:rel]->({age: 2});
+MATCH (a)-[]->(b)
+SET a.age = a.age + 1, b.age = a.age + b.age
+RETURN properties(a) AS a, properties(b) AS b;
+     a      |     b      
+------------+------------
+ {"age": 2} | {"age": 4}
+(1 row)
+
+MATCH (a)-[]->(b) RETURN properties(a) AS a, properties(b) AS b;
+     a      |     b      
+------------+------------
+ {"age": 2} | {"age": 4}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+CREATE ({val: 1})-[:rel]->({val: 2});
+MATCH (a)-[]->(b)
+SET a.val = b.val, b.val = a.val;
+MATCH (a)-[]->(b) RETURN properties(a) AS a, properties(b) AS b;
+     a      |     b      
+------------+------------
+ {"val": 2} | {"val": 2}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+CREATE ({val: 1})-[:rel]->({val: 2});
+MATCH (a)-[]->(b)
+SET a.val = b.val SET b.val = a.val;
+MATCH (a)-[]->(b) RETURN properties(a) AS a, properties(b) AS b;
+     a      |     b      
+------------+------------
+ {"val": 2} | {"val": 2}
+(1 row)
+
+MATCH (a) DETACH DELETE (a);
+-- special multiple set from a bug (AG-279) - this should be successful
+CREATE (:bug_AG279 {"a1234567890123456789": 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "b1234567890123456789": 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', "c1234567890123456789": 'ccccccccccccccccccccccccccccccc', "d1234567890123456789": '123456789012345678901234', "e1234567890123456789": 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', "f": '12345678901234567890123456789012345678901234567'});
+MATCH (v:bug_AG279) return v;
+                                                                                                                                                                                                                                        v                                                                                                                                                                                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ bug_ag279[4.1]{"f": "12345678901234567890123456789012345678901234567", "a1234567890123456789": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "b1234567890123456789": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "c1234567890123456789": "ccccccccccccccccccccccccccccccc", "d1234567890123456789": "123456789012345678901234", "e1234567890123456789": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}
+(1 row)
+
+-- enable_multiple_update
+SET enable_multiple_update = false;
+CREATE (:multiple_update {no:1}), (:multiple_update {no:1});
+MATCH (a:multiple_update), (b:multiple_update)
+SET a.no = a.no + 1
+RETURN a.no;
+WARNING:  graph element(5,1) has been SET multiple times
+WARNING:  graph element(5,2) has been SET multiple times
+ no 
+----
+ 2
+ 2
+ 2
+ 2
+(4 rows)
+
+MATCH (a:multiple_update)
+RETURN a.no;
+ no 
+----
+ 2
+ 2
+(2 rows)
+
+MATCH (a:multiple_update)
+SET a.no = 5
+SET a.no = 6
+SET a.no = 7
+SET a.no = 8
+RETURN a.no;
+ no 
+----
+ 8
+ 8
+(2 rows)
+
+MATCH (a:multiple_update)
+RETURN a.no;
+ no 
+----
+ 8
+ 8
+(2 rows)
+
+SET enable_multiple_update = true;
+MATCH (a:multiple_update), (b:multiple_update)
+SET a.no = a.no + 1
+RETURN a.no;
+ no 
+----
+ 9
+ 9
+ 9
+ 9
+(4 rows)
+
+MATCH (a:multiple_update)
+RETURN a.no;
+ no 
+----
+ 9
+ 9
+(2 rows)
+
+MATCH (a) DETACH DELETE (a);
+-- += operator
+CREATE ({age: 10});
+MATCH (a) SET a += {name: 'ageproject', age: 3}
+RETURN properties(a);
+            properties            
+----------------------------------
+ {"age": 3, "name": "ageproject"}
+(1 row)
+
+MATCH (a) RETURN properties(a);
+            properties            
+----------------------------------
+ {"age": 3, "name": "ageproject"}
+(1 row)
+
+MATCH (a) SET a += NULL;
+ERROR:  cannot set property map to NULL
+LINE 1: MATCH (a) SET a += NULL;
+                           ^
+HINT:  use {} instead of NULL to remove all properties
+MATCH (a) SET a.name += NULL;
+ERROR:  += operator on a property is not allowed
+LINE 1: MATCH (a) SET a.name += NULL;
+                      ^
+MATCH (a) SET a.name += 'someone';
+ERROR:  += operator on a property is not allowed
+LINE 1: MATCH (a) SET a.name += 'someone';
+                      ^
+MATCH (a) DETACH DELETE (a);
+-- CREATE ... SET ...
+CREATE p=(a {no:1})-[r1:rel]->(b {no:2})-[r2:rel]->(c {no:3})
+SET a.no = 4, b.no = 5, c.no = 6
+SET r1.name = 'graph', r2.name = 'database'
+RETURN properties(a), properties(r1), properties(b), properties(r2), properties(c);
+ properties |    properties     | properties |      properties      | properties 
+------------+-------------------+------------+----------------------+------------
+ {"no": 4}  | {"name": "graph"} | {"no": 5}  | {"name": "database"} | {"no": 6}
+(1 row)
+
+MATCH (a)-[r]->(b) RETURN a.no, r.name, b.no;
+ no |    name    | no 
+----+------------+----
+ 4  | "graph"    | 5
+ 5  | "database" | 6
+(2 rows)
+
+MATCH (a) DETACH DELETE (a);
+-- remove
+CREATE ({a: 'a', b: 'b', c: 'c'});
+MATCH (a) SET a.a = NULL REMOVE a.b
+RETURN properties(a);
+ properties 
+------------
+ {"c": "c"}
+(1 row)
+
+MATCH (a) RETURN properties(a);
+ properties 
+------------
+ {"c": "c"}
+(1 row)
+
+MATCH (a) SET a = NULL;
+ERROR:  cannot set property map to NULL
+LINE 1: MATCH (a) SET a = NULL;
+                          ^
+HINT:  use {} instead of NULL to remove all properties
+MATCH (a) DETACH DELETE (a);
+-- referring to undefined attributes
+CREATE ({name: 'ageproject'});
+CREATE ({age: 10});
+MATCH (a) SET a.age = a.age + 1
+RETURN properties(a);
+       properties       
+------------------------
+ {"name": "ageproject"}
+ {"age": 11}
+(2 rows)
+
+MATCH (a) RETURN properties(a);
+       properties       
+------------------------
+ {"name": "ageproject"}
+ {"age": 11}
+(2 rows)
+
+MATCH (a) SET a.age = 2017 - a.undefined_attr;
+MATCH (a) RETURN properties(a);
+       properties       
+------------------------
+ {"name": "ageproject"}
+ {}
+(2 rows)
+
+-- working with NULL
+CREATE VLABEL person;
+CREATE (:person {name: 'ageproject', age: NULL});
+MATCH (a:person {name: 'ageproject'}) RETURN properties(a) AS a;
+           a            
+------------------------
+ {"name": "ageproject"}
+(1 row)
+
+MATCH (a:person {age: NULL}) RETURN properties(a) AS a;
+ a 
+---
+(0 rows)
+
+MATCH (a:person) WHERE a.age IS NULL RETURN properties(a) AS a;
+           a            
+------------------------
+ {"name": "ageproject"}
+(1 row)
+
+CREATE (:person {name: 'graphdb', key1: 1, key2: 2, key3: 3});
+MATCH (a:person {name: 'graphdb'})
+  SET a.key1 = NULL
+  RETURN properties(a);
+                properties                 
+-------------------------------------------
+ {"key2": 2, "key3": 3, "name": "graphdb"}
+(1 row)
+
+MATCH (a:person {name: 'graphdb'})
+  SET a.key2 = null
+  RETURN properties(a);
+           properties           
+--------------------------------
+ {"key3": 3, "name": "graphdb"}
+(1 row)
+
+MATCH (a:person {name: 'graphdb'})
+  SET a.key3 = {first: 1, last: null}
+  RETURN properties(a);
+                properties                 
+-------------------------------------------
+ {"key3": {"first": 1}, "name": "graphdb"}
+(1 row)
+
+MATCH (a:person {name: 'graphdb'})
+  SET a = {name: 'graphdb', key4: null}
+  RETURN properties(a);
+     properties      
+---------------------
+ {"name": "graphdb"}
+(1 row)
+
+MATCH (a:person {name: 'graphdb'}) RETURN properties(a);
+     properties      
+---------------------
+ {"name": "graphdb"}
+(1 row)
+
+--
+-- MERGE
+--
+CREATE GRAPH gm;
+SET GRAPH_PATH = gm;
+CREATE VLABEL v1;
+CREATE VLABEL v2;
+CREATE ELABEL e1;
+MERGE (a);
+MATCH (a) DELETE a;
+CREATE (:v1 {name: 'foo'}), (:v1 {name: 'bar'}), (:v1 {name: 'foo'}), (:v1 {name: 'bar'});
+MATCH (a:v1)
+MERGE (b:v2 {name: a.name})
+  ON CREATE SET b.created = true ON MATCH SET b.matched = true;
+MATCH (a:v2) RETURN properties(a);
+                    properties                     
+---------------------------------------------------
+ {"name": "foo", "created": true, "matched": true}
+ {"name": "bar", "created": true, "matched": true}
+(2 rows)
+
+MATCH (a:v1)
+MERGE (a)-[r:e1 {type: 'same name'}]->(b:v2 {name: a.name})
+  ON CREATE SET r.created = true, r.matched = null
+  ON MATCH SET r.matched = true, r.created = null;
+MATCH (a)-[r:e1]->(b) RETURN properties(a), properties(r), properties(b);
+   properties    |               properties               |   properties    
+-----------------+----------------------------------------+-----------------
+ {"name": "foo"} | {"type": "same name", "created": true} | {"name": "foo"}
+ {"name": "bar"} | {"type": "same name", "created": true} | {"name": "bar"}
+ {"name": "foo"} | {"type": "same name", "created": true} | {"name": "foo"}
+ {"name": "bar"} | {"type": "same name", "created": true} | {"name": "bar"}
+(4 rows)
+
+MATCH (a:v1)
+MERGE (a)-[r:e1 {type: 'same name'}]->(b:v2 {name: a.name})
+  ON CREATE SET r.created = true, r.matched = null
+  ON MATCH SET r.matched = true, r.created = null;
+MATCH (a)-[r:e1]->(b) RETURN properties(a), properties(r), properties(b);
+   properties    |               properties               |   properties    
+-----------------+----------------------------------------+-----------------
+ {"name": "foo"} | {"type": "same name", "matched": true} | {"name": "foo"}
+ {"name": "bar"} | {"type": "same name", "matched": true} | {"name": "bar"}
+ {"name": "foo"} | {"type": "same name", "matched": true} | {"name": "foo"}
+ {"name": "bar"} | {"type": "same name", "matched": true} | {"name": "bar"}
+(4 rows)
+
+MATCH (a:v2) RETURN properties(a);
+                    properties                     
+---------------------------------------------------
+ {"name": "foo", "created": true, "matched": true}
+ {"name": "bar", "created": true, "matched": true}
+ {"name": "foo"}
+ {"name": "bar"}
+ {"name": "foo"}
+ {"name": "bar"}
+(6 rows)
+
+MERGE (a:v1)-[r1:e1]->(b:v2)
+MERGE (a)-[r2:e1]->(b)
+  ON CREATE SET r2.created = true;
+MATCH p=(a)-[r:e1 {created: true}]->(b) RETURN count(p);
+ count 
+-------
+ 0
+(1 row)
+
+CREATE (:v1 {name: 'v1-1'});
+MERGE (a:v1 {name: 'v1-1'})-[:e1]->(b:v2 {name: 'v2-1'});
+MATCH (a:v1 {name: 'v1-1'})-[r]->(b) RETURN properties(a), properties(b);
+    properties    |    properties    
+------------------+------------------
+ {"name": "v1-1"} | {"name": "v2-1"}
+(1 row)
+
+MATCH (a:v1 {name: 'v1-1'}) RETURN count(a);
+ count 
+-------
+ 2
+(1 row)
+
+MATCH (a:v1 {name: 'v1-1'}) DETACH DELETE a;
+CREATE (:v1 {name: 'v1-1'});
+MERGE (a:v1 {name: 'v1-1'})
+MERGE (b:v2 {name: 'v2-1'})
+MERGE (a)-[:e1]->(b);
+MATCH (a:v1 {name: 'v1-1'})-[r]->(b) RETURN properties(a), properties(b);
+    properties    |    properties    
+------------------+------------------
+ {"name": "v1-1"} | {"name": "v2-1"}
+(1 row)
+
+MATCH (a:v1 {name: 'v1-1'}) RETURN count(a);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (a:v1 {name: 'v1-1'}) DETACH DELETE a;
+CREATE VLABEL person;
+CREATE VLABEL city;
+CREATE ELABEL hometown;
+CREATE (:person {name: 'a', bornin: 'seoul'}),
+       (:person {name: 'b', bornin: 'san jose'}),
+       (:person {name: 'c', bornin: 'jeju'}),
+       (:person {name: 'd', bornin: 'san jose'}),
+       (:person {name: 'e', bornin: 'seoul'}),
+       (:person {name: 'f', bornin: 'los angeles'});
+MATCH (a:person)
+MERGE (b:city {name: a.bornin})
+  ON CREATE SET b.population = 1
+  ON MATCH SET b.population = b.population + 1;
+MATCH (c:city)
+RETURN c.name, c.population ORDER BY name;
+     name      | population 
+---------------+------------
+ "jeju"        | 1
+ "los angeles" | 1
+ "san jose"    | 2
+ "seoul"       | 2
+(4 rows)
+
+MATCH (a:person)
+MERGE (a)-[:hometown]->(b:city {name: a.bornin});
+MATCH (:city)<-[r]-(:person) RETURN count(r);
+ count 
+-------
+ 6
+(1 row)
+
+MATCH (a:city) DETACH DELETE a;
+CREATE CONSTRAINT ON city ASSERT name IS UNIQUE;
+MATCH (a:person)
+MERGE (a)-[:hometown]->(b:city {name: a.bornin});
+ERROR:  conflicting key value violates exclusion constraint "city_unique_constraint"
+DETAIL:  Key ((properties.'name'::text))=("san jose") conflicts with existing key ((properties.'name'::text))=("san jose").
+MATCH (a:city) DETACH DELETE a;
+-- unspecified direction
+CREATE (a {id: 2}), (b {id: 1});
+MATCH (a {id: 2}), (b {id: 1})
+MERGE (a)-[r:e1]-(b)
+RETURN properties(startnode(r)) as s, properties(endnode(r)) as e;
+     s     |     e     
+-----------+-----------
+ {"id": 2} | {"id": 1}
+(1 row)
+
+MATCH (a {id: 1}), (b {id: 2})
+MERGE (a)-[r:e1]-(b)
+RETURN properties(a), properties(b);
+ properties | properties 
+------------+------------
+ {"id": 1}  | {"id": 2}
+(1 row)
+
+MATCH (a) DETACH DELETE a;
+CREATE (a {id: 2}), (b {id: 1}), (c {id: 1}), (d {id: 2})
+CREATE (a)-[:e1 {name: 'ab'}]->(b)
+CREATE (c)-[:e1 {name: 'cd'}]->(d);
+MATCH (a {id: 2})-[]-(b {id: 1})
+MERGE (a)-[r:e1]-(b)
+RETURN properties(r);
+   properties   
+----------------
+ {"name": "ab"}
+ {"name": "cd"}
+(2 rows)
+
+MATCH (a) DETACH DELETE a;
+-- update clauses
+CREATE (a:v1 {name: 'ageproject'}) MERGE (:v2 {name: a.name});
+CREATE (a:v1 {name: 'GraphDatabase'})
+MERGE (b:v2 {name: a.name})
+RETURN properties(a), properties(b);
+        properties         |        properties         
+---------------------------+---------------------------
+ {"name": "GraphDatabase"} | {"name": "GraphDatabase"}
+(1 row)
+
+MERGE (a:v1 {name: 'ageproject'})
+MERGE (b:v1 {name: 'GraphDatabase'})
+CREATE p=(a)-[r:e1 {name: a.name + b.name}]->(b)
+RETURN properties(a), properties(r), properties(b), count(p);
+       properties       |             properties              |        properties         | count 
+------------------------+-------------------------------------+---------------------------+-------
+ {"name": "ageproject"} | {"name": "ageprojectGraphDatabase"} | {"name": "GraphDatabase"} | 1
+(1 row)
+
+MERGE (a {name: 'ageproject'})
+CREATE (b:v1 {name: a.name})
+MERGE (c:v1 {name: 'ageproject'})
+  ON MATCH SET c.matched = true
+  ON CREATE SET c.matched = false;
+MATCH (a) RETURN properties(a);
+               properties                
+-----------------------------------------
+ {"name": "GraphDatabase"}
+ {"name": "ageproject", "matched": true}
+ {"name": "ageproject", "matched": true}
+ {"name": "ageproject", "matched": true}
+ {"name": "ageproject"}
+ {"name": "GraphDatabase"}
+(6 rows)
+
+MATCH (a) DETACH DELETE a;
+-- wrong case
+MERGE (a:v1) MERGE (b:v2 {name: a.notexistent});
+MERGE (a:v1) MATCH (b:v2 {name: a.name}) RETURN a, b;
+ a | b 
+---+---
+(0 rows)
+
+MERGE (a:v1) MERGE (b:v2 {name: a.name}) MERGE (a);
+ERROR:  duplicate variable "a"
+LINE 1: MERGE (a:v1) MERGE (b:v2 {name: a.name}) MERGE (a);
+                                                        ^
+MERGE (a)-[r]->(b);
+ERROR:  only one relationship type is allowed for MERGE
+MERGE (a)-[r:e1]->(b) MERGE (a);
+ERROR:  duplicate variable "a"
+LINE 1: MERGE (a)-[r:e1]->(b) MERGE (a);
+                                     ^
+MERGE (a)-[r:e1]->(b) MERGE (a)-[r:e1]->(b);
+ERROR:  duplicate variable "r"
+LINE 1: MERGE (a)-[r:e1]->(b) MERGE (a)-[r:e1]->(b);
+                                         ^
+MERGE (a)-[:e1]->(a:v1);
+ERROR:  duplicate variable "a"
+LINE 1: MERGE (a)-[:e1]->(a:v1);
+                          ^
+MERGE (=10);
+ERROR:  jsonb object is expected for property map
+MERGE ()-[:e1 =10]->();
+ERROR:  jsonb object is expected for property map
+MERGE (:ag_vertex);
+ERROR:  specifying default label is not allowed
+LINE 1: MERGE (:ag_vertex);
+                ^
+MERGE ()-[:ag_edge]->();
+ERROR:  cannot create edge on default label
+LINE 1: MERGE ()-[:ag_edge]->();
+                   ^
+DROP GRAPH gm CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to sequence gm.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v1
+drop cascades to vlabel v2
+drop cascades to elabel e1
+drop cascades to vlabel person
+drop cascades to vlabel city
+drop cascades to elabel hometown
+--
+-- null properties
+--
+CREATE GRAPH np;
+SET GRAPH_PATH = np;
+SHOW allow_null_properties;
+ allow_null_properties 
+-----------------------
+ off
+(1 row)
+
+SET allow_null_properties = off;
+CREATE (:v {z: null});
+CREATE (:v {z: (SELECT 'null'::jsonb)});
+CREATE (:v {z: {z: null}});
+CREATE (:v {z: (SELECT '{"z": null}'::jsonb)});
+CREATE (n:v {p: 0}) SET n.z = null, n.p = null;
+CREATE (n:v) SET n.z = (SELECT 'null'::jsonb);
+CREATE (n:v) SET n.z = {z: null};
+CREATE (n:v) SET n.z = (SELECT '{"z": null}'::jsonb);
+MATCH (n:v) RETURN n;
+        n        
+-----------------
+ v[3.1]{}
+ v[3.2]{}
+ v[3.3]{"z": {}}
+ v[3.4]{"z": {}}
+ v[3.5]{}
+ v[3.6]{}
+ v[3.7]{"z": {}}
+ v[3.8]{"z": {}}
+(8 rows)
+
+CREATE (n:v {z: 0}) SET n.z = null;
+CREATE (n:v {z: 0}) SET n.z = (SELECT 'null'::jsonb);
+CREATE (n:v {z: 0}) REMOVE n.z;
+MATCH (n:v) RETURN n, graphid_labid(id(n)), pg_typeof(id(n));
+        n        | graphid_labid | pg_typeof 
+-----------------+---------------+-----------
+ v[3.1]{}        | 3             | "graphid"
+ v[3.2]{}        | 3             | "graphid"
+ v[3.3]{"z": {}} | 3             | "graphid"
+ v[3.4]{"z": {}} | 3             | "graphid"
+ v[3.5]{}        | 3             | "graphid"
+ v[3.6]{}        | 3             | "graphid"
+ v[3.7]{"z": {}} | 3             | "graphid"
+ v[3.8]{"z": {}} | 3             | "graphid"
+ v[3.9]{}        | 3             | "graphid"
+ v[3.10]{}       | 3             | "graphid"
+ v[3.11]{}       | 3             | "graphid"
+(11 rows)
+
+SET allow_null_properties = on;
+CREATE (:w {z: null});
+CREATE (:w {z: (SELECT 'null'::jsonb)});
+CREATE (:w {z: {z: null}});
+CREATE (:w {z: (SELECT '{"z": null}'::jsonb)});
+CREATE (n:w {p: 0}) SET n.z = null, n.p = null;
+CREATE (n:w) SET n.z = (SELECT 'null'::jsonb);
+CREATE (n:w) SET n.z = {z: null};
+CREATE (n:w) SET n.z = (SELECT '{"z": null}'::jsonb);
+MATCH (n:w) RETURN n;
+              n               
+------------------------------
+ w[4.1]{"z": null}
+ w[4.2]{"z": null}
+ w[4.3]{"z": {"z": null}}
+ w[4.4]{"z": {"z": null}}
+ w[4.5]{"p": null, "z": null}
+ w[4.6]{"z": null}
+ w[4.7]{"z": {"z": null}}
+ w[4.8]{"z": {"z": null}}
+(8 rows)
+
+CREATE (n:w {z: 0}) SET n.z = null;
+CREATE (n:w {z: 0}) SET n.z = (SELECT 'null'::jsonb);
+CREATE (n:w {z: 0}) REMOVE n.z;
+MATCH (n:w) RETURN n;
+              n               
+------------------------------
+ w[4.1]{"z": null}
+ w[4.2]{"z": null}
+ w[4.3]{"z": {"z": null}}
+ w[4.4]{"z": {"z": null}}
+ w[4.5]{"p": null, "z": null}
+ w[4.6]{"z": null}
+ w[4.7]{"z": {"z": null}}
+ w[4.8]{"z": {"z": null}}
+ w[4.9]{"z": null}
+ w[4.10]{"z": null}
+ w[4.11]{}
+(11 rows)
+
+SET allow_null_properties = off;
+--
+-- String Matching
+--
+-- starts with
+RETURN 'abc' STARTS WITH 'a';
+ string_starts_with 
+--------------------
+ t
+(1 row)
+
+RETURN 'abc' STARTS WITH '';
+ string_starts_with 
+--------------------
+ t
+(1 row)
+
+RETURN 'abc' STARTS WITH 'bc';
+ string_starts_with 
+--------------------
+ f
+(1 row)
+
+RETURN 'abc' STARTS WITH 'abcd';
+ string_starts_with 
+--------------------
+ f
+(1 row)
+
+RETURN 'abc' STARTS WITH 1;
+ERROR:  STARTS WITH: two string values expected but "abc", 1
+RETURN ['abc' STARTS WITH 'a'];
+ ?column? 
+----------
+ [true]
+(1 row)
+
+-- ends with
+RETURN 'abc' ENDS WITH 'c';
+ string_ends_with 
+------------------
+ t
+(1 row)
+
+RETURN 'abc' ENDS WITH '';
+ string_ends_with 
+------------------
+ t
+(1 row)
+
+RETURN 'abc' ENDS WITH 'ab';
+ string_ends_with 
+------------------
+ f
+(1 row)
+
+RETURN 'abc' ENDS WITH 'abcd';
+ string_ends_with 
+------------------
+ f
+(1 row)
+
+RETURN 'abc' ENDS WITH 1;
+ERROR:  ENDS WITH: two string values expected but "abc", 1
+RETURN ['abc' ENDS WITH 'c'];
+ ?column? 
+----------
+ [true]
+(1 row)
+
+-- contains
+RETURN 'abc' CONTAINS 'b';
+ string_contains 
+-----------------
+ t
+(1 row)
+
+RETURN 'abc' CONTAINS '';
+ string_contains 
+-----------------
+ t
+(1 row)
+
+RETURN 'abc' CONTAINS 'abcd';
+ string_contains 
+-----------------
+ f
+(1 row)
+
+RETURN 'abc' CONTAINS 1;
+ERROR:  CONTAINS: two string values expected but "abc", 1
+RETURN ['abc' CONTAINS 'b'];
+ ?column? 
+----------
+ [true]
+(1 row)
+
+-- =~
+RETURN 'abc' =~ 'abc';
+ string_regex 
+--------------
+ t
+(1 row)
+
+RETURN 'abc' =~ '';
+ string_regex 
+--------------
+ t
+(1 row)
+
+RETURN 'abc' =~ 'a';
+ string_regex 
+--------------
+ t
+(1 row)
+
+RETURN 'abc' =~ 'abcd';
+ string_regex 
+--------------
+ f
+(1 row)
+
+RETURN 'abc' =~ '(?i)A';
+ string_regex 
+--------------
+ t
+(1 row)
+
+RETURN 'abc' =~ 'a(b{1})c';
+ string_regex 
+--------------
+ t
+(1 row)
+
+RETURN 'abc' =~ 1;
+ERROR:  Regular Expression Pattern: two string values expected but "abc", 1
+RETURN ['abc' =~ 'abc'];
+ ?column? 
+----------
+ [true]
+(1 row)
+
+--
+-- graphid comparison
+--
+CREATE GRAPH gid;
+SET GRAPH_PATH = gid;
+CREATE ();
+CREATE ();
+MATCH (n) WHERE id(n) = '1.1' RETURN n;
+        n         
+------------------
+ ag_vertex[1.1]{}
+(1 row)
+
+MATCH (n) WHERE id(n) > 1.1 RETURN n;
+        n         
+------------------
+ ag_vertex[1.2]{}
+(1 row)
+
+MATCH (n) WHERE id(n) < '1.2' RETURN n;
+        n         
+------------------
+ ag_vertex[1.1]{}
+(1 row)
+
+MATCH (n) WHERE id(n) >= 1.1 RETURN n;
+        n         
+------------------
+ ag_vertex[1.1]{}
+ ag_vertex[1.2]{}
+(2 rows)
+
+MATCH (n) WHERE id(n) <= 1.2 RETURN n;
+        n         
+------------------
+ ag_vertex[1.1]{}
+ ag_vertex[1.2]{}
+(2 rows)
+
+MATCH (n) WHERE id(n) <> 1.1 RETURN n;
+        n         
+------------------
+ ag_vertex[1.2]{}
+(1 row)
+
+--
+-- implicit load
+--
+CREATE GRAPH impload;
+SET GRAPH_PATH = impload;
+CREATE TABLE external_table (id int, name varchar(255));
+INSERT INTO external_table VALUES (1, '1');
+LOAD FROM external_table AS r CREATE (=r);
+MATCH (n) RETURN n;
+                  n                   
+--------------------------------------
+ ag_vertex[1.1]{"id": 1, "name": "1"}
+(1 row)
+
+--
+-- SRF
+--
+CREATE GRAPH srf;
+SET graph_path = srf;
+CREATE (:v {id: 1})-[:e]->(:v {id: 2});
+MATCH p=()-[]->() RETURN unnest(nodes(p)).id;
+ id 
+----
+ 1
+ 2
+(2 rows)
+
+-- AG-161
+CREATE GRAPH ag161;
+SET GRAPH_PATH = ag161;
+CREATE (:v1 {no:1});
+CREATE (:v2 {no:2});
+CREATE (:v3 {no:3});
+ALTER DATABASE regression SET GRAPH_PATH TO ag161;
+SET PARALLEL_SETUP_COST = 0;
+EXPLAIN (VERBOSE, COSTS OFF) MATCH (a) RETURN count(a);
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Finalize Aggregate
+   Output: cypher_to_jsonb(count(ROW(a.id, a.properties, a.ctid)::vertex))
+   ->  Gather
+         Output: (PARTIAL count(ROW(a.id, a.properties, a.ctid)::vertex))
+         Workers Planned: 2
+         ->  Partial Aggregate
+               Output: PARTIAL count(ROW(a.id, a.properties, a.ctid)::vertex)
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on ag161.v1 a_2
+                           Output: a_2.id, a_2.properties, a_2.ctid
+                     ->  Parallel Seq Scan on ag161.v2 a_3
+                           Output: a_3.id, a_3.properties, a_3.ctid
+                     ->  Parallel Seq Scan on ag161.v3 a_4
+                           Output: a_4.id, a_4.properties, a_4.ctid
+                     ->  Parallel Seq Scan on ag161.ag_vertex a_1
+                           Output: a_1.id, a_1.properties, a_1.ctid
+(16 rows)
+
+MATCH (a) RETURN count(a);
+ count 
+-------
+ 3
+(1 row)
+
+ALTER DATABASE regression SET GRAPH_PATH TO DEFAULT;
+DROP GRAPH ag161 CASCADE;
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to sequence ag161.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v1
+drop cascades to vlabel v2
+drop cascades to vlabel v3
+-- AG-169, AG-170
+CREATE GRAPH ag170;
+SET GRAPH_PATH = ag170;
+BEGIN;
+CREATE (:foo {bar : 'a'});
+MATCH (a:foo {bar : 'a'}) RETURN properties(a);
+  properties  
+--------------
+ {"bar": "a"}
+(1 row)
+
+END;
+MATCH (a:foo {bar : 'a'})
+DELETE a
+RETURN count(*);
+ count 
+-------
+ 1
+(1 row)
+
+BEGIN;
+CREATE (:foo {bar : 'a'});
+CREATE (:foo {bar : 'b'});
+MATCH (a:foo) RETURN properties(a);
+  properties  
+--------------
+ {"bar": "a"}
+ {"bar": "b"}
+(2 rows)
+
+END;
+MATCH (a:foo)
+DELETE a
+RETURN count(*);
+ count 
+-------
+ 2
+(1 row)
+
+BEGIN;
+CREATE (a:foo {bar : 'a'})
+MERGE (b:foo {bar : 'b'})
+	ON CREATE SET b.bar = 'a';
+MATCH (a:foo) RETURN properties(a);
+  properties  
+--------------
+ {"bar": "a"}
+ {"bar": "a"}
+(2 rows)
+
+END;
+MATCH (a:foo)
+DELETE a
+RETURN count(*);
+ count 
+-------
+ 2
+(1 row)
+
+\set AUTOCOMMIT OFF
+\echo :AUTOCOMMIT
+OFF
+CREATE (:foo {bar : 'a'});
+MATCH (a:foo {bar : 'a'}) RETURN count(*);
+ count 
+-------
+ 1
+(1 row)
+
+COMMIT;
+MATCH (a:foo {bar : 'a'}) RETURN count(*);
+ count 
+-------
+ 1
+(1 row)
+
+COMMIT;
+\set AUTOCOMMIT ON
+\echo :AUTOCOMMIT
+ON
+DROP GRAPH ag170 CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence ag170.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel foo
+-- AG-183 Unable to prepare cypher statement
+CREATE graph ag183;
+SET graph_path TO ag183;
+CREATE VLABEL v;
+PREPARE stmt1 (text, int, bool) AS CREATE (:v {name: $1, age: $2, married: $3});
+PREPARE stmt2 (text, int, bool) AS MERGE (a:v {name: $1, age: $2, married: $3}) RETURN properties(a);
+EXECUTE stmt1 ('p1', 30, false);
+EXECUTE stmt2 ('p2', 40, false);
+                 properties                  
+---------------------------------------------
+ {"age": 40, "name": "p2", "married": false}
+(1 row)
+
+EXECUTE stmt2 ('p2', 40, false);
+                 properties                  
+---------------------------------------------
+ {"age": 40, "name": "p2", "married": false}
+(1 row)
+
+MATCH (a:v) RETURN properties(a);
+                 properties                  
+---------------------------------------------
+ {"age": 30, "name": "p1", "married": false}
+ {"age": 40, "name": "p2", "married": false}
+(2 rows)
+
+PREPARE stmt3 AS MATCH (a:v) SET a.age = a.age + 1 RETURN properties(a);
+EXECUTE stmt3;
+                 properties                  
+---------------------------------------------
+ {"age": 31, "name": "p1", "married": false}
+ {"age": 41, "name": "p2", "married": false}
+(2 rows)
+
+PREPARE stmt4 (text) AS MATCH (a {name:$1}) RETURN properties(a);
+EXECUTE stmt4 ('p1');
+                 properties                  
+---------------------------------------------
+ {"age": 31, "name": "p1", "married": false}
+(1 row)
+
+PREPARE stmt5 (bool) AS MATCH (a {married:$1}) DELETE a;
+EXECUTE stmt5 (false);
+MATCH (a:v) RETURN properties(a);
+ properties 
+------------
+(0 rows)
+
+DROP GRAPH ag183 CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence ag183.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+-- AG-189
+CREATE graph ag189;
+SET graph_path TO ag189;
+CREATE (vt1:TEST{name:'isaac', age:32});
+MATCH (vt1:TEST{name:'isaac'}) WITH vt1, vt1.age AS my_age
+SET vt1.age = my_age +1
+RETURN properties(vt1), my_age;
+          properties          | my_age 
+------------------------------+--------
+ {"age": 33, "name": "isaac"} | 32
+(1 row)
+
+MATCH (vt1:TEST)
+RETURN properties(vt1);
+          properties          
+------------------------------
+ {"age": 33, "name": "isaac"}
+(1 row)
+
+DROP GRAPH ag189 CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence ag189.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel test
+--
+-- UNWIND
+--
+UNWIND [1, 2, 3] AS i RETURN i;
+ i 
+---
+ 1
+ 2
+ 3
+(3 rows)
+
+CREATE GRAPH test_unwind;
+CREATE ({a: [1, 2, 3]}), ({a: [4, 5, 6]});
+MATCH (n) WITH n.a AS a UNWIND a AS i RETURN *;
+     a     | i 
+-----------+---
+ [1, 2, 3] | 1
+ [1, 2, 3] | 2
+ [1, 2, 3] | 3
+ [4, 5, 6] | 4
+ [4, 5, 6] | 5
+ [4, 5, 6] | 6
+(6 rows)
+
+DROP GRAPH test_unwind CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to sequence test_unwind.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+PREPARE t(_jsonb) AS UNWIND $1 AS i UNWIND i.a AS j UNWIND j AS k RETURN k;
+EXECUTE t(ARRAY['{"a": [[1, 2], [3, 4]]}'::jsonb,
+                '{"a": [[5, 6], [7, 8]]}'::jsonb]);
+ k 
+---
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+(8 rows)
+
+DEALLOCATE t;
+-- LIMIT clause causes VLE relations to crash, issue AG-254
+CREATE GRAPH asterisk;
+CREATE VLABEL vertex;
+CREATE ELABEL edge;
+CREATE VLABEL city; -- additional VLABELs cause crashes (used or not)
+CREATE ELABEL road; -- additional ELABELs cause crashes (used or not)
+CREATE (a0:vertex {name: 'A'})
+CREATE (b0:vertex {name: 'B'})
+CREATE (q0:vertex {name: 'Q'})
+CREATE (x0:vertex {name: 'X'})
+MERGE (a0)-[:edge]->(b0)
+MERGE (q0)-[:edge]->(a0)
+MERGE (b0)-[:edge]->(q0)
+MERGE (a0)-[:edge]->(x0)
+MERGE (x0)-[:edge]->(b0);
+-- 4 row set
+MATCH p=((u:vertex {name: 'A'})-[*]->(v:vertex {name: 'B'}))
+RETURN p LIMIT 4; --crash
+                                                                                                                                p                                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"},edge[4.5][3.4,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"},edge[4.5][3.4,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"},edge[4.5][3.4,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+(4 rows)
+
+-- 22 row set
+MATCH p=((u)-[*0..3]->(v)) RETURN p LIMIT 0; --no crash (nc)
+ p 
+---
+(0 rows)
+
+MATCH p=((u)-[*0..3]->(v)) RETURN p LIMIT 1; --nc
+             p              
+----------------------------
+ [vertex[3.1]{"name": "A"}]
+(1 row)
+
+MATCH p=((u)-[*0..3]->(v)) RETURN p LIMIT 4; --nc/memory corrupted (mem)
+                                                                                  p                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"}]
+(4 rows)
+
+MATCH p=((u)-[*0..3]->(v)) RETURN p LIMIT 5; --crash
+                                                                                  p                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"}]
+(5 rows)
+
+-- 18 row set
+MATCH p=((u)-[*..3]->(v)) RETURN p LIMIT 0; -- nc
+ p 
+---
+(0 rows)
+
+MATCH p=((u)-[*..3]->(v)) RETURN p LIMIT 1; -- nc
+                                    p                                     
+--------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+(1 row)
+
+MATCH p=((u)-[*..3]->(v)) RETURN p LIMIT 4; -- nc/mem
+                                                                                  p                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"}]
+(4 rows)
+
+MATCH p=((u)-[*..3]->(v)) RETURN p LIMIT 5; -- crash
+                                                                                  p                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"}]
+ [vertex[3.1]{"name": "A"},edge[4.1][3.1,3.2]{},vertex[3.2]{"name": "B"},edge[4.3][3.2,3.3]{},vertex[3.3]{"name": "Q"},edge[4.2][3.3,3.1]{},vertex[3.1]{"name": "A"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"}]
+ [vertex[3.1]{"name": "A"},edge[4.4][3.1,3.4]{},vertex[3.4]{"name": "X"},edge[4.5][3.4,3.2]{},vertex[3.2]{"name": "B"}]
+(5 rows)
+
+DROP GRAPH asterisk CASCADE;
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to sequence asterisk.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel vertex
+drop cascades to elabel edge
+drop cascades to vlabel city
+drop cascades to elabel road
+-- cleanup
+DROP GRAPH srf CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to sequence srf.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+drop cascades to elabel e
+DROP GRAPH impload CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to sequence impload.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+DROP GRAPH gid CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to sequence gid.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+DROP GRAPH np CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to sequence np.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+drop cascades to vlabel w
+DROP GRAPH p CASCADE;
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to sequence p.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to elabel rel
+drop cascades to vlabel bug_ag279
+drop cascades to vlabel multiple_update
+drop cascades to vlabel person
+DROP GRAPH u CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence u.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to elabel rel
+DROP GRAPH ag216a CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to sequence ag216a.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v1
+drop cascades to elabel e1
+drop cascades to vlabel v2
+drop cascades to elabel e2
+drop cascades to elabel e3
+drop cascades to vlabel v3
+DROP GRAPH ag216 CASCADE;
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to sequence ag216.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v1
+drop cascades to elabel e
+drop cascades to vlabel v2
+drop cascades to vlabel v3
+DROP GRAPH ag154 CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence ag154.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to elabel rel
+DROP GRAPH t CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to sequence t.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel time
+drop cascades to elabel goes
+drop cascades to vlabel person
+drop cascades to elabel knows
+drop cascades to elabel friendships
+drop cascades to elabel familyship
+DROP GRAPH o CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to sequence o.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel person
+drop cascades to elabel knows
+SET graph_path = graphdb;
+DROP VLABEL feature;
+DROP ELABEL supported;
+DROP VLABEL repo;
+DROP ELABEL lib;
+DROP ELABEL doc;
+DROP GRAPH graphdb CASCADE;
+NOTICE:  drop cascades to 14 other objects
+DETAIL:  drop cascades to sequence graphdb.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel vl1
+drop cascades to vlabel vl2
+drop cascades to vlabel vl3
+drop cascades to elabel el1
+drop cascades to elabel el2
+drop cascades to elabel el3
+drop cascades to elabel made_by
+drop cascades to elabel ag160
+drop cascades to elabel rel
+drop cascades to vlabel v1
+drop cascades to vlabel v2
+DROP TABLE history;

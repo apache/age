@@ -1,0 +1,194 @@
+--
+-- GRAPHID
+--
+-- graphid()
+SELECT graphid(-1, 0);
+ERROR:  labid out of range: -1
+SELECT graphid(0, -1);
+ERROR:  locid out of range: -1
+SELECT graphid(0, 0);
+ graphid 
+---------
+ 0.0
+(1 row)
+
+SELECT graphid(65535, 281474976710655);
+        graphid        
+-----------------------
+ 65535.281474976710655
+(1 row)
+
+SELECT graphid(65535, 281474976710656);
+ERROR:  locid out of range: 281474976710656
+SELECT graphid(65536, 281474976710655);
+ERROR:  labid out of range: 65536
+-- graphid_in()
+SELECT '-1.0'::graphid;
+ERROR:  labid out of range
+LINE 1: SELECT '-1.0'::graphid;
+               ^
+SELECT '0.-1'::graphid;
+ERROR:  locid out of range
+LINE 1: SELECT '0.-1'::graphid;
+               ^
+SELECT '0.0'::graphid;
+ graphid 
+---------
+ 0.0
+(1 row)
+
+SELECT '65535.281474976710655'::graphid;
+        graphid        
+-----------------------
+ 65535.281474976710655
+(1 row)
+
+SELECT '65535.281474976710656'::graphid;
+ERROR:  locid out of range
+LINE 1: SELECT '65535.281474976710656'::graphid;
+               ^
+SELECT '65536.281474976710655'::graphid;
+ERROR:  labid out of range
+LINE 1: SELECT '65536.281474976710655'::graphid;
+               ^
+-- Coercion from unknown and numeric to graphid
+SELECT '1.1'::graphid;
+ graphid 
+---------
+ 1.1
+(1 row)
+
+SELECT 1.1::graphid;
+ graphid 
+---------
+ 1.1
+(1 row)
+
+-- Insert and Operator
+CREATE TABLE GRAPHID_TBL(f1 graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('0.0'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.1'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.12'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.123'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.1234'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12346.123'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('65535.281474976710655'::graphid);
+SELECT * FROM GRAPHID_TBL;
+          f1           
+-----------------------
+ 0.0
+ 12345.1
+ 12345.12
+ 12345.123
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(7 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 =  '12345.123'::graphid;
+    f1     
+-----------
+ 12345.123
+(1 row)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <> '12345.123'::graphid;
+          f1           
+-----------------------
+ 0.0
+ 12345.1
+ 12345.12
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(6 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >  '12345.123'::graphid;
+          f1           
+-----------------------
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(3 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >= '12345.123'::graphid;
+          f1           
+-----------------------
+ 12345.123
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(4 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <  '12345.123'::graphid;
+    f1    
+----------
+ 0.0
+ 12345.1
+ 12345.12
+(3 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <= '12345.123'::graphid;
+    f1     
+-----------
+ 0.0
+ 12345.1
+ 12345.12
+ 12345.123
+(4 rows)
+
+-- Index
+CREATE INDEX GRAPHID_TBL_IDX ON GRAPHID_TBL USING GIN (f1);
+SET enable_seqscan = off;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 =  '12345.123'::graphid;
+    f1     
+-----------
+ 12345.123
+(1 row)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <> '12345.123'::graphid;
+          f1           
+-----------------------
+ 0.0
+ 12345.1
+ 12345.12
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(6 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >  '12345.123'::graphid;
+          f1           
+-----------------------
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(3 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >= '12345.123'::graphid;
+          f1           
+-----------------------
+ 12345.123
+ 12345.1234
+ 12346.123
+ 65535.281474976710655
+(4 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <  '12345.123'::graphid;
+    f1    
+----------
+ 0.0
+ 12345.1
+ 12345.12
+(3 rows)
+
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <= '12345.123'::graphid;
+    f1     
+-----------
+ 0.0
+ 12345.1
+ 12345.12
+ 12345.123
+(4 rows)
+
+SET enable_seqscan = on;
+DROP TABLE GRAPHID_TBL;

@@ -1,0 +1,281 @@
+-- Verify SQL and Cypher substring functions. SQL is added more as
+-- a sanity check.
+-- Create a graph with one node containing a text and numeric value
+CREATE GRAPH substring_ag246;
+SET graph_path = substring_ag246;
+CREATE VLABEL string;
+CREATE (:string {sval: '123', nval: 123});
+-- Check Cypher substring(string, start, length) from graph
+MATCH (u:string) RETURN substring(u.sval, -1, 1);
+ substring 
+-----------
+ ""
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 0, 1);
+ substring 
+-----------
+ "1"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 1, 1);
+ substring 
+-----------
+ "2"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 2, 1);
+ substring 
+-----------
+ "3"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 3, 1);
+ substring 
+-----------
+ ""
+(1 row)
+
+-- Sanity check for cast to text -- this should fail now
+MATCH (u:string) RETURN substring(u.nval, 1, 1);
+ERROR:  cannot cast 123 (jsonb type numeric) to text
+-- Check Cypher substring(string, start) from graph
+MATCH (u:string) RETURN substring(u.sval, -1);
+ substring 
+-----------
+ "123"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 0);
+ substring 
+-----------
+ "123"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 1);
+ substring 
+-----------
+ "23"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 2);
+ substring 
+-----------
+ "3"
+(1 row)
+
+MATCH (u:string) RETURN substring(u.sval, 3);
+ substring 
+-----------
+ ""
+(1 row)
+
+-- Sanity check for cast to text -- this should fail now
+MATCH (u:string) RETURN substring(u.nval, 1);
+ERROR:  cannot cast 123 (jsonb type numeric) to text
+-- Check Cypher substring(string, start, length) from constant
+RETURN substring('123', -1, 1);
+ substring 
+-----------
+ ""
+(1 row)
+
+RETURN substring('123', 0, 1);
+ substring 
+-----------
+ "1"
+(1 row)
+
+RETURN substring('123', 1, 1);
+ substring 
+-----------
+ "2"
+(1 row)
+
+RETURN substring('123', 2, 1);
+ substring 
+-----------
+ "3"
+(1 row)
+
+RETURN substring('123', 3, 1);
+ substring 
+-----------
+ ""
+(1 row)
+
+-- Check Cypher substring(string, start) from constant
+RETURN substring('123', -1);
+ substring 
+-----------
+ "123"
+(1 row)
+
+RETURN substring('123', 0);
+ substring 
+-----------
+ "123"
+(1 row)
+
+RETURN substring('123', 1);
+ substring 
+-----------
+ "23"
+(1 row)
+
+RETURN substring('123', 2);
+ substring 
+-----------
+ "3"
+(1 row)
+
+RETURN substring('123', 3);
+ substring 
+-----------
+ ""
+(1 row)
+
+-- Create a table with one row containing a text value
+CREATE TABLE substring_ag246 (tval text);
+INSERT INTO substring_ag246 (tval) VALUES ('123');
+-- Check SQL substring(string, start, length) from table
+-- The first SELECT should return a blank row
+SELECT substring(tval, 0, 1) FROM substring_ag246;
+ substring 
+-----------
+ 
+(1 row)
+
+SELECT substring(tval, 1, 1) FROM substring_ag246;
+ substring 
+-----------
+ 1
+(1 row)
+
+SELECT substring(tval, 2, 1) FROM substring_ag246;
+ substring 
+-----------
+ 2
+(1 row)
+
+SELECT substring(tval, 3, 1) FROM substring_ag246;
+ substring 
+-----------
+ 3
+(1 row)
+
+SELECT substring(tval, 4, 1) FROM substring_ag246;
+ substring 
+-----------
+ 
+(1 row)
+
+-- Check SQL substring(string, start) from table
+-- The first and second SELECT should have identical output
+SELECT substring(tval, 0) FROM substring_ag246;
+ substring 
+-----------
+ 123
+(1 row)
+
+SELECT substring(tval, 1) FROM substring_ag246;
+ substring 
+-----------
+ 123
+(1 row)
+
+SELECT substring(tval, 2) FROM substring_ag246;
+ substring 
+-----------
+ 23
+(1 row)
+
+SELECT substring(tval, 3) FROM substring_ag246;
+ substring 
+-----------
+ 3
+(1 row)
+
+SELECT substring(tval, 4) FROM substring_ag246;
+ substring 
+-----------
+ 
+(1 row)
+
+-- Check SQL substring(string, start, length) from value
+-- Same as above, except with a text constant
+SELECT substring('123', 0, 1);
+ substring 
+-----------
+ 
+(1 row)
+
+SELECT substring('123', 1, 1);
+ substring 
+-----------
+ 1
+(1 row)
+
+SELECT substring('123', 2, 1);
+ substring 
+-----------
+ 2
+(1 row)
+
+SELECT substring('123', 3, 1);
+ substring 
+-----------
+ 3
+(1 row)
+
+SELECT substring('123', 4, 1);
+ substring 
+-----------
+ 
+(1 row)
+
+-- Check SQL substring(string, start) from table
+-- Same as above, except with a text constant
+SELECT substring('123', 0);
+ substring 
+-----------
+ 123
+(1 row)
+
+SELECT substring('123', 1);
+ substring 
+-----------
+ 123
+(1 row)
+
+SELECT substring('123', 2);
+ substring 
+-----------
+ 23
+(1 row)
+
+SELECT substring('123', 3);
+ substring 
+-----------
+ 3
+(1 row)
+
+SELECT substring('123', 4);
+ substring 
+-----------
+ 
+(1 row)
+
+-- Test hybrid line SQL + Cypher
+SELECT substring('12345', 2, 3); -- '234'
+ substring 
+-----------
+ 234
+(1 row)
+
+RETURN substring((SELECT substring('12345', 2, 3)), 1, 1); -- '3'
+ substring 
+-----------
+ "3"
+(1 row)
+
