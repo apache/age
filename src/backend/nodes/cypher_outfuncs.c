@@ -403,6 +403,18 @@ void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node)
     WRITE_OID_FIELD(graph_oid);
     WRITE_INT32_FIELD(merge_function_attr);
     WRITE_NODE_FIELD(path);
+    WRITE_NODE_FIELD(on_create_updates);
+    WRITE_NODE_FIELD(on_match_updates);
+}
+
+void out_cypher_merge_update_item(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_merge_update_item);
+
+    WRITE_NODE_FIELD(expr);
+    WRITE_STRING_FIELD(var_name);
+    WRITE_STRING_FIELD(prop_name);
+    WRITE_BOOL_FIELD(remove_item);
 }
 
 /*

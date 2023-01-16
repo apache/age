@@ -241,6 +241,15 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
 // merge
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause);
+static void transform_cypher_merge_actions(cypher_parsestate *cpstate,
+                                           Query *query,
+                                           cypher_merge_information *info,
+                                           List *cypher_set_list);
+static void transform_cypher_merge_action(cypher_parsestate *cpstate,
+                                          Query *query,
+                                          cypher_merge_information *info,
+                                          cypher_set *action_clause);
+
 static cypher_create_path *
 transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
                                   cypher_clause *clause,
@@ -1746,6 +1755,123 @@ cypher_update_information *transform_cypher_set_item_list(
     }
 
     return info;
+}
+
+static void transform_cypher_merge_actions(cypher_parsestate *cpstate,
+                                           Query *query,
+                                           cypher_merge_information *info,
+                                           List *cypher_set_list)
+{
+    ListCell *li;
+
+    foreach (li, cypher_set_list)
+    {
+        cypher_set *action_clause = lfirst(li);
+        transform_cypher_merge_action(cpstate, query, info, action_clause);
+    }
+}
+
+static void transform_cypher_merge_action(cypher_parsestate *cpstate,
+                                          Query *query,
+                                          cypher_merge_information *info,
+                                          cypher_set *action_clause)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    ListCell *li;
+    foreach (li, action_clause->items)
+    {
+        cypher_merge_update_item *item = make_ag_node(cypher_merge_update_item);
+        cypher_set_item *set_item = lfirst(li);
+        ColumnRef *ref;
+        A_Indirection *ind;
+        char *variable_name, *property_name;
+        Value *property_node, *variable_node;
+
+        // ColumnRef may come according to the Parser rule.
+        if (!IsA(set_item->prop, A_Indirection))
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                            errmsg("SET clause expects a variable name"),
+                            parser_errposition(pstate, set_item->location)));
+        }
+
+        ind = (A_Indirection *)set_item->prop;
+
+        if (!is_ag_node(lfirst(li), cypher_set_item))
+        {
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                            errmsg("unexpected node in cypher update list")));
+        }
+
+        if (set_item->is_add)
+        {
+            ereport(
+                ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg(
+                     "SET clause does not yet support adding propereties from maps"),
+                 parser_errposition(pstate, set_item->location)));
+        }
+
+        item->remove_item = false;
+
+        // extract variable name
+        ref = (ColumnRef *)ind->arg;
+
+        variable_node = linitial(ref->fields);
+        if (!IsA(variable_node, String))
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                            errmsg("SET clause expects a variable name"),
+                            parser_errposition(pstate, set_item->location)));
+        }
+
+        variable_name = variable_node->val.str;
+        item->var_name = variable_name;
+        if (get_target_entry_resno(query->targetList, variable_name) < 0)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                     errmsg("undefined reference to variable %s in SET clause",
+                            variable_name),
+                     parser_errposition(pstate, set_item->location)));
+        }
+
+        // extract property name
+        if (list_length(ind->indirection) != 1)
+        {
+            ereport(
+                ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg(
+                     "SET clause doesnt not support updating maps or lists in a property"),
+                 parser_errposition(pstate, set_item->location)));
+        }
+
+        property_node = linitial(ind->indirection);
+        if (!IsA(property_node, String))
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                            errmsg("SET clause expects a property name"),
+                            parser_errposition(pstate, set_item->location)));
+        }
+
+        property_name = property_node->val.str;
+        item->prop_name = property_name;
+
+        // create target entry for the new property value
+        item->expr = (Expr *)transform_cypher_expr(cpstate, set_item->expr,
+                                                   EXPR_KIND_SELECT_TARGET);
+
+        if (action_clause->kind == CYPHER_SET_ON_CREATE)
+        {
+            info->on_create_updates = lappend(info->on_create_updates, item);
+        }
+        else
+        {
+            info->on_match_updates = lappend(info->on_match_updates, item);
+        }
+    }
 }
 
 /* from PG's static helper function */
@@ -5398,7 +5524,6 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     Query *query;
     FuncExpr *func_expr;
     TargetEntry *tle;
-    ListCell *lc = NULL;
 
     Assert(is_ag_node(self->path, cypher_path));
 
@@ -5457,6 +5582,13 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     merge_information->graph_oid = cpstate->graph_oid;
     merge_information->path = merge_path;
 
+    /* Filled from transform_cypher_merge_actions(..) */
+    merge_information->on_match_updates = NIL;
+    merge_information->on_create_updates = NIL;
+
+    transform_cypher_merge_actions(cpstate, query, merge_information,
+                                   self->actions);
+
     if (!clause->next)
     {
         merge_information->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
@@ -5484,17 +5616,6 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     query->hasSubLinks = pstate->p_hasSubLinks;
 
     assign_query_collations(pstate, query);
-
-    /*
-     * FIXME: What to do with the actions? (set item list items)
-     */
-    foreach (lc, self->actions)
-    {
-	/*
-	 * FIXME: Dummy
-	 */
-        transform_cypher_set_item_list(cpstate, lfirst(lc), query);
-    }
 
     return query;
 }

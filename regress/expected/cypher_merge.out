@@ -894,38 +894,55 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtyp
  * test 31:
  * MERGE + Actions
  */
-
 -- Create a node with .created and .updated properties set to the same timestamp
-SELECT * FROM cypher('cypher_merge', $$MERGE (n {value: 1}) ON CREATE SET n.created = timestamp(), n.updated = timestamp() ON MATCH SET n.updated = timestamp() RETURN n.value $$) AS (a agtype);
- a
+SELECT * FROM cypher('cypher_merge', $$
+    MERGE (n {value: 1})
+    ON CREATE SET n.created = 1, n.updated = 1
+    ON MATCH SET n.updated = 1
+    RETURN n.value, n.created, n.updated
+$$) AS (val agtype, created agtype, updated agtype);
+ val | created | updated 
+-----+---------+---------
+ 1   | 1       | 1
+(1 row)
+
+-- Count the number of nodes WHERE .updated == .created (if implemented it should be 1)
+SELECT * FROM cypher('cypher_merge', $$
+    MATCH (n {value: 1})
+    WHERE n.created = n.updated
+    RETURN count(n)
+$$) AS (a agtype);
+ a 
 ---
  1
 (1 row)
 
--- Count the number of nodes WHERE .updated == .created (if implemented it should be 1)
-SELECT * FROM cypher('cypher_merge', $$MATCH (n {value: 1}) WHERE n.created = n.updated RETURN count(n) $$) AS (a agtype);
- a
----
- 0
-(1 row)
-
 -- MERGE the existing node and have it update the .updated property
-SELECT * FROM cypher('cypher_merge', $$MERGE (n {value: 1}) ON CREATE SET n.created = timestamp(), n.updated = timestamp() ON MATCH SET n.updated = timestamp() RETURN n.value $$) AS (a agtype);
-                                    a
---------------------------------------------------------------------------
- {"id": 281474976710658, "label": "", "properties": {"value": 1}}::vertex
+SELECT * FROM cypher('cypher_merge', $$
+    MERGE (n {value: 1})
+    ON CREATE SET n.created = 2, n.updated = 2
+    ON MATCH SET n.updated = 2
+    RETURN n.value, n.created, n.updated
+$$) AS (val agtype, created agtype, updated agtype);
+ val | created | updated 
+-----+---------+---------
+ 2   | 1       | 2
 (1 row)
 
 -- Count the number of nodes WHERE .updated == .created (if implemented it should be 0)
-SELECT * FROM cypher('cypher_merge', $$MATCH (n {value: 1}) WHERE n.created = n.updated RETURN count(n) $$) AS (a agtype);
- a
+SELECT * FROM cypher('cypher_merge', $$
+     MATCH (n {value: 1})
+     WHERE n.created = n.updated
+     RETURN count(n)
+$$) AS (a agtype);
+ a 
 ---
  0
 (1 row)
 
 -- Clean up
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtype);
- a
+ a 
 ---
 (0 rows)
 

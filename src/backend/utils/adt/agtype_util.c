@@ -511,7 +511,8 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
     char *base_addr;
     uint32 nelements;
 
-    if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+    if (!AGTYPE_CONTAINER_IS_ARRAY(container) &&
+        !AGTYPE_CONTAINER_IS_OBJECT(container))
         ereport(ERROR, (errmsg("container is not an agtype array")));
 
     nelements = AGTYPE_CONTAINER_SIZE(container);

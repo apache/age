@@ -22,7 +22,7 @@ AlignEscapedNewlines: DontAlign
 AlignOperands: true
 AlignTrailingComments: false
 AllowAllParametersOfDeclarationOnNextLine: false
-AllowShortBlocksOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
@@ -32,7 +32,7 @@ AlwaysBreakBeforeMultilineStrings: false
 BinPackArguments: true
 BinPackParameters: true
 BraceWrapping:
-  AfterControlStatement: true
+  AfterControlStatement: Always
   AfterEnum: true
   AfterFunction: true
   AfterStruct: true
@@ -45,7 +45,7 @@ BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: false
 BreakStringLiterals: false
-ColumnLimit: 79
+ColumnLimit: 80
 CommentPragmas: ''
 ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
@@ -71,7 +71,7 @@ PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right
 ReflowComments: false
-SortIncludes: true
+SortIncludes: CaseSensitive
 SpaceAfterCStyleCast: false
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeParens: ControlStatements

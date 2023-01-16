@@ -84,5 +84,6 @@ void out_cypher_delete_item(StringInfo str, const ExtensibleNode *node);
 
 // merge private data structures
 void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node);
+void out_cypher_merge_update_item(StringInfo str, const ExtensibleNode *node);
 
 #endif

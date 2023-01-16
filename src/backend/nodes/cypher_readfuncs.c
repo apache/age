@@ -289,4 +289,16 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_OID_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
+    READ_NODE_FIELD(on_create_updates);
+    READ_NODE_FIELD(on_match_updates);
+}
+
+void read_cypher_merge_update_item(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_merge_update_item);
+
+    READ_NODE_FIELD(expr);
+    READ_STRING_FIELD(var_name);
+    READ_STRING_FIELD(prop_name);
+    READ_BOOL_FIELD(remove_item);
 }

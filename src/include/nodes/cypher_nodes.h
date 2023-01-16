@@ -374,6 +374,15 @@ typedef struct cypher_update_information
     char *clause_name;
 } cypher_update_information;
 
+typedef struct cypher_merge_update_item
+{
+    ExtensibleNode extensible;
+    Expr *expr;
+    char *var_name;
+    char *prop_name;
+    bool remove_item;
+} cypher_merge_update_item;
+
 typedef struct cypher_update_item
 {
     ExtensibleNode extensible;

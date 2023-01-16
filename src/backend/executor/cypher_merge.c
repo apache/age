@@ -24,10 +24,12 @@
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
 #include "nodes/extensible.h"
+#include "nodes/nodeFuncs.h"
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
 #include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
+#include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/tqual.h"
 
@@ -54,6 +56,11 @@ static bool check_path(cypher_merge_custom_scan_state *css,
                        TupleTableSlot *slot);
 static void process_path(cypher_merge_custom_scan_state *css);
 static void mark_tts_isnull(TupleTableSlot *slot);
+
+static HeapTuple insert_merge_entity_tuple(
+    cypher_merge_custom_scan_state *css, cypher_target_node *cypher_target_node,
+    ResultRelInfo *resultRelInfo, TupleTableSlot *elemTupleSlot, EState *estate,
+    CommandId cid);
 
 const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      begin_cypher_merge,
@@ -642,7 +649,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
     {
         ResultRelInfo *old_estate_es_result_relation_info = NULL;
-        Datum prop;
+        //        Datum prop;
         /*
          * Set estate's result relation to the vertex's result
          * relation.
@@ -663,8 +670,8 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         elemTupleSlot->tts_isnull[vertex_tuple_id] = isNull;
 
         /* get the properties for this vertex */
-        prop = ExecEvalExpr(node->prop_expr_state, econtext, &isNull);
-        elemTupleSlot->tts_values[vertex_tuple_properties] = prop;
+        elemTupleSlot->tts_values[vertex_tuple_properties] =
+            ExecEvalExpr(node->prop_expr_state, econtext, &isNull);
         elemTupleSlot->tts_isnull[vertex_tuple_properties] = isNull;
 
         /*
@@ -693,7 +700,8 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
          */
         if (css->base_currentCommandId == GetCurrentCommandId(false))
         {
-            insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+            insert_merge_entity_tuple(css, node, resultRelInfo, elemTupleSlot,
+                                      estate, GetCurrentCommandId(true));
 
             /*
              * Increment the currentCommandId since we processed an update. We
@@ -705,8 +713,8 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         }
         else
         {
-            insert_entity_tuple_cid(resultRelInfo, elemTupleSlot, estate,
-                                    css->base_currentCommandId);
+            insert_merge_entity_tuple(css, node, resultRelInfo, elemTupleSlot,
+                                      estate, css->base_currentCommandId);
         }
 
         /* restore the old result relation info */
@@ -723,8 +731,9 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
             Datum result;
 
             /* make the vertex agtype */
-            result = make_vertex(
-                id, CStringGetDatum(node->label_name), prop);
+            result =
+                make_vertex(id, CStringGetDatum(node->label_name),
+                            elemTupleSlot->tts_values[vertex_tuple_properties]);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
@@ -907,7 +916,8 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
     elemTupleSlot->tts_isnull[edge_tuple_properties] = isNull;
 
     // Insert the new edge
-    insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+    insert_merge_entity_tuple(css, node, resultRelInfo, elemTupleSlot, estate,
+                              GetCurrentCommandId(true));
 
     /* restore the old result relation info */
     estate->es_result_relation_info = old_estate_es_result_relation_info;
@@ -941,4 +951,82 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
             scantuple->tts_isnull[node->tuple_position - 1] = false;
         }
     }
+}
+
+static HeapTuple insert_merge_entity_tuple(
+    cypher_merge_custom_scan_state *css, cypher_target_node *cypher_target_node,
+    ResultRelInfo *resultRelInfo, TupleTableSlot *elemTupleSlot, EState *estate,
+    CommandId cid)
+{
+    ListCell *lc;
+    agtype *agtype_properties = NULL;
+    agtype_value *properties = NULL;
+    ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
+    AttrNumber properties_position = vertex_tuple_properties;
+    bool updated = false;
+
+    if (cypher_target_node->type == LABEL_KIND_EDGE)
+    {
+        properties_position = edge_tuple_properties;
+    }
+
+    foreach (lc, css->merge_information->on_create_updates)
+    {
+        cypher_merge_update_item *merge_update_item =
+            (cypher_merge_update_item *)lfirst(lc);
+
+        if (strcmp(merge_update_item->var_name,
+                   cypher_target_node->variable_name) == 0)
+        {
+            bool isnull;
+            Oid expr_type = exprType((const Node *)merge_update_item->expr);
+            ExprState *expr_state;
+            Datum new_property_value_datum;
+            agtype *new_property_value = NULL;
+
+            if (expr_type != get_AGTYPEOID())
+            {
+                continue;
+            }
+
+            ResetExprContext(econtext);
+            expr_state = ExecInitExpr(merge_update_item->expr, &css->css.ss.ps);
+            new_property_value_datum = ExecEvalExpr(expr_state, econtext,
+                                                    &isnull);
+
+            if (!isnull)
+            {
+                new_property_value =
+                    DATUM_GET_AGTYPE_P(new_property_value_datum);
+            }
+
+            /*
+			 * If the agtype_properties is null, we need to get from tuple slot.
+			 */
+            if (agtype_properties == NULL)
+            {
+                agtype_properties = DATUM_GET_AGTYPE_P(
+                    elemTupleSlot->tts_values[properties_position]);
+            }
+
+            /*
+			 * If the property is null, we need to remove it from the properties map.
+			 */
+            properties = alter_property_value_internal(
+                agtype_properties, merge_update_item->prop_name,
+                new_property_value, isnull);
+            agtype_properties = agtype_value_to_agtype(properties);
+
+            /* Mark as updated. */
+            updated = true;
+        }
+    }
+
+    if (updated)
+    {
+        elemTupleSlot->tts_values[properties_position] =
+            PointerGetDatum(agtype_properties);
+    }
+
+    return insert_entity_tuple_cid(resultRelInfo, elemTupleSlot, estate, cid);
 }

@@ -173,3 +173,14 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_NODE_FIELD(on_create_updates);
     COPY_NODE_FIELD(on_match_updates);
 }
+
+void copy_cypher_merge_update_item(ExtensibleNode *newnode,
+                                   const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_merge_update_item);
+
+    COPY_NODE_FIELD(expr);
+    COPY_STRING_FIELD(var_name);
+    COPY_STRING_FIELD(prop_name);
+    COPY_SCALAR_FIELD(remove_item);
+}

@@ -8242,13 +8242,7 @@ agtype_value *agtype_composite_to_agtype_value_binary(agtype *a)
 agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                                    agtype *new_v, bool remove_property)
 {
-    agtype_iterator *it;
-    agtype_iterator_token tok = WAGT_DONE;
-    agtype_parse_state *parse_state = NULL;
-    agtype_value *r;
     agtype *prop_agtype;
-    agtype_value *parsed_agtype_value = NULL;
-    bool found;
 
     // if no properties, return NULL
     if (properties == NULL)
@@ -8263,18 +8257,34 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                         errmsg("can only update objects")));
     }
 
+    prop_agtype = agtype_value_to_agtype(properties);
+
+    return alter_property_value_internal(prop_agtype, var_name, new_v,
+                                         remove_property);
+}
+
+agtype_value *alter_property_value_internal(agtype *properties, char *var_name,
+                                            agtype *new_v, bool remove_property)
+{
+    agtype_iterator *it;
+    agtype_iterator_token tok = WAGT_DONE;
+    agtype_parse_state *parse_state = NULL;
+    agtype_value *r;
+    agtype_value *parsed_agtype_value = NULL;
+    bool found;
+
     r = palloc0(sizeof(agtype_value));
 
-    prop_agtype = agtype_value_to_agtype(properties);
-    it = agtype_iterator_init(&prop_agtype->root);
+    it = agtype_iterator_init(&properties->root);
     tok = agtype_iterator_next(&it, r, true);
 
-    parsed_agtype_value = push_agtype_value(&parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
+    parsed_agtype_value = push_agtype_value(&parse_state, tok,
+                                            tok < WAGT_BEGIN_ARRAY ? r : NULL);
 
     /*
-     * If the new value is NULL, this is equivalent to the remove_property
-     * flag set to true.
-     */
+	 * If the new value is NULL, this is equivalent to the remove_property
+	 * flag set to true.
+	 */
     if (new_v == NULL)
     {
         remove_property = true;
@@ -8295,11 +8305,11 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
         str = pnstrdup(r->val.string.val, r->val.string.len);
 
         /*
-         * Check the key value, if it is equal to the passed in
-         * var_name, replace the value for this key with the passed
-         * in agtype. Otherwise pass the existing value to the
-         * new properties agtype_value.
-         */
+		 * Check the key value, if it is equal to the passed in
+		 * var_name, replace the value for this key with the passed
+		 * in agtype. Otherwise pass the existing value to the
+		 * new properties agtype_value.
+		 */
         if (strcmp(str, var_name))
         {
             // push the key
@@ -8315,7 +8325,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
             agtype_value *new_agtype_value_v;
 
             // if the remove flag is set, don't push the key or any value
-            if(remove_property)
+            if (remove_property)
             {
                 // skip the value
                 tok = agtype_iterator_next(&it, r, true);
@@ -8330,24 +8340,28 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
             tok = agtype_iterator_next(&it, r, true);
 
             /*
-             * If the the new agtype is scalar, push the agtype_value to the
-             * parse state. If the agtype is an object or array convert the
-             * agtype to a binary agtype_value to pass to the parse_state.
-             * This will save uncessary deserialization and serialization
-             * logic from running.
-             */
+			 * If the the new agtype is scalar, push the agtype_value to the
+			 * parse state. If the agtype is an object or array convert the
+			 * agtype to a binary agtype_value to pass to the parse_state.
+			 * This will save uncessary deserialization and serialization
+			 * logic from running.
+			 */
             if (AGTYPE_CONTAINER_IS_SCALAR(&new_v->root))
             {
                 //get the scalar value and push as the value
-                new_agtype_value_v = get_ith_agtype_value_from_container(&new_v->root, 0);
+                new_agtype_value_v =
+                    get_ith_agtype_value_from_container(&new_v->root, 0);
 
-                parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE, new_agtype_value_v);
+                parsed_agtype_value = push_agtype_value(
+                    &parse_state, WAGT_VALUE, new_agtype_value_v);
             }
             else
             {
-                agtype_value *result = agtype_composite_to_agtype_value_binary(new_v);
+                agtype_value *result =
+                    agtype_composite_to_agtype_value_binary(new_v);
 
-                parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE, result);
+                parsed_agtype_value = push_agtype_value(&parse_state,
+                                                        WAGT_VALUE, result);
             }
 
             found = true;
@@ -8355,42 +8369,46 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
     }
 
     /*
-     * If we have not found the property and we aren't trying to remove it,
-     * add the key/value pair now.
-     */
+	 * If we have not found the property and we aren't trying to remove it,
+	 * add the key/value pair now.
+	 */
     if (!found && !remove_property)
     {
         agtype_value *new_agtype_value_v;
         agtype_value *key = string_to_agtype_value(var_name);
 
         // push the new key
-        parsed_agtype_value = push_agtype_value(
-            &parse_state, WAGT_KEY, key);
+        parsed_agtype_value = push_agtype_value(&parse_state, WAGT_KEY, key);
 
         /*
-         * If the the new agtype is scalar, push the agtype_value to the
-         * parse state. If the agtype is an object or array convert the
-         * agtype to a binary agtype_value to pass to the parse_state.
-         * This will save uncessary deserialization and serialization
-         * logic from running.
-         */
+		 * If the the new agtype is scalar, push the agtype_value to the
+		 * parse state. If the agtype is an object or array convert the
+		 * agtype to a binary agtype_value to pass to the parse_state.
+		 * This will save uncessary deserialization and serialization
+		 * logic from running.
+		 */
         if (AGTYPE_CONTAINER_IS_SCALAR(&new_v->root))
         {
-            new_agtype_value_v = get_ith_agtype_value_from_container(&new_v->root, 0);
+            new_agtype_value_v =
+                get_ith_agtype_value_from_container(&new_v->root, 0);
 
             // convert the agtype array or object to a binary agtype_value
-            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE, new_agtype_value_v);
+            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE,
+                                                    new_agtype_value_v);
         }
         else
         {
-            agtype_value *result = agtype_composite_to_agtype_value_binary(new_v);
+            agtype_value *result =
+                agtype_composite_to_agtype_value_binary(new_v);
 
-            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE, result);
+            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE,
+                                                    result);
         }
     }
 
     // push the end object token to parse state
-    parsed_agtype_value = push_agtype_value(&parse_state, WAGT_END_OBJECT, NULL);
+    parsed_agtype_value = push_agtype_value(&parse_state, WAGT_END_OBJECT,
+                                            NULL);
 
     return parsed_agtype_value;
 }

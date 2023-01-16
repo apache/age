@@ -53,5 +53,6 @@ void read_cypher_delete_information(struct ExtensibleNode *node);
 void read_cypher_delete_item(struct ExtensibleNode *node);
 
 void read_cypher_merge_information(struct ExtensibleNode *node);
+void read_cypher_merge_update_item(struct ExtensibleNode *node);
 
 #endif

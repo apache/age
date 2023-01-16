@@ -129,7 +129,7 @@
 %type <boolean> detach_opt
 
 /* MERGE clause */
-%type <boolean> merge_action_create_or_match
+%type <integer> merge_action_create_or_match
 %type <list> merge_action
 %type <node> merge
 
@@ -1081,7 +1081,7 @@ merge:
 
             n = make_ag_node(cypher_merge);
             n->path = $2;
-            n->actions = NULL;
+            n->actions = NIL;
 
             $$ = (Node *)n;
         }
@@ -1095,19 +1095,19 @@ merge_action:
 
             n = make_ag_node(cypher_set);
             n->items = $4;
-            n->kind = $2 ? CYPHER_SET_ON_CREATE : CYPHER_SET_ON_MATCH;
+            n->kind = $2;
             n->is_remove = false;
             n->location = @1;
 
             $$ = list_make1((Node *)n);
         }
-    | merge_action ON merge_action_create_or_match  SET set_item_list
+    | merge_action ON merge_action_create_or_match SET set_item_list
         {
             cypher_set *n;
 
             n = make_ag_node(cypher_set);
             n->items = $5;
-            n->kind = $3 ? CYPHER_SET_ON_CREATE : CYPHER_SET_ON_MATCH;
+            n->kind = $3;
             n->is_remove = false;
             n->location = @1;
 
@@ -1118,11 +1118,12 @@ merge_action:
 merge_action_create_or_match:
     CREATE
         {
-            $$ = true;
+            $$ = CYPHER_SET_ON_CREATE;
         }
     | MATCH
         {
-            $$ = false;
+            elog(WARNING, "ON MATCH SET Clause is not implemented.");
+            $$ = CYPHER_SET_ON_MATCH;
         }
     ;
 
