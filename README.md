@@ -30,7 +30,7 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.1.1-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -65,14 +65,14 @@ Intelligent -- AGE allows you to perform graph queries that are the basis for ma
 
 **This README file is for the Apache AGE PostgreSQL 12 release**
 
-- **Apache AGE is currently being developed for the PostgreSQL 11, and 12 releases** and will support all the future releases of PostgreSQL.
+- **Apache AGE is currently being developed for the PostgreSQL 11 and 12 releases** and will support all the future releases of PostgreSQL.
 - Apache AGE supports the openCypher graph query language.
 - Apache AGE enables querying multiple graphs at the same time.
 - Apache AGE will be enhanced with an aim to support all of the key features of AgensGraph (PostgreSQL fork extended with graph DB functionality).
 
 ## Latest happenings
 
-- Latest Apache AGE for PG 12 release, [Apache AGE 1.1.0 (https://github.com/apache/age/releases/tag/PG12/v1.1.0-rc0).
+- Latest Apache AGE for PG 12 release, [Apache AGE 1.1.1 (https://github.com/apache/age/releases/tag/PG12/v1.1.1-rc0).
 - The latest Apache AGE documentation is now available at [here](https://age.apache.org/docs/master/index.html).
 - The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
 - Send all your comments and inquiries to the user mailing list, users@age.apache.org.

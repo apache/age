@@ -15,28 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-Release Notes for Apache AGE release v1.1.0 for PG 12
+Release Notes for Apache AGE release v1.1.1 for PG 12
 
-Apache AGE 1.1.0 - Release Notes
+Apache AGE 1.1.1 - Release Notes
 
-    Support for Agtype containment ops and GIN Indices.
-    Add CALL [YIELD] grammar rules for the implementation of CALL procedures.
-    VLE path variable integration performance patch.
-    Improve WHERE clause performance and support index scans.
-    Allow global graph contexts to see currentCommandIds.
-    Cache Agtype and GRAPHID OIDs.
-    Allow lists and maps to be used in the SET clause.
-    Fix bug in aggregate function collect().
-    Fix Bug in WHERE clause and property constraints.
-    Fix VLE local cache bug (crash).
-    Fix bug where integers were not being serialized correctly when stored in GIN indices.
-    Fix the VLE peek_stack_head routine to return a NULL if the stack is NULL.
-    Fix MERGE visibility in chained commands, SET specifically.
-    Fix github issue #212 - Add access operator (`->`, `->>`) to Agtype.
-    Fix github issue #220 - fix local cached contexts for static procedures.
-    Fix github issue #224 - fix regression tests to fix issues on mac with trigonometric functions.
-    Fix github issue #235 - when MERGE and SET were used together.
-    Fix github issue #240 - negative array bounds.
-    Fix github issue #240 - negative array bounds - addendum.
+    Issue (#318): PGXN Support added. (#367)
+    Add the ability to pass parameters to the cypher function.
+    Modify the python driver's parameterization.
+    Fix compare_agtype_scalar_values returned result.
+    Implement CI testing for Golang Driver (#372).
+    Update to go version 1.19, as 1.16 is EOL (#373).
+    Issue #388 - Fix python driver build from source (#389).
     Updated README.
 
