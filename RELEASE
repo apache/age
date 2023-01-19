@@ -22,6 +22,7 @@ Apache AGE 1.1.1 - Release Notes
     Issue (#318): PGXN Support added. (#367)
     Add the ability to pass parameters to the cypher function.
     Modify the python driver's parameterization.
+    Modify the go driver's parameterization.
     Fix compare_agtype_scalar_values returned result.
     Implement CI testing for Golang Driver (#372).
     Update to go version 1.19, as 1.16 is EOL (#373).
