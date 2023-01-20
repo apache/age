@@ -4,7 +4,7 @@ AGType parser and driver support for [Apache AGE](https://age.apache.org/), gra
 
 ## Prerequisites
 
-You should have installed following jar files and packages.
+You should have downloaded following jar files and packages.
 
 - [postgres JDBC driver](https://jdbc.postgresql.org/download/)
 - [antlr4-4.9.2-complete](https://repo1.maven.org/maven2/org/antlr/antlr4/4.9.2/)
@@ -19,7 +19,7 @@ Kindly unzip the jars if they are zipped before using them.
 git clone https://github.com/apache/age.git
 cd age/drivers/jdbc
 
-./gradle assemble
+./gradlew assemble
 ```
 
 After the build completes successfully, a jar file will be created at path `age/drivers/jdbc/lib/build/libs/lib.jar`. Now add this JAR file to class path for your java project.
