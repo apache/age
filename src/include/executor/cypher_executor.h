@@ -24,6 +24,8 @@
 #include "nodes/nodes.h"
 #include "nodes/plannodes.h"
 
+#include "utils/agtype.h"
+
 #define DELETE_SCAN_STATE_NAME "Cypher Delete"
 #define SET_SCAN_STATE_NAME "Cypher Set"
 #define CREATE_SCAN_STATE_NAME "Cypher Create"
