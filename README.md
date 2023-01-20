@@ -30,7 +30,7 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.2.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -145,7 +145,7 @@ sudo apt install postgresql
 &nbsp;Install From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">offical Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">official Postgres Website.</a>
 
 
 
@@ -254,7 +254,7 @@ You can use the following to create an edge, for example, between two nodes.
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    MATCH (a:lable), (b:lable)
+    MATCH (a:label), (b:label)
     WHERE a.property = 'Node A' AND b.property = 'Node B'
     CREATE (a)-[e:RELTYPE]->(b)
     RETURN e
