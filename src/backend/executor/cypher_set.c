@@ -375,13 +375,10 @@ static void process_update_list(CustomScanState *node)
         agtype *new_property_value;
         TupleTableSlot *slot;
         ResultRelInfo *resultRelInfo;
-        ScanKeyData scan_keys[1];
-        HeapScanDesc scan_desc;
         bool remove_property;
         char *label_name;
         cypher_update_item *update_item;
         Datum new_entity;
-        HeapTuple heap_tuple;
         char *clause_name = css->set_list->clause_name;
 
         update_item = (cypher_update_item *)lfirst(lc);
@@ -522,32 +519,7 @@ static void process_update_list(CustomScanState *node)
          */
         if (luindex[update_item->entity_position - 1] == lidx)
         {
-            /*
-             * Setup the scan key to require the id field on-disc to match the
-             * entity's graphid.
-             */
-            ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
-            /*
-             * Setup the scan description, with the correct snapshot and scan
-             * keys.
-             */
-            scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
-                                       estate->es_snapshot, 1, scan_keys);
-            /* Retrieve the tuple. */
-            heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
-
-            /*
-             * If the heap tuple still exists (It wasn't deleted between the
-             * match and this SET/REMOVE) update the heap_tuple.
-             */
-            if (HeapTupleIsValid(heap_tuple))
-            {
-                heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
-                                                 heap_tuple);
-            }
-            /* close the ScanDescription */
-            heap_endscan(scan_desc);
+            exec_table_update(estate, resultRelInfo, slot, id);
         }
 
         /* close relation */
@@ -648,4 +620,38 @@ Node *create_cypher_set_plan_state(CustomScan *cscan)
     cypher_css->css.methods = &cypher_set_exec_methods;
 
     return (Node *)cypher_css;
+}
+
+void exec_table_update(EState *estate, ResultRelInfo *resultRelInfo,
+                       TupleTableSlot *slot, agtype_value *id)
+{
+    ScanKeyData scan_keys[1];
+    HeapScanDesc scan_desc;
+    HeapTuple heap_tuple;
+    /*
+	 * Setup the scan key to require the id field on-disc to match the
+	 * entity's graphid.
+	 */
+    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                GRAPHID_GET_DATUM(id->val.int_value));
+    /*
+	 * Setup the scan description, with the correct snapshot and scan
+	 * keys.
+	 */
+    scan_desc = heap_beginscan(resultRelInfo->ri_RelationDesc,
+                               estate->es_snapshot, 1, scan_keys);
+    /* Retrieve the tuple. */
+    heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+    /*
+	 * If the heap tuple still exists (It wasn't deleted between the
+	 * match and this SET/REMOVE) update the heap_tuple.
+	 */
+    if (HeapTupleIsValid(heap_tuple))
+    {
+        heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
+                                         heap_tuple);
+    }
+    /* close the ScanDescription */
+    heap_endscan(scan_desc);
 }

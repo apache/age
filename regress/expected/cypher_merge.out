@@ -926,7 +926,7 @@ SELECT * FROM cypher('cypher_merge', $$
 $$) AS (val agtype, created agtype, updated agtype);
  val | created | updated 
 -----+---------+---------
- 2   | 1       | 2
+ 1   | 1       | 2
 (1 row)
 
 -- Count the number of nodes WHERE .updated == .created (if implemented it should be 0)

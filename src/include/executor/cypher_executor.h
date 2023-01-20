@@ -41,4 +41,7 @@ extern const CustomExecMethods cypher_delete_exec_methods;
 Node *create_cypher_merge_plan_state(CustomScan *cscan);
 extern const CustomExecMethods cypher_merge_exec_methods;
 
+extern void exec_table_update(EState *estate, ResultRelInfo *resultRelInfo,
+                              TupleTableSlot *slot, agtype_value *id);
+
 #endif

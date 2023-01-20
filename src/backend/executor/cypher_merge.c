@@ -34,11 +34,12 @@
 #include "utils/tqual.h"
 
 #include "catalog/ag_label.h"
+#include "commands/label_commands.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
 #include "utils/ag_cache.h"
+#include "utils/agtype.h"
 #include "utils/graphid.h"
 
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
@@ -57,6 +58,8 @@ static bool check_path(cypher_merge_custom_scan_state *css,
 static void process_path(cypher_merge_custom_scan_state *css);
 static void mark_tts_isnull(TupleTableSlot *slot);
 
+/* Merge Actions */
+static void process_on_match_set_action(cypher_merge_custom_scan_state *css);
 static HeapTuple insert_merge_entity_tuple(
     cypher_merge_custom_scan_state *css, cypher_target_node *cypher_target_node,
     ResultRelInfo *resultRelInfo, TupleTableSlot *elemTupleSlot, EState *estate,
@@ -273,6 +276,10 @@ static void process_simple_merge(CustomScanState *node)
 
         process_path(css);
     }
+    else
+    {
+        process_on_match_set_action(css);
+    }
 }
 
 /*
@@ -442,6 +449,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              */
             css->found_a_path = true;
 
+            process_on_match_set_action(css);
             econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
             return ExecProject(node->ss.ps.ps_ProjInfo);
         }
@@ -1029,4 +1037,133 @@ static HeapTuple insert_merge_entity_tuple(
     }
 
     return insert_entity_tuple_cid(resultRelInfo, elemTupleSlot, estate, cid);
+}
+
+static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
+{
+    EState *estate = css->css.ss.ps.state;
+    ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
+    TupleTableSlot *scantuple =
+        css->css.ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
+    cypher_create_path *path = css->path;
+    ListCell *lc, *lc2;
+
+    foreach (lc, path->target_nodes)
+    {
+        cypher_target_node *cypher_node = (cypher_target_node *)lfirst(lc);
+        agtype *entity = NULL;
+        agtype_value *entity_value;
+        agtype_value *properties;
+        agtype_value *id;
+        agtype_value *label;
+        char *label_name;
+
+        if (scantuple->tts_isnull[cypher_node->tuple_position - 1])
+            continue;
+
+        foreach (lc2, css->merge_information->on_match_updates)
+        {
+            cypher_merge_update_item *merge_update_item =
+                (cypher_merge_update_item *)lfirst(lc2);
+
+            if (strcmp(merge_update_item->var_name,
+                       cypher_node->variable_name) == 0)
+            {
+                ExprState *expr_state;
+                Datum new_property_value_datum;
+                agtype *new_property_value = NULL;
+                bool isnull;
+
+                if (entity == NULL)
+                {
+                    entity = DATUM_GET_AGTYPE_P(
+                        scantuple->tts_values[cypher_node->tuple_position - 1]);
+                    entity_value =
+                        get_ith_agtype_value_from_container(&entity->root, 0);
+
+                    /* get the id and label for later */
+                    id = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value, "id");
+                    label = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value,
+                                                          "label");
+                    label_name = pnstrdup(label->val.string.val,
+                                          label->val.string.len);
+
+                    /* get the properties we need to update */
+                    properties = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value,
+                                                               "properties");
+                }
+
+                ResetExprContext(econtext);
+                expr_state = ExecInitExpr(merge_update_item->expr,
+                                          &css->css.ss.ps);
+                new_property_value_datum = ExecEvalExpr(expr_state, econtext,
+                                                        &isnull);
+
+                if (!isnull)
+                {
+                    new_property_value =
+                        DATUM_GET_AGTYPE_P(new_property_value_datum);
+                }
+
+                properties = alter_property_value(properties,
+                                                  merge_update_item->prop_name,
+                                                  new_property_value, isnull);
+            }
+        }
+
+        if (entity != NULL)
+        {
+            TupleTableSlot *slot = cypher_node->elemTupleSlot;
+            Datum entity_result = (Datum)NULL;
+            Relation label_relation;
+            ResultRelInfo *resultRelInfo;
+            resultRelInfo = palloc(sizeof(ResultRelInfo));
+
+            if (entity_value->type == AGTV_VERTEX)
+            {
+                entity_result = make_vertex(
+                    GRAPHID_GET_DATUM(id->val.int_value),
+                    CStringGetDatum(label_name),
+                    AGTYPE_P_GET_DATUM(agtype_value_to_agtype(properties)));
+
+                slot = populate_vertex_tts(slot, id, properties);
+            }
+            else if (entity_value->type == AGTV_EDGE)
+            {
+                agtype_value *startid =
+                    GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value, "start_id");
+                agtype_value *endid =
+                    GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value, "end_id");
+
+                entity_result = make_edge(
+                    GRAPHID_GET_DATUM(id->val.int_value),
+                    GRAPHID_GET_DATUM(startid->val.int_value),
+                    GRAPHID_GET_DATUM(endid->val.int_value),
+                    CStringGetDatum(label_name),
+                    AGTYPE_P_GET_DATUM(agtype_value_to_agtype(properties)));
+
+                slot = populate_edge_tts(slot, id, startid, endid, properties);
+            }
+
+            if (strlen(label_name) == 0)
+                label_name = AG_DEFAULT_LABEL_VERTEX;
+
+            label_relation =
+                heap_open(get_label_relation(label_name, css->graph_oid),
+                          RowExclusiveLock);
+            InitResultRelInfo(resultRelInfo, label_relation,
+                              list_length(estate->es_range_table), NULL,
+                              estate->es_instrument);
+            ExecOpenIndices(resultRelInfo, false);
+
+            exec_table_update(estate, resultRelInfo, slot, id);
+
+            /* update the tuple */
+            scantuple->tts_values[cypher_node->tuple_position - 1] =
+                entity_result;
+
+            ExecCloseIndices(resultRelInfo);
+            heap_close(label_relation, NoLock);
+        }
+    }
 }

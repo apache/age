@@ -1122,7 +1122,6 @@ merge_action_create_or_match:
         }
     | MATCH
         {
-            elog(WARNING, "ON MATCH SET Clause is not implemented.");
             $$ = CYPHER_SET_ON_MATCH;
         }
     ;
