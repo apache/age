@@ -991,16 +991,19 @@ static HeapTuple insert_merge_entity_tuple(
             ExprState *expr_state;
             Datum new_property_value_datum;
             agtype *new_property_value = NULL;
+            MemoryContext oldmctx;
 
             if (expr_type != get_AGTYPEOID())
             {
                 continue;
             }
 
+            oldmctx = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
             ResetExprContext(econtext);
             expr_state = ExecInitExpr(merge_update_item->expr, &css->css.ss.ps);
             new_property_value_datum = ExecEvalExpr(expr_state, econtext,
                                                     &isnull);
+            MemoryContextSwitchTo(oldmctx);
 
             if (!isnull)
             {
@@ -1023,6 +1026,12 @@ static HeapTuple insert_merge_entity_tuple(
             properties = alter_property_value_internal(
                 agtype_properties, merge_update_item->prop_name,
                 new_property_value, isnull);
+
+            if (agtype_properties != NULL)
+                pfree(agtype_properties);
+            if (new_property_value != NULL)
+                pfree(new_property_value);
+
             agtype_properties = agtype_value_to_agtype(properties);
 
             /* Mark as updated. */
@@ -1073,6 +1082,7 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
                 Datum new_property_value_datum;
                 agtype *new_property_value = NULL;
                 bool isnull;
+                MemoryContext oldmctx;
 
                 if (entity == NULL)
                 {
@@ -1093,11 +1103,14 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
                                                                "properties");
                 }
 
+                oldmctx =
+                    MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
                 ResetExprContext(econtext);
                 expr_state = ExecInitExpr(merge_update_item->expr,
                                           &css->css.ss.ps);
                 new_property_value_datum = ExecEvalExpr(expr_state, econtext,
                                                         &isnull);
+                MemoryContextSwitchTo(oldmctx);
 
                 if (!isnull)
                 {
@@ -1164,6 +1177,9 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
 
             ExecCloseIndices(resultRelInfo);
             heap_close(label_relation, NoLock);
+
+            pfree(entity);
+            pfree(resultRelInfo);
         }
     }
 }
