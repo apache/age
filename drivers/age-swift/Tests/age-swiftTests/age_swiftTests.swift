@@ -2,9 +2,9 @@ import XCTest
 @testable import age_swift
 
 let host = "127.0.0.1";
-let port = 5430 ;
-let user = "fahadzaheer";
-let db_name = "fahad";
+let port = 5432 ;
+let user = "root";
+let db_name = "demo";
 
 final class age_swiftTests: XCTestCase {
     func testExample() throws {
@@ -17,7 +17,7 @@ final class age_swiftTests: XCTestCase {
 
         age.connect(connectionParam: connection_param, graph: "hello")
                 
-        let text = "SELECT * FROM weather;"
+        let text = "SELECT 1;"
         
         //age.execSQL(statement: text)
     }
