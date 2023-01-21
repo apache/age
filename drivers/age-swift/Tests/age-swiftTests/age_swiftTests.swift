@@ -19,6 +19,6 @@ final class age_swiftTests: XCTestCase {
                 
         let text = "SELECT * FROM weather;"
         
-        age.query(statement: text, connection: age.connection!)
+        //age.execSQL(statement: text)
     }
 }

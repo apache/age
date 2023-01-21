@@ -8,6 +8,35 @@
 import PostgresClientKit
 
 
+func setUpAge(connection:Connection){
+    do{
+        try connection.prepareStatement(text: "Load 'age';").execute()
+        try connection.prepareStatement(text: "SET search_path = ag_catalog, '$user', public;").execute()
+        
+        let cursor = try connection.prepareStatement(text: "SELECT typelem FROM pg_type WHERE typname='_agtype'").execute();
+        defer { cursor.close() }
+        var oid:Int? = nil;
+        for row in cursor {
+                let columns = try row.get().columns
+            oid = try columns[0].int()
+            break;
+        }
+        
+        
+        if oid == nil{
+            // Will raise exception over here
+        }
+        
+        
+
+        
+        
+    }catch{
+        print(error)
+    }
+}
+
+
 func connectDatabase(connectionParam:[String:Any]) -> Connection?{
     do {
         var configuration = PostgresClientKit.ConnectionConfiguration()
@@ -34,6 +63,25 @@ func connectDatabase(connectionParam:[String:Any]) -> Connection?{
 }
 
 
+func querySQL(statement:String, connection:Connection){
+    do{
+        let statement = try connection.prepareStatement(text: statement)
+        defer { statement.close() }
+        
+        let cursor = try statement.execute()
+        defer { cursor.close() }
+
+        for row in cursor {
+                let columns = try row.get().columns
+                columns.forEach{column in
+                    print(column)
+                }
+            }
+    }catch{
+        print(error)
+    }
+}
+
 class Age{
     var connection:Connection?;
     var graphName:String;
@@ -46,24 +94,15 @@ class Age{
     
     func connect(connectionParam:[String:Any], graph:String){
         self.connection = connectDatabase(connectionParam: connectionParam)
+        setUpAge(connection:self.connection!)
     }
     
-    func query(statement:String, connection:Connection){
-        do{
-            let statement = try connection.prepareStatement(text: statement)
-            defer { statement.close() }
-            
-            let cursor = try statement.execute()
-            defer { cursor.close() }
-
-            for row in cursor {
-                    let columns = try row.get().columns
-                    columns.forEach{column in
-                        print(column)
-                    }
-                }
-        }catch{
-            print(error)
+    func execSQL(statement:String){
+        if self.connection == nil{
+            return print("The connection is not yet established")
         }
+        return querySQL(statement: statement, connection: self.connection!)
     }
+    
+    
 }
