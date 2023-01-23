@@ -27,10 +27,6 @@ func setUpAge(connection:Connection){
             // Will raise exception over here
         }
         
-        
-
-        
-        
     }catch{
         print(error)
     }
