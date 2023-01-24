@@ -97,8 +97,8 @@ typedef enum cypher_set_kind
 typedef struct cypher_set
 {
     ExtensibleNode extensible;
-    List *items;    // a list of cypher_set_items
-    int kind;       // cypher_set_kind
+    List *items; // a list of cypher_set_items
+    int kind; // cypher_set_kind
     bool is_remove; // true if this is REMOVE clause
     int location;
 } cypher_set;

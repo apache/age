@@ -657,7 +657,6 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
     {
         ResultRelInfo *old_estate_es_result_relation_info = NULL;
-        //        Datum prop;
         /*
          * Set estate's result relation to the vertex's result
          * relation.
@@ -1011,30 +1010,30 @@ static HeapTuple insert_merge_entity_tuple(
                     DATUM_GET_AGTYPE_P(new_property_value_datum);
             }
 
-            /*
-			 * If the agtype_properties is null, we need to get from tuple slot.
-			 */
+            // If the agtype_properties is null, get from tuple slot.
             if (agtype_properties == NULL)
             {
                 agtype_properties = DATUM_GET_AGTYPE_P(
                     elemTupleSlot->tts_values[properties_position]);
             }
 
-            /*
-			 * If the property is null, we need to remove it from the properties map.
-			 */
+            // If the property is null, remove it from the properties map.
             properties = alter_property_value_internal(
                 agtype_properties, merge_update_item->prop_name,
                 new_property_value, isnull);
 
             if (agtype_properties != NULL)
+            {
                 pfree(agtype_properties);
+            }
             if (new_property_value != NULL)
+            {
                 pfree(new_property_value);
+            }
 
             agtype_properties = agtype_value_to_agtype(properties);
 
-            /* Mark as updated. */
+            // Mark as updated.
             updated = true;
         }
     }
@@ -1068,7 +1067,9 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
         char *label_name;
 
         if (scantuple->tts_isnull[cypher_node->tuple_position - 1])
+        {
             continue;
+        }
 
         foreach (lc2, css->merge_information->on_match_updates)
         {
@@ -1091,14 +1092,14 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
                     entity_value =
                         get_ith_agtype_value_from_container(&entity->root, 0);
 
-                    /* get the id and label for later */
+                    // get the id and label for later
                     id = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value, "id");
                     label = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value,
                                                           "label");
                     label_name = pnstrdup(label->val.string.val,
                                           label->val.string.len);
 
-                    /* get the properties we need to update */
+                    // get the properties we need to update
                     properties = GET_AGTYPE_VALUE_OBJECT_VALUE(entity_value,
                                                                "properties");
                 }
@@ -1159,7 +1160,9 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
             }
 
             if (strlen(label_name) == 0)
+            {
                 label_name = AG_DEFAULT_LABEL_VERTEX;
+            }
 
             label_relation =
                 heap_open(get_label_relation(label_name, css->graph_oid),
@@ -1171,7 +1174,7 @@ static void process_on_match_set_action(cypher_merge_custom_scan_state *css)
 
             exec_table_update(estate, resultRelInfo, slot, id);
 
-            /* update the tuple */
+            // update the tuple
             scantuple->tts_values[cypher_node->tuple_position - 1] =
                 entity_result;
 

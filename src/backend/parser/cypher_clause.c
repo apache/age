@@ -5582,7 +5582,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     merge_information->graph_oid = cpstate->graph_oid;
     merge_information->path = merge_path;
 
-    /* Filled from transform_cypher_merge_actions(..) */
+    // Filled from transform_cypher_merge_actions(..)
     merge_information->on_match_updates = NIL;
     merge_information->on_create_updates = NIL;
 
