@@ -1,0 +1,263 @@
+<!--
+    doc/src/sgml/ref/show_pool_health_check_stats.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-HEALTH-CHECK-STATS">
+ <indexterm zone="sql-show-pool-health-check-stats">
+  <primary>SHOW POOL_HEALTH_CHECK_STATS</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_HEALTH_CHECK_STATS</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_HEALTH_CHECK_STATS</refname>
+  <refpurpose>
+   ヘルスチェックの統計情報を表示する
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_HEALTH_CHECK_STATS
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>SHOW POOL_HEALTH_CHECK_STATS</command>は、主にヘルスチェックプロセスが収集したヘルスチェック(<xref linkend="runtime-config-health-check">参照)の統計情報データを表示します。
+   このコマンドは、<productname>Pgpool-II</productname>管理者がヘルスチェックに関連したイベントを調べるのに役立ちます。
+   たとえば、"last_failed_health_check"列を見ることにより、フェイルオーバイベントをログファイルの中から容易に発見することができます。
+   他の例としては、"average_retry_count"列を評価することにより、不安定なバックエンドへのコネクションを見つけることができます。
+   ある特定のノードが他のノードよりもリトライ率が高ければ、バックエンドへの接続に問題があるかも知れません。
+  </para>
+
+  <para>
+   <xref linkend="health-check-stats-data-table">に各々の列名と説明を示します。
+  </para>
+
+  <table id="health-check-stats-data-table">
+   <title>pool_health_check_statsコマンドが表示する統計情報</title>
+   <tgroup cols="2">
+    <thead>
+     <row>
+      <entry>列名</entry>
+      <entry>説明</entry>
+     </row>
+    </thead>
+
+    <tbody>
+
+     <row>
+      <entry>node_id</entry>
+      <entry>
+       バックエンドノードID。
+      </entry>
+     </row>
+
+     <row>
+      <entry>hostname</entry>
+      <entry>
+       バックエンドホスト名あるいはUNIXドメインソケットのパス。
+      </entry>
+     </row>
+
+     <row>
+      <entry>port</entry>
+      <entry>
+       バックエンドのポート番号。
+      </entry>
+     </row>
+
+     <row>
+      <entry>status</entry>
+      <entry>
+       バックエンドの状態。up, down, waiting, unused, quarantineのいずれか。
+      </entry>
+     </row>
+
+     <row>
+      <entry>role</entry>
+      <entry>
+       このノードの役割。ストリーミングレプリケーションモードではprimaryあるいはstandbyです。
+       他のモードでは、mainあるいはreplicaです。
+      </entry>
+     </row>
+
+     <row>
+      <entry>last_status_change</entry>
+      <entry>
+       バックエンドの状態の最終変更時刻。
+      </entry>
+     </row>
+
+     <row>
+      <entry>total_count</entry>
+      <entry>
+       ヘルスチェックの合計回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>success_count</entry>
+      <entry>
+       成功したヘルスチェックの合計回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>fail_count</entry>
+      <entry>
+       失敗したヘルスチェックの合計回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>skip_count</entry>
+      <entry>
+       ヘルスチェックをスキップした合計回数。そのノードがすでにダウン状態の場合、ヘルスチェックはそのノードをスキップします。
+      </entry>
+     </row>
+
+     <row>
+      <entry>retry_count</entry>
+      <entry>
+       ヘルスチェックの合計リトライ回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>average_retry_count</entry>
+      <entry>
+       一回のヘルスチェックセッションの平均リトライ回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>max_retry_count</entry>
+      <entry>
+       一回のヘルスチェックセッションの中での最大リトライ回数。
+      </entry>
+     </row>
+
+     <row>
+      <entry>max_duration</entry>
+      <entry>
+       ヘルスチェックに要した時間の最大値をミリ秒で表示。
+       ヘルスチェックセッションがリトライを行った場合、各々のリトライしたヘルスチェックの時間の合計がヘルスチェックに要した時間になります。
+      </entry>
+     </row>
+
+     <row>
+      <entry>min_duration</entry>
+      <entry>
+       ヘルスチェックに要した時間の最小値をミリ秒で表示。
+       ヘルスチェックセッションがリトライを行った場合、各々のリトライしたヘルスチェックの時間の合計がヘルスチェックに要した時間になります。
+      </entry>
+     </row>
+
+     <row>
+      <entry>average_duration</entry>
+      <entry>
+       ヘルスチェックに要した時間の平均値をミリ秒で表示。
+       ヘルスチェックセッションがリトライを行った場合、各々のリトライしたヘルスチェックの時間の合計がヘルスチェックに要した時間になります。
+      </entry>
+     </row>
+
+     <row>
+      <entry>last_health_check</entry>
+      <entry>
+       最後にヘルスチェックを行った時刻。
+       まだヘルスチェックを行っていない場合は空文字です。
+      </entry>
+     </row>
+
+     <row>
+      <entry>last_successful_health_check</entry>
+      <entry>
+       最後にヘルスチェックに成功した時刻。
+       まだヘルスチェックが成功していない場合は空文字です。
+      </entry>
+     </row>
+
+     <row>
+      <entry>last_skip_health_check</entry>
+      <entry>
+       最後にヘルスチェックをスキップした時刻。
+       まだヘルスチェックがスキップされていない場合は空文字です。
+       ステータスがdownであっても、このフィールドが空文字であることがあり得ることに注意してください。
+       この場合は、ヘルスチェックプロセス以外でフェイルオーバが起きています。
+      </entry>
+     </row>
+
+     <row>
+      <entry>last_failed_health_check</entry>
+      <entry>
+       最後にヘルスチェックに失敗した時刻。
+       まだヘルスチェックが失敗していない場合は空文字です。
+       ステータスがdownであっても、このフィールドが空文字であることがあり得ることに注意してください。
+       この場合は、ヘルスチェックプロセス以外でフェイルオーバが起きています。
+      </entry>
+     </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+
+  <para>
+   セッション例を示します。
+   <programlisting>
+test=# show pool_health_check_stats;
+-[ RECORD 1 ]----------------+--------------------
+node_id                      | 0
+hostname                     | /tmp
+port                         | 11002
+status                       | up
+role                         | primary
+last_status_change           | 2020-01-26 19:08:45
+total_count                  | 27
+success_count                | 27
+fail_count                   | 0
+skip_count                   | 0
+retry_count                  | 0
+average_retry_count          | 0.000000
+max_retry_count              | 0
+max_duration                 | 9
+min_duration                 | 2
+average_duration             | 6.296296
+last_health_check            | 2020-01-26 19:12:45
+last_successful_health_check | 2020-01-26 19:12:45
+last_skip_health_check       | 
+last_failed_health_check     | 
+-[ RECORD 2 ]----------------+--------------------
+node_id                      | 1
+hostname                     | /tmp
+port                         | 11003
+status                       | down
+role                         | standby
+last_status_change           | 2020-01-26 19:11:48
+total_count                  | 19
+success_count                | 12
+fail_count                   | 1
+skip_count                   | 6
+retry_count                  | 3
+average_retry_count          | 0.230769
+max_retry_count              | 3
+max_duration                 | 83003
+min_duration                 | 0
+average_duration             | 6390.307692
+last_health_check            | 2020-01-26 19:12:48
+last_successful_health_check | 2020-01-26 19:10:15
+last_skip_health_check       | 2020-01-26 19:12:48
+last_failed_health_check     | 2020-01-26 19:11:48
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

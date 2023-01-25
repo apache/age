@@ -1,0 +1,282 @@
+<!--
+doc/src/sgml/ref/pgproto.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPROTO">
+ <indexterm zone="pgproto">
+  <primary>pgproto</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgproto</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgproto</refname>
+  <refpurpose>
+   tests <productname>PostgreSQL</productname> or any other servers that understand the frontend/backend protocol.</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgproto</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PGPROTO-1">
+  <title>Description</title>
+  <para>
+   <command>pgproto</command>
+   tests <productname>PostgreSQL</productname> or any other servers that understand the frontend/backend protocol.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+    <varlistentry>
+     <term><option>-h <replaceable class="parameter">hostname</replaceable></option></term>
+     <term><option>--hostname=<replaceable class="parameter">hostname</replaceable></option></term>
+     <listitem>
+      <para>
+       The host name of the machine on which the server is running. If the value begins with a slash, it is used as the directory for the Unix-domain socket (default: Unix-domain socket).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-p <replaceable class="parameter">port</replaceable></option></term>
+     <term><option>--port=<replaceable class="parameter">port</replaceable></option></term>
+     <listitem>
+      <para>
+       The port number (default:5432).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-u <replaceable class="parameter">username</replaceable></option></term>
+     <term><option>--user=<replaceable class="parameter">username</replaceable></option></term>
+     <listitem>
+      <para>
+       The user name (default: OS user name).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d <replaceable class="parameter">databasename</replaceable></option></term>
+     <term><option>--database=<replaceable class="parameter">databasename</replaceable></option></term>
+     <listitem>
+      <para>
+       The database name (default: same as user).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">filename</replaceable></option></term>
+     <term><option>--proto-data-file=<replaceable class="parameter">filename</replaceable></option></term>
+     <listitem>
+      <para>
+       Text file describing message data to be sent to <productname>PostgreSQL</productname> (default: pgproto.data).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-r <replaceable class="parameter">naptime</replaceable></option></term>
+     <term><option>--read-nap=<replaceable class="parameter">naptime</replaceable></option></term>
+     <listitem>
+      <para>
+       The nap time in micro seconds (default:0).
+       Greater than 0 will let pgproto sleep between each data reading from socket.
+       This is useful to simulate slow clients.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-D</option></term>
+     <term><option>--debug</option></term>
+     <listitem>
+      <para>
+       Enable debug message.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-v</option></term>
+     <term><option>--version</option></term>
+     <listitem>
+      <para>
+       Print the command version, then exit.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-?</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       Shows help for the command line arguments, then exit.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   In the example below, the first character in the file (i.e. 'Q')
+   indicates the message kind specified in the PostgreSQL frontend/backend protocol.
+  </para>
+  <para>
+   Exceptions are 'Y' , 'y' and 'z'. 'Y' reads messages from backend
+   until 'Ready for query' is received.
+   'y' reads messages from backend while messages are coming from backend then stops
+   if messages are not available for 1 second.
+   'Y' is used for waiting for reply of 'Q' (simple query) or after 'S' (sync) in extended queries.
+   'y' can be used for receiving messages after 'H' (flush).
+   'z' reads 1 messages from backend. If no message arrives within 1 second, 'z' stops.
+   If you want to read multiple messages, you can use repeat 'z' for the message count.
+   'z' can be useful for 'H' message test when you already know how
+   many reply messages will come.
+  </para>
+  <para>
+   If you want to include a " (double quotation) in a string data type,
+   for example "SELECT * FROM "aaa"", you can qualify it by using \ (back slash) like ""SELECT * FROM "aaa""
+
+   A command line spread over multiple lines can be created using \ as well.
+   <programlisting>
+    'Q' "SELECT * FROM aaa \
+    WHERE a = 1"
+   </programlisting>
+  </para>
+  <para>
+   Here is an example input file:
+   <programlisting>
+    #
+    # Test data example
+    #
+    'Q'	"SELECT * FROM aaa"
+    'Y'
+    'P'	"S1"	"BEGIN"	0
+    'B'	""	"S1"	0	0	0
+    'E'	""	0
+    'C'	'S'	"S1"
+    'P'	"foo"	"SELECT 1"	0
+    'B'	"myportal"	"foo"	0	0	0
+    'E'	"myportal"	0
+    'P'	"S2"	"COMMIT"	0
+    'B'	""	"S2"	0	0	0
+    'E'	""	0
+    'C'	'S'	"S2"
+    'S'
+    'Y'
+    'X'
+   </programlisting>
+  </para>
+  <para>
+   Here is an example output:
+   <programlisting>
+    $ pgproto -p 11000 -d test -f sample.data
+    FE=> Query (query="SELECT * FROM aaa")
+    <= BE RowDescription
+    <= BE CommandComplete(SELECT 0)
+    <= BE ReadyForQuery(I)
+    FE=> Parse(stmt="S1", query="BEGIN")
+    FE=> Bind(stmt="S1", portal="")
+    FE=> Execute(portal="")
+    FE=> Close(stmt="S1")
+    FE=> Parse(stmt="foo", query="SELECT 1")
+    FE=> Bind(stmt="foo", portal="myportal")
+    FE=> Execute(portal="myportal")
+    FE=> Parse(stmt="S2", query="COMMIT")
+    FE=> Bind(stmt="S2", portal="")
+    FE=> Execute(portal="")
+    FE=> Close(stmt="S2")
+    FE=> Sync
+    <= BE ParseComplete
+    <= BE BindComplete
+    <= BE CommandComplete(BEGIN)
+    <= BE CloseComplete
+    <= BE ParseComplete
+    <= BE BindComplete
+    <= BE DataRow
+    <= BE CommandComplete(SELECT 1)
+    <= BE ParseComplete
+    <= BE BindComplete
+    <= BE CommandComplete(COMMIT)
+    <= BE CloseComplete
+    <= BE ReadyForQuery(I)
+    FE=> Terminate
+   </programlisting>
+  </para>
+  <para>
+   Other example data files:
+  </para>
+  <para>
+   Copy
+   <programlisting>
+    #
+    # Test data example
+    #
+
+    # CopyIn
+    #
+    'Q'	"COPY t1 FROM STDIN"
+    # CopyData
+    'd'	"abc"
+    # CopyDone
+    'c'
+    'Y'
+
+    # CopyOut
+    #
+    'Q'	"COPY t1 TO STDOUT"
+    'Y'
+
+    #
+    # Copy fail case
+    #
+    'Q'	"COPY t1 FROM STDIN"
+    # CopyData
+    'd'	"abc"
+    # CopyFail
+    'f'	"pgproto copy fail test"
+    'Y'
+    'X'
+   </programlisting>
+  </para>
+  <para>
+   Function Call
+   <programlisting>
+    #
+    # Test data example
+    #
+
+    # Function call (lo_creat)
+    # from PostgreSQL's src/include/catalog/pg_proc.data
+    # { oid => '957', descr => 'large object create',
+    #  proname => 'lo_creat', provolatile => 'v', proparallel => 'u',
+    #  prorettype => 'oid', proargtypes => 'int4', prosrc => 'be_lo_creat' },
+
+    'F'	957	1	0	1	1	"0"	0
+    'Y'
+    'X'
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+CMD=$1
+ELASTIC_IP=$2
+AWSCLI=$3
+
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+ALLOCATION_ID=$(aws ec2 describe-addresses --query "Addresses[?PublicIp=='${ELASTIC_IP}'].AllocationId" --output text)
+
+if [ "${CMD}" == "up" ]; then
+
+    echo "running if_up_cmd"
+
+    echo "associate Elastic IP ${ELASTIC_IP} with instance ${INSTANCE_ID}"
+    ${AWSCLI} ec2 associate-address  \
+        --instance-id ${INSTANCE_ID} \
+        --allocation-id ${ALLOCATION_ID}
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: failed to associates Elastic IP ${ELASTIC_IP} with instance ${INSTANCE_ID}" >&2
+        exit 1
+    fi
+
+elif [ "${CMD}" == "down" ]; then
+
+    echo "running if_down_cmd"
+
+    ASSOCIATION_ID=$(${AWSCLI} ec2 describe-addresses \
+        --query "Addresses[?PublicIp=='${ELASTIC_IP}'].AssociationId" --output text)
+
+    if [ -z "${ASSOCIATION_ID}" ]; then
+        echo "ERROR: failed to retrieve ASSOCIATION_ID while bringing down Elastic IP ${ELASTIC_IP}" >&2
+        exit 1
+    fi
+
+    echo "disassociate Elastic IP ${ELASTIC_IP} from instance ${INSTANCE_ID}"
+
+    ${AWSCLI} ec2 disassociate-address --association-id ${ASSOCIATION_ID}
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: failed to disassociate Elastic IP ${ELASTIC_IP} from instance ${INSTANCE_ID}" >&2
+        exit 1
+    fi
+
+fi
+
+echo "Elastic IP ${ELASTIC_IP} ${CMD} successfully"
+exit 0

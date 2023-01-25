@@ -1,0 +1,206 @@
+#!/bin/sh
+# pgpool    This is the init script for starting up pgpool-II
+#
+# chkconfig: - 64 36
+# description: Starts and stops the pgpool daemon
+# processname: pgpool
+# pidfile:	/var/run/${NAME}.pid
+#
+# v1.0.0 Devrim GUNDUZ <devrim@CommandPrompt.com>
+# - Initial version of Red Hat / Fedora init script
+#
+# v2.2 Devrim GUNDUZ <devrim@CommandPrompt.com>
+# - New and improved version which has some fixes.
+#
+# v2.2.5 Devrim GUNDUZ <devrim@CommandPrompt.com>
+# - Fix logging.
+#
+# v3.3.3 Ryan Deshone <rdshone@liquidweb.com> and Yugo Nagata <nagata@sraoss.co.jp>
+# - Update stop and reload to use pgpool commands properly
+# - Removed "switch" as pgpool no longer supports that command
+# - Add try-restart option
+# - Fix exit code according with LSB
+
+# Source function library.
+INITD=/etc/rc.d/init.d
+. $INITD/functions
+
+# Get function listing for cross-distribution logic.
+TYPESET=`typeset -f|grep "declare"`
+
+# Get config.
+. /etc/sysconfig/network
+
+# Check that networking is up.
+# We need it for pgpool
+[ "${NETWORKING}" = "no" ] && exit 0
+
+# Find the name of the script
+NAME=`basename $0`
+if [ ${NAME:0:1} = "S" -o ${NAME:0:1} = "K" ]
+then
+	NAME=${NAME:3}
+fi
+
+# For SELinux we need to use 'runuser' not 'su'
+if [ -x /sbin/runuser ]
+then
+    SU=runuser
+else
+    SU=su
+fi
+
+# Set defaults for configuration variables
+PGPOOLUSER=postgres
+PGPOOLENGINE=/usr/bin
+PGPOOLDAEMON=$PGPOOLENGINE/pgpool
+PGPOOLCONF=/etc/pgpool-II/pgpool.conf
+PGPOOLPIDDIR=/var/run/pgpool
+PGPOOLLOG=/var/log/pgpool.log
+
+lockfile="/var/lock/subsys/${NAME}"
+pidfile="$PGPOOLPIDDIR/pgpool.pid"
+
+# Import configuration from /etc/sysconfig, if it exists 
+[ -f /etc/sysconfig/${NAME} ] && . /etc/sysconfig/${NAME}
+
+test -x $PGPOOLDAEMON || exit 5
+
+# Check whether the config file exists or not
+if [ ! -r $PGPOOLCONF ]
+then
+	echo "$PGPOOLCONF not found"
+	echo_failure
+	echo
+	exit 1
+fi
+
+# Create the log file if it does not exist
+if [ ! -x $PGPOOLLOG ]
+then
+	touch $PGPOOLLOG
+	chown ${PGPOOLUSER}: $PGPOOLLOG
+fi
+
+if [ ! -d $PGPOOLPIDDIR ]
+then
+	mkdir $PGPOOLPIDDIR
+	chown ${PGPOOLUSER}: $PGPOOLPIDDIR
+fi
+
+script_result=0
+
+start(){
+	PGPOOL_START=$"Starting ${NAME} service: "
+
+	echo -n "$PGPOOL_START"
+	if [ -n "`pidofproc -p $pidfile $PGPOOLDAEMON`" ]
+	then
+		echo_success
+		echo
+		exit 0
+	fi
+
+	$SU -l $PGPOOLUSER -c "$PGPOOLDAEMON -f $PGPOOLCONF $OPTS & " >> "$PGPOOLLOG" 2>&1 < /dev/null
+	sleep 2
+
+	if [ -n "`pidofproc -p $pidfile $PGPOOLDAEMON`" ]
+	then
+		success "$PGPOOL_START"
+		touch "$lockfile"
+		echo
+	else
+		failure "$PGPOOL_START"
+		echo
+		script_result=1
+	fi
+}
+
+stop(){
+	PGPOOL_STOP=$"Stopping ${NAME} service: "
+
+	echo -n "$PGPOOL_STOP"
+	if [ -e "$lockfile" ]
+	then
+		$SU -l $PGPOOLUSER -c "$PGPOOLDAEMON -f $PGPOOLCONF -m fast stop" >> "$PGPOOLLOG" 2>&1 < /dev/null
+
+		RETVAL=$?
+		if [ $RETVAL -eq 0 ]
+		then
+			success "$PGPOOL_STOP"
+			rm -f "$lockfile"
+		else
+			failure "$PGPOOL_STOP"
+			script_result=1
+		fi
+	else
+		echo_success
+	fi
+	echo
+}
+
+restart(){
+    stop
+    start
+}
+
+reload(){
+	PGPOOL_RELOAD=$"Reloading ${NAME} configuration: "
+
+	echo -n "$PGPOOL_RELOAD"
+	if [ -n "`pidofproc -p $pidfile $PGPOOLDAEMON`" ]
+	then
+		$SU -l $PGPOOLUSER -c "$PGPOOLDAEMON -f $PGPOOLCONF reload" >> "$PGPOOLLOG" 2>&1 < /dev/null
+	else
+		failure "$PGPOOL_RELOAD"
+		echo
+		exit 1
+	fi
+	RETVAL=$?
+	if [ $RETVAL -eq 0 ]; then
+		success "$PGPOOL_RELOAD"
+	else
+		failure "$PGPOOL_RELOAD"
+		script_result=1
+	fi
+	echo
+}
+
+condrestart(){
+	[ -e "$lockfile" ] && restart
+}
+
+condstop(){
+	[ -e "$lockfile" ] && stop
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  status)
+        status -p $pidfile pgpool
+        script_result=$?
+        ;;
+  restart)
+        restart
+        ;;
+  reload|force-reload)
+        reload
+        ;;
+  condrestart|try-restart)
+        condrestart
+        ;;
+  condstop)
+        condstop
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|condstop|reload|force-reload}"
+        exit 2
+esac
+
+exit $script_result

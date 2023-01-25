@@ -1,0 +1,64 @@
+CREATE TABLE foo (a int, b text)
+CREATE TABLE foo (a int, b text) INHERITS (bar)
+CREATE TABLE foo (a int, b text) INHERITS (a,b,c,d)
+CREATE TABLE foo (a int, b numeric) WITH OIDS
+CREATE TABLE foo (a int, b numeric) WITHOUT OIDS
+CREATE TABLE foo (a int, b numeric) WITH (fillfactor=10)
+CREATE TABLE foo (a, b) AS SELECT 1, 2
+CREATE TABLE foo (a, b) WITH OIDS AS SELECT 1,2 
+CREATE TABLE foo (a, b) WITHOUT OIDS AS SELECT 1,2
+CREATE TABLE foo (a, b) WITH (fillfactor=10) AS SELECT 1,2
+CREATE TABLE foo (a, b) ON COMMIT DROP
+CREATE TABLE foo (a, b) ON COMMIT DELETE
+CREATE TABLE foo (a, b) ON COMMIT PRESERVE
+CREATE TABLE foo (a, b) ON COMMIT PRESERVE ROWS TABLESPACE data
+CREATE TABLE foo (a, b) ON COMMIT DROP AS SELECT 1,2 
+CREATE TABLE foo (a, b) ON COMMIT DELETE ROWS AS SELECT 1,2 
+CREATE TABLE foo (a, b) ON COMMIT PRESERVE ROWS AS SELECT 1,2 
+CREATE TABLE foo (a, b) ON COMMIT PRESERVE ROWS TABLESPACE data AS SELECT 1,2 
+CREATE TABLE foo (a int, LIKE a INCLUDING DEFAULTS);
+CREATE TABLE foo (a int, LIKE a INCLUDING CONSTRAINTS);
+CREATE TABLE foo (a int, LIKE a INCLUDING ALL EXCLUDING DEFAULTS);
+CREATE TABLE foo (a int, LIKE a INCLUDING ALL EXCLUDING CONSTRAINTS);
+CREATE TABLE foo (a int unique);
+CREATE TABLE foo (a int unique with(fillfactor=10));
+CREATE TABLE foo (a int primary key);
+CREATE TABLE foo (a int check (a > 100))
+CREATE TABLE foo (a int references b(c))
+CREATE TABLE foo (a int references b(c) MATCH FULL)
+CREATE TABLE foo (a int references b(c) MATCH PARTIAL)
+CREATE TABLE foo (a int references b(c) MATCH SIMPLE)
+CREATE TABLE foo (a int references b(c) ON UPDATE RESTRICT)
+CREATE TABLE foo (a int references b(c) ON UPDATE CASCADE)
+CREATE TABLE foo (a int references b(c) ON UPDATE SET NULL)
+CREATE TABLE foo (a int references b(c) ON UPDATE SET DEFAULT)
+CREATE TABLE foo (a int references b(c) ON DELETE RESTRICT)
+CREATE TABLE foo (a int references b(c) ON DELETE CASCADE)
+CREATE TABLE foo (a int references b(c) ON DELETE SET NULL)
+CREATE TABLE foo (a int references b(c) ON DELETE SET DEFAULT)
+CREATE TYPE enum_test AS ENUM ('label1', 'label2');
+CREATE TYPE enum_test AS ENUM ();
+CREATE TYPE enum_test AS ENUM;
+CREATE TEXT SEARCH PARSER foo (a='b')
+CREATE TEXT SEARCH DICTIONARY foo (a='b')
+CREATE TEXT SEARCH CONFIGURATION foo (a='b')
+CREATE INDEX foo on a(b)
+CREATE INDEX foo on a(b, c)
+CREATE UNIQUE INDEX foo on a(b)
+CREATE UNIQUE INDEX CONCURRENTLY foo on a(b)
+CREATE SEQUENCE a_seq
+CREATE TEMP SEQUENCE a_seq
+CREATE TEMPORARY SEQUENCE a_seq
+CREATE SEQUENCE a_seq INCREMENT 1
+CREATE SEQUENCE a_seq INCREMENT BY 1
+CREATE SEQUENCE a_seq minvalue 1
+CREATE SEQUENCE a_seq no minvalue
+CREATE SEQUENCE a_seq maxvalue 1
+CREATE SEQUENCE a_seq no maxvalue
+CREATE SEQUENCE a_seq start 1
+CREATE SEQUENCE a_seq start with 1
+CREATE SEQUENCE a_seq cache 1
+CREATE SEQUENCE a_seq cycle
+CREATE SEQUENCE a_seq no cycle
+CREATE SEQUENCE a_seq OWNED BY a.b
+CREATE SEQUENCE a_seq OWNED BY NONE

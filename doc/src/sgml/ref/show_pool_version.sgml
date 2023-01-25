@@ -1,0 +1,49 @@
+<!--
+    doc/src/sgml/ref/show_pool_version.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-VERSION">
+ <indexterm zone="sql-show-pool-version">
+  <primary>SHOW POOL_VERSION</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_VERSION</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_VERSION</refname>
+  <refpurpose>
+   displays a string containing
+   the <productname>Pgpool-II</productname> release number.
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_VERSION
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>SHOW POOL_VERSION</command> displays a string
+   containing the <productname>Pgpool-II</productname> release
+   number. Here is an example session:
+   <programlisting>
+    test=# show pool_version;
+    pool_version
+    --------------------------
+    3.6.0 (subaruboshi)
+    (1 row)
+   </programlisting>
+
+  </para>
+ </refsect1>
+
+</refentry>

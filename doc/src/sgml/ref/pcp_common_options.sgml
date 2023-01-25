@@ -1,0 +1,164 @@
+<!--
+doc/src/sgml/ref/pcp_common_options.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-COMMON-OPTIONS">
+ <indexterm zone="pcp-common-options">
+  <primary>pcp_common_options</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_common_options</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_common_options</refname>
+  <refpurpose>
+   common options used in PCP commands</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_command</command>
+   <arg rep="repeat"><replaceable>option</></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-common-options-1">
+  <title>
+   Description
+  </title>
+  <para>
+   There are some arguments common to all PCP commands.  Most of
+   these are for authentication and the rest are about verbose
+   mode, debug message, and so on.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-h <replaceable class="parameter">hostname</replaceable></option></term>
+     <term><option>--host=<replaceable class="parameter">hostname</replaceable></option></term>
+     <listitem>
+      <para>
+       The host name of the machine on which the server is running. If the
+       value begins with a slash, it is used as the directory for the Unix-domain socket.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-p <replaceable class="parameter">port</replaceable></option></term>
+     <term><option>--port=<replaceable class="parameter">port</replaceable></option></term>
+     <listitem>
+      <para>
+       The PCP port number (default:"9898").
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-U <replaceable class="parameter">username</replaceable></option></term>
+     <term><option>--username=<replaceable class="parameter">username</replaceable></option></term>
+     <listitem>
+      <para>
+       The user name for PCP authentication (default: OS user name).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-w</option></term>
+     <term><option>--no-password</option></term>
+     <listitem>
+      <para>
+       Never prompt for password. And if a password is not available
+       by a <filename>.pcppass</filename> file, the connection
+       attempt will fail. This option can be useful in batch jobs
+       and scripts where no user is present to enter a password.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-W</option></term>
+     <term><option>--password</option></term>
+     <listitem>
+      <para>
+       Force password prompt (should happen automatically).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <term><option>--debug</option></term>
+     <listitem>
+      <para>
+       Enable debug message.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-v</option></term>
+     <term><option>--verbose</option></term>
+     <listitem>
+      <para>
+       Enable verbose output.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-V</option></term>
+     <term><option>--version</option></term>
+     <listitem>
+      <para>
+       Print the command version, then exit.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-?</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       Shows help for the command line arguments, then exit.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Environment</title>
+
+  <variablelist>
+   <varlistentry>
+    <term><envar>PCPPASSFILE</envar></term>
+
+    <listitem>
+     <para>
+      Specifies the path to pcp password file.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+
+ </refsect1>
+
+</refentry>

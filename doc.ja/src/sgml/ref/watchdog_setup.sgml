@@ -1,0 +1,521 @@
+<!--
+doc/src/sgml/ref/watchdog_setup.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="WATCHDOG-SETUP">
+ <indexterm zone="watchdog-setup">
+  <primary>watchdog_setup</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>watchdog_setup</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>watchdog_setup</refname>
+  <refpurpose>
+   <!--
+   Create a temporary installation of Pgpool-II clusters with watchdog</refpurpose>
+   -->
+   watchdog 機能を有効にした <productname>Pgpool-II</productname> クラスタのテスト環境を構築するツール</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>watchdog_setup</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-WATCHDOG-SETUP-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <application>watchdog_setup</application>
+   <!--
+   creates a temporary
+   installation of <productname>Pgpool-II</productname> clusters with watchdog enabled, which
+   includes a <productname>Pgpool-II</productname> installation and
+   specified number of <productname>PostgreSQL</productname>
+   installations under current directory.
+   Current directory must be empty before running <application>watchdog_setup</application>.
+   -->
+   はカレントディレクトリで、watchdog 機能を有効にした <productname>Pgpool-II</productname>
+   とノード数が指定できる複数の <productname>PostgreSQL</productname>
+   のクラスタテスト環境を構築するツールです。
+   カレントディレクトリは空である必要があります。
+  </para>
+  <para>
+   <!--
+   <application>watchdog_setup</application> is for testing purpose
+   only and should not be used to create production installations.
+   Also please note that heartbeat is not used.
+   -->
+   <application>watchdog_setup</application> はテストのために使うツールなので、
+   実際の業務システムで利用することはおすすめしません。また、heartbeat が使用されていないことにもご注意ください。
+  </para>
+
+  <para>
+   <!--
+   <application>watchdog_setup</application>
+   uses <xref linkend="pgpool-setup"> as a workhorse.
+   -->
+   <application>watchdog_setup</application> は <xref linkend="pgpool-setup"> をベースとしたツールです。
+  </para>
+
+  <para>
+   <!--
+   Currently <application>watchdog_setup</application> supports streaming replication mode, native replication mode, logical replication mode and raw mode.
+   Watchdog is not supported yet.
+   -->
+   現在、<application>watchdog_setup</application> は「ストリーミングレプリケーションモード」、「スナップショットアイソレーションモード」、「ネイティブレプリケーションモード」、「ロジカルレプリケーションモード」、及び「raw モード」に対応しています。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <!--
+   <application>watchdog_setup</application> accepts the following command-line arguments:
+   -->
+   <application>watchdog_setup</application> は以下のコマンドライン引数を受け付けます:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-wn <replaceable class="parameter">num_pgpool</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the number of Pgpool-II installations.
+       If this is omitted, <literal>3</literal> is used.
+       -->
+       <productname>Pgpool-II</productname> の数を指定します。
+       指定しない場合は 3 です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-wp <replaceable class="parameter">watchdog_base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specify the starting base port number used by Pgpool-II and
+       PostgreSQL.  For the first Pgpool-II, Pgpool-II port is
+       watchdog_base_port. pcp port is u watchdog port is
+       watchdog_base_port + 2. wd_heartbeat_port is
+       watchdog_base_port + 3 (though heartbeat is not used).  The
+       first PostgreSQL node's port is watchdog_base_port + 4,
+       second PostgreSQL node's port is watchdog_base_port + 5 and
+       so on.
+       -->
+       <productname>Pgpool-II</productname> と <productname>PostgreSQL</productname> のベースとなるポート番号を指定します。
+       最初の Pgpool-II のポートは watchdog_base_port となります。
+       pcp のポートは watchdog_base_port + 1、watchdog のポートは watchdog_base_port + 2 となります。wd_heartbeat_port は watchdog_base_port + 3 (heartbeat が使われていない場合でも)。
+       1 番目の PostgreSQL ノードのポートは watchdog_base_port + 4、
+       2 番目の PostgreSQL ノードのポートは watchdog_base_port + 5 というようになります。
+      </para>
+      <para>
+       省略した場合、<literal>50000</literal> が使われます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the running mode.  <replaceable>mode</replaceable>
+       can be <literal>r</literal> (native replication mode), <literal>s</literal> (streaming replication mode), or
+       <literal>n</literal> (raw mode).
+       If this is omitted, <literal>s</literal> is used.
+       -->
+       動作モードを指定します。<replaceable>mode</replaceable>は
+       <literal>r</literal> (ネイティブレプリケーションモード)、<literal>i</literal> (スナップショットアイソレーションモード)、<literal>s</literal> (ストリーミングレプリケーションモード)、<literal>l</literal> (ロジカルレプリケーションモード)または<literal>n</literal> (raw モード)を指定できます。
+       指定しない場合は、<literal>s</literal> (ストリーミングレプリケーションモード) が使われます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">num_clusters</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the number of PostgreSQL installations.
+       If this is omitted, <literal>2</literal> is used.
+       -->
+       <productname>PostgreSQL</productname> のノード数を指定します。指定しない場合は、ノード数が 2 です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>--no-stop</option></term>
+     <listitem>
+      <para>
+       <!--
+       Do not stop pgpool and PostgreSQL after the work.
+       -->
+       セットアップ終了後に <productname>Pgpool-II</productname>, PostgreSQL を終了しません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <listitem>
+      <para>
+       <!--
+       Start pgpool with debug mode.
+       -->
+       デバッグモードで <productname>Pgpool-II</productname> を起動します。
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Environment variables</title>
+  -->
+  <title>環境変数</title>
+  <para>
+   <!--
+   <application>watchdog_setup</application> recognizes following environment variables:
+   -->
+   <application>watchdog_setup</application> は以下の環境変数を使用します:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>PGPOOL_SETUP</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to pgpool_setup command.  The default is
+       "pgpool_setup", thus it is assumed that pgpool_setup is in the
+       command search path.
+       -->
+       <command>pgpool_setup</command> コマンドへのパスを指定します。
+       デフォルトでは "pgpool_setup" であり、
+       <command>pgpool_setup</command> がコマンドサーチパスに入っていなければなりません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOL_INSTALL_DIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the Pgpool-II installation directory. Pgpool-II
+       binaries is expected to be placed under PGPOOL_INSTALL_DIR/bin
+       and pgpool.conf and pool_hba.conf etc. are expected to be placed under
+       PGPOOL_INSTALL_DIR/etc. The default is /usr/local.
+       -->
+       <productname>Pgpool-II</productname> のインストールディレクトリを指定します。
+       <productname>Pgpool-II</productname> バイナリーは PGPOOL_INSTALL_DIR/bin ディレクトリ以下、
+       <filename>pgpool.conf</filename> と <filename>pool_hba.conf</filename>
+       などは PGPOOL_INSTALL_DIR/etc ディレクトリ以下にインストールされます。
+       デフォルトでは /usr/local ディレクトリ以下にインストールされます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOLDIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to Pgpool-II configuration files.
+       The default is PGPOOL_INSTALL_DIR/etc.
+       -->
+       <productname>Pgpool-II</productname> 設定ファイルへのパスを指定します。
+       デフォルトでは PGPOOL_INSTALL_DIR/etc です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGBIN</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to PostgreSQL commands such as initdb, pg_ctl and psql.
+       The default is /usr/local/pgsql/bin.
+       -->
+       initdb、pg_ctl と psql など <productname>PostgreSQL</productname> コマンドへのパスを指定します。
+       デフォルトでは、/usr/local/pgsql/bin です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGLIB</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to PostgreSQL shared libraries.
+       The default is /usr/local/pgsql/lib.
+       -->
+       <productname>PostgreSQL</productname> の共有ライブラリへのパスを指定します。
+       デフォルトでは、/usr/local/pgsql/lib です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGSOCKET_DIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to Unix socket directory.
+       The default is /tmp.
+       -->
+       Unix ソケットのディレクトリへのパスを指定します。
+       デフォルトでは /tmp です。
+      </para>
+     </listitem>
+    </varlistentry>
+    <varlistentry>
+     <term><option>INITDBARG</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the arguments for initdb command.
+       The default is "no-locale -E UTF_8".
+       -->
+       initdb コマンドの引数を指定します。
+       デフォルトでは "--no-locale -E UTF_8" です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>出力例</title>
+  <para>
+   <screen>
+    $ watchdog_setup
+    Starting set up
+    ============= setting up pgpool 0 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | false             | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | true              | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50000
+    pcp port is 50001
+    The info above is in README.port.
+    ============= setting up pgpool 1 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50004
+    pcp port is 50005
+    The info above is in README.port.
+    ============= setting up pgpool 2 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50008
+    pcp port is 50009
+    The info above is in README.port.
+
+    $ ls
+    pgpool0  pgpool1  pgpool2  shutdownall	startall
+
+    $ sh startall
+    waiting for server to start....16123 2016-08-18 16:26:53 JST LOG:  redirecting log output to logging collector process
+    16123 2016-08-18 16:26:53 JST HINT:  Future log output will appear in directory "pg_log".
+    done
+    server started
+    waiting for server to start....16136 2016-08-18 16:26:54 JST LOG:  redirecting log output to logging collector process
+    16136 2016-08-18 16:26:54 JST HINT:  Future log output will appear in directory "pg_log".
+    done
+    server started
+
+    t-ishii@localhost: psql -p 50000 test
+
+    Pager usage is off.
+    psql (9.5.4)
+    Type "help" for help.
+
+    test=# \q
+
+    $ pcp_watchdog_info -p 50001 -v
+    Password:
+    Watchdog Cluster Information
+    Total Nodes          : 3
+    Remote Nodes         : 2
+    Quorum state         : QUORUM EXIST
+    Alive Remote Nodes   : 2
+    VIP up on local node : NO
+    Leader Node Name     : Linux_tishii-CF-SX3HE4BP_50004
+    Leader Host Name     : localhost
+
+    Watchdog Node Information
+    Node Name      : Linux_tishii-CF-SX3HE4BP_50000
+    Host Name      : localhost
+    Delegate IP    : Not_Set
+    Pgpool port    : 50000
+    Watchdog port  : 50002
+    Node priority  : 1
+    Status         : 7
+    Status Name    : STANDBY
+
+    Node Name      : Linux_tishii-CF-SX3HE4BP_50004
+    Host Name      : localhost
+    Delegate IP    : Not_Set
+    Pgpool port    : 50004
+    Watchdog port  : 50006
+    Node priority  : 1
+    Status         : 4
+    Status Name    : LEADER
+
+    Node Name      : Linux_tishii-CF-SX3HE4BP_50008
+    Host Name      : localhost
+    Delegate IP    : Not_Set
+    Pgpool port    : 50008
+    Watchdog port  : 50010
+    Node priority  : 1
+    Status         : 7
+    Status Name    : STANDBY
+
+   </screen>
+  </para>
+ </refsect1>
+
+</refentry>

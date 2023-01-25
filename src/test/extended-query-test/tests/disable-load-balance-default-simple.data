@@ -1,0 +1,57 @@
+# Test for disable_load_balance_on_write feature
+# using simple queries.
+
+# Force load balance node to 1.
+##backend_weight0 = 0
+##backend_weight1 = 1
+
+# Disable load balance in current transaction only.
+# (default behavior)
+
+# Create test table
+'Q'	"DROP TABLE IF EXISTS pgproto_test1"
+'Y'
+'Q'	"CREATE TABLE pgproto_test1(i INT)"
+'Y'
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue Parse SELECT. This should be sent to node 1.
+'Q'	"SELECT 1"
+'Y'
+
+# Issue INSERT
+'Q'	"INSERT INTO pgproto_test1 VALUES(1)"
+'Y'
+
+# Issue another SELECT. This should be sent to primary node.
+'Q'	"SELECT 2"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+# Issue another SELECT. This should be sent to node 1 because outside a transaction.
+'Q'	"SELECT 3"
+'Y'
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue another SELECT. This should be sent to primary node.
+'Q'	"SELECT 4"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+# DROP test table
+'Q'	"DROP TABLE pgproto_test1"
+'Y'
+
+'X'

@@ -1,0 +1,101 @@
+<!--
+doc/src/sgml/ref/reset.sgml
+PostgreSQL documentation
+-->
+
+<refentry id="SQL-PGPOOL-RESET">
+ <indexterm zone="sql-pgpool-reset">
+  <primary>RESET</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>PGPOOL RESET</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>PGPOOL RESET</refname>
+  <refpurpose>restore the value of a configuration parameter to the default value</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   PGPOOL RESET <replaceable class="PARAMETER">configuration_parameter</replaceable>
+   PGPOOL RESET ALL
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+   <command>PGPOOL RESET</command> command restores the value of
+   <productname>Pgpool-II</productname> configuration parameters to
+   the default value.
+   The default value is defined as the value that the parameter would have had,
+   if no <command>PGPOOL SET</command> had ever been issued for it in the
+   current session.
+
+   This command is similar to the
+   <ulink url="https://www.postgresql.org/docs/current/static/sql-reset.html">
+    <command>RESET</command></ulink> command in PostgreSQL with an addition
+   of <acronym>PGPOOL</acronym> keyword to distinguish it from the
+   PostgreSQL RESET command.
+
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+  <variablelist>
+   <varlistentry>
+    <term><replaceable class="PARAMETER">configuration_parameter</replaceable></term>
+    <listitem>
+     <para>
+      Name of a settable <productname>Pgpool-II</productname> configuration parameter.
+      Available parameters are
+      documented in <xref linkend="runtime-config">.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><literal>ALL</literal></term>
+    <listitem>
+     <para>
+      Resets all settable <productname>Pgpool-II</productname> configuration parameters to default values.
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Reset the value of <xref linkend="guc-client-idle-limit"> parameter:
+    <screen>
+     PGPOOL RESET client_idle_limit;
+    </screen></para>
+
+  <para>
+   Reset the value of all parameter to default:
+   <screen>
+    PGPOOL RESET ALL;
+   </screen></para>
+ </refsect1>
+
+
+ <refsect1>
+  <title>See Also</title>
+
+  <simplelist type="inline">
+   <member><xref linkend="SQL-PGPOOL-SET"></member>
+   <member><xref linkend="SQL-PGPOOL-SHOW"></member>
+  </simplelist>
+ </refsect1>
+</refentry>

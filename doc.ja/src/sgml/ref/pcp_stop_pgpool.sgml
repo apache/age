@@ -1,0 +1,126 @@
+<!--
+doc/src/sgml/ref/pcp_stop_pgpool.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-STOP-PGPOOL">
+ <indexterm zone="pcp-stop-pgpool">
+  <primary>pcp_stop_pgpool</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_stop_pgpool</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_stop_pgpool</refname>
+  <refpurpose>
+   <!--
+   terminates the Pgpool-II process</refpurpose>
+   -->
+   <productname>Pgpool-II</productname> を指定されたモードでシャットダウンする</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_stop_pgpool</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>mode</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-STOP-PGPOOL-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pcp_stop_pgpool</command>
+   <!--
+   terminates the Pgpool-II process.
+   -->
+   は <productname>Pgpool-II</productname> を指定されたモードで停止します。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <term><option>--mode=<replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Shutdown mode for terminating the Pgpool-II process.
+       -->
+       停止モードを指定します。
+      </para>
+      <para>
+       <!--
+       The available modes are as follows:
+       -->
+       指定できるモードは以下のとおりです。
+       デフォルトは"smart"です。
+       <itemizedlist>
+	<!--
+	<listitem><para>s, smart : smart mode </para></listitem>
+	<listitem><para>f, fast : fast mode </para></listitem>
+	<listitem><para>i, immediate : immediate mode </para></listitem>
+	-->
+	<listitem><para>s, smart : smart モード </para></listitem>
+	<listitem><para>f, fast : fast モード </para></listitem>
+	<listitem><para>i, immediate : immediate モード </para></listitem>
+       </itemizedlist>
+      </para>
+      <para>
+       ※ 現在は fast モードと immediate シャットダウンの処理に区別はありません。 命令を送った時点でクライアントがいる・いないに関わらずシャットダウン処理を即座に行います。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s <replaceable class="parameter">scope</replaceable></option></term>
+     <term><option>--scope=<replaceable class="parameter">scope</replaceable></option></term>
+     <listitem>
+      <para>
+       コマンドの与える影響範囲を指定します。
+      </para>
+      <para>
+　　　　サポートされているコマンドスコープは以下です。
+       デフォルトは"local"です。
+       <itemizedlist>
+	<listitem><para>c, cluster : クラスタを構成するすべてのPgpool-IIノードを停止します。</para></listitem>
+	<listitem><para>l, local : ローカルPgpool-IIノードのみを停止します。</para></listitem>
+       </itemizedlist>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <!--
+     <term><option>Other options </option></term>
+     -->
+     <term><option>その他 </option></term>
+     <listitem>
+      <para>
+       <!--
+       See <xref linkend="pcp-common-options">.
+       -->
+       <xref linkend="pcp-common-options"> を参照してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

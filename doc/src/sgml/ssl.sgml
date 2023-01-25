@@ -1,0 +1,294 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-ssl">
+ <title>Secure Socket Layer (SSL)</title>
+
+ <sect2 id="runtime-config-ssl-settings">
+
+  <title>SSL Settings</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-ssl" xreflabel="ssl">
+    <term><varname>ssl</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>ssl</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      When set to on, <productname>Pgpool-II</productname> enables the <acronym>SSL</acronym>
+      for both the frontend and backend communications.
+      Default is off.
+     </para>
+     <note>
+      <para>
+       <xref linkend="guc-ssl-key"> and <xref linkend="guc-ssl-cert"> must also be
+	 configured in order for SSL to work with frontend connections.
+      </para>
+     </note>
+     <note>
+      <para>
+       For SSL to work <productname>Pgpool-II</productname> must be build with OpenSSL support.
+       See <xref linkend="install-pgpool"> for details on building the
+	<productname>Pgpool-II</productname>.
+      </para>
+     </note>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-key" xreflabel="ssl_key">
+    <term><varname>ssl_key</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_key</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the private key file to be used for
+      incoming frontend connections. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory.
+      There is no default value for this option, and if left unset
+      <acronym>SSL</acronym> will be disabled for incoming frontend connections.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-cert" xreflabel="ssl_cert">
+    <term><varname>ssl_cert</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_cert</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the public x509 certificate file to be used
+      for the incoming frontend connections. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory.
+      There is no default value for this option, and if left unset
+      <acronym>SSL</acronym> will be disabled for incoming frontend connections.
+     </para>
+
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ca-cert" xreflabel="ssl_ca_cert">
+    <term><varname>ssl_ca_cert</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_ca_cert</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies a <acronym>PEM</acronym> format <acronym>CA</acronym>
+      certificate file, which can be used to verify the backend server
+      certificates. Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory. This is
+      analogous to the <command>-CApath</command> option of the
+      <command>OpenSSL verify(1)</command> command.
+     </para>
+
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ca-cert-dir" xreflabel="ssl_ca_cert_dir">
+    <term><varname>ssl_ca_cert_dir</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_ca_cert_dir</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the path to a directory containing <acronym>PEM</acronym>
+      format <acronym>CA</acronym> certificate files, which can be used
+      to verify the backend server certificates. This is analogous to
+      the <command>-CApath</command> option of the
+      <command>OpenSSL verify(1)</command> command.
+     </para>
+     <para>
+      The default value for this option is unset, which means no
+      verification takes place. Verification will still happen if
+      this option is not set but a value is provided for
+      <xref linkend="guc-ssl-ca-cert">.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-crl-file" xreflabel="ssl_crl_file">
+    <term><varname>ssl_crl_file</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_crl_file</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the file containing the SSL server certificate
+      revocation list (CRL). Relative paths are relative to
+      <productname>Pgpool-II</productname> configuration directory.
+      The default is empty, meaning no <acronym>CRL</acronym> file is loaded.
+     </para>
+
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ciphers" xreflabel="ssl_ciphers">
+    <term><varname>ssl_ciphers</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_ciphers</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies a list of <acronym>SSL</acronym> cipher suites that
+      are allowed to be used by SSL connections.  See
+      the <citerefentry><refentrytitle>ciphers</refentrytitle></citerefentry>
+      manual page in the <application>OpenSSL</application> package
+      for the syntax of this setting and a list of supported values.
+      Only connections using TLS version 1.2 and lower are affected.
+      There is currently no setting that controls the cipher choices
+      used by TLS version 1.3 connections.
+      The default value
+      is <literal>HIGH:MEDIUM:+3DES:!aNULL</literal>, which is same
+      as <productname>PostgreSQL</productname>.
+      See <productname>PostgreSQL</productname> manual to know why
+      the value is chosen.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-prefer-server-ciphers" xreflabel="ssl_prefer_server_ciphers">
+    <term><varname>ssl_prefer_server_ciphers</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>ssl_prefer_server_ciphers</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies whether to use the server's <acronym>SSL</acronym>
+      cipher preferences, rather than the client's.
+      The default value is false.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-ecdh-curve" xreflabel="ssl_ecdh_curve">
+    <term><varname>ssl_ecdh_curve</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_ecdh_curve</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the name of the curve to use in <acronym>ECDH</acronym> key
+      exchange. It needs to be supported by all clients that connect.
+      It does not need to be the same curve used by the server's Elliptic
+      Curve key. The default value is <literal>prime256v1</literal>.
+     </para>
+     <para>
+      OpenSSL names for the most common curves are:
+      <literal>prime256v1</literal> (NIST P-256),
+      <literal>secp384r1</literal> (NIST P-384),
+      <literal>secp521r1</literal> (NIST P-521).
+      The full list of available curves can be shown with the command
+      <command>openssl ecparam -list_curves</command>. Not all of them
+      are usable in <acronym>TLS</acronym> though.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-dh-params-file" xreflabel="ssl_dh_params_file">
+    <term><varname>ssl_dh_params_file</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_dh_params_file</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the name of the file containing Diffie-Hellman parameters
+      used for so-called ephemeral DH family of SSL ciphers. The default is
+      empty. In which case compiled-in default DH parameters used. Using
+      Custom DH parameters reduces the exposure if an attacker manages to
+      crack the well-known compiled-in DH parameters. You can create your own
+      DH parameters file with the command <command>openssl -out dhparams.pem 2048</command>.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ssl-passphrase-command" xreflabel="ssl_passphrase_command">
+    <term><varname>ssl_passphrase_command</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>ssl_passphrase_command</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Sets an external command to be invoked when a passphrase for decrypting
+      an SSL file such as a private key needs to be obtained. By default,
+      this parameter is empty, which means SSL file will not be loaded if passphrase is required.
+     </para>
+     <para>
+      The command must print the passphrase to the standard output and
+      exit with code 0. In the parameter value, %p is replaced by a prompt
+      string. (Write %% for a literal %.) Note that the prompt string will probably
+      contain whitespace, so be sure to quote adequately. A single newline is stripped
+      from the end of the output if present.
+     </para>
+     <para>
+      The command does not actually have to prompt the user for a passphrase.
+      It can read it from a file, obtain it from a keychain facility, or similar.
+      It is up to the user to make sure the chosen mechanism is adequately secure.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-g-connection-pooling-settings">
+
+  <title>Generating SSL certificates</title>
+
+  <para>
+   Certificate handling is outside the scope of this document. The
+   <ulink url="http://developer.postgresql.org/pgdocs/postgres/ssl-tcp.html">
+    Secure TCP/IP Connections with SSL</> page at postgresql.org has
+   pointers with sample commands for how to generate self-signed
+   certificates. 
+  </para>
+
+ </sect2>
+
+</sect1>

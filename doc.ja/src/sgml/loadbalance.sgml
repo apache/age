@@ -1,0 +1,1495 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-config-load-balancing">
+ <!--
+ <title>Load Balancing</title>
+ -->
+ <title>負荷分散</title>
+
+ <para>
+  <productname>Pgpool-II</productname>のSELECTクエリの負荷分散はrawモードを除くすべてのクラスタリングモードで動作します。
+    有効時、<productname>Pgpool-II</productname>は更新を伴うクエリを、ストリーミングレプリケーションモード、ロジカルレプリケーションモード、Slonyモードでは<acronym>プライマリノード</acronym>に、レプリケーションモードでは全てのバックエンドノードに対し送信します。
+    そして、その他のクエリは全てのバックエンドの間で負荷分散されます。
+    <xref linkend="guc-statement-level-load-balance">が指定されている場合を除き、負荷分散メカニズムが参照クエリをどのノードに送信するかはセッション開始時に決められ、セッションの終了まで変更されません。
+    ただし、いくつかの例外があります。
+    詳細については以下をご覧ください。
+ </para>
+ <note>
+  <para>
+   <!--
+   Queries which are sent to primary node or all backend nodes because they cannot be balanced are
+   also accounted for in the load balancing algorithm.
+   -->
+   負荷分散ができないためにプライマリノードまたは全バックエンドノードに送られるクエリもまた、
+   負荷分散アルゴリズムの考慮に入れられます。
+  </para>
+ </note>
+
+ <note>
+  <para>
+   <!--
+   You can check which DB node is assigned as the load balancing
+   node by using <xref linkend="sql-show-pool-nodes">.
+   -->
+   どのDBノードが負荷分散ノードになっているかは、<xref linkend="sql-show-pool-nodes">を利用して確認できます。
+  </para>
+ </note>
+
+ <sect2 id="runtime-config-load-balancing-condition">
+  <!--
+  <title>Condition for Load Balancing</title>
+  -->
+  <title>負荷分散の条件について</title>
+
+  <para>
+   <!--
+   For a query to be load balanced, all the following requirements
+   must be met:
+   -->
+   クエリが負荷分散されるためには、以下の全ての条件を満たす必要があります：
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      <productname>PostgreSQL</> version 7.4 or later
+      -->
+      <productname>PostgreSQL</>のバージョンが7.4以降である
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      either in replication mode or native replication mode
+      -->
+      rawモードでない
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      the query must not be in an explicitly declared transaction
+      (i.e. not in a BEGIN ~ END block)
+      -->
+      問い合わせが明示的なトランクザションブロックの内側にない(つまり、BEGINを発行していない)
+     </para>
+     <itemizedlist>
+      <listitem>
+       <para>
+	<!--
+	However, if following conditions are met, load balance is possible
+	even if in an explicit transaction
+	-->
+	ただし、以下の条件が満たされればトランザクションブロックの内側であっても負荷分散の対象となります。
+	<itemizedlist>
+	 <listitem>
+	  <para>
+	   <!--
+	   transaction isolation level is not SERIALIZABLE
+	   -->
+	   トランザクション分離レベルがSERIALIZABLEでない
+	  </para>
+	 </listitem>
+	 <listitem>
+	  <para>
+	   <!--
+	   transaction has not issued a write query yet (until a write
+	   query is issued, load balance is possible. Here "write query"
+	   means non SELECT DML or DDL. <EMPHASIS>Before <productname>Pgpool-II</> 4.1</>,
+	   SELECTs having write functions as specified in write or
+	   read_only function list is not regarded as a write query.)
+	   -->
+	   トランザクション内で更新を伴うクエリが実行されていない
+	   (更新を伴うクエリが実行されるまでは負荷分散されます。
+	   ここで「更新を伴うクエリ」とは、SELECT以外のDDLやDMLを指します。
+	   <EMPHASIS><productname>Pgpool-II</>4.1以前</>のバージョンでは、write/read_only function list
+	   で指定される更新関数を含むSELECTは更新を伴うクエリとは見なされません。)
+	  </para>
+	 </listitem>
+	 <listitem>
+	  <para>
+	   もしwrite/read_only function listが空の場合は、揮発性ではない関数を持つSELECTは、更新を伴うクエリとは見なされません。
+	  </para>
+	 </listitem>
+	</itemizedlist>
+       </para>
+      </listitem>
+     </itemizedlist>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      it's not SELECT INTO
+      -->
+      SELECT INTO 文ではない
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      it's not SELECT FOR UPDATE nor FOR SHARE
+      -->
+      SELECT FOR UPDATE/SELECT FOR SHARE文ではない
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      it starts with "SELECT" or one of COPY TO STDOUT, EXPLAIN,
+      EXPLAIN ANALYZE SELECT... (Except for SELECTs using writing functions
+      specified in <xref linkend="guc-write-function-list"> or
+      <xref linkend="guc-read-only-function-list">)
+      <xref linkend="guc-ignore-leading-white-space"> = <literal>true</>
+      will ignore leading white space.
+      -->
+      SELECT または COPY TO STDOUT, EXPLAIN, EXPLAIN ANALYZE SELECT... から始まる。
+      (<xref linkend="guc-write-function-list">または<xref linkend="guc-read-only-function-list">で指定された書き込み関数を含むSELECTを除く)
+	<xref linkend="guc-ignore-leading-white-space"> = <literal>true</>の場合は最初の空白文字は無視されます。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      in native replication mode, in addition to above, following conditions must be met:
+      -->
+      ネィティブレプリケーションモードの場合、更に以下の条件が満たされなければなりません。
+     </para>
+     <itemizedlist>
+      <listitem>
+       <para>
+	<!--
+	does not use temporary tables
+	-->
+	一時テーブルを使っていない
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+	<!--
+	does not use unlogged tables
+	-->
+	unloggedテーブルを使っていない
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+	<!--
+	does not use system catalogs
+	-->
+	システムカタログを使っていない
+       </para>
+      </listitem>
+     </itemizedlist>
+    </listitem>
+   </itemizedlist>
+  </para>
+
+  <note>
+   <para>
+    <!--
+    You could suppress load balancing by inserting arbitrary
+    comments just in front of the SELECT query:
+    -->
+    SELECTクエリの前に任意のコメントを挿入することにより負荷分散を抑制することができます。
+   </para>
+   <programlisting>
+/*REPLICATION*/ SELECT ...
+   </programlisting>
+   <para>
+    <!--
+    If you want to use comments without suppressing load balancing, you can set
+    <xref linkend="guc-allow-sql-comments"> to on.
+    Please refer to <xref linkend="guc-replicate-select"> as well.
+    -->
+    SQLコメントの記述が負荷分散に影響を与えないようにするには、<xref linkend="guc-allow-sql-comments">をonにします。
+     <xref linkend="guc-replicate-select">も参照してください。
+   </para>
+  </note>
+
+  <note>
+   <para>
+    <!--
+    The JDBC driver has an autocommit option. If the autocommit is false,
+    the JDBC driver sends "BEGIN" and "COMMIT" by itself, and an explicit
+    transaction starts. In this case the same restriction above regarding
+    load balancing will be applied.
+    -->
+    JDBC ドライバにはautocommitオプションがあります。
+    autocommit を無効にすると、ドライバが内部でBEGINおよびCOMMITコマンドを実行し、明示的なトランザクションが開始されます。
+    この場合、トランザクション内における上記の負荷分散の制限事項が適用されます。
+   </para>
+  </note>
+
+ </sect2>
+
+ <sect2 id="runtime-config-writing-queries-may-affect-load-balancing">
+
+  <!--
+  <title>Writing queries may affect Load Balancing</title>
+  -->
+  <title>更新を伴うクエリは負荷分散に影響する可能性がある</title>
+  <para>
+   <!--
+   In general, read queries are load balanced if certain conditions
+   are met. However, writing queries may affect the load
+   balancing. Here "writing queries" mean all the queries except
+   below:
+   -->
+   一般的には、特定の条件を満たしている場合、参照クエリは負荷分散します。
+   ただし、更新を伴うクエリは負荷分散に影響する可能性があります。
+   ここで、”更新を伴うクエリ”とは以下の例を除く全てのクエリを指します。
+  </para>
+
+  <para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      SELECT/WITH without FOR UPDATE/SHARE
+      -->
+      FOR UPDATE/SHARE がないSELECT/WITH
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      COPY TO STDOUT
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      EXPLAIN
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      EXPLAIN ANALYZE and the query is SELECT not including writing functions
+      -->
+      EXPLAIN ANALYZEおよびクエリが書き込み関数を含まないSELECT
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      SHOW
+     </para>
+    </listitem>
+
+   </itemizedlist>
+  </para>
+
+  <para>
+   <!--
+   If writing queries appear, succeeding read queries may not be
+   load balanced. i.e. sent to primary node (in streaming
+   replication mode) or main node (in other mode) depending on the
+   setting of <xref linkend="guc-disable-load-balance-on-write">.
+   -->
+   更新を伴うクエリが存在する場合、続いて実行される参照クエリは負荷分散しません。
+   すなわち、<xref linkend="guc-disable-load-balance-on-write">の設定に応じて（ストリーミングレプリケーションの）プライマリノードまたは（その他のモードの）メインノードに送ります。
+  </para>
+ </sect2>
+
+ <sect2 id="runtime-config-load-balancing-in-streaming-replication">
+
+  <!--
+  <title>Load Balancing in Streaming Replication</title>
+  -->
+  <title>ストリーミングレプリケーションにおける負荷分散</title>
+
+  <para>
+   <!--
+   While using Streaming replication and Hot Standby, it is important to
+   determine which query can be sent to the primary or the standby,
+   and which one should not be sent to the standby.
+   <productname>Pgpool-II</>'s Streaming Replication mode carefully
+   takes care of this.
+   -->
+   ストリーミングレプリケーションとHot Standbyを利用している環境では、プライマリノードに送ってよい問い合わせ、スタンバイに送ってもよい問い合わせ、両方に送らなければならない問い合わせを厳密に管理する必要があります。
+   <productname>Pgpool-II</>のストリーミングレプリケーションモードは、こうした振り分けを自動的に行ないます。
+  </para>
+
+  <para>
+   <!--
+   We distinguish which query should be sent to which node by looking
+   at the query itself.
+   -->
+   クエリそのものから、どのクエリがどのノードに送られるべきかを区別します。
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      These queries should be sent to the primary node only
+      -->
+      プライマリノードにしか送られない問い合わせ
+      <itemizedlist>
+       <listitem>
+	<para>
+	 INSERT, UPDATE, DELETE, COPY FROM, TRUNCATE, CREATE, DROP, ALTER, COMMENT
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 SELECT ... FOR SHARE | UPDATE
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 SELECT in transaction isolation level SERIALIZABLE
+	 -->
+	 トランザクションの分離レベルがSERIALIZABLEの場合のSELECT
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 LOCK command more strict than ROW EXCLUSIVE MODE
+	 -->
+	 ROW EXCLUSIVE MODEよりも強いLOCK
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 DECLARE, FETCH, CLOSE
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 SHOW
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Some transactional commands:
+	 -->
+	 トランザクションコマンドの一部
+	 <itemizedlist>
+	  <listitem>
+	   <para>
+	    BEGIN READ WRITE, START TRANSACTION READ WRITE
+	   </para>
+	  </listitem>
+	  <listitem>
+	   <para>
+	    SET TRANSACTION READ WRITE, SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE
+	   </para>
+	  </listitem>
+	  <listitem>
+	   <para>
+	    SET transaction_read_only = off
+	   </para>
+	  </listitem>
+	 </itemizedlist>
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Two phase commit commands: PREPARE TRANSACTION, COMMIT PREPARED, ROLLBACK PREPARED
+	 -->
+	 二相コミット関連のコマンド。PREPARE TRANSACTION, COMMIT PREPARED, ROLLBACK PREPARED
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 LISTEN, UNLISTEN, NOTIFY
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 VACUUM
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Som sequence functions (nextval and setval)
+	 -->
+	 シーケンス関連の関数(nextvalやsetvalなど)の呼び出し
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Large objects creation commands
+	 -->
+	 ラージオブジェクトの生成
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 マルチステートメントSQL(1行の中に複数のSQLが含まれている)
+	</para>
+       </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      These queries can be sent to both the primary node and the standby node.
+      If load balancing is enabled, these types of queries can be sent to the standby node.
+      However, if delay_threshold is set and the replication delay is higher than
+      <xref linkend="guc-delay-threshold">, queries are sent to the primary node.
+      -->
+      プライマリノードとスタンバイノードのどちらにも送ることのできる問い合わせ。
+      負荷分散設定が有効ならば、スタンバイノードにも送信されます。
+      レプリケーションの遅延が<xref linkend="guc-delay-threshold">を上回っている場合は問い合わせはプライマリノードに送られます。
+
+       <itemizedlist>
+	<listitem>
+	 <para>
+	  SELECT (上記以外)
+	 </para>
+	</listitem>
+	<listitem>
+	 <para>
+	  COPY TO
+	 </para>
+	</listitem>
+       </itemizedlist>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      These queries are sent to both the primary node and the standby node
+      -->
+      プライマリノードとスタンバイノードのどちらにも送られる問い合わせ
+      <itemizedlist>
+       <listitem>
+	<para>
+	 SET
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 DISCARD
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 DEALLOCATE ALL
+	</para>
+       </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+
+  <para>
+   <!--
+   In an explicit transaction:
+   -->
+   明示的なトランザクションでは、以下のようになります。
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      <!--
+      Transaction starting commands such as BEGIN are sent to the primary node
+      and the standby node.
+      -->
+      BEGINなどのトランザクション開始コマンドは、プライマリノードとスタンバイノードの両方に送られます。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Following SELECT and some other queries that can be sent to both
+      primary or standby are executed in the transaction or on the standby node.
+      -->
+      続くSELECTなど、プライマリ/スタンバイのどちらにも送ることのできる問い合わせは、プライマリのトランザクション内でそのまま実行されるか、スタンバイノードで実行されます。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Commands which cannot be executed on the standby such as INSERT are sent
+      to the primary.
+      After one of these commands, even SELECTs are sent to the primary node,
+      This is because these SELECTs might want to see the result of an INSERT immediately.
+      This behavior continues until the transaction closes or aborts.
+      -->
+      INSERTなど、スタンバイに送ることのできない問い合わせが現われた場合はプライマリに送られます。
+      そういったコマンドの後は、SELECTであってもプライマリノードに送られます。
+      これは、INSERTなどの問い合わせの結果を SELECTが直ちに参照できるようにするためです。
+      この状態は、トランザクションが閉じるか、アボートするまで続きます。
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+
+  <para>
+   <!--
+   In the extended protocol, it is possible to determine if the query can
+   be sent to standby or not in load balance mode while parsing the query.
+   The rules are the same as for the non extended protocol.
+   For example, INSERTs are sent to the primary node.
+   Following bind, describe and execute will be sent to the primary node as well.
+   -->
+   問い合わせが、拡張問い合わせモードで実行される場合は、問い合わせのparse段階で、問い合わせがスタンバイに送信可能かが決まります。
+   その際の判断ルールは通常のSQLと同じです。
+   たとえば問い合わせがINSERTならば、プライマリノードに送られます。
+   それに後に続くbind, describe, executeも同じくプライマリに送られます。
+  </para>
+
+  <note>
+   <para>
+    <!--
+    If the parse of a SELECT statement is sent to the standby node due to load
+    balancing, and then a DML statement, such as an INSERT, is sent to <productname>Pgpool-II</>,
+    then the parsed SELECT will have to be executed on the primary node.
+    Therefore, we re-parse the SELECT on the primary node.
+    -->
+    負荷分散によりSELECT文のparseがスタンバイノードに送信され、その後INSERTなどのDML文が<productname>Pgpool-II</>に送られた場合、parse済のSELECTはプライマリノードで実行されなければなりません。
+    そのため、同じSELECTがプライマリノードで再度パースされることになります。
+   </para>
+  </note>
+
+  <para>
+   <!--
+   Lastly, queries that <productname>Pgpool-II</>'s parser thinks to be an
+   error are sent to the primary node.
+   -->
+   最後に、pgpool-IIのパーサが構文エラーと判断した問い合わせはプライマリノードだけに送られます。
+  </para>
+ </sect2>
+
+ <sect2 id="runtime-config-load-balancing-settings">
+
+  <!--
+  <title>Load Balancing Settings</title>
+  -->
+  <title>負荷分散の設定</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-load-balance-mode" xreflabel="load_balance_mode">
+    <term><varname>load_balance_mode</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>load_balance_mode</varname> configuration parameter</primary>
+      -->
+      <primary><varname>load_balance_mode</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, <productname>Pgpool-II</productname> enables the
+      load balancing on incoming <acronym>SELECT</acronym> queries.
+      i.e. <acronym>SELECT</acronym> queries from the clients gets distributed to
+      the configured <productname>PostgreSQL</> backends.
+      Default is off.
+      -->
+      onに設定すると、<productname>Pgpool-II</productname>は入ってきた<acronym>SELECT</acronym>クエリに対する負荷分散を有効にします。
+      すなわち、クライアントからの<acronym>SELECT</acronym>クエリは設定された<productname>PostgreSQL</>バックエンドに振り分けます。
+      デフォルトはonです。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータはサーバ起動時にのみ設定可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ignore-leading-white-space" xreflabel="ignore_leading_white_space">
+    <term><varname>ignore_leading_white_space</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ignore_leading_white_space</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ignore_leading_white_space</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, <productname>Pgpool-II</productname> ignores the
+      white spaces at the beginning of SQL queries in load balancing.
+      It is useful if used with APIs like DBI/DBD:Pg which adds
+      white spaces against the user's intention.
+      -->
+      onに設定すると、負荷分散の際にSQL文行頭の空白を無視します(全角スペースは無視されません)。
+      これは、DBI/DBD:Pgのように、ユーザの意図に反して空白を追加するようなAPIを使っているときに有用です。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-read-only-function-list" xreflabel="read_only_function_list">
+    <term><varname>read_only_function_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>read_only_function_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>read_only_function_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a comma separated list of function names that
+      <emphasis>DO NOT</emphasis> update the database. SELECTs including
+      functions <emphasis>not specified </emphasis> in this list are not load balanced.
+      These are replicated among all the DB nodes in Replication mode,
+      sent to the primary node only in Native Replication mode.
+      -->
+      データベースに対して更新を<emphasis>行なわない</emphasis>関数名をコンマ区切りで指定します。
+      このリストに<emphasis>指定されていない</emphasis>関数呼び出しを含むSELECTは負荷分散されません。
+      これらのクエリはレプリケーションモードにおいてはすべてのDBノードで複製され、それ以外のモードにおいてはプライマリノードにのみ送信されます。
+     </para>
+     <para>
+      <!--
+      You can use regular expression to match function names,
+      to which <literal>^</> and <literal>$</> are automatically added.
+      -->
+      関数名のマッチングに正規表現を使うことができます。
+      正規表現には自動的に<literal>^</literal>と<literal>$</literal>が付与されます。
+     </para>
+
+     <example id="example-read-only-function-list-1">
+      <!--
+      <title>Using regular expression</title>
+      -->
+      <title>正規表現の使用</title>
+      <para>
+       <!--
+       If you have prefixed all your read only function
+       with 'get_' or 'select_', You can
+       set the <xref linkend="guc-read-only-function-list"> like below:
+       -->
+       もし読み出しのみを行う関数が"get_"あるいは"select_"で始まるようにしてあるのであれば、<xref linkend="guc-read-only-function-list">を以下のように設定可能です。
+	<programlisting>
+read_only_function_list = 'get_.*,select_.*'
+	</programlisting>
+      </para>
+     </example>
+
+     <note>
+      <para>
+       問い合わせがスキーマ修飾なしあるいはスキーマ修飾ありの両方の関数を参照するなら、その両者をリストに登録しなければなりません。
+       <programlisting>
+#たとえば、ある問い合わせが"f1()"を、他の問い合わせが"public.f1()"を関数f1を参照するなら、
+#read_only_function_listは以下のように設定されるでしょう。
+
+read_only_function_list = "f1,public.f1"
+
+       </programlisting>
+
+      </para>
+     </note>
+
+     <note>
+      <para>
+       このパラメータと<xref linkend="guc-write-function-list">が空文字なら、関数の揮発性属性が検査されます。
+       これが揮発性(volatile)なら、この関数は書き込みを行うと見なされます。
+       これは便利ですし、推奨できる設定です。
+       しかしこれにより初回システムカタログへのアクセスが発生します（次回以降はキャッシュされた結果が使用されるので余計な問い合わせは送信されません。）
+       そのようなクエリの送信を望まないのであれば、このパラメータを使い続けることができます。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-write-function-list" xreflabel="write_function_list">
+    <term><varname>write_function_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>write_function_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>write_function_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a comma separated list of function names that
+      <emphasis>DO</emphasis> update the database.
+      SELECTs including functions <emphasis>specified</emphasis> in this list are
+      not load balanced.
+      These are replicated among all the DB nodes in Replication mode,
+      sent to the primary node only in Native Replication mode.
+      -->
+      データベースに対して更新を<emphasis>行う</emphasis>関数名をコンマ区切りで指定します。
+      このリストに<emphasis>指定された</emphasis>関数呼び出しを含むSELECTは負荷分散されません。
+      これらのクエリはレプリケーションモードにおいてはすべてのDBノードで複製され、それ以外のモードにおいてはプライマリノードにのみ送信されます。
+     </para>
+     <para>
+      <!--
+      You can use regular expression to match function names,
+      to which <literal>^</> and <literal>$</> are automatically added.
+      -->
+      関数名のマッチングに正規表現を使うことができます。
+      正規表現には自動的に<literal>^</literal>と<literal>$</literal>が付与されます。
+     </para>
+
+     <example id="example-write-function-list-1">
+      <!--
+      <title>Using regular expression</title>
+      -->
+      <title>正規表現の使用</title>
+      <para>
+       <!--
+       If you have prefixed all your updating functions
+       with 'set_', 'update_', 'delete_' or 'insert_', You can
+       set the <xref linkend="guc-write-function-list"> like below:
+       -->
+       もし更新を行う関数が"set_"、"update_"、"delete_"、あるいは"insert_"で始まるようにしてあるのであれば、<xref linkend="guc-write-function-list">を以下のように設定可能です。
+	<programlisting>
+	 write_function_list = 'nextval,setval,set_.*,update_.*,delete_.*,insert_.*'
+	</programlisting>
+      </para>
+     </example>
+
+     <note>
+      <para>
+       問い合わせがスキーマ修飾なしあるいはスキーマ修飾ありの両方の関数を参照するなら、その両者をリストに登録しなければなりません。
+       <programlisting>
+#たとえば、ある問い合わせが"f1()"を、他の問い合わせが"public.f1()"を関数f1を参照するなら、
+#write_function_listは以下のように設定されるでしょう。
+
+write_function_list = "f1,public.f1"
+       </programlisting>
+
+      </para>
+     </note>
+
+     <note>
+      <para>
+       <!--
+       <xref linkend="guc-write-function-list"> and <xref linkend="guc-read-only-function-list">
+       are mutually exclusive and only one of the two lists can be set in the configuration.
+       -->
+       <xref linkend="guc-write-function-list">と<xref linkend="guc-read-only-function-list">は互いに排他的で、２つのリストの内、どちらか一方のみ設定することができます。
+      </para>
+     </note>
+
+     <example id="example-write-function-list-2">
+      <!--
+      <title>Configuring to send <literal>nextval()</literal> and <literal>setval()</literal> to the proper backend</title>
+      -->
+      <title><literal>nextval()</literal>と<literal>setval()</literal>を適切なバックエンドに送る設定</title>
+      <para>
+       <!--
+       Prior to <productname>Pgpool-II</productname><emphasis>V3.0</emphasis>,
+       <literal>nextval()</literal> and <literal>setval()</literal> were known as functions writing to the database.
+       You can configure this by setting <xref linkend="guc-write-function-list">
+       and <xref linkend="guc-read-only-function-list"> as follows
+       -->
+       <productname>Pgpool-II</productname> <emphasis>V3.0</emphasis>より前のバージョンでは、固定で<literal>nextval()</literal>と<literal>setval()</literal>がデータベースに書き込みを行なう関数であると認識されていました。
+       以下のように<xref linkend="guc-read-only-function-list">と<xref linkend="guc-write-function-list">を設定することで、それと同じように動作させることができます。
+	 <programlisting>
+read_only_function_list = ''
+write_function_list = 'nextval,setval,lastval,currval'
+	 </programlisting>
+      </para>
+     </example>
+
+     <note>
+      <para>
+       <!--
+       <productname>PostgreSQL</> also contains <literal>lastval()</literal> and
+       <literal>currval()</literal> in addition to
+       <literal>nextval()</literal> and <literal>setval()</literal>.
+       Though <literal>lastval()</literal> and <literal>currval()</literal>
+       are not writing function type, but it is advised to treat
+       <literal>lastval()</literal> and <literal>currval()</literal>
+       as writing functions to avoid errors which occur when
+       these functions are accidentally load balanced.
+       -->
+       <productname>PostgreSQL</>には<literal>nextval()</literal>と<literal>setval()</literal>に加え、<literal>lastval()</literal>と<literal>currval()</literal>があります。
+       <literal>lastval()</literal>と<literal>currval()</literal>は書き込みを行う関数ではありませんが、これらの関数が負荷分散されることで発生するエラーを防ぐため、<literal>lastval()</literal>と<literal>currval()</literal>を書き込みを行う関数として扱うのが望ましいです。
+      </para>
+     </note>
+
+     <note>
+      <para>
+       このパラメータと<xref linkend="guc-read-only-function-list">が空文字なら、関数の揮発性属性が検査されます。
+       これが揮発性(volatile)なら、この関数は書き込みを行うと見なされます。
+       これは便利ですし、推奨できる設定です。
+       しかしこれにより初回システムカタログへのアクセスが発生します（次回以降はキャッシュされた結果が使用されるので余計な問い合わせは送信されません。）
+       そのようなクエリの送信を望まないのであれば、このパラメータを使い続けることができます。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-primary-routing-query-pattern-list" xreflabel="primary_routing_query_pattern_list">
+    <term><varname>primary_routing_query_pattern_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>primary_routing_query_pattern_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>primary_routing_query_pattern_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a semicolon separated list of SQL patterns that
+      should be sent to primary node.
+      SQL that matched patterns specified in this list are
+      not load balanced.
+      Other than Native Replication mode is supported.
+      -->
+      特定の SQL をプライマリノードに送信するように <xref linkend="guc-primary-routing-query-pattern-list">を設定します。
+       SQL パターンをセミコロン区切りで指定します。
+       ネイティブレプリケーションモード以外でのみで動作します。
+     </para>
+     <para>
+      <!--
+      You can use regular expression to match function names,
+      to which <literal>^</> and <literal>$</> are automatically added.
+      When using  special characters in regular expressions 
+      (such as "'", ";", "*", "(", ")", "|", "+", ".", "\", "?", "^", "$",
+      "{","}", "{" or "}", etc.)
+      in SQL patterns, you need to escape them by using "\".
+      SQL pattern specified in this parameter is case-insensitive.
+      -->
+      SQL のマッチングに正規表現を使うことができます。
+      正規表現には自動的に<literal>^</literal>と<literal>$</literal>が付与されます。
+      "'"、";" あるいは "*" などの文字を SQL パターンの中で利用する場合、"\" でエスケープする必要があります。
+      SQL パターンの中で正規表現の特殊文字を使用する場合、"\" でエスケープする必要があります。
+      例えば、"'"、";"、"*"、"("、")"、"|"、"+"、"."、"\"、"?"、"^"、"$"、"{"、"}"、"{"、"}" などの特殊文字の場合、"\" でエスケープする必要があります。
+      また、指定される SQL パターンでは大文字と小文字を区別しません。
+     </para>
+
+     <example id="example-primary-routing-query-pattern-list-1">
+      <!--
+      <title>Using regular expression</title>
+      -->
+      <title>正規表現の使用</title>
+      <para>
+       <!--
+       If the following SQL should be sent to the primary node only, You can
+       set the <xref linkend="guc-primary-routing-query-pattern-list"> like below:
+       -->
+       もし以下の SQL をプライマリノードに送信したい場合、<xref linkend="guc-primary-routing-query-pattern-list">を以下のように設定可能です。
+
+	<itemizedlist>
+	 <listitem>
+	  <para>
+	   SELECT * FROM table_name1;
+	  </para>
+	 </listitem>
+	 <listitem>
+	  <para>
+	   SELECT col1, col2 FROM table_name2 WHERE col1 LIKE '%a%';
+	  </para>
+	 </listitem>
+	 <listitem>
+	  <para>
+	   <!--
+	   SQL including table_nama3
+	   -->
+	   table_name3 という文字列を含む SQL
+	  </para>
+	 </listitem>
+	</itemizedlist>
+      </para>
+
+      <para>
+       <programlisting>
+primary_routing_query_pattern_list = 'SELECT \* FROM table_name1\;;SELECT col1, col2 FROM table_name2 WHERE col1 LIKE \'%a%\'\;;.*table_name3.*'
+       </programlisting>
+      </para>
+     </example>
+
+     <note>
+      <para>
+       <!--
+       If SQL matches both <xref linkend="guc-write-function-list"> and
+       <xref linkend="guc-read-only-function-list">, <xref linkend="guc-read-only-function-list">
+       setting is ignored and the SQL should be sent only to the primary node.
+       -->
+       <xref linkend="guc-primary-routing-query-pattern-list">と<xref linkend="guc-read-only-function-list">の両方にマッチした場合、
+	 <xref linkend="guc-read-only-function-list">の設定が無視され、プライマリノードのみに送信されます。
+      </para>
+     </note>
+     <para>
+      <!--
+      Depending on SQL pattern, performance may be 1-2% lower than turning off this feature.
+      -->
+      SQL のパターンにもよりますが、この機能を使用する場合、パフォーマンスが 1-2％ 低下する可能性があります。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-database-redirect-preference-list" xreflabel="database_redirect_preference_list">
+    <term><varname>database_redirect_preference_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>database_redirect_preference_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>database_redirect_preference_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the list of <replaceable>"database-name:node id"</replaceable> pairs
+      to send <acronym>SELECT</acronym> queries to a particular backend
+      node for a particular database connection.
+      -->
+      特定のデータベース接続で<acronym>SELECT</acronym>クエリが指定したロードバランス比率で特定のバックエンドノードに送信されるように、"<replaceable>データベース名:ノードID(比率)</replaceable>"ペアのリストを指定します。ロードバランス比率は0-1の間の値を指定します。
+      比率の指定を省略した場合は、デフォルトの1.0となります。
+     </para>
+     <para>
+      <!--
+      For example, by specifying "test:1", <productname>Pgpool-II</productname>
+      will redirect all <acronym>SELECT</acronym> queries to the backend node of ID 1 for
+      the connection to "test" database.
+      You can specify multiple <replaceable>"database name:node id"</replaceable> pair by separating them
+      using comma (,).
+      -->
+      たとえば"test:1(0.5)"とした場合、"test"データベースへの接続においては、<productname>Pgpool-II</productname>は50%の<acronym>SELECT</acronym>クエリをIDが1のバックエンドノードに送信します。
+      複数の"<replaceable>データベース名:ノードID</replaceable>"のペアを カンマ(,)で区切って指定することができます。
+     </para>
+     <para>
+      <!--
+      Regular expressions are also accepted for database name.
+      You can use special keywords as <replaceable>node id</replaceable>.
+      If <emphasis>"primary"</emphasis> is specified, queries are sent to the primary node, and
+      if <emphasis>"standby"</emphasis> is specified, one of the standby nodes are selected randomly
+      based on weights.
+      -->
+      データベース名には正規表現を指定することができます。
+      <replaceable>ノードID</replaceable>には特別なキーワードを使うことができます。
+      "<emphasis>primary</emphasis>"が指定された場合にはクエリはプライマリノードに送られます。
+      また、"<emphasis>standby</emphasis>"が指定された場合はスタンバイノードのうちどれかをウェイト(<xref linkend="guc-backend-weight">)に応じてランダムに選択します。
+     </para>
+
+     <example id="example-database-redirect-list">
+      <!--
+      <title>Using database_redirect_preference_list</title>
+      -->
+      <title>database_redirect_preference_listの利用</title>
+      <para>
+       <!--
+       If you want to configure the following <acronym>SELECT</acronym> query routing rules:
+       -->
+       <acronym>SELECT</acronym>クエリのルーティングルールを以下のように設定したい場合：
+      </para>
+
+      <itemizedlist>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> queries on <literal>postgres</literal>
+	 database to the primary backend node.
+	 -->
+	 全ての<literal>postgres</literal>データベースにおける<acronym>SELECT</acronym>クエリはプライマリバックエンドノードに送る。
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> queries on <literal>mydb0</literal> or on
+	 <literal>mydb1</literal> databases to backend node of ID 1.
+	 -->
+	 全ての<literal>mydb0</literal>または<literal>mydb1</literal>データベースにおける30%の<acronym>SELECT</acronym>クエリはIDが1のバックエンドノードに送る。
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> queries on <literal>mydb2</literal>
+	 database to standby backend nodes.
+	 -->
+	 全ての<literal>mydb2</literal>データベースにおける<acronym>SELECT</acronym>クエリはスタンバイバックエンドノードに送る。
+	</para>
+       </listitem>
+
+      </itemizedlist>
+      <para>
+       <!--
+       then the <xref linkend="guc-database-redirect-preference-list"> will be configured as follows:
+       -->
+       <xref linkend="guc-database-redirect-preference-list">は以下のように設定します。
+	<programlisting>
+database_redirect_preference_list = 'postgres:primary,mydb[01]:1(0.3),mydb2:standby'
+	</programlisting>
+      </para>
+     </example>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-app-name-redirect-preference-list" xreflabel="app_name_redirect_preference_list">
+    <term><varname>app_name_redirect_preference_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>app_name_redirect_preference_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>app_name_redirect_preference_list</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+
+     <para>
+      <!--
+      Specifies the list of <replaceable>"application-name:node id"</replaceable> pairs
+      to send <acronym>SELECT</acronym> queries to a particular backend
+      node for a particular client application connection.
+      -->
+      特定のクライアントアプリケーションの接続で<acronym>SELECT</acronym>クエリが指定したロードバランス比率で特定のバックエンドノードに送信されるように、"<replaceable>アプリケーション名:ノードID(比率)</replaceable>"ペアのリストを指定します。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       The "Application name" is a name specified by a client when it connects to database,
+       and is available in <productname>PostgreSQL</> <emphasis>V9.0</> or later.
+       -->
+       「アプリケーション名」とはクライアントがデータベースに接続する時に指定する名称で、<productname>PostgreSQL</> <emphasis>V9.0</>以降で利用可能です。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      For example, application name of <command>psql</command> command is
+      <literal>"psql"</literal>
+      -->
+      たとえば、<command>psql</command>コマンドのアプリケーション名は"<literal>psql</literal>"です。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       <productname>Pgpool-II</productname> recognizes the application name
+       only specified in the start-up packet sent from the client.
+       Although a client can provide the application name
+       later in the session, but that does not get considered by the
+       <productname>Pgpool-II</productname> for query routing.
+       -->
+       <productname>Pgpool-II</productname>は、クライアントから送信されたスタートアップパケットに含まれるアプリケーション名だけを認識します。
+       クライアントは事後にセッションの中でアプリケーション名を指定できますが、それは<productname>Pgpool-II</productname>のクエリルーティングでは考慮されません。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      The notion of <xref linkend="guc-app-name-redirect-preference-list">
+      is same as the <xref linkend="guc-database-redirect-preference-list">
+      thus you can also use the regular expressions for application names.
+      Similarly special keyword <emphasis>"primary"</emphasis> indicates the primary node and
+      <emphasis>"standby"</emphasis> indicates one of standby nodes.
+      -->
+      <xref linkend="guc-app-name-redirect-preference-list">の記法は<xref linkend="guc-database-redirect-preference-list">と同じですので、アプリケーション名には正規表現も使用できます。
+	同様に特別なキーワード"<emphasis>primary</emphasis>"はプライマリノードを、"<emphasis>standby</emphasis>"はスタンバイサーバのいずれかを意味します。
+	ロードバランス比率は0-1の間の値を指定します。ロードバランス比率の指定を省略した場合は、デフォルトの1.0となります。
+     </para>
+
+     <example id="example-app-name-redirect-list">
+      <!--
+      <title>Using app-name_redirect_preference_list</title>
+      -->
+      <title>app_name_redirect_preference_listの利用</title>
+      <para>
+       <!--
+       If you want to configure the following <acronym>SELECT</acronym> query routing rules:
+       -->
+       <acronym>SELECT</acronym>クエリのルーティングルールを以下のように設定したい場合：
+      </para>
+
+      <itemizedlist>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> from <literal>psql</literal>
+	 client to the primary backend node.
+	 -->
+	 全ての<literal>psql</literal>クライアントからの<acronym>SELECT</acronym>クエリはプライマリバックエンドノードに送る。
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> queries from <literal>myapp1</literal>
+	 client to backend node of ID 1.
+	 -->
+	 全ての<literal>myapp1</literal>クライアントからの30%の<acronym>SELECT</acronym>クエリはIDが1のバックエンドノードに送る。
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 Route all <acronym>SELECT</acronym> queries from <literal>myapp2</literal>
+	 client to standby backend nodes.
+	 -->
+	 全ての<literal>myapp2</literal>クライアントからの<acronym>SELECT</acronym>クエリはスタンバイバックエンドノードに送る。
+	</para>
+       </listitem>
+
+      </itemizedlist>
+      <para>
+       <!--
+       then the <xref linkend="guc-app-name-redirect-preference-list"> will be configured as follows:
+       -->
+       <xref linkend="guc-app-name-redirect-preference-list">は以下のように設定します。
+	<programlisting>
+app_name_redirect_preference_list = 'psql:primary,myapp1:1(0.3),myapp2:standby'
+	</programlisting>
+      </para>
+     </example>
+
+     <note>
+      <para>
+       <!--
+       <xref linkend="guc-app-name-redirect-preference-list"> takes precedence
+       over the <xref linkend="guc-database-redirect-preference-list">.
+       -->
+       <xref linkend="guc-app-name-redirect-preference-list">は、<xref linkend="guc-database-redirect-preference-list">よりも優先されます。
+      </para>
+      <para>
+       <!--
+       For example, if you set
+       <literal>database_redirect_preference_list = 'postgres:standby(1.0)'</literal> and
+       <literal>app_name_redirect_preference_list = 'psql:primary(1.0)'</literal>,
+       all SELECT from psql client on postgres database will be sent to primary backend node.
+       -->
+       たとえば、
+       <literal>database_redirect_preference_list = 'postgres:standby(1.0)'</literal>、
+       <literal>app_name_redirect_preference_list = 'myapp1:primary(1.0)'</literal>
+       と設定した場合、アプリケーション<literal>myapp1</literal>、<literal>postgres</literal>データベースでの<literal>SELECT</literal>はプライマリバックエンドノードに送られます。
+      </para>
+     </note>
+
+     <note>
+      <para>
+       <!--
+       In the settings of <xref linkend="guc-app-name-redirect-preference-list"> and
+       <xref linkend="guc-database-redirect-preference-list">, when multiple database
+       names and application names are matched, the first setting will be used.
+       -->
+       <xref linkend="guc-app-name-redirect-preference-list">及び<xref linkend="guc-database-redirect-preference-list">の設定では、複数のデータベース名やアプリケーション名にマッチした場合、最初の設定が反映されます。
+      </para>
+      <para>
+       <!--
+       For example, if you set
+       database_redirect_preference_list = 'postgres:primary,postgres:standby',
+       "postgres: primary" will be used.
+       -->
+       たとえば、
+       <literal>database_redirect_preference_list = 'postgres:primary,postgres:standby'</literal>
+       と設定した場合、<literal>postgres:primary</literal>の設定が反映されます。
+      </para>
+     </note>
+
+     <caution>
+      <para>
+       <!--
+       <acronym>JDBC</acronym> driver postgreSQL-9.3 and earlier versions
+       does not send the application name in the startup packet even if
+       the application name is specified using the <acronym>JDBC</acronym>
+       driver option <literal>"ApplicationName"</literal> and
+       <literal>"assumeMinServerVersion=9.0"</literal>.
+       If you want to use the <xref linkend="guc-app-name-redirect-preference-list">
+       feature through <acronym>JDBC</acronym>, use postgreSQL-9.4 or later version of the driver.
+       -->
+       <acronym>JDBC</acronym>ドライバのpostgresql-9.3以前のバージョンでは、<acronym>JDBC</acronym>ドライバの"<literal>ApplicationName</literal>" と "<literal>assumeMinServerVersion=9.0</literal>"オプションを指定してもスタートアップパケットの中にアプリケーション名を含みません。
+       <acronym>JDBC</acronym>から<xref linkend="guc-app-name-redirect-preference-list">機能を使用したければ、postgresql-9.4 以降のドライバをお使いください
+      </para>
+     </caution>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-allow-sql-comments" xreflabel="allow_sql_comments">
+    <term><varname>allow_sql_comments</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>allow_sql_comments</varname> configuration parameter</primary>
+      -->
+      <primary><varname>allow_sql_comments</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, <productname>Pgpool-II</productname> ignore the
+      <acronym>SQL</acronym> comments when identifying if the load balance
+      or query cache is possible on the query.
+      When this parameter is set to off, the <acronym>SQL</acronym> comments
+      on the query could effectively prevent the query from being
+      load balanced or cached (pre <productname>Pgpool-II</productname>
+      <emphasis>V3.4</emphasis> behavior).
+      -->
+      onに設定すると、<productname>Pgpool-II</productname>は負荷分散やクエリキャッシュができるかどうかの判定の際に<acronym>SQL</acronym>コメントを無視します。
+      このパラメータがoffに設定されている場合、クエリの<acronym>SQL</acronym>コメントにより、クエリの負荷分散やキャッシュを防止することができます。
+      （<productname>Pgpool-II</productname> <emphasis>V3.4</emphasis>より前のバージョンの動作です）。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+      this parameter for a current session.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+      現在のセッションでのパラメータ値は、<xref linkend="SQL-PGPOOL-SET">コマンドで変更することもできます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-disable-load-balance-on-write" xreflabel="disable_load_balance_on_write">
+    <term><varname>disable_load_balance_on_write</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>disable_load_balance_on_write</varname> configuration parameter</primary>
+      -->
+      <primary><varname>disable_load_balance_on_write</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specify load balance behavior after write queries appear.
+      This parameter is especially useful in streaming replication
+      mode. When write queries are sent to primary server, the
+      changes are applied to standby servers but there's a time
+      lag. So if a client read the same row right after the write
+      query, the client may not see the latest value of the
+      row. If that's the problem, clients should always read data
+      from the primary server. However this effectively disables
+      load balancing, which leads to lesser performance. This
+      parameter allows a fine tuning for the trade off between
+      not-clustering-aware applications compatibility and
+      performance.
+      -->
+      writeクエリが発行された時の負荷分散の振る舞いを指定します。
+      このパラメータは、特にストリーミングレプリケーションモードで有効です。
+      writeクエリがプライマリサーバに送られた時、この変更はスタンバイサーバにも適用されますが、そこには時間差があります。
+      ですからクライアントが行を更新して同じ行をスタンバイから読むと、その行の最新データを読めないかもしれません。
+      もしこれが問題になるようなら、クライアントは常にプライマリサーバからデータを読むべきです。
+      しかし、これは実質的に負荷分散を無効にして、性能低下をもたらします。
+      このパラメータは、クラスタリングについて考慮しないアプリケーションにおける互換性と、性能の間におけるトレードオフの細かな調整を可能にします。
+     </para>
+     <para>
+      <!--
+      If this parameter is set to <varname>off</varname>, read
+      queries are load balanced even if write queries appear. This
+      gives the best load balance performance but clients may see
+      older data. This is useful for an environment where
+      PostgreSQL parameter synchronous_commit = 'remote_apply', or
+      in the native replication mode, since there's no replication
+      delay in such environments.
+      -->
+      このパラメータが<varname>off</varname>なら、writeクエリが来ても負荷分散が行われます。
+      この設定では最大の性能を期待できますが、クライアントは古いデータを読むことになるかもしれません。
+      この設定は、PostgreSQLのパラメータsynchronous_commit = 'remote_apply'が設定されているか、ネィティブレプリケーションモードのときに有用です。
+      そのような環境ではレプリケーションの遅延が発生しないからです。
+     </para>
+     <para>
+      <!--
+      If this parameter is set to <varname>transaction</varname>
+      and write queries appear in an explicit transaction,
+      subsequent read queries are not load balanced until the
+      transaction ends.  Please note that read queries not in an
+      explicit transaction are not affected by the parameter. This
+      setting gives the best balance in most cases and you should
+      start from this. This is the default and same behavior in
+      <productname>Pgpool-II 3.7</productname> or before.
+      -->
+      このパラメータが<varname>transaction</varname>で、明示的なトランザクション中にwriteクエリが来ると、トランザクションが終了するまで負荷分散が行われません。
+      なお、明示的なトランザクション中ではないreadクエリは、このパラメータの影響を受けないことに注意してください。
+      この設定は、たいていの場合に最良のバランスを提供するので、この設定から試すことをお勧めします。
+      これはデフォルトで、<productname>Pgpool-II 3.7</productname>以前のバージョンと同じ振る舞いです。
+     </para>
+     <para>
+      <!--
+      If this parameter is set
+      to <varname>trans_transaction</varname> and write queries
+      appear in an explicit transaction, subsequent read queries
+      are not load balanced in the transaction and subsequent
+      explicit transaction until the session ends. So this
+      parameter is safer for older applications but give lesser
+      performance than <varname>transaction</varname>. Please note
+      that read queries not in an explicit transaction are not
+      affected by the parameter.
+      -->
+      このパラメータが<varname>trans_transaction</varname>で、明示的なトランザクション中にwriteクエリが来ると、トランザクションが終了するまで負荷分散が行われません。
+      また、セッションが終了するまで後続の明示的なトランザクション中でも負荷分散が行われません。
+      この設定は古いアプリケーションにとって安全ですが、<varname>transaction</varname>よりは性能が低下します。
+      なお、明示的なトランザクション内にないreadクエリは、このパラメータの影響を受けないことに注意してください。
+     </para>
+
+     <para>
+      <!--
+      If this parameter is set to <varname>always</varname> and
+      write queries appear, subsequent read queries are not load
+      balanced until the session ends regardless they are in
+      explicit transactions or not. This gives the highest
+      compatibility with not-clustering-aware applications and the
+      lowest performance.
+      -->
+      このパラメータが<varname>always</varname>で、writeクエリが来ると、明示的なトランザクション中であるかどうかを問わず、セッションが終了するまで負荷分散が行われません。
+      この設定により、クラスタリングについて考慮しないアプリケーションを使った場合最大の互換性が得られますが、性能は最低になります。
+     </para>
+
+     <para>
+<!--
+		If this parameter is set to <varname>dml_adaptive</varname> <productname>Pgpool-II</>
+		keep track of each TABLE referenced in the WRITE statements within
+		the explicit transactions and will not load balances the subsequent
+		READ queries if the TABLE they are reading from is previously modified
+		inside the same transaction.
+		Dependent functions, triggers, and views on the tables can be configured
+		using <xref linkend="guc-dml-adaptive-object-relationship-list">
+-->
+     このパラメータが<varname>dml_adaptive</varname>に設定されると、<productname>Pgpool-II</productname>は明示的なトランザクション内のWRITE文に含まれる個々のテーブルを追跡し、テーブルが同じトランザクション内で事前に変更されている場合には後続のREADクエリを負荷分散しません。
+     テーブルが依存する関数、トリガ、ビューは<xref linkend="guc-dml-adaptive-object-relationship-list">で設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-dml-adaptive-object-relationship-list" xreflabel="dml_adaptive_object_relationship_list">
+    <term><varname>dml_adaptive_object_relationship_list</varname> (<type>string</type>)
+     <indexterm>
+<!--
+      <primary><varname>dml_adaptive_object_relationship_list</varname> configuration parameter</primary>
+-->
+      <primary><varname>dml_adaptive_object_relationship_list</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+
+     <para>
+<!--
+	 To prevent load balancing of READ dependent objects, you may specify the object name
+	 followed by a colon(<literal>:</>) and then a comma(<literal>,</>) separated list of dependent object names.
+	 <replaceable>"[object]:[dependent-object]"</replaceable>
+     In an explicit transaction block after a WRITE statement has been issues, this will prevent
+	 load balancing of any READ statements containing references of dependent object(s).
+	 <example id="example-dml-adaptive-object-relationship-list-1">
+	 <title>Configuring dml adaptive object relationship</title>
+-->
+      オブジェクトに依存しているREAD問い合わせが負荷分散しないようにするために、オブジェクト名の後にコロン(<literal>:</>)、続いてカンマ(<literal>,</>)で区切られた依存オブジェクトの名前のリストを指定できます。
+	 <replaceable>"[object]:[dependent-object]"</replaceable>
+      明示的なトランザクションブロックの中でWRITE文が発行された後、依存オブジェクトへの参照を含むREAD文は負荷分散されないようになります。
+	 <example id="example-dml-adaptive-object-relationship-list-1">
+	 <title>dmlが関与するオブジェクト関係の設定</title>
+	   <para>
+<!--
+	    If you have a trigger installed on table_1 that do INSERT in  <literal>table_2</> for each
+		INSERT on  <literal>table_1</>. Then you would want to make sure that
+		read on  <literal>table_2</> must not get load-balanced within the same transaction
+		after INSERT into  <literal>table_1</>.
+		For this configuration you can set
+		<programlisting>
+dml_adaptive_object_relationship_list = 'table_1:table_2'
+		</programlisting>
+-->
+	<literal>table_1</>へのINSERTのたびに<literal>table_2</>にINSERTを行うトリガがtable_1に設定されており、<literal>table_1</>へのINSERTの後で<literal>table_2</>からの読み出しが同じトランザクション内で負荷分散されないようにしたいとします。
+	このための設定は以下のようになります。
+		<programlisting>
+dml_adaptive_object_relationship_list = 'table_1:table_2'
+		</programlisting>
+	  </para>
+	 </example>
+
+      <!--
+     This parameter is only valid for
+	 <xref linkend="guc-disable-load-balance-on-write">=<emphasis>'dml_adaptive'</emphasis>
+      -->
+      このパラメータは<xref linkend="guc-disable-load-balance-on-write">=<emphasis>'dml_adaptive'</emphasis>のときにのみ有効です。
+	  <note>
+	   <para>
+<!--
+	   To configure the dependency on the function,
+	   The function must be present in the <xref linkend="guc-write-function-list">
+-->
+関数の依存性を設定するには、関数は<xref linkend="guc-write-function-list">で設定済みでなければなりません。
+	   </para>
+	  </note>
+
+     </para>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-statement-level-load-balance" xreflabel="statement_level_load_balance">
+    <term><varname>statement_level_load_balance</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>statement_level_load_balance</varname> configuration parameter</primary>
+      -->
+      <primary><varname>statement_level_load_balance</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, the load balancing node is decided for each read query.
+      When set to off, load balancing node is decided at the session start time
+      and will not be changed until the session ends.
+      For example, in applications that use connection pooling remain connections
+      open to the backend server, because the session may be held for a long time,
+      the load balancing node does not change until the session ends.
+      In such applications, When <varname>statement_level_load_balance</varname> is enabled,
+      it is possible to decide load balancing node per query, not per session.
+      The default is off.
+      -->
+      onに設定すると、参照クエリごとに負荷分散先を決めます。
+      offに設定すると、セッションが始まるときに決められた負荷分散先がセッションが終了するまで変更されません。
+      例えば、コネクションプールを利用し、バックエンドサーバに接続したままのようなアプリケーションの場合、
+      セッションが長い間保持される可能性があるので、セッションが終了するまで負荷分散先のノードが変わりません。
+      このようなアプリケーションでは、<varname>statement_level_load_balance</varname>を有効にすると、
+      セッションごとではなく、クエリごとに負荷分散先を決めることが可能です。デフォルトはoffです。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータはPgpool-IIの設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+</sect1>

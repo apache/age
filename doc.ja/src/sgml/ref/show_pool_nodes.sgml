@@ -1,0 +1,95 @@
+<!--
+    doc/src/sgml/ref/show_pool_nodes.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-NODES">
+ <indexterm zone="sql-show-pool-nodes">
+  <primary>SHOW POOL_NODES</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_NODES</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_NODES</refname>
+  <refpurpose>
+   <!--
+   sends back a list of all configured nodes
+   -->
+   DB ノードのリストを表示する
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_NODES
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+
+  <para>
+   <!--
+   <command>SHOW POOL_NODES</command> displays the node id, the
+   hostname, the port, the status, the weight (only meaningful if
+   you use the load balancing mode), the role, the SELECT query
+   counts issued to each backend, whether each node is the load
+   bakance node or not, the replication delay (only if in streaming
+   replication mode) and last status change time. The possible
+   values in the status column are explained in
+   the <xref linkend="pcp-node-info"> reference. If the hostname is
+   something like "/tmp", that means
+   <productname>Pgpool-II</productname> is connecting to backend by
+   using UNIX domain sockets. The SELECT count does not include
+   internal queries used
+   by <productname>Pgpool-II</productname>. Also the counters are
+   reset to zero upon starting up
+   of <productname>Pgpool-II</productname>.  The last status change
+   time is initially set to the
+   time <productname>Pgpool-II</productname> starts.  After that
+   whenever "status" or "role" is changed, it is updated.
+   -->
+   <command>SHOW POOL_NODES</command> はホスト名、ポート番号、状態、
+   重み(ロードバランスモードで運用しているときにのみ意味があります)、
+   ノードの役割、発行された SELECT の数、ロードバランスノードであるかどうか、
+   レプリケーション遅延 (ストリーミングレプリケーションモードのみ) 、最終状態変更時刻が表示されます。
+  </para>
+  <para>
+   これらに加えて、<productname>Pgpool-II</productname> 4.1以降では、スタンバイサーバの行でレプリケーション状態と、同期レプリケーション状態が表示されます。
+   更に、<productname>Pgpool-II</productname> 4.3以降では、"pg_status"と"pg_role"が追加されています。
+   表示情報の意味については、 <xref linkend="pcp-node-info"> リファレンスで説明されています。
+  </para>
+  <para>
+   ホスト名が "/tmp" のように表示される場合、UNIX ドメインソケットを使用して
+    <productname>Pgpool-II</productname> が <productname>PostgreSQL</productname> に接続していることを意味します。
+    SELECT の数には、<productname>Pgpool-II</productname> 内部で発行されるクエリの数は含まれません。
+    また、このカウンタは <productname>Pgpool-II</productname> がスタートした時に 0にリセットされます。
+  </para>
+  <para>
+    最終状態変更時刻は、<productname>Pgpool-II</productname>が起動した時にセットされたあとは、"status"あるいは"role"が変更される度に更新されます。
+  </para>
+  <para>
+   <!--
+   Here is an example session:
+   -->
+   ここでは例を示します。
+   <programlisting>
+test=# show pool_nodes;
+ node_id | hostname | port  | status | pg_status | lb_weight |  role   | pg_role | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+-----------+---------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | up        | 0.500000  | primary | primary | 0          | false             | 0                 |                   |                        | 2021-02-27 15:10:19
+ 1       | /tmp     | 11003 | up     | up        | 0.500000  | standby | standby | 0          | true              | 0                 | streaming         | async                  | 2021-02-27 15:10:19
+(2 rows)
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

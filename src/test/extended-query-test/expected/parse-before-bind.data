@@ -1,0 +1,46 @@
+FE=> Query (query="DROP TABLE IF EXISTS pgproto_test1")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "pgproto_test1" does not exist, skipping F tablecmds.c L 914 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE pgproto_test1(i INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="S1", query="BEGIN")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Parse(stmt="S2", query="SELECT 1")
+FE=> Parse(stmt="S1", query="INSERT INTO pgproto_test1 VALUES(1)")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Bind(stmt="S2", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S2")
+FE=> Parse(stmt="S1", query="COMMIT")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE CloseComplete
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(INSERT 0 1)
+<= BE CloseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE CloseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE CloseComplete
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE pgproto_test1")
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Terminate

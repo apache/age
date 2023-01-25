@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set 1 0 0	# expected results: Parse:1 Parse:0 Execute: 0
+grep "SELECT 1" $PGPOOLLOG |awk '{print $9}' | while read node
+do
+    if [ $1 -ne $node ]
+    then
+	echo "expected: $1 result: $node"
+	exit 99
+    fi
+    shift
+done
+
+if [ $? = 99 ]
+then
+   exit 1
+fi
+
+exit 0
+   

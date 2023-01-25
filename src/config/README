@@ -1,0 +1,166 @@
+How to add new config parameter
+===============================
+
+This document explains how to add a new configuration parameter. In We
+use new enum type configuration parameter
+"disable_load_balance_on_write" as an example.
+
+Step1: add enum definition
+==========================
+
+Add an enum type to src/include/pool_config.h.
+
+typedef enum DLBOW_OPTION
+{
+	DLBOW_OFF = 1,
+	DLBOW_TRANSACTION,
+	DLBOW_TRANS_TRANSACTION,
+	DLBOW_ALWAYS
+} DLBOW_OPTION;
+
+Step2: Add the new entry to POOL_CONFIG struct
+==============================================
+
+There's a struct called "POOL_CONFIG" holding all config
+variables. Add the new configparameter name along with the enum
+defined above to src/include/pool_config.h.
+
+	DLBOW_OPTION	disable_load_balance_on_write;	/* Load balance behavior when write query is issued
+							 * in an explicit transaction.
+							 * Note that any query not in an explicit transaction
+							 * is not affected by the parameter.
+							 * 'transaction' (the default): if a write query is issued,
+							 * subsequent read queries will not be load balanced
+							 * until the transaction ends.
+							 * 'trans_transaction': if a write query is issued,
+							 * subsequent read queries in an explicit transaction
+							 * will not be load balanced until the session ends.
+							 */
+
+Step3: Add config_emum_entry array to src/config/pool_config.c.
+================================================================
+
+static const struct config_enum_entry disable_load_balance_on_write_options[] = {
+	{"off", DLBOW_OFF, false},
+	{"transaction", DLBOW_TRANSACTION, false},
+	{"trans_transaction", DLBOW_TRANS_TRANSACTION, false},
+	{"always", DLBOW_ALWAYS, false},
+	{NULL, 0, false}
+};
+
+config_enum_entry is defined in src/include/pool_config_variable.h:
+
+/*
+ * The possible values of an enum variable are specified by an array of
+ * name-value pairs.  The "hidden" flag means the value is accepted but
+ * won't be displayed when guc.c is asked for a list of acceptable values.
+ */
+struct config_enum_entry
+{
+	const char *name;
+	int			val;
+	bool		hidden;
+};
+
+Other than enum config type, we have: config_bool, config_int,
+config_int_array, config_double, config_double_array, config_long,
+config_string, config_string_array, and config_list. See
+src/include/pool_config_variable.h for more details.
+
+Note that for each config_* struct they have common data as struct
+config_generic.  config_generic is defined as follows in
+src/include/pool_config_variables.h:
+
+struct config_generic
+{
+	/* constant fields, must be set correctly in initial value: */
+	const char		*name;		/* name of variable - MUST BE FIRST */
+	ConfigContext	context;		/* context required to set the variable */
+	config_group	group;			/* to help organize variables by function */
+	const char		*description;	/* short desc. of this variable's purpose */
+	config_type		vartype;	/* type of variable (set only at startup) */
+	bool			dynamic_array_var;	/* true if the variable name contains index postfix */
+	int				flags;		/* flags */
+	int				max_elements;	/* number of maximum elements, only valid for array type configs */
+	int				status;		/* status bits, see below */
+	int				sourceline;	/* line in source file */
+
+
+	GucSource		*sources;	/* source of the current actual value, For array type config elements
+						 * it contains the corresponding source of each individual element */
+	GucSource		*reset_sources;	/* source of the reset value, For array type config elements
+						 * it contains the corresponding source of each individual element */
+	ConfigContext	*scontexts;		/* context that set the current value, For array type config elements
+						 * it contains the corresponding context of each individual element */
+
+};
+
+
+Step4: add an entry to static struct config_enum ConfigureNamesEnum[].
+=====================================================================
+
+	{
+		{"disable_load_balance_on_write", CFGCXT_RELOAD, LOAD_BALANCE_CONFIG,
+			"Load balance behavior when write query is received.",
+			CONFIG_VAR_TYPE_ENUM,false, 0
+		},
+		(int*)&g_pool_config.disable_load_balance_on_write,
+		DLBOW_TRANSACTION,
+		disable_load_balance_on_write_options,
+		NULL, NULL, NULL, NULL
+	},
+
+
+config_enum is defined as below.
+
+struct config_enum
+{
+	struct config_generic gen;
+	/* constant fields, must be set correctly in initial value: */
+	int		   *variable;
+	int			boot_val;
+	const struct config_enum_entry *options;
+	ConfigEnumAssignFunc assign_func;
+	ConfigEnumAssignFunc check_func;
+	ConfigEnumProcessingFunc process_func;
+	VarShowHook show_hook;
+	int		reset_val;
+};
+
+config_generic is defined as below.
+
+struct config_generic
+{
+	/* constant fields, must be set correctly in initial value: */
+	const char		*name;			/* name of variable - MUST BE FIRST */
+	ConfigContext	context;		/* context required to set the variable */
+	config_group	group;			/* to help organize variables by function */
+	const char		*description;	/* short desc. of this variable's purpose */
+	config_type		vartype;		/* type of variable (set only at startup) */
+	bool			dynamic_array_var;	/* true if the variable name contains index postfix */
+	int				flags;			/* flags */
+	int				status;			/* status bits, see below */
+	GucSource		source;			/* source of the current actual value */
+	ConfigContext	scontext;		/* context that set the current value */
+	int				sourceline;		/* line in source file */
+};
+
+
+Step5: add the new config parameter to example config files.
+============================================================
+
+You need to the new config sample to config example files under
+src/sample/pgpool.conf.sample*
+
+Step6: add the new config parameter to the report program.
+==========================================================
+
+ src/utils/pool_process_reporting.c
+
+	StrNCpy(status[i].name, "disable_load_balance_on_write", POOLCONFIG_MAXNAMELEN);
+	snprintf(status[i].value, POOLCONFIG_MAXVALLEN, "%d", pool_config->disable_load_balance_on_write);
+	StrNCpy(status[i].desc, "Load balance behavior when write query is received", POOLCONFIG_MAXDESCLEN);
+	i++;
+
+Step7: remember to add documents and tests!
+===========================================

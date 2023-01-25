@@ -1,0 +1,3965 @@
+<!-- doc/src/sgml/release-3.5.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id=release-3-5-28>
+ <!--
+ <title>Release 3.5.28</title>
+ -->
+ <title>リリース 3.5.28</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2020-11-19</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Changes</title>
+  -->
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-10-03 [d4cd86e]
+    -->
+    <para>
+	 フロントエンドが<acronym>GSSAPI</acronym>暗号化接続を要求した場合、
+	 <productname>Pgpool-II</productname>は<acronym>GSSAPI</acronym>をサポートしていないため、
+	 これまでエラーを返していましたが、他の方式での接続を要求するように変更しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     パッチはTatsuo Ishiiにより作成され、Umar Hayatによりレビュー・テストされました。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-11-17 [94cbceb]
+    -->
+    <para>
+	 ネイティブレプリケーションモードで「INSERT ... ON CONFLICT」クエリ書換えの不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=654">bug 654</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-10-30 [0e76626]
+    -->
+    <para>
+	 クエリがキャンセルされたときにコネクションカウントが減少しない不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=656">bug 656</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-09-23 [cefb2fc]
+    -->
+    <para>
+     pgpool_setupのPostgreSQLのバージョンチェックの不具合を修正しました。(Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-27>
+ <!--
+ <title>Release 3.5.27</title>
+ -->
+ <title>リリース 3.5.27</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2020-09-17</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Changes</title>
+  -->
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-09-13 [d35acfc]
+    -->
+    <para>
+     <!--
+     Follow the guide line of PostgreSQL 12.4 regarding extensions. (Tatsuo Ishii)
+     -->
+	 <productname>PostgreSQL</productname> 12.4 のガイドラインに従って<productname>Pgpool-II</productname>の拡張機能のスクリプトを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     CREATE OR REPLACE FUNCTION should be avoided. Use CREATE FUNCTION instead.
+     -->
+	 <command>CREATE OR REPLACE FUNCTION</command>の使用を避けて、代わりに<command>CREATE FUNCTION</command>を使用するように修正しました。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-09-14 [7bf7f09]
+    -->
+    <para>
+     <!--
+     Remove unnecessary checks in some code path. (Tatsuo Ishii)
+     -->
+	 いくつかの不要なチェックをソースコードから削除しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Patch contributed by Hou, Zhijie.
+     -->
+	 パッチはby Hou, Zhijieにより提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-09-06 [07c8b39]
+    -->
+    <para>
+     <!--
+     Fix relcache query sometimes sent to other than primary. (Tatsuo Ishii)
+     -->
+	 relcacheクエリがプライマリ以外に送信される不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     In streaming replication mode, relcache queries are supposed to be
+     sent to the primary node.  But actually they were not sent to the primary
+     node if primary node was not the master node. Typically this could
+     happen when the primary is not node 0.
+     -->
+	 ストリーミングレプリケーションモードでは、relcacheクエリはプライマリノードに送信されるようになっています。
+     しかし、実際には、プライマリノードがマスターノードでない場合、relcacheクエリはプライマリノードに送信されませんでした。
+     通常、これはプライマリがノード0でない場合に発生する可能性があります。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-09-01 [fcb9ac4]
+    -->
+    <para>
+     <!--
+     Fix connection_life_time not working when serialize_accept is enabled. (Tatsuo Ishii)
+     -->
+	 <xref linkend="GUC-SERIALIZE-ACCEPT">が有効になっているときに<xref linkend="GUC-CONNECTION-LIFE-TIME">が機能しない問題を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+	 Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2020-August/007233.html">[pgpool-general: 7175]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-08-30 [53457d9]
+    -->
+    <para>
+     <!--
+     Display more informative error message in authentication process. (Tatsuo Ishii)
+     -->
+	 認証処理において有益なエラーメッセージを表示するように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-08-21 [310650e]
+    -->
+    <para>
+     <!--
+     Fix segfault in pgpool child process in certain case. (Tatsuo Ishii)
+     -->
+	 特定の場合に発生するpgpool子プロセスのセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+	 This issue can be reproduced with the following steps:
+     -->
+	 以下の方法で再現できます。
+     <orderedlist>
+	  <listitem>
+	   <para>
+        <!--
+        shutdown all backends.
+        -->
+		すべてのバックエンドを停止します。
+	   </para>
+	  </listitem>
+	  <listitem>
+	   <para>
+        <!--
+        connect to pgpool with invalid client. I have used pcp_attach_node with pgpool's port number, not pcp's.
+        -->
+		無効なクライアントでpgpoolに接続します。例えば、pcpのポートではなく、pgpoolのポート番号を使用して<command>pcp_attach_node</command>を実行します。
+	   </para>
+	  </listitem>
+     </orderedlist>
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-26>
+ <!--
+ <title>Release 3.5.26</title>
+ -->
+ <title>リリース 3.5.26</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2020-08-20</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Changes</title>
+  -->
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-05-22 [a73d5a1]
+    -->
+    <para>
+	 <filename>pool_hba.conf</filename>サンプルファイルに<literal>hostssl/hostnossl</literal>に関する説明を追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-08-12 [0462d90]
+    -->
+    <para>
+	 pgpoolの起動時に、pidファイルが存在する場合、書き込む前にpidファイルを長さゼロに切り詰めるように修正しました。(Bo Peng)
+    </para>
+    <para>
+	 パッチはmaliangzhuにより提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-08-11 [81b1e3e]
+    -->
+    <para>
+	 ストリーミングレプリケーションモードでプライマリノードが0以外の場合、<xref linkend="guc-connection-life-time">が機能しない問題を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-08-05 [014458a]
+    -->
+    <para>
+	 -rオプション及び<productname>PostgreSQL</productname> 12での<command>pgpool_setup</command>の問題を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-07-31 [ea1a420]
+    -->
+    <para>
+	 RPMパッケージのPCPコマンドの<literal>UNIX_DOMAIN_PATH</literal>を<filename>/var/run/postgresql</filename>に変更します。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+	2020-08-05 [6b31f2e]
+    2020-07-14 [21bdf08]
+    -->
+    <para>
+	 クエリキャッシュの不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+	 クエリキャッシュが有効な場合、あるテーブルが更新された場合、<productname>Pgpool-II</productname>は自動的にそのテーブルに関係する全てのキャッシュを削除するようになっています。
+	 しかし、<command>EXPLAIN ANALYZE</command>または<acronym>CTE</acronym>で更新クエリを実行した場合に、
+	 これらのクエリが誤って参照クエリとして扱われ、キャッシュが削除されませんでした。
+    </para>
+    <para>
+	 パッチはHou, Zhijieにより作成され、Tatsuo Ishiiにより修正されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-07-09 [4827bd4]
+    -->
+    <para>
+	 コーナーケースで発生する<productname>Pgpool-II</productname>のハングアップを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-06-26 [5f62ef2]
+    -->
+    <para>
+	 user、database、application_name以外のパラメータが指定された場合、startupパケットの読み取りが失敗する不具合を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-06-22 [7587851]
+    -->
+    <para>
+	 <function>pg_terminate_backend</function>を実行した時にコネクションのカウントがずれる不具合を修正しました。(Takuma Hoshiai)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-06-04 [4100dbf]
+    -->
+    <para>
+     アプリケーション名が<xref linkend="GUC-LOG-LINE-PREFIX">に含まれている場合に発生するセグメンテーション違反を修正しました。 (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=615">bug 615</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-25> 
+ <!--
+ <title>Release 3.5.25</title>
+ -->
+ <title>リリース 3.5.25</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2020-05-21</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-05-16 [2fd983b]
+    2020-04-26 [1304dcc]
+    -->
+    <para>
+     <!--
+     Fix build error on some system (Fedora 32). (Tatsuo Ishii)
+     -->
+     一部のシステム(Fedora 32)で発生するビルドエラーを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-04-23 [1221a65]
+    -->
+    <para>
+     <!--
+     Fix unnecessary checks. (Tatsuo Ishii)
+     -->
+     不要なチェックを削除しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Patch contributed by sherlockcpp. Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2020-April/007062.html">[pgpool-general: 7004]</ulink>
+     -->
+     パッチはsherlockcppによって提供されました。Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2020-April/007062.html">[pgpool-general: 7004]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2020-03-06 [5ce6273]
+    -->
+    <para>
+     <!--
+     Fix watchdog ping probes fail with long hostnames due to small buffer. (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=516">bug 516</ulink>) (Bo Peng)
+     -->
+     ホスト名が長い場合、バッファサイズの制限によってWatchdogのpingが失敗する問題を修正しました。(<ulink url="https://www.pgpool.net/mantisbt/view.php?id=516">bug 516</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-24> 
+ <!--
+ <title>Release 3.5.24</title>
+ -->
+ <title>リリース 3.5.24</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2020-02-20</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Changes</title>
+  -->
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-01-28 [218886b]
+    -->
+    <para>
+     <!--
+     Check if socket file exists at startup and remove them if PID file doesn't exist to avoid bind() failire. (Bo Peng)
+     -->
+     起動時のbind()エラーを回避するために、ソケットファイルが存在するかどうかを確認し、
+     PIDファイルが存在しない場合、それらのソケットファイルを削除するように修正しました。(Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2020-02-18 [e20c60b]
+    -->
+    <para>
+     <!--
+     Fix incorrect query rewriting in native replication mode. 
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=551">bug 551</ulink>) (Bo Peng)
+     -->
+     レプリケーションモードの場合に、クエリのタイムスタンプがリライトされない不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=551">bug 551</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2020-02-08 [97446c3]
+    -->
+    <para>
+     <!--
+     Fix <xref linkend="PGPOOL-SETUP"> to support <productname>PostgreSQL</productname> 12. (Tatsuo Ishii)
+     -->
+     <xref linkend="PGPOOL-SETUP">が<productname>PostgreSQL</productname> 12 に対応するように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2020-01-11 [2f5c9a2]
+    2020-01-10 [d1d490f]
+    2020-01-04 [78364ae]
+    2019-12-31 [0591a76]
+    2019-12-27 [d4365d8]
+    2019-12-26 [a308b49]
+    -->
+    <para>
+     <!--
+     Fix occasional regression test failure. (Tatsuo Ishii)
+     -->
+     時々起こるリグレッションテストの失敗を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-12-12 [88f1179]
+    -->
+    <para>
+     Fix replication delay worker segfault when application_name in primary_conninfo is an empty string.
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=565">bug 565</ulink>) (Tatsuo Ishii)
+     -->
+     primary_conninfoのapplication_nameが空の場合に発生するレプリケーション遅延チェックワーカープロセスのセグメンテーション違反を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=565">bug 565</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-11-18 [2a4be9b]
+    2019-11-15 [0a7d632]
+    -->
+    <para>
+     <!--
+     Fix the bug with ignored syslog setting. (Bo Peng)
+     -->
+     <literal>syslog</literal>が出力されない不具合を修正しました。(Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-23> 
+ <!--
+ <title>Release 3.5.23</title>
+ -->
+ <title>リリース 3.5.23</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2019-10-31</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-10-25 [45a3469]
+    -->
+    <para>
+     <!--
+     Fix incorrect query rewrite in replication mode. (Bo Peng)
+     -->
+	 レプリケーションモードでの誤ったクエリの書き換えを修正しました。 (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-10-10 [4b726df]
+    -->
+    <para>
+    <!--
+ 	 Fix assorted ancient v2 protocol bugs. (Tatsuo Ishii)
+     -->
+     各種のv2プロトコルのバグを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-10-08 [45ac39b]
+    -->
+    <para>
+    <!--
+	 Fix problem that <xref linkend="guc-syslog-facility"> doesn't change by reload. 
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=548">bug 548</ulink>) (Takuma Hoshiai)
+     -->
+     <xref linkend="guc-syslog-facility">の変更がリロードによって反映されない不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=548">bug 548</ulink>) (Takuma Hoshiai)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-10-03 [fed3d6b]
+    -->
+    <para>
+     <!--
+     Fix Pgpool-II shutdown failed in certain case. (Tatsuo Ishii)
+     -->
+     特定の場合に<productname>Pgpool-II</productname>のシャットダウンが失敗する不具合を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-09-15 [a333a45]
+    -->
+    <para>
+     <!--
+     Fix segfault when executing an erroneous query after DEALLOCATE a named statement.
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=546">bug 546</ulink>) (Tatsuo Ishii)
+     -->
+	 名前付きステートメントをDEALLOCATEした後に、誤ったクエリを実行すると
+     セグメンテーション違反が発生する不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=546">bug 546</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-08-16 [956c040]
+    -->
+    <para>
+     <!--
+     Add "-I" option to <xref linkend="guc-arping-cmd"> command default setting. (Bo Peng)
+     -->
+	 <xref linkend="guc-arping-cmd">パラメータのデフォルト値にネットワークインターフェイスオプション -I を含めるように修正しました。(Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-22> 
+ <!--
+ <title>Release 3.5.22</title>
+ -->
+ <title>リリース 3.5.22</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2019-08-15</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Enhancements</title>
+  -->
+  <title>改善点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-08-08 [7ea54a1]
+    -->
+    <para>
+     <!--
+     Import some of memory manager debug facilities from <productname>PostgreSQL</productname>. (Tatsuo Ishii)
+     -->
+     <productname>PostgreSQL</productname>からメモリマネージャデバッグ機能の一部をインポートしました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-07-24 [717411f]
+    -->
+    <para>
+     <!--
+     Use <function>pg_get_expr()</function> instead of <literal>pg_attrdef.adsrc</literal> to support for <productname>PostgreSQL</productname> 12. (Bo Peng)
+     -->
+     <productname>PostgreSQL</productname> 12に対応するために、<literal>pg_attrdef.adsrc</literal>のかわりに
+     <function>pg_get_expr()</function>を使用するように修正しました。(Bo Peng)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-08-11 [c553e51]
+    2019-07-17 [6b89f9e]
+    2019-07-02 [3b32bc4]
+    -->
+    <para>
+     <!--
+     Enhance shutdown script of <xref linkend="PGPOOL-SETUP">. (Tatsuo Ishii)
+     -->
+     <xref linkend="PGPOOL-SETUP">のshutdownスクリプトを改良しました。(Tatsuo Ishii)
+      <itemizedlist> 
+       <listitem>
+	<para>
+	 <!--
+	 Make shutdownall to wait for completion of shutdown of <productname>Pgpool-II</productname>.
+	 -->
+	 shutdownスクリプトが<productname>Pgpool-II</productname>のシャットダウン完了を待つように修正しました。
+	</para>
+       </listitem>
+       <listitem>
+	<para>
+	 <!--
+	 if environment variable <varname>CHECK_TIME_WAIT</varname> is set to true, use <command>netstat</command> command to confirm usage of the <literal>TCP/IP</literal> port while executing shutdown script.
+	 -->
+	 環境変数<varname>CHECK_TIME_WAIT</varname>が<literal>true</literal>に設定されているとき、shutdownスクリプト実行時に<command>netstat</command>コマンドで<literal>TCP/IP</literal>ポートの使用を確認するように修正しました。 
+	</para>
+       </listitem>
+      </itemizedlist> 
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-05-22 [57cd1d4]
+    -->
+    <para>
+     <!--
+     Deal <literal>pgpool_adm</literal> extension with <productname>PostgreSQL</productname> 12. (Tatsuo Ishii)
+     -->
+     <literal>pgpool_adm</literal>拡張が<productname>PostgreSQL</productname> 12 に対応するように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2019-08-09 [b6d77f4]
+    -->
+    <para>
+     <!--
+     Fix "unable to bind. cannot get parse message" error.
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=531">bug 531</ulink>) (Tatsuo Ishii)
+     -->
+     "unable to bind. cannot get parse message"エラーを修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=531">bug 531</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-08-08 [f48f624]
+    -->
+    <para>
+     <!--
+     Fix online-recovery is blocked after a child process exits abnormally with replication mode and watchdog. 
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=483">bug 483</ulink>) (Muhammad Usama)
+     -->
+     ネイティブレプリケーションモードかつ<application>Watchdog</application>が有効な場合、
+     子プロセスが異常終了した後に、オンラインリカバリが失敗する不具合を修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=483">bug 483</ulink>) (Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-07-28 [34dc12f]
+    -->
+    <para>
+     <!--
+     Fix <xref linkend="PGPOOL-SETUP"> to produce correct follow master command. (Tatsuo Ishii)
+     -->
+     <xref linkend="PGPOOL-SETUP">が正しい<varname>follow master command</varname>を生成するように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-07-07 [44f8e2d]
+    -->
+    <para>
+     <!--
+     Fix query cache module so that it checks oid array's bound. (Tatsuo Ishii)
+     -->
+     クエリキャッシュモジュールでoid配列の境界をチェックするように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-07-07 [bb3af6f]
+    -->
+    <para>
+     <!--
+     Fix off-by-one error in query cache module. (Tatsuo Ishii)
+     -->
+     クエリキャッシュモジュールのOff-by-oneエラーを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-07-03 [5d042e4]
+    -->
+    <para>
+     <!--
+     Fix sefault when query cache is enabled. (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=525">bug 525</ulink>) (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効な場合に発生するセグメンテーション違反を修正しました。(<ulink url="https://www.pgpool.net/mantisbt/view.php?id=525">bug 525</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-07-02 [b8137d6]
+    -->
+    <para>
+     <!--
+     Down grade LOG "checking zapping sent message ..." to DEBUG5. (Tatsuo Ishii)
+     -->
+     LOG "checking zapping sent message ..."をDEBUG5にダウングレードしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2019-June/006678.html">[pgpool-general: 6620]</ulink>
+     -->
+     詳細は<ulink url="https://www.pgpool.net/pipermail/pgpool-general/2019-June/006678.html">[pgpool-general: 6620]</ulink>をご参照ください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-06-24 [8742f9f]
+    -->
+    <para>
+     <!--
+     Fix segfault when <literal>samenet</literal> is specified in <filename>pool_hba.conf</filename>. (Tatsuo Ishii)
+     -->
+     <filename>pool_hba.conf</filename>に<literal>samenet</literal>が指定されている場合に発生するセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2019-June/006659.html">[pgpool-general: 6601]</ulink>.
+     -->
+     詳細は<ulink url="https://www.pgpool.net/pipermail/pgpool-general/2019-June/006659.html">[pgpool-general: 6601]</ulink>をご参照ください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-06-07 [48a45fc]
+    -->
+    <para>
+     <!--
+     Fix to deal with backslashes according to the config of <varname>standard_conforming_strings</varname> in native replication mode.
+     -->
+     ネイティブレプリケーションモードの場合、<varname>standard_conforming_strings</varname>の設定に応じてバックスラッシュを処理するように修正しました。
+     (<ulink url="https://www.pgpool.net/mantisbt/view.php?id=467">bug 467</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-14 [5765ed7]
+    2019-05-23 [0e8c1c2]
+    2019-05-22 [c264275]
+    2019-05-22 [53e7af0]
+    2019-05-22 [19cfda2]
+    -->
+    <para>
+     <!--
+     Fix memory leaks. (Tatsuo Ishii)
+     -->
+     いくつかのメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-05-23 [827a056]
+    -->
+    <para>
+     <!--
+     Make failover in progress check more aggressively to avoid potential segfault. (Tatsuo Ishii)
+     -->
+     潜在的なセグメンテーション違反を回避するために、フェイルオーバ実行中であるかどうかのチェックをより積極的に行うように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-21> 
+ <!--
+ <title>Release 3.5.21</title>
+ -->
+ <title>リリース 3.5.21</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2019-05-16</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Enhancements</title>
+  -->
+  <title>改善点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-05-03 [6a4130f]
+    -->
+    <para>
+     <!--
+     Speed up failover when all of backends are down. (Tatsuo Ishii)
+     -->
+     すべてのバックエンドが停止しているときのフェイルオーバをスピードアップします。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     If all of the backend are in down status, immediately give up finding 
+     primary node regardless <varname>search_primary_node_timeout</> and promptly 
+     finish the failover process.
+     -->
+     すべてのバックエンドが停止状態になった場合、<varname>search_primary_node_timeout</>の値に関わらずプライマリノードの検索を中止し、
+     直ちにフェールオーバプロセスを終了するように修正しました。
+    </para>
+    <para>
+     <!--
+     Discussion: <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2019-May/003321.html">[pgpool-hackers: 3321]</ulink>
+     -->
+     ディスカッション: <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2019-May/003321.html">[pgpool-hackers: 3321]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-30 [0cd3d5f]
+    2019-04-30 [06d9887]
+    -->
+    <para>
+     <!--
+     pgpool-recovery extension and <command>pgpool_setup</> is now ready for the next major release <productname>PostgreSQL</> 12. (Tatsuo Ishii)
+     -->
+     pgpool-recovery拡張と<command>pgpool_setup</>を次期バージョンである<productname>PostgreSQL</>12に対応しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-05-09 [f9536cc]
+    -->
+    <para>
+     <!--
+     Fix the wrong error message "ERROR: connection cache is full", when all backend nodes are down. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=487">bug 487</>) (Bo Peng)
+     -->
+     すべてのバックエンドがダウンした場合には表示される不適切なエラーメッセージ"ERROR: connection cache is full"を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=487">bug 487</>) (Bo Peng)
+    </para>
+    <para>
+     <!--
+     When all backend nodes are down, <productname>Pgpool-II</> throws an uncorrect
+     error message "ERROR: connection cache is full". Change the error
+     message to "all backend nodes are down, pgpool requires at least one valid node".
+     -->
+     すべてのバックエンドがダウンした場合に、<productname>Pgpool-II</>が不適切なエラーメッセージ"ERROR: connection cache is full"を投げています。
+     このエラーを"all backend nodes are down, pgpool requires at least one valid node"に修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-21 [d2bb1ec]
+    -->
+    <para>
+     <!--
+     Avoid exit/fork storm of pool_worker_child process. (Tatsuo Ishii)
+     -->
+     pool_worker_childプロセスの終了/フォークの繰り返しを避けるために修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     pool_worker_child issues query to get WAL position using <function>do_query()</>,
+     which could throws FATAL error. In this case pool_worker_child process
+     exits and <productname>Pgpool-II</> parent immediately forks new process. This cycle
+     indefinitely repeats and gives high load to the system.
+     To avoid the exit/fork storm, sleep <varname>sr_check_period</>.
+     -->
+     pool_worker_childは<function>do_query()</>を使用してWAL位置を取得するためのクエリを発行します。
+     これにより、致命的エラーが発生した場合、pool_worker_childプロセスを終了し、
+     <productname>Pgpool-II</>の親プロセスは直ちに新しいプロセスをフォークするようにしています。
+     このサイクルは無限に繰り返され、システムに大きな負荷を与える可能性があります。
+     無限に繰り返される終了/フォーク処理を回避するために、<varname>sr_check_period</>をスリープさせるように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-18 [157c5fe]
+    -->
+    <para>
+     <!--
+     Fix <xref linkend="GUC-WRITE-FUNCTION-LIST">'s broken default value. (Tatsuo Ishii)
+     -->
+     <xref linkend="GUC-WRITE-FUNCTION-LIST">のデフォル値が間違っていた不具合を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-17 [d0b0fd0]
+    -->
+    <para>
+     <!--
+     Fix "not enough space in buffer" error. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=499">bug 499</>) (Tatsuo Ishii)
+     -->
+     「not enough space in buffer」エラーを修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=499">bug 499</>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     The error occurred while processing error message returned from
+     backend and the cause is that the query string in question is too
+     big. Problem is, the buffer is in fixed size (8192 bytes).
+     Eliminate the fixed size buffer and use palloced buffer
+     instead. This also saves some memory copy work.
+     -->
+     バックエンドから返されたエラーメッセージサイズが固定バッファサイズ (8192 bytes)を超えた場合、
+     「not enough space in buffer」エラーが発生していました。
+     固定サイズのバッファの使用を廃止し、動的にバッファサイズを割り当てるように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-16 [65f5db4]
+    -->
+    <para>
+     <!--
+     Fix DROP DATABASE failure. (Tatsuo Ishii)
+     -->
+     DROP DATABASEの失敗を修正しました。 (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-10 [c7d8845]
+    -->
+    <para>
+     <!--
+     Fix wrong variable in <function>read_status_file()</> function. (Takuma Hoshiai)
+     -->
+     <function>read_status_file()</>関数の間違った変数名を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=493">bug 493</>) (Takuma Hoshiai)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-04-02 [8e6176c]
+    -->
+    <para>
+     <!--
+     Abort session if failover/failback is ongoing to prevent potential segfault. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=481">bug 481</ulink>, 
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=482">bug 482</ulink>) (Tatsuo Ishii)
+     -->
+     failover/failback実行中に接続があった場合に発生しうるセグメンテーション違反を回避するために、セッションを終了するように修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=481">bug 481</ulink>, 
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=482">bug 482</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-03-30 [508f1c4]
+    2019-03-30 [ab6c527]
+    -->
+    <para>
+     <!--
+     Fix compiler warnings. (Tatsuo Ishii)
+     -->
+     コンパイル時に発生するワーニング を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-03-28 [b39953c]
+    -->
+    <para>
+     <!--
+     Fix memory leak in "batch" mode in extended query. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=468">bug 468</>) (Tatsuo Ishii)
+     -->
+     拡張問い合わせかつ"batch"モードで発生するメモリリークを修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=468">bug 468</>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-20> 
+ <!--
+ <title>Release 3.5.20</title>
+ -->
+ <title>リリース 3.5.20</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2019-03-29</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Enhancements</title>
+  -->
+  <title>改善点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-03-27 [4c6d5c3]
+    -->
+    <para>
+     <!--
+     Add new configuration option <xref linkend="guc-ssl-prefer-server-ciphers">. (Muhammad Usama)
+     -->
+     新しい設定パラメータ<xref linkend="guc-ssl-prefer-server-ciphers">を追加しました。(Muhammad Usama)
+    </para>
+    <para>
+     <!--
+     Add the new setting <xref linkend="guc-ssl-prefer-server-ciphers"> to let users configure if they
+     want client's or server's cipher order to take preference.
+     -->
+     ユーザがサーバ側のSSL暗号設定をクライアントに優先して使うかどうかを設定できるように、新しい設定パラメータ<xref linkend="guc-ssl-prefer-server-ciphers">を追加しました。
+    </para>
+    <para>
+     <!--
+     The default for this parameter is off, which prioritize the client's
+     cipher order as usual. However this is just for keeping backward
+     compatibility, and it is possible that a malicious client uses weak
+     ciphers. For this reason we recommend to set this parameter to on at
+     all times.
+     -->
+     この設定はデフォルトでオフで、従来と同じようにクライアント側のリクエストが優先されます。
+     しかしこれはあくまで過去の挙動との互換性のための設定であり、悪意のあるクライアントが弱い暗号を利用できる可能性があります。
+     ですから、常にこのパラメータをオンにしておくことを推奨します。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-03-23 [d919f5a]
+    -->
+    <para>
+     <!--
+     Allow to set a client cipher list. (Tatsuo Ishii, Yugo Nagata)
+     -->
+     client cipher リストの設定が可能になりました。(Tatsuo Ishii, Yugo Nagata)  
+    </para>
+    <para>
+     <!--
+     For this purpose new parameter <xref linkend="guc-ssl-ciphers">, which specifies the cipher
+     list to be accepted by <productname>Pgpool-II</>, is added.
+     This is already implemented in <productname>PostgreSQL</> and useful to enhance security when SSL is enabled. 
+     -->
+     <productname>Pgpool-II</>がクライアントからのSSL接続を受け付ける際に受け入れる暗号のリストを指定する新しいパラメータ、
+     <xref linkend="guc-ssl-ciphers">を追加しました。これはすでに<productname>PostgreSQL</>に実装されていて、
+      SSLが有効なときにセキュリティを強化するのに役立ちます。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-03-18 [d95f1f6]
+    -->
+    <para>
+     <!--
+     Fix unnecessary <function>fsync()</> to <filename>pgpool_status</> file. (Tatsuo Ishii)
+     -->
+     不要な<filename>pgpool_status</>ファイルへの書き込みが減らしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Whenever new connections are created to PostgreSQL backend, <function>fsync()</>
+     was issued to <filename>pgpool_status</> file, which could generate excessive I/O
+     in certain conditions.
+     So reduce the chance of issuing <function>fsync()</> so that it is issued only when
+     backend status is changed.
+     -->
+     今までは<productname>PostgreSQL</>バックエンドへの新しい接続が作成されるたびに、
+     <filename>pgpool_status</>ファイルに書き込むために<function>fsync()</>が実行されていましたが、
+     これにより、特定の条件で過剰なI/Oを発生させる可能性がありました。
+     そのため、バックエンドの状況が変更されたときにのみ<function>fsync()</>を実行するように修正しました。
+    </para>
+    <para>
+     <!--
+     Discussion: <ulink url="http://www.sraoss.jp/pipermail/pgpool-general/2019-February/006494.html">[pgpool-general: 6436]</ulink>
+     -->
+     ディスカッション: <ulink url="http://www.sraoss.jp/pipermail/pgpool-general/2019-February/006494.html">[pgpool-general: 6436]</ulink>
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-19> 
+ <!--
+ <title>Release 3.5.19</title>
+ -->
+ <title>リリース 3.5.19</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2019-02-21</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2019-02-15 [2e4c67f]
+    -->
+    <para>
+     <!--
+     Test: Fix old JDBC functions and typos in regression test 068.memqcache_bug. (Takuma Hoshiai)
+     -->
+     Test: レグレッションテスト068.memqcache_bugの古いJDBCの関数及びタイポを修正しました。(Takuma Hoshiai)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-02-15 [8ae3dfa]
+    -->
+    <para>
+     <!--
+     Doc: Fix configuration change timing regarding memory_cache_enabled. (Tatsuo Ishii)
+     -->
+     Doc: <xref linkend="GUC-MEMORY-CACHE-ENABLED">パラメータはサーバ起動時にのみ設定可能なことをドキュメントに追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2019-02-12 [3aac064]
+    -->
+    <para>
+     <!--
+     Fix online recovery failed due to client_idle_limit_in_recovery in certain cases. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=431">bug 431</ulink>)(Tatsuo Ishii)
+     -->
+     特定の場合に、<xref linkend="GUC-CLIENT-IDLE-LIMIT-IN-RECOVERY">によって、オンラインリカバリが失敗する不具合を修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=431">bug 431</ulink>)(Tatsuo Ishii)
+    </para>
+   </listitem>
+   <listitem>
+    <!--
+    2019-01-29 [f7d0c96]
+    -->
+    <para>
+     <!--
+     Fix corner case bug when strip_quote() handle a empty query string. <ulink url="http://www.pgpool.net/mantisbt/view.php?id=458">(bug 458</ulink>) (Tatsuo Ishii)
+     -->
+     <function>strip_quote()</function>が空のクエリを処理するときに発生するセグメンテーション違反を修正しました。<ulink url="http://www.pgpool.net/mantisbt/view.php?id=458">(bug 458</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+
+   <listitem>
+    <!--
+    2019-01-10 [776ee0a]
+    -->
+    <para>
+     <!--
+     Fix Pgpool child segfault if failover occurs when trying to establish a connection. (Tatsuo Ishii)
+     -->
+     接続を確立しようとするとき、フェイルオーバが発生する場合に発生しうるセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     参照: <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2019-January/003214.html">[pgpool-hackers: 3214]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-12-12 [733852e]
+    -->
+    <para>
+     <!--
+     Fix Pgpool-II hang if a client sends a extended query message such as close after sync message but before next simple query. (Tatsuo Ishii)
+     -->
+     クライアントがsyncメッセージの後、次の簡易問い合わせの前にcloseメッセージを送ると発生しうるハングアップを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     参照: <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2018-December/003164.html">[pgpool-hackers: 3164]</ulink>
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-12-06 [f8f8e3d]
+    -->
+    <para>
+     <!--
+     Fix Pgpool-II hang when "idle_in_transaction_session_timeout=on". (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=448">bug 448</ulink>)(Tatsuo Ishii)
+     -->
+     <productname>PostgreSQL</productname>の<varname>idle_in_transaction_session_timeout</varname>が有効な場合に発生しうる<productname>Pgpool-II</productname>のハングアップを修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=448">bug 448</ulink>)(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id=release-3-5-18> 
+ <!--
+ <title>Release 3.5.18</title>
+ -->
+ <title>リリース 3.5.18</title>
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-11-22</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2018-11-21 [d8148c5]
+    -->
+    <para>
+     <!--
+     Fix to sort startup packet's parameters sent by client. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=444">bug 444</ulink>)(Takuma Hoshiai)
+     -->
+     クライアントから送信された startup パケットのパラメータをソートするように修正します。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=444">bug 444</ulink>)(Takuma Hoshiai)
+    </para>
+    <para>
+     <!--
+     If order of startup packet's parameters differ between cached connection
+     pools and connection request, did't use connection pool ,and created new
+     connection pool.
+     -->
+     キャッシュされたコネクションプールと接続要求のstartupパケットのパラメータの順序が異なる場合、
+     コネクションプールを使用せず、新しいコネクションプールを作成しまていました。
+    </para>
+   </listitem>
+   
+   <listitem>
+    <!--
+    2018-11-13 [f342215]
+    -->
+    <para>
+     <!--
+     Fix segmentation fault occurs when a certain Bind message is sent in native replication mode. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=443">bug 443</ulink>)(Bo Peng)
+     -->
+     ネイティブレプリケーションモードで特定のBindメッセージが送信されたときに発生するセグメンテーション違反を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=443">bug 443</ulink>) (Bo Peng)
+    </para>
+    <para>
+     <!--
+     If the number of parameter format codes is specified to one, but the number
+     of the original query's parameter is zero, bind_rewrite_timestamp() will
+     call memcpy with a negative value. This causes segmentation fault.
+     -->
+     パラメータ書式コードの数が 1 に指定されて、元のクエリのパラメータの数が 0 の場合、
+     <function>bind_rewrite_timestamp()</>に負の値を指定して<function>memcpy</>を呼び出していました。
+     これによりセグメンテーション違反が発生していました。
+    </para>
+    <para>
+     <!--
+     Patch is provided by Yugo Nagata.
+     -->
+     パッチがYugo Nagataにより提供されました。
+    </para>
+   </listitem>
+   
+   <listitem>
+    <!--
+    2018-11-08 [a92ceba]
+    -->
+    <para>
+     <!--
+     Fix a query passed to relcache so that it uses schema qualified table name. (Tatsuo Ishii)
+     -->
+     スキーマ名で修飾されたテーブル名を使用するようにクエリキャッシュに渡されるクエリを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   
+   <listitem>
+    <!--
+    2018-11-05 [14878cb]
+    -->
+    <para>
+     <!--
+     Fix query cache invalidation bug. (Tatsuo Ishii)
+     -->
+     クエリキャッシュ無効化のバグを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   
+   <listitem>
+    <!--
+    2018-11-03 [c466e5c]
+    -->
+    <para>
+     <!--
+     Fix segfault in extended query + query cache case. (Tatsuo Ishii)
+     -->
+     拡張問い合わせかつクエリキャッシュ有効の場合に発生するセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+   
+   <listitem>
+    <!--
+    2018-11-01 [c47ba42]
+    -->
+    <para>
+     <!--
+     Fix memory leak in extended query + query cache enabled. (Tatsuo Ishii)
+     -->
+     拡張問い合わせかつクエリキャッシュ有効の場合に発生するメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-17">
+ <!--
+ <title>Release 3.5.17</title>
+ -->
+ <title>リリース 3.5.17</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-10-31</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Changes</title>
+  -->
+  <title>変更点</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-10-30 [3d0311b]
+    -->
+    <para>
+     <!--
+     Allow <command>PCP[attach/detach/promote]</command> commands during failover. (Muhammad Usama)
+     -->
+     フェイルオーバ時に<command>PCP[attach/detach/promote]</command>コマンドを許可するようになりました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-18 [d3c29b7]
+    -->
+    <para>
+     <!--
+     Change <filename>pgpool.spec</filename> file to install extension to DB server which supports LLVM JIT. (Bo Peng)
+     -->
+     LLVM JITをサポートするDBサーバに拡張機能をインストールするために、<filename>pgpool.spec</filename>ファイルを変更しました。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-29 [ed8bfa5]
+    -->
+    <para>
+     <!--
+     Test: Add regression test for SSL connection. (Tatsuo Ishii)
+     -->
+     Test: SSL 接続のレグレッションテストを追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-10 [e41a92a]
+    -->
+    <para>
+     <!--
+     Test: Add definition of PGLIB in <filename>regress.sh</filename>. (Bo Peng)
+     -->
+     Test: <filename>regress.sh</filename>にPGLIBの定義を追加しました。 (Bo Peng)
+    </para>
+    <para>
+     <!--
+     Patch provided by Jesper Pedersen.
+     -->
+     パッチはJesper Pedersenにより提供されました。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-10-25 [c031a7e]
+    -->
+    <para>
+     <!--
+     Fix typo in <varname>child_max_connections</varname> description of <command>SHOW POOL_STATUS</command> output. (Tatsuo Ishii)
+     -->
+     <command>SHOW POOL_STATUS</command>コマンドの出力の<varname>child_max_connections</varname>の説明のタイポを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Patch provided by Phil Ramirez.
+     -->
+     パッチはPhil Ramirezにより提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-22 [f1b13a4]
+    -->
+    <para>
+     <!--
+     Fix segmentation fault when error query and Sync message are sent in native replication mode. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=434">bug 434</ulink>) (Takuma Hoshiai)
+     -->
+     ネイティブレプリケーションモードでエラークエリと同期メッセージが送信されたときのセグメンテーション違反を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=434">bug 434</ulink>) (Takuma Hoshiai)
+    </para>
+    <para>
+     <!--
+     In native replication mode, segmentation fault occurs when Sync messages is sent just after a query error.
+     -->
+     ネイティブレプリケーションモードで、クエリエラーの後に同期メッセージが送信されるとセグメンテーション違反が発生していました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-18 [22e9242]
+    -->
+    <para>
+     <!--
+     Fix syntax error when queries including time functions and <literal>IN (SELECT ...)</literal> in 
+     <literal>WHERE</literal> clause in native replication mode. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=433">bug 433</ulink>) (Bo Peng)
+     -->
+     ネイティブレプリケーションモードで、クエリに時刻関数を含み、かつ<literal>WHERE</literal>句に<literal>IN (SELECT ...)</literal>を含むと構文エラーになる不具合を修正しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     In native replication mode, queries including time functions (e.g. <function>now()</function>, <function>CURRENT_TIMESTAMP</function> etc.) are rewritten to a timestamp constant value. 
+     However, <productname>Pgpool-II</productname> doesn't support queries including time functions and <literal>IN (SELECT ...)</literal> in <literal>WHERE</literal> clause.
+     -->
+     ネイティブレプリケーションモードで、クエリに<function>now()</function>、<function>CURRENT_TIMESTAMP</function>などの時刻関数を利用した場合、
+     タイムスタンプ型の定数に書き換えるようになっています。
+     しかし、<productname>Pgpool-II</productname>は時刻関数含み、かつ<literal>WHERE</literal>句に<literal>IN (SELECT ...)</literal>を含むクエリを対応しませんでした。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-12 [75cff9a]
+    -->
+    <para>
+     <!--
+     Fix occasional less data returned to frontend with extended protocol. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=432">bug432</ulink>) (Tatsuo Ishii)
+     -->
+     拡張問い合わせの場合、時々期待される応答がフロントエンドに返されないことがあったので、修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=432">bug 432</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     The idea for fix is, use pending message data list. It records
+     messages from frontend, and it is expected that we will receive same
+     number of messages.
+     -->
+     解決策は、保留中のメッセージデータリストを使用することです。それはフロントエンドからのメッセージを記録し、同じ数のメッセージを受け取ることが期待されます。
+    </para>
+    <para>
+     <!--
+     Initial patch is created by Yugo Nagata and fixed by Tatsuo Ishii.
+     -->
+     パッチは Yugo Nagata によって作成され、Tatsuo Ishii により修正されました。 
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-11 [be2e21c]
+    -->
+    <para>
+     <!--
+     Fix memory leak in <function>trigger_failover_command()</function>. (Tatsuo Ishii)
+     -->
+     <function>trigger_failover_command()</function> 関数で発生するメモリリークを修正しました。 (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-11 [ebbdd6f]
+    -->
+    <para>
+     <!--
+     Fix memory leak when query cache enabled in streaming replication mode + extended query case. (Tatsuo Ishii)
+     -->
+     ストリーミングレプリケーションモードかつ拡張問い合わせの場合、クエリキャッシュを有効にするときに発生するメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-09 [5072e78]
+    -->
+    <para>
+     <!--
+     Fix memory leak when memory_cache_enabled = on and write SQLs are sent. (Bo Peng)
+     -->
+     ストリーミングレプリケーションモードかつクエリキャッシュが有効の場合に更新クエリが発行された場合に発生するメモリリークを修正しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     In a explicit transaction, the <literal>SELECT</literal> results are cached in temporary buffer.
+     If a write <acronym>SQL</acronym> is sent which modifies the table, the temporary buffe should be reset.
+     -->
+     明示的なトランザクションでは、<literal>SELECT</literal>の結果は一時バッファにキャッシュされます。
+     テーブルを変更する書込み<acronym>SQL</acronym>が送信されると、一時的なバッファをリセットしなければなりません。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-10-09 [26642f7]
+    -->
+    <para>
+     <!--
+     Test: Fix occasional failure in regression 065.bug152. (Tatsuo Ishii)
+     -->
+     Test: 時々発生するレグレッションテスト 065.bug152 のエラーを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-09-21 [011e56b]
+    -->
+    <para>
+     <!--
+     Test: Add <literal>EXECUTE/DEALLOCATE</literal> regression test. (Takuma Hoshiai)
+     -->
+     Test: <literal>EXECUTE/DEALLOCATE</literal>のレグレッションテストを追加しました。(Takuma Hoshiai)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-09-19 [576f576]
+    -->
+    <para>
+     <!--
+     Add missing <filename>pgpool_recovery/-/-1.0/-/-1.1.sql</filename> file to update 
+     <function>pgpool_recovery()</function> function version to 1.1. (Bo Peng)
+     -->
+     <function>pgpool_recovery()</function>関数のバージョンを1.1に更新するための<filename>pgpool_recovery--1.0--1.1.sql</filename>ファイルを追加しました。 (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-09-13 [f771dd1]
+    -->
+    <para>
+     <!--
+     Fix kind mismatch error when <literal>DEALLOCATE</literal> statement is issued. (Bo Peng)
+     -->
+     <literal>DEALLOCATE</literal>ステートメントが発行された場合に発生するkind mismatchエラーを修正しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     <literal>PREPARE</literal> should be add to pool_add_sent_message, 
+     so that <literal>EXECUTE</literal> and <literal>DEALLOCATE</literal>
+     can be sent to the same node as <literal>PREPARE</literal>.
+     -->
+     <literal>EXECUTE</literal>と<literal>DEALLOCATE</literal>が<literal>PREPARE</literal>と同じノードに送信されるために、<literal>PREPARE</literal>をpool_add_sent_messageに追加するように修正しました。
+    </para>
+    <para>
+     <!--
+     See <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2018-September/006284.html">[pgpool-general: 6226]</ulink> for more details.
+     -->
+     詳細は<ulink url="https://www.pgpool.net/pipermail/pgpool-general/2018-September/006284.html">[pgpool-general: 6226]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-27 [afb0617]
+    -->
+    <para>
+     <!--
+     Do not update <xref linkend="guc-pool-passwd"> if the password length is incorrect. 
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=419">bug 419</ulink>) (Takuma Hoshiai, Tatsuo Ishii)
+     -->
+     パスワードの長さが正しくない場合、<xref linkend="guc-pool-passwd">を更新しないように修正しました。
+      (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=419">bug 419</ulink>) (Takuma Hoshiai, Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     For <productname>Pgpool-II</productname> 3.7 or before, the password stored in 
+     <xref linkend="guc-pool-passwd"> is <literal>MD5</literal> password only. 
+     So check the correctness of <xref linkend="guc-pool-passwd"> by scanning entire file.
+     -->
+     <productname>Pgpool-II 3.7</productname>以前では、<xref linkend="guc-pool-passwd">に保存されているパスワードは<literal>MD5</literal> パスワードのみです。
+      <xref linkend="guc-pool-passwd">ファイルのパスワードの長さをチェックするように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-10 [3d4e5f6]
+    -->
+    <para>
+     <!--
+     Test: Update <filename>clean.sh</filename> which clean up regression test results. (Bo Peng)
+     -->
+     Test: レグレッションテストの結果を削除するための<filename>clean.sh</filename>ファイルを更新しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     Patch provided by Jesper Pedersen.
+     -->
+     パッチはJesper Pedersenにより提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-10 [5abd56e]
+    -->
+    <para>
+     <!--
+     Add .gitignore files. (Bo Peng)
+     -->
+     .gitignoreファイルを追加しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     Patch provided by Jesper Pedersen.
+     -->
+     パッチはJesper Pedersenにより提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-08-05 [d56f618]
+    -->
+    <para>
+     <!--
+     Fix segfault when node 0 is in down status in case of both health check and fail_over_on_backend_error are disabled. (Tatsuo Ishii)
+     -->
+     ヘルスチェックと<xref linkend="guc-failover-on-backend-error">の両方が無効になっている場合に、ノード0がダウンしたときに発生するセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-16">
+ <!--
+ <title>Release 3.5.16</title>
+ -->
+ <title>リリース 3.5.16</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-07-31</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title> 
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-07-04 [eec52a4]
+    -->
+    <para>
+     <!--
+     Fix "write on backend 0 failed with error :"Success"" error.
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=403">bug 403</ulink>) (Tatsuo Ishii)
+     -->
+     「write on backend 0 failed with error :"Success"」エラーを修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=403">bug 403</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <function>write()</function> が 0 を返した場合、エラーとして扱わないように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-06-20 [a73a255]
+    -->
+    <para>
+     <!--
+     Fix memory leaks related to pool_extract_error_message(). (Tatsuo Ishii)
+     -->
+     <function>pool_extract_error_message()</function> で発生するメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-06-19 [bf61ea2]
+    -->
+    <para>
+     <!--
+     Fix an incorrect declare as bool, rather than int in pool_extract_error_message(). (Tatsuo Ishii)
+     -->
+     <function>pool_extract_error_message()</function> 関数での誤ったデータ型の変数宣言を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     This led to a segfault issue mentioned on certain platform.
+     -->
+     これにより、特定のプラットフォームでセグメンテーション違反が発生する可能性がありました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-06-19 [95f32d2]
+    -->
+    <para>
+     <!--
+     Fix segfault in per_node_error_log() on armhf architecture. (Tatsuo Ishii)
+     -->
+     <literal>armhf</literal> アーキテクチャで発生する <function>per_node_error_log()</function> のセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Patch provided by Christian Ehrhardt.
+     -->
+     修正パッチは Christian Ehrhardt によって提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-06-20 [cc270ce]
+    2018-07-11 [b37e629]
+    -->
+    <para>
+     <!--
+     [Test] Fix 006.memqcache test failure. (Tatsuo Ishii)
+     -->
+     Test: テスト006.memqcache の失敗を修正しました。(	Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+	
+<sect1 id="release-3-5-15">
+ <!--
+ <title>Release 3.5.15</title>
+ -->
+ <title>リリース 3.5.15</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-06-12</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title> 
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-05-31 [871c089]
+    -->
+    <para>
+     <!--
+     Fix pgpool hung if replication delay is too much, when query cache enabled in extended query mode. (Tatsuo Ishii)
+     -->
+     拡張問合せ、かつクエリキャッシュが有効の場合、レプリケーション遅延が大きすぎるときに発生しうる <productname>Pgpool-II</productname> のハングアップを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     See <ulink url="https://www.pgpool.net/pipermail/pgpool-general-jp/2018-May/001533.html">[pgpool-general-jp: 1534]</ulink> 
+     for more details.
+     -->
+     詳細は <ulink url="https://www.pgpool.net/pipermail/pgpool-general-jp/2018-May/001533.html">[pgpool-general-jp: 1534]</ulink> 
+     を参考してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-05-24 [c88c336]
+    -->
+    <para>
+     <!--
+     In extended query mode, do not set writing tx flag with SET TRANSACTION READ ONLY. (Tatsuo Ishii) 
+     -->
+     拡張問合せでは、SET TRANSACTION READ ONLY の場合、書き込みトランザクションフラグを立てないように修正しました。 (Tatsuo Ishii) 
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-04-18 [7f47596]
+    -->
+    <para>
+     <!--
+     Prevent pcp_recovery_node from recovering "unused" status node. (Tatsuo Ishii)
+     -->
+     pcp_recovery_node が "unused" 状態のノードをリカバリしないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     This allowed to try to recover a node without configuration data,
+     which leads to variety of problems. 
+     -->
+     これにより、設定情報がないノードをリカバリしようとするときに発生する様々な問題を回避できます。
+    </para>
+    <para>
+     <!--
+     See <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2018-March/006021.html">[pgpool-general: 5963]</ulink> 
+     for more details.
+     -->
+     詳細は
+     <ulink url="https://www.pgpool.net/pipermail/pgpool-general/2018-March/006021.html">[pgpool-general: 5963]</ulink> 
+     をご参照してください。
+    </para>
+    <para>
+     <!--
+     Also I fixed pgpool_recovery function so that it quotes an empty
+     string argument with double quotes. 
+     -->
+     また、空の文字列の引数に対応できるように引数をダブルクォートで囲むように、<function>pgpool_recovery</function> 関数を修正しました。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+
+
+<sect1 id="release-3-5-14">
+ <!--
+ <title>Release 3.5.14</title>
+ -->
+ <title>リリース 3.5.14</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-04-17</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title> 
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2018-04-09 [b9ff4df]
+    -->
+    <para>
+     <!--
+     Add new regression test for node 0 is down. (Tatsuo Ishii)
+     -->
+     Test: ノード0 がダウンした場合のレグレッションテストを追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-04-08 [6bd77fe]
+    -->
+    <para>
+     <!--
+     Make calls to to_regclass fully schema qualified. (Tatsuo Ishii)
+     -->
+     to_regclass を呼び出すときにスキーマ名を含むように修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-03-20 [06b81ce]
+    -->
+    <para>
+     <!--
+     Test: Improve test script 003.failover. (Bo Peng)
+     -->
+     Test: 003.failover レグレッションテストが失敗しないように修正しました。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-03-14 [cec26d2]
+    -->
+    <para>
+     <!--
+     Deal with "unable to bind D cannot get parse message "S1" error. (Tatsuo Ishii)
+     -->
+     「unable to bind D cannot get parse message "S1"」エラーによるハングアップを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-02-27 [f8c1824]
+    -->
+    <para>
+     <!--
+     Fix <command>pgpool_setup</command> failure in replication mode. (Tatsuo Ishii)
+     -->
+     レプリケーションモードで <command>pgpool_setup</command> が失敗するのを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-02-27 [c7d2af4]
+    -->
+    <para>
+     <!--
+     Allow to support <function>pgpool_switch_xlog</function> <productname>PostgreSQL</productname> 10. (Tatsuo Ishii)
+     -->
+     <productname>PostgreSQL</productname> 10 に対応できるように pgpool_switch_xlog を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-13">
+ <!--
+ <title>Release 3.5.13</title>
+ -->
+ <title>リリース 3.5.13</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-02-13</simpara>
+ </note>
+ <note>
+  <para>
+   このリリースでは、Pgpool-II 3.7.0、3.6.6、3.5.10で追加された、ソケット
+   への書き込み不具合を修正しています。この障害により、ネットワーク負荷が
+   高い状態でのフロントエンド、バックエンドへのメッセージ送信の際に、不正
+   なメッセージが送信される可能性があります。3.7.x、3.6.6以降、3.5.10以降
+   のバージョンを利用中のユーザは、できるだけ早くアップグレードすることを
+   お勧めします。
+  </para>
+ </note>
+
+ <sect2>
+  <title>変更点</title> 
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-02-10 [a61b2bc]
+    -->
+    <para>
+     <!--
+     Allow to build with libressl. (Tatsuo Ishii)
+     -->
+     <productname>Pgpool-II</> が libressl の環境でビルドできるようになりました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳細は <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2018-February/002714.html">[pgpool-hackers: 2714]</ulink> を参照してください。パッチは Sandino Araico Sanchez により提供されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-29 [ca57328]
+    -->
+    <para>
+     <!--
+     Set TCP_NODELAY and non blocking to frontend socket. (Tatsuo Ishii)
+     -->
+     <productname>PostgreSQL</>のようにフロントエンドソケットを TCP_NODELAY、non-blocking に設定しました。 (Tatsuo Ishii) 
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-19 [e2be15a]
+    -->
+    <para>
+     <!--
+     Change systemd service file to use STOP_OPTS=" -m fast". (Bo Peng)
+     -->
+     systemd サービスを用いて<productname>Pgpool-II</> を停止するときに fast モードで停止するように変更しました。 (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-19 [883e0ae]
+    -->
+    <para>
+     <!--
+     Change pgpool_setup to add restore_command in recovery.conf. (Bo Peng)
+     -->
+     pgpool_setup の recovery.conf で  restore_command を使用するように pgpool_setup を変更します。 (Bo Peng)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+
+ <sect2>
+  <title>不具合修正</title> 
+  <itemizedlist>
+   <listitem>
+    <!--
+    2018-02-09 [4ffa279]
+    -->
+    <para>
+     <!--
+     Fix writing transaction flag is accidentally set at commit or rollback. (Tatsuo Ishii)
+     -->
+     コミットまたはロールバック時に誤って書き込みトランザクションフラグをセットする不具合を修正しました。 (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-29 [cfbde79]
+    -->
+    <para>
+     <!--
+     Fix bug with socket writing. (Tatsuo Ishii)
+     -->
+     ソケット書き込みの不具合を修正しました。 (Tatsuo Ishii)
+    </para>
+    <para>
+     ネットワーク負荷が高い場合に、フロントエンド、バックエンドへのメッセージ送信の際に、
+     不正なメッセージが送信される可能性があるのを修正しました。
+    </para>
+    <para>
+     このバグは 3.6.6、3.5.10 がリリースされた際に追加されたものです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-24 [5afc059]
+    -->
+    <para>
+     <!--
+     Fix segfault when %a is in log_line_prefix and debug message is on. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=376">bug 376</ulink>) (Tatsuo Ishii)
+     -->
+     デバッグモードがオン、かつ log_line_prefix に %a を指定した場合に発生するセグメンテーション違反を修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=376">bug 376</ulink>) (Tatsuo Ishii)
+    </para>
+
+   </listitem>
+
+   <listitem>
+    <!--
+    2018-01-18 [59267e3]
+    -->
+    <para>
+     <!--
+     Fix queries hanging in parse_before_bind with extended protocol and replication + load-balancing. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=377">bug 377</ulink>) (Tatsuo Ishii)
+     -->
+     拡張プロトコル、レプリケーションモードかつロードバランスを使用した場合に発生しうるハングアップを修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=377">bug 377</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-12">
+ <!--
+ <title>Release 3.5.12</title>
+ -->
+ <title>リリース 3.5.12</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2018-01-09</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-12-22 [725e7fb]
+    -->
+    <para>
+     <!--
+     Replace /bin/ed with /bin/sed, because /bin/sed is included in most distribution's base packages. (Tatsuo Ishii)
+     -->
+     <xref linkend="pgpool-setup"> スクリプト内の <command>/bin/ed</command> を <command>/bin/sed</command> に置き換えました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <command>/bin/sed</command> は <command>/bin/ed</command>に比べてほとんどのディストリビューションの基本パッケージに含まれているためです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-21 [20d83ee]
+    -->
+    <para>
+     <!--
+     Change the pgpool.service and sysconfig files to output Pgpool-II log. (Bo Peng)
+     -->
+     ログを取得するために <filename>pgpool.service</filename> とsysconfig ファイルを変更しました。(Bo Peng)
+    </para>
+    <para>
+     <!--
+     Removeing "Type=forking" and add OPTS=" -n" to
+     run Pgpool-II with non-daemon mode, because we need to redirect logs.
+     Using "journalctl" command to see Pgpool-II systemd log.
+     -->
+     ログを取得するために、非デーモンモードで <productname>Pgpool-II</productname> を起動するように Type=forking を削除し、OPTS=" -n" を追加しました。<command>journalctl</command> コマンドで <productname>Pgpool-II</productname> の systemd のログを確認することができます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-18 [6aaa2bd]
+    2017-12-17 [29c26a7]
+    -->
+    <para>
+     <!--
+     Fix timestamp data inconsistency by replication mode. (Bo Peng)
+     -->
+     ネイティブレプリケーションモードで発生するタイムスタンプデータの不整合を修正しました。 (Bo Peng)
+    </para>
+    <para>
+     <!--
+     From PostgreSQL10 the column default value such as 'CURRENT_DATE' changes,
+     Pgpool-II didn't rewrite timestamp by the added default
+     values. This caused data inconsistency.
+     -->
+     <productname>PostgreSQL</productname> 10から「CURRENT_DATE」のようなカラムのデフォルト値が変わったので、<productname>Pgpool-II</productname> はこれらのタイムスタンプをリライトしませんでした。これによって、データの不整合が発生していました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-14 [b590851]
+    -->
+    <para>
+     <!--
+     Downgrade a log message to debug message. (Tatsuo Ishii)
+     -->
+     一部のログメッセージをデバッグメッセージにダウングレードしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     That was mistaken left while last development cycle.
+     -->
+     前回の開発で誤って残していました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-12 [a94ee75]
+    -->
+    <para>
+     <!--
+     Fix for re-sync logic in reading packet from backend. (Tatsuo Ishii)
+     -->
+     バックエンドからのパケットを読み込む際の再同期のロジックを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Fix for re-sync logic in reading packet from backend. (Tatsuo Ishii)
+     read_kind_from_backend(), which reads message kind from backend,
+     re-syncs backend nodes when a ready for query message is
+     received. Unfortunately it forgot to call
+     pool_pending_message_pull_out() to delete sync pending message. This
+     leads to random stuck while reading packets from backend. Fix this to
+     call pool_pending_message_pull_out().
+     -->
+     <function>read_kind_from_backend()</function> は、バックエンドからメッセージを読み取り、"ready for query" メッセージが受信されたときにバックエンドノードを再同期します。
+     しかし、<function>pool_pending_message_pull_out()</function> を呼び出して「sync メッセージを受信した」を削除することを忘れていました。
+     これによって、バックエンドからのパケットの読み取り中に <productname>Pgpool-II</productname> がハングアップする可能性がありました。
+     <function>pool_pending_message_pull_out()</function>を呼び出し、「sync メッセージを受信した」を削除するように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-12 [2124bbd]
+    -->
+    <para>
+     <!--
+     Fix Pgpool-II hangs.(Bug370) (Tatsuo Ishii)
+     -->
+     問い合わせ中に <productname>Pgpool-II</productname> がハングアップする不具合を修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=370">bug 370</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     If an erroneous query is sent to primary and without a sync message the next query that requires a catalog cache look up is send, Pgpool-II hangs in do_query().
+     -->
+     エラークエリがプライマリに送信され、sync メッセージを送信せずに、次のクエリを実行するときに、
+     <productname>PostgreSQL</productname> のシステムカタログへの問い合わせが必要な場合、<productname>Pgpool-II</productname> は <function>do_query()</function> 関数でハングアップしていました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-12 [5b2a5dc]
+    -->
+    <para>
+     <!--
+     Add SL_MODE macro for upper compatibility with Pgpool-II 3.7 or later. (Tatsuo Ishii)
+     -->
+     <productname>Pgpool-II</productname> 3.7 以降の上位互換性のために SL_MODE マクロを追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-12-10 [719fb06]
+    -->
+    <para>
+     <!--
+     Fix returning transaction state when "ready for query" message received. (Tatsuo Ishii)
+     -->
+     "ready for query" メッセージを受信したときにトランザクション状態を返すように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     We return primary or master node state of ready for query message to
+     frontend. In most cases this is good. However if other than primary
+     node or master node returns an error state (this could happen if load
+     balance node is other than primary or master node and the query is an
+     errornous SELECT), this should be returned to frontend, because the
+     frontend already received an error.
+     -->
+     今まではプライマリノードまたはマスターノードの状態をフロントエンドに返していました。
+     ほとんどの場合、問題がありませんでした。
+     ただし、プライマリノードまたはマスターノード以外のノードがエラー状態を返した場合(ロードバランスノードがプライマリまたはマスターノード以外で、誤った SELECT クエリの場合に発生する可能性がある)、このエラー状態をフロントエンドに返す必要がありました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-11-16 [b6c750b]
+    -->
+    <para>
+     <!--
+     Fix pgpool start message printed multiple times. (Tatsuo Ishii)
+     -->
+     pgpool 開始メッセージが複数回出力されるのを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-11">
+ <title>リリース 3.5.11</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-11-01</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-10-31 [f4e1e93]
+    -->
+    <para>
+     <!--
+     Add different pgpool.sysconfig file for RHEL6 and RHEL7. (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=343">bug 343</ulink>) (Bo Peng)
+     -->
+     <filename>/etc/sysconfig/pgpool</filename> を RHEL6 と RHEL7 向けに分け、RHEL6 では起動時に "-n" オプションを指定するようにしました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=343">bug 343</ulink>) (Bo Peng)
+    </para>
+    <para>
+     <!--
+     In RHEL6, the "-n" option is needed to redirect log.
+     -->
+     RHEL6 では、起動時のログが出力されなくなったとの報告がありました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-10-16 [94b9919]
+    -->
+    <para>
+     <!--
+     Fix for bug in watchdog where sometime failover is not reliably performed (Muhammad Usama)
+     -->
+     たまににフェイルオーバが実行されない watchdog の不具合を修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     <!--
+     Currently watchdog process only considers the node's watchdog state before
+     deciding if it can handle the failover and failover-locking requests.
+     -->
+     今までは、watchdog プロセスは、自分の状態のみを考慮し、フェイルオーバおよびフェイルオーバロック要求の処理を判断していました。
+    </para>
+    <para>
+     <!--
+     But the problem with this technique is that, for the instance when the node has
+     announced itself as a master/coordinator of the cluster and is waiting for
+     the standby nodes to recognise it as a Master node. For that period of time
+     the watchdog state of the node is Master/coordinator, but it is yet not fully
+     capable of handling the failover and failover-locking requests.
+     -->
+     しかし、この処理の問題点は、ある watchdog が自分をクラスタのマスター/コーディネーターとして通知し、スタンバイノードが自分をマスターノードとして認識するのを待っている間に、自分の状態はマスター/コーディネータですが、まだフェイルオーバおよびフェイルオーバロック要求処理することはできませんでした。
+    </para>
+    <para>
+     <!--
+     So sometimes this leads to a situation where a failover is not reliably
+     performed in case when the failover request arrives while watchdog cluster
+     is in the process of electing a leader.
+     -->
+     そのため、たまに watchdog クラスタがリーダーを選出している間にフェイルオーバが実行されないことがありました。
+    </para>
+    <para>
+     <!--
+     The fix for the above situation is to make sure that the node has fully acquired
+     the Master status before accepting the failover and failover-locking requests.
+     -->
+     修正案としては、ノードがフェイルオーバおよびフェイルオーバーロック要求を受け入れる前に、完全にマスター状態を取得したことを確認するように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-10-10 [6cf6ae1]
+    -->
+    <para>
+     <!--
+     Fix bug with handling of 'H' (flush) message in streaming replication mode. (Tatsuo Ishii)
+     -->
+     ストリーミングレプリケーションモードで 'H'(フラッシュ) メッセージの処理に関するバグを修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=345">bug 345</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     If user expects to read response right after 'H', Pgpool-II hangs. The
+     cause was, when 'H' received, extended query mode was reset and
+     pending message was not used.
+     -->
+     ユーザが 'H' メッセージの直後に応答を読み込もうとすると、<productname>Pgpool-II</productname>はハングアップしまていました。
+     因は、'H' が受信されたときに拡張クエリモードがリセットされ、保留メッセージが使用されなかったためです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-09-22 [86d1195]
+    -->
+    <para>
+     <!--
+     Fix bug mistakenly overriding global backend status right after failover. (Tatsuo Ishii)
+     -->
+     フェイルオーバの直後にグローバルバックエンドの状態が誤って上書きされる不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳細は <ulink url="http://www.sraoss.jp/pipermail/pgpool-general/2017-September/005786.html">[pgpool-general: 5728]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-09-22 [3acd553]
+    -->
+    <para>
+     <!--
+     Fix exit signal handlers to not call ereport. (Tatsuo Ishii)
+     -->
+     exit シグナルハンドラが ereport を呼び出さないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳細は <ulink url="https://www.pgpool.net/pipermail/pgpool-hackers/2017-September/002545.html">[pgpool-hackers: 2545]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-09-11 [dbfbb10]
+    -->
+    <para>
+     <!--
+     Deal with OpenSSL 1.1. (Tatsuo Ishii)
+     -->
+     OpenSSL 1.1に対応しました。(Tatsuo Ishii, Muhammad Usama)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-10">
+ <title>リリース 3.5.10</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-09-05</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-09-02 [322eb19]
+    -->
+    <para>
+     ストリーミングレプリケーションモード/拡張クエリで発生する可能性のあるハングアップを修正しました。 (Tatsuo Ishii)
+    </para>
+    <para>
+     エラーが発生すると、<productname>Pgpool-II</productname>はフロントエンドから送られてきた<literal>Sync</literal>メッセージを読み取ります。しかし、タイミングによってはまれに<literal>Sync</literal>メッセージがまだ送出されていないことがあり、<literal>sync</literal>が送られるまで待つように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-09-01 [ad90886]
+    -->
+    <para>
+     <literal>watchdog</literal>が新しいノードを追加しようとした時にmasterに拒否される問題を修正しました。 (Yugo Nagata)
+    </para>
+    <para>
+     <literal>watchdog</literal>の間の認証の際に、秒を元にした文字列が使われていたため、<literal>watchdog</literal>ノードの間で秒単位の時刻同期ができていないときに、この問題が発生します。修正は、単に秒を元にした文字列を認証キーに使わないようにしました。
+    </para>
+    <para>
+     これは3.5.6, 3.6.3で追加された問題です。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-09-01 [56dccb4]
+    -->
+    <para>
+     Test: 001.load_balance のテストスクリプトを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     ネイティブレプリケーションモードのみで実行される一部のテストが、ストリーミングレプリケーションモードでも実行されていたので、修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-31 [b380241]
+    -->
+    <para>
+     拡張クエリで<literal>slony</literal>モードが動かなくなっていたのを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <literal>slony</literal>モードの場合、応答がバックエンドから返されたときに、進行中フラグがリセットされず、バックエンドからの次のメッセージ待ち状態になり、ハングアップしていました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-29 [e0d27bd]
+    -->
+    <para>
+     ストリーム書き込みモジュールのバグを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     要求された長さが残りの書き込みバッファサイズを超えた場合に発生する<function>pool_write_noerror()</function>の不具合を修正しました。この不具合はバッファオーバーランの問題につながる可能性がありました。
+    </para>
+    <para>
+     書き込みバッファがいっぱいになると、<function>pool_flush_it()</function>を呼び出し、バッファをフラッシュし、要求されたデータを直接書き込むように修正しました。
+    </para>
+    <para>
+     さらに、<function>pool_unread()</function>のパフォーマンスが向上しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-24 [661c8d3]
+    -->
+    <para>
+     Test: レグレッションテストスクリプトを修正しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-24 [7bcd7b8]
+    -->
+    <para>
+     Doc: ロードバランスに関するドキュメントを修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-16 [2db0ded]
+    -->
+    <para>
+     コアダンプが発生する可能性があったのと、一時テーブルの扱いに関するバグを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-15 [2f3d3e1]
+    -->
+    <para>
+     <function>pool_unread()</function> の不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <function>pool_unread()</function> が<function>realloc()</function>を呼び出すときに、バッファサイズが更新されませんでした。これにより、メモリ破損や予期しないデータの読み取りが発生する可能性がありました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-13 [645468e]
+    -->
+    <para>
+     空文字のクエリの処理を修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=328">bug 328</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     空文字のクエリ (空文字列またはコメントクエリ) が送信されると、コマンド完了メッセージがフロントエンドに返されていました。この動作は正しくありません。空文字クエリのレスポンスをフロントエンドに返すように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-09 [e1de72c]
+    -->
+    <para>
+     ストリーミングレプリケーションモード/拡張クエリで発生するクエリキャッシュのバグを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-03 [0780efe]
+    -->
+    <para>
+     ストリーミングレプリケーションモード/拡張クエリで発生するメモリリークを修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=324">bug 324</ulink>)(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-03 [3b298f0]
+    -->
+    <para>
+     Test: テスト 005.jdbc の Java プログラムを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-03 [49e47ec]
+    -->
+    <para>
+     <literal>worker</literal>プロセスが間違った DB ノードをフェイルオーバーさせる不具合を修正しました。 (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=303">bug 303</ulink>) (Tatsuo Ishii)
+    </para>
+    <para>
+     <literal>worker</literal>プロセスが間違った DB ノードをフェイルオーバーさせる可能性がありました。原因は、<varname>POLL_CONNECTIO</varname>構造体の<varname>db_node_id</varname>メンバがこのプロセスで初期化されていなかったからです （子プロセスでは適切に初期化されていました）。
+    </para>
+    <para>
+     この問題を解決するには、ノード ID をセットする関数 <function>pool_set_db_node_id()</function>を追加し、<function>make_persistent_db_connection()</function>内で呼び出すように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-31 [c4a2a44]
+    -->
+    <para>
+     <command>SET</command>コマンド発行時の不要なトランザクションの開始を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-27 [6586da8]
+    -->
+    <para>
+     ヘルスチェックアラームを無効にした状態で <function>Failover()</function>関数を実行するように修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     詳細は <ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-July/005679.html">[pgpool-general: 5621]</ulink> をご参照ください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-27 [7958f97]
+    -->
+    <para>
+     ストリーミングレプリケーションモード/拡張クエリの場合、フロントエンドが 'S' (同期) メッセージを送信する前に、バックエンドからエラーレスポンスを受信するときに発生するハングアップを修正しました。
+    </para>
+    <para>
+     さらに、以下の修正を行いました。
+    </para>
+    <para>
+     - ストリーミングレプリケーションモードで <function>ErrorResponse3()</function> 関数が意図的にエラークエリをバックエンドに送信しないように修正しました。
+    </para>
+    <para>
+     - クエリが進行中でクエリコンテキストが存在する場合のみ、<varname>virtual_master_node_id</varname>を返すように <function>pool_virtual_master_db_node_id()</function>関数を修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-07-20 [a9ada5c]
+    -->
+    <para>
+     配布物に<filename>pgpool.service</filename>が含まれるように修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+  </itemizedlist>
+
+ </sect2>
+
+ <sect2>
+  <title>改善点</title>
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-08-09 [50223bc]
+    -->
+    <para>
+     Test: ビルド時のログがファイルに出力されるように修正しました。 (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-08-09 [ea3a958]
+    -->
+    <para>
+     Test: メモリリークのレグレッションテストを追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-9">
+ <title>リリース 3.5.9</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-07-11</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2017-07-07 [d845be6]
+    -->
+    <para>
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-June/002400.html">[pgpool-hackers: 2400]</ulink>で報告された、ログ出力中の不正なバイトを修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     ほとんどログメッセージの修正でした。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-29 [e83a274]
+    -->
+    <para>
+     <productname>PostgreSQL</productname>の<productname>MemoryManager API</productname>に関する最新の変更をインポートしました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-21 [cc0b21d]
+    -->
+    <para>
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-June/002390.html">[pgpool-hackers: 2390]</ulink> によって報告されたデーモンモードでの相対パスの問題を修正しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-19 [d1013ac]
+    -->
+    <para>
+     <productname>PostgreSQL</productname> 10の変更に合わせて以下の関数名を修正しました。(Tatsuo Ishii)
+    </para>
+    <programlisting>
+     pg_current_wal_location     -> pg_current_wal_lsn
+     pg_last_wal_replay_location -> pg_last_wal_replay_lsn
+    </programlisting>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-09 [b86e7b7]
+    -->
+    <para>
+     ストリーミングレプリケーションと拡張プロトコルで発生するハングアップを修正しました。(Yugo Nagata)
+    </para>
+    <para>
+     以下の例で再現できます。
+
+     <programlisting>
+      - <filename>pgpool.conf</filename>ですべての読み取りクエリをスタンバイに送信するように設定しています。
+      - まず、トランザクションブロックで書き込みクエリを発行します。
+      - トランザクションをコミットした後、<command>SELECT</command>クエリを発行します。
+      - クエリを処理するときに、<command>Parse</command>の直後に<command>Describe（statement)</command>メッセージを送信します。
+     </programlisting>
+    </para>
+
+    <para>
+     <productname>JDBC</productname>を使用せず、<productname>pgproto</productname>を利用し以下のデータでこの問題を再現できます。
+    </para>
+
+    <programlisting>
+     'Q' "DROP TABLE IF EXISTS test_tbl"
+     'Y'
+     'Q' "CREATE TABLE test_tbl(i int)"
+     'Y'
+     'Q' "INSERT INTO test_tbl VALUES(1)"
+     'Y'
+
+     'P' "" "BEGIN" 0
+     'B' "" "" 0 0 0
+     'E' "" 0
+     'S'
+     'Y'
+
+     'P' "" "INSERT INTO test_tbl VALUES(1)" 0
+     'B' "" "" 0 0 0
+     'E' "" 0
+     'S'
+     'Y'
+
+     'P' "" "COMMIT" 0
+     'B' "" "" 0 0 0
+     'E' "" 0
+     'S'
+     'Y'
+
+     'P' "S_1" "SELECT * FROM test_tbl" 0
+     'D' 'S' "S_1"
+     'B' "C_1" "S_1" 0 0 0
+     'E' "C_1" 0
+     'S'
+     'Y'
+
+     'X'
+    </programlisting>
+
+    <para>
+     <command>Bind</command>と<command>Execute</command>を適切なバックエンドに送信するように、<function>parse_before_bind()</function>は、トランザクション中にのみ呼び出されるように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-07 [378111d]
+    -->
+    <para>
+     <productname>erlang</productname>アプリケーションを使用する場合、<productname>Pgpool-II</productname> がハングする不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <productname>Erlang</productname>クライアントは "Describe"メッセージの後に "Flush"を送信し、バックエンドは "Row description" を返します。しかし、<productname>Pgpool-II</productname>は、"Row description" メッセージを受信した後、進行中のクエリフラグをリセットすることを忘れてしまい、<productname>Pgpool-II</productname>はバックエンドからの応答を待っていました。これが<productname>erlang</productname>クライアントのハングアップの原因でした。
+
+    </para>
+    <para>
+     <productname>Pgpool-II</productname>が "Row description" メッセージを受信した際に、クエリ処理中のフラグをリセットするように修正しました。"no data" メッセージと同じ扱いにする必要がありました。
+    </para>
+    <para>
+     詳細は<ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-June/005613.html">[pgpo       ol-general: 5555]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-06-07 [cfcb85e]
+    -->
+    <para>
+     間違ったターゲットノードにバインドメッセージを送信するバグを修正しました。 <ulink url="http://www.pgpool.net/mantisbt/view.php?id=306">(bug 306)</ulink> (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-31 [ba69889]
+    -->
+    <para>
+     <productname>node.js</productname>を使用する場合に発生するクエリキャッシュのハングアップの問題を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳細は<ulink url="http://www.pgpool.net/pipermail/pgpool-general/2017-May/005569.html">[pgpool-general: 5511]</ulink>を参照してください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-28 [9de196b]
+    -->
+    <para>
+     <productname>PostgreSQL</productname> 10のストリーミングレプリケーションの遅延チェックに関する変更に合わせて修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-27 [52769db]
+    -->
+    <para>
+     クエリキャッシュのメモリリークを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     oidがないクエリ（<command>BEGIN</command>、<command>CHECKPOINT</command>、<command>VACUUM</command>など）の場合キャッシュバッファがクリアされるべきでしたが、されていませんでした。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-23 [27a516a]
+    -->
+    <para>
+     特定の場合に発生する拡張クエリのハングアップを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <productname>erlang</productname> PostgreSQL APIは<command>Parse ('P')</command>、<command>Describe ('D')</command>、<command>Flush ('H')</command>、<command>Bind (B)</command>、<command>Execute('E')</command>を生成します。この"H"は<productname>JDBC</productname>にはありませんので、今まで問題が起こらなかったと思われます。その後、<productname>Pgpool-II</productname>は拡張クエリモードを削除し、データを読み取るバックエンドを見つけることができませんでした。したがって、<productname>Pgpool-II</productname>はバックエンドの一部にメッセージを送信していない可能性があるため、ハングアップを引き起こすすべてのバックエンドを読み取ろうとします。
+    </para>
+    <para>
+     この問題を避けるために、<command>Flush</command>メッセージを受信後拡張クエリフラグを設定するように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-10 [7b2ef18]
+    -->
+    <para>
+     滅多に発生しない<productname>Pgpool-II</productname>起動時のバグを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     プライマリノードが見つかる前にフェールオーバーの要求が受け入れられる可能性がありました。
+     これにより、<productname>Pgpool-II</productname>は奇妙な状態に陥ります。障害が発生したノードはプライマリノードの場合、
+     プライマリノードは存在しないと判断していました。（既存のスタンバイが昇格し新しいプライマリノードになった場合でも）
+    </para>
+    <para>
+     詳細は<ulink url="http://www.pgpool.net/pipermail/pgpool-hackers/2017-May/002321.html">[pgpool-hackers: 2321]</ulink>  をご参照下さい。
+    </para>
+   </listitem>
+  </itemizedlist>
+ </sect2>
+</sect1>
+
+<sect1 id="release-3-5-8">
+ <title>リリース 3.5.8</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-05-11</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-05-08 [8b92a23]
+    -->
+    <para>
+     ノード 0 がフェイルオーバーするレグレッションテストを追加しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-05-04 [b97c38f]
+    -->
+    <para>
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-May/002312.html">[pgpool-hackers：2312]</ulink> で報告された
+     <productname>Pgpool-II</productname>ノード 0 がフェイルオーバーするときに発生するセグメンテーション違反を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+
+<sect1 id="release-3-5-7">
+ <title>リリース 3.5.7</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-04-28</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-04-12 [0069844]
+    -->
+    <para>
+     Watchdogのソースコードのミスを修正し、いくつかのdebugメッセージを追加しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-12 [f99053c]
+    -->
+    <para>
+     pool_hba.confファイルのリロード時に発生するエラーを修正しました。<ulink url="http://www.pgpool.net/mantisbt/view.php?id=299">(Bug 299)</ulink> (Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-11 [2997b3a]
+    -->
+    <para>
+     watchdog 使用時に Pgpool-II 間でバックエンドの状態が一致しない不具合を修正しました。
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=289">(Bug 289)</ulink> (Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-12 [ab32ae7]
+    -->
+    <para>
+     Watchdogによるスプリットブレインシナリオの処理を強化しました。(Muhammad Usama)
+    </para>
+    <para>
+
+     watchdogクラスタを使用しmaster/coordinatorノードの再選出が呼び出されていました。その結果、すべてのノードがウォッチドッグネットワークに再結合する必要がありました。これはwatchdogクラスタ全体の再起動と本質的に同じでした。
+    </para>
+    <para>
+     今回の修正では、master/coordinatorノードの候補は、次の基準で選択されるようになりました。
+    </para>
+    <para>
+     (1) 2つのウォッチドッグノードがクラスタマスターであると主張している場合、エスカレーションを実行したマスターノードはマスター状態を保持し、他のノードはステップダウンするように要求されます。
+    </para>
+    <para>
+     (2) 競合がノードのエスカレーション状況によって解決できない場合、クォーラムを保持するノードはマスター/コーディネータのままです。
+    </para>
+    <para>
+     (3) 両方の候補のクォーラムステータスが同じ場合、接続されたアライブノードの数が多いノードが優先されます。
+    </para>
+    <para>
+     (4) 最後に、上記3つでマスターノードを選出できなかった場合、古いマスター(長期間コーディネーターステータスを持つノード) はマスターのままです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-11 [8ffd1fa]
+    -->
+    <para>
+     複数の並行コマンドを処理するためにwatchdog内部コマンドのメカニズムを強化しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-12 [79f219a]
+    -->
+    <para>
+     コードの互換性のためにboolエンコードおよびデコード関数をJSONフレームワークに追加します。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-06 [7859f06]
+    -->
+    <para>
+     リグレッションの失敗を防ぐために、サポートされていないJavaメソッドを新しいJDBCドライバでコメントアウトしました。(Tatsu Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-05 [436f7a7]
+    -->
+    <para>
+     <function>parse_before_bind()</function> のログメッセージを debug1 にダウングレードしました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-04-04 [aa4e308]
+    2017-04-04 [24d9770]
+    2017-04-03 [7d8482a]
+    -->
+    <para>
+     coverity警告を修正しました。(Muhammad Usama, Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-31 [f61e002]
+    -->
+    <para>
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-general/2017-March/005454.html">[pgpool-general: 5396]</ulink>
+     pam ldapが失敗する不具合を修正しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-31 [0c16dd1]
+    -->
+    <para>
+     <command>SHOW</command>コマンドを読み込みクエリの一つとして認識するようにしました。(Tatsuo Ishii)
+    </para>
+    <para>
+     ストリーミングレプリケーションモードでは、<command>SHOW</command>が発行されるとその後のSELECTは明示的なトランザクションでプライマリノードに送信されていました。この制限は不適切でした。また、parseコマンドがエラーを返すときに発生するハングアップを修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-30 [4b28556]
+    -->
+    <para>
+     コミットadcb636によって引き起こされたメモリリークの問題を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     Commit adcb636では"pending message queue"を導入しました。メッセージを受信すると、情報がキューに追加され、オブジェクトのコピーが同時に作成されますが、オブジェクトを解放するのを忘れてしまいました。
+    </para>
+    <para>
+     今回の修正では、新しい関数<function>pool_pending_message_free_pending_message()</function>を作成し、<function>pool_pending_message_add()</function>、<function>pool_pending_message_get()</function>および<function>pool_pending_message_pull_out()</function>の後に呼び出すように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-29 [a504a9f]
+    -->
+    <para>
+     ストリーミングレプリケーションモードで「kind mismatch」(またはそれに関連する)エラーが修正されました。
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=271">(Bug 271)</ulink> (Tatsuo Ishii)
+    </para>
+    <para>
+     このエラー原因はデータベースノードがPgpool-IIに送る応答の予測が誤っていたことです。以前使用した「sync map」の実装は弱く、予測に失敗することがありました。今回の修正では、送信されたすべてのメッセージをバックエンドに記録する"pending message queue"を導入しました。このキューの要素には、メッセージのタイプ(parse/bind/execute/describe/close/sync)、メッセージが送信されたデータベースノードの情報などが格納されます。これは単純なFIFOキューです。バックエンドからメッセージが到着すると、"pending message queue"の先頭を見れば、受信したメッセージの種類やデータベースノードを確実に予測できます。 メッセージを受信した後、この要素はキューから削除されます。
+    </para>
+    <para>
+     一連のパッチをテストしてくれたSergey Kimさんに感謝します。
+    </para>
+    <para>
+     詳細は <ulink url="http://www.pgpool.net/mantisbt/view.php?id=271">Bug 271</ulink>、
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-February/002043.html">[pgpool-hackers: 2043]</ulink> と
+     <ulink url="http://www.sraoss.jp/pipermail/pgpool-hackers/2017-March/002140.html">[pgpool-hackers: 2140]</ulink> をご参照下さい。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-24 [d726c3a]
+    -->
+    <para>
+     [Service] が Type=forking に設定されている場合、Pgpool-II 3.6.2 が systemd によって強制終了されていた不具合を修正しました。
+     <ulink url="http://www.pgpool.net/mantisbt/view.php?id=296">(Bug 296)</ulink> (Muhammad Usama)
+    </para>
+   </listitem>
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+
+<sect1 id="release-3-5-6">
+ <title>リリース 3.5.6</title>
+
+ <note>
+  <title>リリース日</title>
+  <simpara>2017-03-17</simpara>
+ </note>
+
+ <sect2>
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2017-03-17 [ba1bcc3]
+    -->
+    <para>
+     pgpool.serviceファイルに"Wants=network.target"を追加しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=294">bug 294</ulink>) (Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-03-09 [1ddb7f1]
+    -->
+    <para>
+     <link linkend="PCP-PROMOTE-NODE">pcp_promote_node</link>を使ってノード0の昇格に失敗する不具合を修正しました。(Yugo Nagata)
+    </para>
+    <para>
+     失敗したときのエラーメッセージは以下のとおりです。
+    </para>
+
+    <programlisting>
+     FATAL: invalid pgpool mode for process recovery request
+     DETAIL: specified node is already primary node, can't promote node id 0
+    </programlisting>
+
+    <para>
+     ストリーミングレプリケーションモードでは、<productname>Pgpool-II</productname>がプライマリノードを何らかの理由で「スタンバイ」とみなしていました。たとえば、<productname>Pgpool-II</productname>が起動中で、pg_ctl promoteを手動で実行したとき、<productname>Pgpool-II</productname>はプライマリノードが存在しないと認識します。
+    </para>
+
+    <para>
+     この状態の不一致は、pcp_promote_nodeコマンドによって直されるはずですが、昇格させたいノードがマスターノード（最初のアライブノード）である場合、上記のように失敗しました。
+     失敗した理由は次のとおりです。ステータスを変更する前に、pcp_promote_nodeコマンドがPRIMARY_NODE_IDのノードIDと比較することによって、指定されたノードが既にプライマリであるかどうかをチェックします。ただし、プライマリが存在しない場合<productname>Pgpool-II</productname>のビューでは、PRIMARY_NODE_IDが0に設定されます。これはMASTER_NODE_IDと同じです。したがって、マスタノードを昇格させるように指定する場合、pcp_promote_nodeはこのノードが既にプライマリであるとのエラーを返して終了しました。
+    </para>
+
+    <para>
+     これを修正するには、pcp_promote_nodeは指定したノードがプライマリーノードであるかどうかをチェックするとき、PRIMARY_NODE_IDではなくREAL_PRIMARY_NODE_IDを使うように修正しました。REAL_PRIMARY_NODE_IDはプライマリが存在しない場合、-1に設定されます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-28 [5b4f78c]
+    -->
+    <para>
+     READMEに最新リリースノートへのリンクを追加しました。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-23 [2b7217e]
+    -->
+    <para>
+     <productname>Pgpool-II</productname>がVIPを解除した後にpingテストを続けている不具合を修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     <ulink url="http://www.pgpool.net/pipermail/pgpool-hackers/2016-June/001611.html">[pgpool-hackers: 1611]</ulink> により報告されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-23 [7ed400b]
+    -->
+    <para>
+     特定の場合に、<productname>Pgpool-II</productname>が終了したときに共有メモリセグメントを解放しない不具合を修正しました。(<ulink url="http://www.pgpool.net/mantisbt/view.php?id=272">bug 272</ulink>) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-02-06 [8fa731a]
+    -->
+    <para>
+     ExecStopとExecReloadコマンドをsystemdサービス設定ファイルに追加しました。(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-30 [6362ba6]
+    -->
+    <para>
+     <link linkend="PCP-ATTACH-NODE">pcp_attach_node</link>を実行するときのセグメンテーション違反を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=281">bug 281</ulink>)(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-30 [fb58877]
+    -->
+    <para>
+     ストリーミングレプリケーションモードでロードバランスのバグを修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     明示的なトランザクションでは、書き込みクエリが送信されるまで、SELECTはロードバランスされます。書込みクエリが送信された後、SELECTがプライマリノードに送信されます。しかし、syncメッセージが送信される前にSELECTが送信された場合、これは正しく動作しませんでした。
+    </para>
+    <para>
+     書き込みクエリが実行されると書き込みクエリの処理が行われるように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-30 [8371649]
+    -->
+    <para>
+     ストリーミングレプリケーションモードでのkind mismatchエラーを修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-27 [4f98bf0]
+    -->
+    <para>
+     closeメッセージの後に<function>do_query()</function>がハングする問題を修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-27 [7512482]
+    -->
+    <para>
+     <function>wd_get_cmd</function>関数のバッファオーバーフローを修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=280">bug 280</ulink>)(Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-19 [839a709]
+    -->
+    <para>
+     watchdogプロセスを再起動する時の不具合を修正しました。(Muhammad Usama)
+    </para>
+    <para>
+     watchdogプロセスが何らかの問題（例えばセグメンテーションフォルト）によって異常終了した場合、新たに生成されたwatchdogプロセスの起動が失敗し、"bind on ... failed with reason: Address already in use"とのエラーを返しました。
+    </para>
+
+    <para>
+     理由は、異常終了したwatchdogプロセスはIPCに使用するソケットをクリーンアップする時間がなかったからです。
+    </para>
+
+    <para>
+     この不具合を修正するために、Pgpoolのメインプロセスは、watchdogプロセスが異常終了したときに共有メモリにフラグを設定するように修正しました。
+     watchdogプロセスが再起動されるとき、フラグがセットされたら、ソケットファイルをクリーンアップするようにしました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-19 [779d029]
+    -->
+    <para>
+     特定の条件下で、ストリーミングレプリケーションモードでクエリキャッシュが有効な場合、SELECTがハングアップする不具合を修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <ulink url="http://www.pgpool.net/pipermail/pgpool-general-jp/2017-January/001440.html">pgpool-general-jp:1441</ulink>により報告されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-11 [29b61eb]
+    -->
+    <para>
+     シグナルハンドラがelog/ereportを呼び出さないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     詳しくは<ulink url="http://www.pgpool.net/pipermail/pgpool-hackers/2016-December/001950.html">[pgpool-hackers: 1950]</ulink>をご参照ください。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-10 [39d24e7]
+    -->
+    <para>
+     FreeBSDでlisten_addresses = '*'の場合、INETドメインソケットが作成できない不具合を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=202">bug 202</ulink>)(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [8598d5a]
+    -->
+    <para>
+     特定に場合にwatchdogがデエスカレーションに失敗する不具合を修正しました。
+     (<ulink url="http://www.pgpool.net/mantisbt/view.php?id=249">bug 249</ulink>)(Muhammad Usama)
+    </para>
+
+    <para>
+     WNOHANGオプションなしで<function>waitpid()</function>システムコールを使用するように修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2017-01-04 [bd92a11]
+    -->
+    <para>
+     authentication_timeoutが有効な場合、connection_life_timeが正しく処理されない不具合を修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-28 [afebadf]
+    -->
+    <para>
+     クライアント接続直後に発生しうる認証タイムアウトを修正しました。(Yugo Nagata)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+
+<sect1 id="release-3-5-5">
+ <!--
+ <title>Release 3.5.5</title>
+ -->
+ <title>リリース 3.5.5</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2016-12-26</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+
+  <itemizedlist>
+   <listitem>
+    <!--
+    2016-12-23 [4124e5e]
+    -->
+    <para>
+     <!--
+     Tightening up the watchdog security. (Muhammad Usama)
+     -->
+     watchdog のセキュリティを強化しました。(Muhammad Usama)
+    </para>
+
+    <para>
+     <!--
+     Now wd_authkey uses the HMAC SHA-256 hashing.
+     -->
+     wd_authkeyは、HMAC SHA-256ハッシングを使用するようになりました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-22 [f8a157a]
+    -->
+    <para>
+     <!--
+     Add pgpool_adm extension. (Bo Peng)
+     -->
+     <productname>Pgpool-II</productname>のRPM にpgpool_adm extension が含まれるように修正しました。(Bo Peng)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-20 [888ac16]
+    -->
+    <para>
+     <!--
+     Fix occasional segfault when query cache is enabled. (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効になっている場合に、時々発生しうるセグメンテーション違反を修正しました。(bug 263) (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-20 [9274f82]
+    -->
+    <para>
+     <!--
+     Fix packet kind does not match error in extended protocol per bug 231. (Tatsuo Ishii)
+     -->
+     拡張プロトコルにおいて発生しうるkind mismatchエラーを修正しました。(bug 231) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     According to the bug231, the bug seem to bite you if all of
+     following conditions are met:
+     -->
+     bug 231によると、以下の条件がすべて満たされていると、このバグが発生する可能性がありました。
+    </para>
+    <itemizedlist>
+     <listitem>
+      <para>
+       <!--
+       Streaming replication mode
+       -->
+       ストリーミングレプリケーションモード
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Load balance node is not node 0
+       -->
+       ロードバランスノードがnode 0ではない
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Extended protocol is used
+       -->
+       拡張プロトコルを使用している
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       SELECT is executed, the statement is closed, then a
+       transaction command is executed
+       -->
+       SELECTが実行され、ステートメントがクローズされた後、トランザクションコマンドが実行されている
+      </para>
+     </listitem>
+    </itemizedlist>
+    <para>
+     <!--
+     The sequence of how the problem bites is:
+     -->
+     問題の発生順序:
+     <orderedlist>
+      <listitem>
+       <para>
+        <!--
+	SELECT executes on statement S1 on the load balance node 1
+	-->
+	ロードバランスノード1でステートメントS1のSELECTが実行されます。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Frontend send Close statement
+	-->
+	フロントエンドがクローズステートメントを送ります。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Pgpool-II forward it to backend 1
+	-->
+	Pgpool-IIはそれをバックエンド1に転送します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Frontend sends Parse, Bind, Execute of COMMIT
+	-->
+	フロントエンドは、COMMITのParse、Bind、Executeを送信します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Pgpool-II forward it to backend 0 & 1
+	-->
+	Pgpool-IIはそれをバックエンド0と1に転送します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Frontend sends sync message
+	-->
+	フロントエンドが同期メッセージを送信します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Pgpool-II forward it to backend 0 & 1
+	-->
+	Pgpool-IIはそれをバックエンド0と1に転送します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Backend 0 replies back Parse complete ("1"), while
+	backend 1 replies back close complete ("3") because of
+	#3.
+	-->
+	バックエンド0はParse complete（ "1"）を返しますが、バックエンド1は＃3によりclose complete（ "3"）を返します。
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        <!--
+	Kind mismatch occurs
+	-->
+	Kind mismatch が発生します。
+       </para>
+      </listitem>
+     </orderedlist>
+
+    </para>
+    <para>
+     <!--
+     The solution is, in #3, let Pgpool-II wait for response from backend
+     1, but do not read the response message. Later on Pgpool-II's state
+     machine will read the response from it before the sync message is sent
+     in #6. With this, backend 1 will reply back "1" in #8, and the kind
+     mismatch error does not occur.
+     -->
+     解決策は、＃3では、Pgpool-IIがバックエンド1からの応答を待つようにしますが、応答メッセージは読み取らないようにします。 その後、Pgpool-IIの状態マシンは、＃6で同期メッセージが送信される前に、その応答を読み込みます。 これによりバックエンド1は＃8で "1"を返信し、kind mismatchエラーは発生しなくなります。
+    </para>
+    <para>
+     <!--
+     Also, fix not calling pool_set_doing_extended_query_message() when
+     receives Close message.  (I don't know why it was missed).
+     -->
+     また、Closeメッセージを受け取ったときにpool_set_doing_extended_query_message（）が呼び出されない不具合を修正しました。
+    </para>
+    <para>
+     <!--
+     New regression test "067.bug231" was added.
+     -->
+     新しいリグレッションテスト "067.bug231"が追加されました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-12-06 [336e932]
+    -->
+    <para>
+     <!--
+     Fix a race condition in a signal handler per bug 265. (Tatsuo Ishii)
+     -->
+     シグナルハンドラでの競合状態を修正しました。(bug 265) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     In child.c there's signal handler which calls elog. Since the signal
+     handler is not blocked against other signals while processing, deadlock
+     could occur in the system calls in the pgpool shutdown sequence. To
+     fix the problem, now the signal handler is blocked by using
+     POOL_SETMASK.
+     -->
+     child.cには、elogを呼び出すシグナルハンドラがあります。 シグナルハンドラは処理中に他のシグナルに対してブロックされないため、pgpoolのシャットダウンシーケンスでシステムコールにデッドロックが発生する可能性がありました。 この問題を解決するために、シグナルハンドラはPOOL_SETMASKを使用してブロックされるように修正されました。
+    </para>
+    <para>
+     <!--
+     Ideally we should avoid calling elog in signal handlers though.
+     -->
+     理想的にはシグナルハンドラでelogを呼び出すことを避けるべきです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-11-26 [045a59f]
+    -->
+    <para>
+     <!--
+     Back porting the improved failover command propagation mechanism from Pgpool-II 3.6 (Muhammad Usama)
+     -->
+     <productname>Pgpool-II</productname> 3.6 でのフェイルオーバーコマンドの転送処理の改善がバックポートされました。(Muhammad Usama)
+    </para>
+    <para>
+     <!--
+     Overhauling the design of how failover, failback and promote node commands are
+     propagated to the watchdog nodes. Previously the watchdog on pgpool-II node that
+     needs to perform the node command (failover, failback or promote node) used to
+     broadcast the failover command to all attached pgpool-II nodes. And this
+     sometimes makes the synchronization issues, especially when the watchdog cluster
+     contains a large number of nodes and consequently the failover command sometimes
+     gets executed by more than one pgpool-II.
+     -->
+     これまでは、Pgpool-II ノードの watchdogがすべての接続されたノードにフェイルオーバーコマンド(failover、 failback 及び promote node)を転送していました。多数のノードが含まれているwatchdogクラスタでは、フェールオーバーコマンドが複数のPgpool-IIによって実行されることによって、データの同期問題を引き起こす可能性がありました。このコミットでは、すべてのフェイルオーバーコマンド(failover、 failback 及び promote node)が master/coordinator watchdog に転送され、master/coordinator watchdogはすべてのスタンバイノードに転送するようになりました。
+    </para>
+    <para>
+     <!--
+     Now with this commit all the node commands are forwarded to the
+     master/coordinator watchdog, which in turn propagates to all standby nodes.
+     Apart from above the commit also changes the failover command interlocking
+     mechanism and now only the master/coordinator node can become the lock holder
+     so the failover commands will only get executed on the master/coordinator node.
+     -->
+     また、今回の修正では、インターロック機能も変更されました。master/coordinatorノードのみがロックホルダになり、フェイルオーバコマンドはmaster/coordinatorノードでのみ実行されます。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-10-27 [f37c592]
+    -->
+    <para>
+     <!--
+     Do not cancel a query when the query resulted in an error other than in native replication mode. (Tatsuo Ishii)
+     -->
+     ネイティブレプリケーションモード以外の場合、エラーが発生した場合は、クエリをキャンセルしないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     It was intended to keep the consistency, but there's no point in other
+     than native replication mode.
+     -->
+     本来は一貫性を維持するためにキャンセルされるようになっていましたが、ネイティブレプリケーションモード以外の場合ではキャンセルする必要がないので、修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-10-27 [c9e203d]
+    -->
+    <para>
+     <!--
+     Remove obsoleted option "-c" in pgpool command. (Tatsuo Ishii)
+     -->
+     pgpool コマンドで廃止されたオプション"-c"を削除しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     Also fix typo in the help message.
+     -->
+     また、helpメッセージのタイポを修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-10-18 [8da0e7f]
+    -->
+    <para>
+     <!--
+     Fix for 0000252: authentication failed error when PCP command is cancelled... (Muhammad Usama)
+     -->
+     PCPコマンドがキャンセルされたときの認証失敗エラーが修正されました。(bug 252) (Muhammad Usama)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-24 [8aa7586]
+    -->
+    <para>
+     <!--
+     Change the default value of search_primary_node_timeout from 10 to 300. (Tatsuo Ishii)
+     -->
+     <xref linkend="guc-search-primary-node-timeout">のデフォルト値を10から300に変更しました。(Tatstuo Ishii)
+    </para>
+    <para>
+     <!--
+     Prior default value 10 seconds is sometimes too short for a standby to
+     be promoted.
+     -->
+     これまでのデフォルト値10秒は、スタンバイを昇格する際には小さすぎでした。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-21 [b306e04]
+    -->
+    <para>
+     <!--
+     Fix the case when all backends are down then 1 node attached. (Tatsuo Ishii)
+     -->
+     すべてのバックエンドがダウンした後に、1つのノードを復帰させる時の不具合が修正されました。(bug 248) (Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     When all backends are down, no connection is accepted. Then 1
+     PostgreSQL becomes up, and attach the node using pcp_attach_node. It
+     successfully finishes. However, when a new connection arrives, still
+     the connection is refused because pgpool child process looks into the
+     cached status, in which the recovered node is still in down status if
+     mode is streaming replication mode (native replication and other modes
+     are fine). Solution is, if all nodes are down, force to restart all
+     pgpool child.
+     -->
+     すべてのノードがダウンすると、すべてのコネクションを受け付けなくなります。
+     その状態で1つの<productname>PostgreSQL</productname>が起動し、<command>pcp_attach_node</command>コマンドでそのノードを復帰させます。
+     そしてこのコマンドは成功しました。
+     しかし、新しい接続が拒否されました。
+     これは<productname>Pgpool-II</productname> の子プロセスがキャッシュされた古い情報を参照したのが原因でした。
+     ストリーミングレプリケーションモードでは、このキャッシュされた情報において、復帰させたノードの状態がdownのままでした。
+     （ネィティブレプリケーションモード、およびそれ以外のモードでは問題ありません）
+     解決法として、全ノードがダウンした場合、強制的に全 <productname>Pgpool-II</productname>子プロセスを再起動するようにしました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-20 [a38fa09]
+    -->
+    <para>
+     <!--
+     Fix for: [pgpool-general: 4997] Avoiding downtime when pgpool changes require a restart (Muhammad Usama)
+     -->
+     再起動が必要なパラメータの設定を変更した際の<productname>Pgpool-II</productname>停止が起こらないようにしました。(Muhammad Usama)
+    </para>
+    <para>
+     <!--
+     To fix this, The verification mechanism of configuration parameter values is
+     reversed, previously the standby nodes used to verify their parameter values
+     against the respective values on the master pgpool-II node and when the
+     inconsistency was found the FATAL error was thrown, now with this commit the
+     verification responsibility is delegated to the master pgpool-II node.
+     Now the master node will verify the configuration parameter values of each
+     joining standby node against its local values and will produce
+     a WARNING message instead of an error in case of a difference.
+     This way the nodes having the different configurations will also be allowed to
+     join the watchdog cluster and the user has to manually look out for the
+     configuration inconsistency warnings in the master pgpool-II log to avoid the
+     surprises at the time of pgpool-II master switch over.
+     -->
+     この修正のために、設定パラメータの検証機構の順序を逆にしました。
+     以前はスタンバイノードが<productname>Pgpool-II</productname>マスターノードに対して設定パラメータの値を検証し、不整合が見つかった場合にはFATALエラーが出力されていました。
+     この修正で、<productname>Pgpool-II</productname>マスターノードに検証の役割が移譲されました。
+     マスターノードは参加している個々のスタンバイノードの設定値をローカルの設定値と比較し、違っている場合にはエラーではなくてWARNINGメッセージを出力します。
+     この方法では、ユーザは、手動でマスター<productname>Pgpool-II</productname>ログの中から不整合ワーニングを見つけて、<productname>Pgpool-II</productname>マスターのスイッチオーバが起きたときに驚くようなことが起こらないようにしなければなりません。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-13 [1c99580]
+    -->
+    <para>
+     <!--
+     Add compiler flag "-fno-strict-aliasing" in <filename>configure.ac</filename> to fix compiler error. (Tatsuo Ishii)
+     -->
+     コンパイルエラーを修正するために、<filename>configure.ac</filename>
+     ファイルにコンパイルフラグ "-fno-strict-aliasing" が追加されました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-09 [8231f65]
+    -->
+    <para>
+     <!--
+     Do not use random() while generating MD5 salt. (Tatsuo Ishii)
+     -->
+     MD5 salt を生成するときに、<function>random()</function> を使用しないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     <function>random()</function> should not be used in security related applications.  To
+     replace <function>random()</function>, import <function>PostmasterRandom()</function> from PostgreSQL.
+     -->
+     <function>random()</function>関数はセキュリティ関連のアプリケーションで使用すべきではありません。
+     <function>random()</function>の代わりに<productname>PostgreSQL</productname>の<function>PostmasterRandom()</function> 使用するように変更しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-06 [891ce0f]
+    -->
+    <para>
+     <!--
+     Don't ignore sync message from frontend when query cache is enabled. (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効な場合、sync メッセージが廃棄されないよう修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>
+

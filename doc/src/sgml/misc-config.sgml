@@ -1,0 +1,331 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-misc">
+ <title>Misc Configuration Parameters</title>
+
+ <variablelist>
+
+  <varlistentry id="guc-relcache-expire" xreflabel="relcache_expire">
+   <term><varname>relcache_expire</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>relcache_expire</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the relation cache expiration time in seconds.
+     The relation cache is used for caching the query result of
+     <productname>PostgreSQL</> system catalogs that is used by <productname>Pgpool-II
+     </productname> to get various information including the table
+     structures and to check table types(e.g. To check if the referred
+     table is a temporary table or not). The cache is maintained in
+     the local memory space of <productname>Pgpool-II</productname>
+     child process and its lifetime is same as of the child process.
+     The cache is also maintained in shared memory to share among child
+     processes,if enable  <xref linkend="guc-enable-shared-relcache">.
+      So If the table is modified using <command>ALTER TABLE</command>
+      or some other means, the relcache becomes inconsistent.
+      For this purpose, <varname>relcache_expire</varname> controls
+      the life time of the cache.
+      Default is 0, which means the cache never expires.
+    </para>
+
+    <para>
+     This parameter can only be set at server start.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-relcache-size" xreflabel="relcache_size">
+   <term><varname>relcache_size</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>relcache_size</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the number of relcache entries. Default is 256.
+     The cache is created  about 10 entries per table. So you can estimate
+     the required number of relation cache at "number of using table * 10".
+    </para>
+    <note>
+     <para>
+      If the below message frequently appears in the
+      <productname>Pgpool-II</productname> log, you may need to
+      increase the <varname>relcache_size</varname> for better performance.
+      <programlisting>
+       "pool_search_relcache: cache replacement happened"
+      </programlisting>
+     </para>
+    </note>
+    <para>
+     This parameter can only be set at server start.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-enable-shared-relcache" xreflabel="enable_shared_relcache">
+   <term><varname>enable_shared_relcache</varname> (<type>boolean</type>)
+    <indexterm>
+     <primary><varname>enable_shared_relcache</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     By setting to on, relation cache is shared among
+     <productname>Pgpool-II</productname> child processes using the in
+     memory query cache (see <xref
+     linkend="runtime-in-memory-query-cache-enabling"> for more
+     details). Default is on. Each child process needs to access to
+     the system catalog from <productname>PostgreSQL</productname>.
+     By enabling this feature, other process can extract the catalog
+     lookup result from the query cache and it should reduce the
+     frequency of the query. Cache invalidation is not happen even if
+     the system catalog is modified. So it is strongly recommend to
+     set time out base cache invalidation by using <xref
+     linkend="guc-relcache-expire"> parameter.
+    </para>
+    <para>
+     This parameter can be used even if <xref
+     linkend="guc-memory-cache-enabled"> is off.  In this case some
+     query cache parameters(<xref linkend="guc-memqcache-method">,
+     <xref linkend="guc-memqcache-maxcache"> and each cache storage
+     parameter) is used together.
+    </para>
+    <para>
+     <productname>Pgpool-II</productname> search the local relation
+     cache first. If it is not found on the cache, the shared relation
+     query cache is searched if this feature is enabled. If it is
+     found on query cache, it is copied into the local relation
+     cache. If a cache entry is not found on anywhere,
+     <productname>Pgpool-II</productname> executes the query against
+     <productname>PostgreSQL</productname>, and the result is stored
+     into the shared relation cache and the local cache.
+    </para>
+    <para>
+     This parameter can only be set at server start.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-relcache-query-target" xreflabel="relcache_query_target">
+   <term><varname>relcache_query_target</varname> (<type>enum</type>)
+    <indexterm>
+     <primary><varname>relcache_query_target</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     The target node to send queries to create relation cache
+     entries. If set to <literal>primary</literal>, queries will
+     be sent to primary node. This is the default and
+     recommended to most users because the query could get the
+     latest information.  If you want to lower the load of
+     primary node, you can set the parameter to
+     <literal>load_balance_node</literal>, which will send
+     queries to the load balance node. This is especially useful
+     for such a system
+     where <productname>Pgpool-II</productname>/primary server is
+     on a continent A while
+     other <productname>Pgpool-II</productname>/standby server is
+     on other continent B. Clients on B want read data from the
+     standby because it's much geographically closer. In this
+     case you can set backend_weight0 (this represents primary)
+     to 0, backend_weight1 to 1 (this represents standby) and set
+     relcache_query_target
+     to <literal>load_balance_node</literal>.
+    </para>
+    <para>
+     Note, however, if you send query to the standby node,
+     recently created tables and rows might not be available on
+     the standby server yet because of replication delay. Thus
+     such a configuration is not recommended for systems where
+     data modification activity is high.
+    </para>
+    <para>
+     This parameter can be changed by reloading
+     the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-check-temp-table" xreflabel="check_temp_table">
+   <term><varname>check_temp_table</varname> (<type>enum</type>)
+    <indexterm>
+     <primary><varname>check_temp_table</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Setting to <literal>catalog</literal>
+     or <literal>trace</literal>, enables the temporary table
+     check in the <acronym>SELECT</acronym> statements. To check
+     the temporary table <productname>Pgpool-II</productname>
+     queries the system catalog of
+     primary/main <productname>PostgreSQL</productname> backend
+     if <literal>catalog</literal> is specified, which
+     increases the load on the primary/main server.
+    </para>
+    <para>
+     If <literal>trace</literal> is
+     set, <productname>Pgpool-II</productname> traces temporary
+     table creation and dropping to obtain temporary table
+     info. So no need to access system catalogs. However, if
+     temporary table creation is invisible
+     to <productname>Pgpool-II</productname> (done in functions
+     or triggers, for
+     example), <productname>Pgpool-II</productname> cannot
+     recognize the creation of temporary tables.
+    </para>
+    <para>
+     If you are absolutely sure that your system never uses
+     temporary tables, then you can safely set to none.
+    </para>
+    <note>
+     <para>
+      For a backward compatibility sake for 4.0 or
+      before, <productname>Pgpool-II</productname>
+      accepts <literal>on</literal>, which is same
+      as <literal>catalog</literal> and <literal>off</literal>,
+      which is same as <literal>none</literal>, they may be
+      deleted in the future version.
+     </para>
+    </note>
+    <para>
+     Default is <literal>catalog</literal>.
+    </para>
+    <para>
+     This parameter can be changed by reloading
+     the <productname>Pgpool-II</productname> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to
+      alter the value of this parameter for a current session.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-check-unlogged-table" xreflabel="check_unlogged_table">
+   <term><varname>check_unlogged_table</varname> (<type>boolean</type>)
+    <indexterm>
+     <primary><varname>check_unlogged_table</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Setting to on, enables the unlogged table check in the <acronym>SELECT</acronym>
+     statements. To check the unlogged table <productname>Pgpool-II</productname>
+     queries the system catalog of primary/main <productname>PostgreSQL</> backend which increases
+     the load on the primary/main server.
+     If you are absolutely sure that your system never uses the unlogged tables
+     (for example, you are using 9.0 or earlier version of <productname>PostgreSQL</>) then you
+     can safely turn off the <varname>check_unlogged_table</varname>.
+     Default is on.
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+      this parameter for a current session.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-pid-file-name" xreflabel="pid_file_name">
+   <term><varname>pid_file_name</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>pid_file_name</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the full path to a file to store the <productname>Pgpool-II
+     </productname> process id.
+     The pid_file_name path can be specified as relative to the
+     location of pgpool.conf file or as an absolute path
+     Default is <literal>"/var/run/pgpool/pgpool.pid"</literal>.
+    </para>
+
+    <para>
+     This parameter can only be set at server start.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-logdir" xreflabel="logdir">
+   <term><varname>logdir</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>logdir</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the full path to a directory to store the <literal>pgpool_status</literal>.
+     Default is <literal>'/tmp'</literal>.
+    </para>
+
+    <para>
+     This parameter can only be set at server start.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-test" xreflabel="health_check_test">
+   <term><varname>health_check_test</varname> (<type>boolean</type>)
+    <indexterm>
+     <primary><varname>health_check_test</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+     <caution>
+       <para>
+	Do not set this parameter to on in a production
+	environment. This feature is purely for testing purpose.
+       </para>
+     </caution>
+    <para>
+     Setting to on,
+     enables the testing facility of health checking. In this case the
+     health check process looks
+     into <filename>backend_down_request</filename>
+     under <xref linkend="guc-logdir">.  The file may contain multiple
+     lines, and each line corresponds to each backend. A line in the
+     file starts with backend id (must be a decimal number starting
+     with zero), then a TAB, and ends with "down". The backend is
+     assumed in down status and <productname>Pgpool-II</productname>
+     will start a failover. Once the failover completes, the "down" is
+     rewritten to "already_down" by health check process to prevent
+     repeating failovers.
+    </para>
+    <para>
+     This feature is particularly useful for
+     testing <xref linkend="guc-failover-require-consensus">. Suppose
+     we have 3 watchdog node. Each watchdog checks healthiness of
+     backend 0. By setting "0	down" in the file only under watchdog 0,
+     other watchdogs disagree with the unhealthiness of backend 0, so
+     failover will not occur. This kind of partial network failure can
+     be simulated using this feature.
+    </para>
+    <para>
+     Default is <literal>off</literal>.
+    </para>
+
+    <para>
+     This parameter can only be set at server start.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+</sect1>

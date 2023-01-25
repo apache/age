@@ -1,0 +1,109 @@
+<sect1 id="example-Aurora">
+ <title>Aurora Configuration Example</title>
+
+ <para>
+  <productname>Amazon Aurora for PostgreSQL
+   Compatibility</productname> (Aurora) is a managed service for
+  <productname>PostgreSQL</productname>. From user's point of
+  view, <productname>Aurora</productname> can be regarded as a
+  streaming replication cluster with some exceptions. First,
+  fail over and online recovery are managed
+  by <productname>Aurora</productname>. So you don't need to
+  set <xref linkend="guc-failover-command">, <xref linkend="guc-follow-primary-command">,
+    and recovery related parameters. In this section we explain
+    how to set up <productname>Pgpool-II</productname> for Aurora.
+ </para>
+
+ <sect2 id="example-Aurora-config">
+  <title>Setting pgpool.conf for Aurora</title>
+  <para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      Create <filename>pgpool.conf</filename>
+      from <filename>pgpool.conf.sample</filename>.
+      Make sure your <filename>pgpool.conf</filename> includes following line:
+      <programlisting>
+backend_clustering_mode = 'streaming_replication'
+      </programlisting>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Set <xref linkend="guc-sr-check-period"> to 0 to
+       disable streaming replication delay checking.  This
+       is because <productname>Aurora</productname> does
+       not provide necessary functions to check the
+       replication delay.
+     </para>
+     <programlisting>
+sr_check_period = 0
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      Enable <xref linkend="guc-enable-pool-hba"> to on so
+       that md5 authentication is enabled
+       (<productname>Aurora</productname> always use md5
+       authentication).
+     </para>
+     <programlisting>
+enable_pool_hba = on
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      Create <filename>pool_password</filename>. See <xref linkend="auth-md5">
+       for more details.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Set <xref linkend="guc-backend-hostname">0 for the Aurora cluster endpoint.
+	  Set <xref linkend="guc-backend-hostname">1 for the Aurora reader endpoint.
+	  Set appropriate <xref linkend="guc-backend-weight"> as usual.
+	  You don't need to set <xref linkend="guc-backend-data-directory">.
+     </para>
+     <programlisting>
+backend_hostname0 = 'cluster endpoint'
+backend_hostname1 = 'reader endpoint'
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      Set <varname>ALWAYS_PRIMARY</varname> flag to
+      the <xref linkend="guc-backend-flag">
+      for <xref linkend="guc-backend-hostname">0.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Because failover is managed by Aurora, set <varname>DISALLOW_TO_FAILOVER</varname> flag to
+      the <xref linkend="guc-backend-flag">
+      for <xref linkend="guc-backend-hostname">0 and <xref linkend="guc-backend-hostname">1.
+     </para>
+     <programlisting>
+backend_flag0 = 'ALWAYS_PRIMARY|DISALLOW_TO_FAILOVER'
+backend_flag1 = 'DISALLOW_TO_FAILOVER'
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      Set <xref linkend="guc-health-check-period"> to 0 to disable health checking.
+     </para>
+     <programlisting>
+health_check_period = 0
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      Disable <xref linkend="guc-failover-on-backend-error">
+       to avoid failover when connecting to the backend or
+       detecting errors on backend side while executing
+       queries for the same reasons above.
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+ </sect2>
+</sect1>

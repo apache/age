@@ -1,0 +1,100 @@
+CREATE TABLE t1(i int);
+CREATE TABLE
+INSERT INTO T1 VALUES(1);
+INSERT 0 1
+CREATE TEMP TABLE t1(i int);
+CREATE TABLE
+SELECT * FROM t1;	-- should return 0 row
+ i 
+---
+(0 rows)
+
+DROP TABLE t1;
+DROP TABLE
+SELECT * FROM t1;	-- should return 1 row
+ i 
+---
+ 1
+(1 row)
+
+BEGIN;
+BEGIN
+CREATE TEMP TABLE t1(i int);
+CREATE TABLE
+SELECT * FROM t1;	-- should return 0 row
+ i 
+---
+(0 rows)
+
+DROP TABLE t1;
+DROP TABLE
+SELECT * FROM t1;	-- should return 1 row
+ i 
+---
+ 1
+(1 row)
+
+END;
+COMMIT
+BEGIN;
+BEGIN
+CREATE TEMP TABLE t1(i int);
+CREATE TABLE
+SELECT * FROM t1;	-- should return 0 row
+ i 
+---
+(0 rows)
+
+aaa;
+ABORT;
+ROLLBACK
+SELECT * FROM t1;	-- should return 1 row
+ i 
+---
+ 1
+(1 row)
+
+CREATE TEMP TABLE t1(i int);
+CREATE TABLE
+CREATE TEMP TABLE t2(i int);
+CREATE TABLE
+CREATE TEMP TABLE t3(i int);
+CREATE TABLE
+SELECT * FROM t1;	-- should return 0 row
+ i 
+---
+(0 rows)
+
+DROP TABLE t1, t2, t3;
+DROP TABLE
+SELECT * FROM t1;	-- should return 1 row
+ i 
+---
+ 1
+(1 row)
+
+BEGIN;
+BEGIN
+CREATE TEMP TABLE t1(i int);
+CREATE TABLE
+CREATE TEMP TABLE t2(i int);
+CREATE TABLE
+CREATE TEMP TABLE t3(i int);
+CREATE TABLE
+SELECT * FROM t1;	-- should return 0 row
+ i 
+---
+(0 rows)
+
+DROP TABLE t1, t2, t3;
+DROP TABLE
+SELECT * FROM t1;	-- should return 1 row
+ i 
+---
+ 1
+(1 row)
+
+END;
+COMMIT
+DROP TABLE t1;
+DROP TABLE

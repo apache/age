@@ -1,0 +1,58 @@
+pdo-test README
+
+-pdo-testとは?
+
+pdo-testはphp PDOドライバを利用してpgpoolのテストを行うプログラム
+です。
+
+pdo-testはab(Apache HTTP server benchmarking tool)を使いテストを行
+います。
+
+実際の実行例は以下の通りです。
+
+abc 10 -n 100 "http://localhost/pdo-test/pdotest.php"
+
+PDOドライバとpgpoolとの接続設定はdef.incファイルを編集します。
+def.incの内容は以下の通りです。
+<?php
+	/* ホスト名の設定*/
+	define("HOSTNAME","localhost");
+	/* DB名の設定*/
+	define("DBNAME","postgres");
+	/* 接続ユーザ名の設定*/
+	define("USER","postgres");
+	/* 接続portの設定*/
+	define("PORT","9999");
+	/* パスワードの設定*/
+	define("PASS","");
+?>
+
+実行するクエリはSQLListディレクトリ内のファイルからランダムに
+実行されます。
+
+ファイルには;(セミコロン)区切りで複数のSQLを記述してください。
+
+また、特定のファイルのみ実行したい場合には、以下のように実行
+します。
+
+http://localhost/pdo-test/pdotest.php?query=ファイル名
+
+PHPが出力するエラーはlog.txtに出力されます。
+SQLレベルのエラーについてはabの実行結果から分かるようになってます。
+
+以下がエラーが発生した場合のabの実行結果です。
+Non-2xx responsesが表示された場合には何かしらDBにエラーが発生した
+可能性があるので、log.txtとDBのログを確認してください。
+
+oncurrency Level:      10
+Time taken for tests:   7.721773 seconds
+Complete requests:      100
+Failed requests:        0
+Write errors:           0
+Non-2xx responses:      100
+Total transferred:      25100 bytes
+HTML transferred:       5300 bytes
+Requests per second:    12.95 [#/sec] (mean)
+Time per request:       772.177 [ms] (mean)
+Time per request:       77.218 [ms] (mean, across all concurrent requests)
+Transfer rate:          3.11 [Kbytes/sec] received

@@ -1,0 +1,46 @@
+BEGIN;
+BEGIN
+SELECT * FROM non_existing_table;
+ERROR:  relation "non_existing_table" does not exist
+LINE 1: SELECT * FROM non_existing_table;
+                      ^
+SELECT 1;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+DETAIL:  statement: SELECT 1;
+END;
+ROLLBACK
+BEGIN;
+BEGIN
+aaa;
+ERROR:  syntax error at or near "aaa"
+LINE 1: aaa;
+        ^
+SELECT 1;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+DETAIL:  statement: SELECT 1;
+END;
+ROLLBACK
+SELECT 1;
+ ?column? 
+----------
+        1
+(1 row)
+
+BEGIN;
+BEGIN
+SAVEPOINT s1;
+SAVEPOINT
+aaa;
+ERROR:  syntax error at or near "aaa"
+LINE 1: aaa;
+        ^
+ROLLBACK TO s1;
+ROLLBACK
+SELECT 1;
+ ?column? 
+----------
+        1
+(1 row)
+
+END;
+COMMIT

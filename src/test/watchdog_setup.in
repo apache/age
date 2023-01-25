@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) 2013-2021 PgPool Global Development Group
+#
+# Permission to use, copy, modify, and distribute this software and
+# its documentation for any purpose and without fee is hereby
+# granted, provided that the above copyright notice appear in all
+# copies and that both that copyright notice and this permission
+# notice appear in supporting documentation, and that the name of the
+# author not be used in advertising or publicity pertaining to
+# distribution of the software without specific, written prior
+# permission. The author makes no representations about the
+# suitability of this software for any purpose.  It is provided "as
+# is" without express or implied warranty.
+#-------------------------------------------------------------------
+# Set up watchdog enabled pgpool-II and PostgreSQL temporary
+# installation in current directory for *testing* purpose.  Do not use
+# this tool for production environment!
+# Note that this script uses pgpool_setup as a work horse.
+#
+# usage: watchdog_setup [-wn num_pgpool][-wp watchdog_base_port][-m r|s|n|i][-n num_clusters][-p base_port][--no-stop][-d]
+# -wn num_pgpool: create num_pgpool pgpool nodes. The default is 3. Must be greater than 1.
+# -wp watchdog_base_port: starting port number. The default is
+#  50000.
+#-------------------------------------------
+# Configuration section
+#-------------------------------------------
+# Number of Pgpool-II installations.
+W_NUM_PGPOOL=${W_NUM_PGPOOL:-"3"}
+
+# Starting port number.
+W_BASE_PORT=${W_BASE_PORT:-"50000"}
+
+# Number of default PostgreSQL clusters
+NUMCLUSTERS=2
+
+# PostgreSQL startig port number.
+export PGBASEPORT=`expr $W_BASE_PORT + 1000`
+
+# number of ports used in a single pgpool-II installation.
+# (port, pcp_port, wd_port, wd_heartbeat_port)
+num_ports_per_node=4
+#-------------------------------------------
+# End of configuration section
+#-------------------------------------------
+#
+# user name
+WHOAMI=`whoami`
+
+# our root directory
+BASEDIR=`pwd`
+
+# location of pgpool_setup
+PGPOOL_SETUP=${PGPOOL_SETUP:-"$(dirname $0)/pgpool_setup"}
+
+# PostgreSQL bin directory
+PGBIN=${PGBIN:-"@@PGSQL_BIN_DIR@@"}
+INITDB=$PGBIN/initdb
+PG_CTL=$PGBIN/pg_ctl
+PSQL=$PGBIN/psql
+
+#-------------------------------------------
+# set postgresql.conf
+# argument: PostgreSQL database cluster directory
+#-------------------------------------------
+function set_postgresql_conf
+{
+    PGCONF=$1/postgresql.conf
+
+    echo "listen_addresses = '*'" >> $PGCONF
+    echo "port = $PORT" >> $PGCONF
+    echo "logging_collector = on" >> $PGCONF
+    echo "log_filename = '%A.log'" >> $PGCONF
+    echo "log_line_prefix = '%p %t '" >> $PGCONF
+    echo "log_truncate_on_rotation = on" >> $PGCONF
+    echo "log_statement = 'all'" >> $PGCONF
+    echo "max_prepared_transactions = 10" >> $PGCONF
+    echo "unix_socket_directories = '$PGSOCKET_DIR'" >> $PGCONF 
+
+    if [ $MODE = "s" ];then
+	echo "hot_standby = on" >> $PGCONF
+	echo "wal_level = hot_standby" >> $PGCONF
+	echo "max_wal_senders = $NUMCLUSTERS" >> $PGCONF
+	echo "archive_mode = on" >> $PGCONF
+	echo "archive_command = 'cp %p $BASEDIR/archivedir/%f </dev/null'" >> $PGCONF
+    else
+	echo "wal_level = archive" >> $PGCONF
+	echo "archive_mode = on" >> $PGCONF
+	echo "archive_command = 'cp %p $BASEDIR/archivedir/%f </dev/null'" >> $PGCONF
+    fi
+
+    ed $1/pg_hba.conf <<EOF
+/^#local *replication/s/^#//p
+/^#host *replication/s/^#//p
+/^#host *replication/s/^#//p
+w
+q
+EOF
+
+}
+
+#-------------------------------------------
+# set pgpool.conf
+# argument: absolute path to pgpool.conf
+#-------------------------------------------
+function set_pgpool_conf {
+    echo "sr_check_user = '$WHOAMI'" >> $CONF
+    echo "recovery_user = '$WHOAMI'" >> $CONF
+    echo "recovery_password = ''"  >> $CONF
+    echo "recovery_1st_stage_command = 'basebackup.sh'" >> $CONF
+
+    if [ $MODE = "r" || $MODE = "i" ];then
+	echo "recovery_2nd_stage_command = 'pgpool_recovery_pitr'" >> $CONF
+    fi
+
+    echo "health_check_period = 10" >> $CONF
+    echo "health_check_user = '$WHOAMI'" >> $CONF
+    OIDDIR=$BASEDIR/log/pgpool/oiddir
+    mkdir -p $OIDDIR
+    echo "memqcache_oiddir = '$OIDDIR'" >> $CONF
+    echo "log_per_node_statement = on" >> $CONF
+
+    if [ $MODE = "s" ];then
+	echo "failover_command = '$FAILOVER_SCRIPT %d %h %p %D %m %M %H %P %r %R'" >> $CONF
+    fi
+
+    echo "unix_socket_directories = '$PGSOCKET_DIR'" >> $CONF
+    echo "pcp_socket_dir = '$PGSOCKET_DIR'" >> $CONF
+}
+
+#-------------------------------------------
+# wait for pgpool comes up
+#-------------------------------------------
+function wait_for_pgpool_startup {
+    timeout=20
+
+    while [ $timeout -gt  0 ]
+    do
+	$PSQL -p $PGPOOL_PORT -c "show pool_nodes" postgres >/dev/null 2>&1
+	if [ $? = 0 ];then
+	    #		        echo "pgpool-II comes up after `expr 20 - $timeout` seconds"
+	    break;
+	fi
+	timeout=`expr $timeout - 1`
+	sleep 1
+    done
+}
+
+#-------------------------------------------
+# wait for pgpool reload finished
+#-------------------------------------------
+function wait_for_pgpool_reload {
+    timeout=20
+    num_node=$1
+
+    while [ $timeout -gt  0 ]
+    do
+	N=`$PSQL -p $PGPOOL_PORT -c "show pool_status" test | grep backend_data | wc -l`
+	if [ $N = $num_node ];then
+	    break;
+	fi
+	timeout=`expr $timeout - 1`
+	sleep 1
+    done
+}
+
+#-------------------------------------------
+# Set watchdog params to pgpool.conf
+#-------------------------------------------
+function set_watchdog_params {
+    id=$1
+    num_pgpool=$2
+    base_port=$3
+    priority=`expr $num_pgpool - $id`
+    n=0
+    conf=etc/pgpool.conf
+	node_id_file=etc/pgpool_node_id
+
+    cat >> $conf <<EOF
+use_watchdog = on
+wd_interval = 1
+wd_priority = $priority
+EOF
+
+    while [ $n -lt $num_pgpool ]
+    do
+		pgpool_port=`expr $base_port + \( $n \* $num_ports_per_node \)`
+		pcp_port=`expr $pgpool_port + 1`
+		wd_port=`expr $pcp_port + 1`
+
+		wd_heartbeat_port=`expr $wd_port + 1`
+		echo "hostname$n = 'localhost'" >> $conf
+		echo "pgpool_port$n = $pgpool_port" >> $conf
+		echo "wd_port$n = $wd_port" >> $conf
+		echo "heartbeat_hostname$n = 'localhost'" >> $conf
+		echo "heartbeat_port$n = $wd_heartbeat_port" >> $conf
+		n=`expr $n + 1`
+    done
+
+	echo "$id" >> $node_id_file
+}
+
+#################################################################################
+#
+# main script
+#
+################################################################################
+function usage()
+{
+    echo "usage: $0 [-wn num_pgpool][-wp watchdog_base_port][-m r|s|n|i] [-n num_clusters] [-p base_port] [-pg pg_base_port][--no-stop] [-d]";exit 1
+}
+
+#-------------------------------------------
+# Argument check
+# usage: $0  [-wn num_pgpool][-wp watchdog_base_port][-m r|s|n][-n num_clusters][-p base_port][-pg pg_base_port][--no-stop][-d]
+#-------------------------------------------
+#
+# default mode is streaming replication mode
+MODE="s"
+NO_STOP="false"
+
+while [ $# -gt 0 ]
+do
+    if [ $1 = "-wn" ];then
+	shift
+	W_NUM_PGPOOL=$1
+	if [ "$W_NUM_PGPOOL" -le 1 ];then
+	    echo "number of Pgpool-II nodes must be greater than 1"
+	    exit 1
+	fi
+    elif [ $1 = "-wp" ];then
+	shift
+	W_BASE_PORT=$1
+	PGBASEPORT=`expr $W_BASE_PORT + 1000`
+
+	# rest are pgpool_setup args
+
+    elif [ $1 = "-m" ];then
+	shift
+	case $1 in
+	    r ) MODE="r";;
+	    s ) MODE="s";;
+	    n ) MODE="n";;
+	    i ) MODE="i";;
+	    * ) usage;;
+	esac
+    elif [ $1 = "-n" ];then
+	shift
+	export NUMCLUSTERS=$1
+    elif [ $1 = "-p" ];then
+	shift
+	export BASEPORT=$1
+    elif [ $1 = "-pg" ];then
+	shift
+	export PGBASEPORT=$1
+    elif [ $1 = "--no-stop" ];then
+	shift
+	NO_STOP="true"
+    elif [ $1 = "-d" ];then
+	export PGPOOLDEBUG="true"
+	shift;
+    elif [ $1 = "--help" -o $1 = "-o" ];then
+	usage
+	exit
+    else
+	usage
+	exit
+    fi
+    shift
+done
+
+#-------------------------------------------
+# Make sure that current directory is empty
+#-------------------------------------------
+if [ "`/bin/ls`" != "" ]
+then
+    echo "$0: Current directory is not empty. Please remove files and directories then try again."
+    exit 1
+fi
+
+#-------------------------------------------
+# everything looks good. starting setup...
+#-------------------------------------------
+echo "Starting set up "
+
+#-------------------------------------------
+# Run pgpool_setup
+#-------------------------------------------
+
+STARTALL=$BASEDIR/startall
+SHUTDOWNALL=$BASEDIR/shutdownall
+
+cnt=0
+
+while [ $cnt -lt $W_NUM_PGPOOL ]
+do
+    echo "============= setting up pgpool $cnt ============="
+    mkdir pgpool$cnt
+    cd pgpool$cnt
+    port=`expr $W_BASE_PORT + \( $cnt \* $num_ports_per_node \)`
+
+    if [ $cnt -gt 0 ];then
+	$PGPOOL_SETUP -m $MODE -p $port -pg $PGBASEPORT -e
+    else
+	$PGPOOL_SETUP -m $MODE -p $port -pg $PGBASEPORT
+    fi
+
+    set_watchdog_params $cnt $W_NUM_PGPOOL $W_BASE_PORT
+
+    if [ $cnt != 0 ]
+    then
+	# remove "pg_ctl start" line from startall/shutdownall script in other than pgpool0
+	sed -i '/.*data.*/d' startall
+	sed -i '/.*data.*/d' shutdownall
+
+	# change database cluster directory symlink to pgpool0.
+	# The database cluster entity only resides in pgpool0.
+	n=0
+	while [ $n -lt $NUMCLUSTERS ]
+	do
+	    rm -fr data$n
+	    ln -s ../pgpool0/data$n .
+	    n=`expr $n + 1`
+	done
+    fi
+
+    echo "cd pgpool$cnt" >> $STARTALL
+    echo "./startall" >> $STARTALL
+    echo "cd .." >> $STARTALL
+
+    cd ..
+    cnt=`expr $cnt + 1`
+done
+
+# shutdown needs to be performed in reverse order because shutdown of
+# PostgreSQL servers must be executed in pgpoo0.
+cnt=$W_NUM_PGPOOL
+while [ $cnt -gt 0 ]
+do
+    cnt=`expr $cnt - 1`
+    echo "cd pgpool$cnt" >> $SHUTDOWNALL
+    echo "./shutdownall" >> $SHUTDOWNALL
+    echo "cd .." >> $SHUTDOWNALL
+done
+
+chmod 755 $STARTALL
+chmod 755 $SHUTDOWNALL

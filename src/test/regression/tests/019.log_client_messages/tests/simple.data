@@ -1,0 +1,4 @@
+# Test for simple-query protocol 'Q'
+'Q'	"SELECT * FROM pgbench_accounts LIMIT 1"
+'Y'
+'X'

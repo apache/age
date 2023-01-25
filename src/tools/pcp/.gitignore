@@ -1,0 +1,13 @@
+pcp_attach_node
+pcp_detach_node
+pcp_health_check_stats
+pcp_node_count
+pcp_node_info
+pcp_pool_status
+pcp_proc_count
+pcp_proc_info
+pcp_promote_node
+pcp_recovery_node
+pcp_reload_config
+pcp_stop_pgpool
+pcp_watchdog_info

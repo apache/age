@@ -1,0 +1,30 @@
+pset 0
+ SELECT ''''
+ SELECT ''''
+ SELECT 'A
+BC'
+ SELECT 'A
+BC'
+syntax error: SELECT U&'d\0061t\+000061'; --error
+pset 1
+syntax error: SELECT '\''; -- error
+ SELECT ''''
+ SELECT 'A\\nBC'
+ SELECT 'A
+BC'
+pset 0
+ SELECT * FROM "data"
+ SELECT 'data'
+ SELECT 'data'
+ SELECT 'data'
+syntax error: SELECT E'\u3042\u3044\u3046\u3048\u304a'; -- error
+syntax error: SELECT U&'\3042\3044\3046\3048\304a'; -- error
+pset 6
+ SELECT * FROM "data"
+ SELECT 'data'
+ SELECT 'data'
+ SELECT 'data'
+ SELECT 'あいうえお'
+ SELECT 'あいうえお'
+ SELECT '𐀀'
+ SELECT '𐀀'

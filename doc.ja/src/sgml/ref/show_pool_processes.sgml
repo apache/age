@@ -1,0 +1,200 @@
+<!--
+    doc/src/sgml/ref/show_pool_processes.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-PROCESSES">
+ <indexterm zone="sql-show-pool-processes">
+  <primary>SHOW POOL_PROCESSES</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_PROCESSES</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_PROCESSES</refname>
+  <refpurpose>
+   <!--
+   sends back a list of all <productname>Pgpool-II</productname>
+   processes waiting for connections and dealing with a connection
+   -->
+   接続待ち、あるいは接続中の <productname>Pgpool-II</productname> の子プロセスの状態を表示する
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_PROCESSES
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+
+  <para>
+   <!--
+   <command>SHOW pool_processes</command> sends back a list of all
+   <productname>Pgpool-II</productname> processes waiting for
+   connections and dealing with a connection.
+   -->
+   <command>SHOW POOL_PROCESSES</command> は接続待ち、あるいは接続中の
+   <productname>Pgpool-II</productname> の子プロセスの状態を表示します。
+  </para>
+  <para>
+   <!--
+   It has 8 columns:
+   -->
+   8つのカラムがあります。
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_pid</literal> is the PID of the
+      displayed <productname>Pgpool-II</productname> process.
+      -->
+      <literal>pool_pid</literal> は <productname>Pgpool-II</productname> プロセスのプロセス ID です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>start_time</literal> is the timestamp of when
+      this process was launched.
+      -->
+      <literal>start_time</literal> はこのプロセスが起動された時刻です。
+      <itemizedlist>
+       <listitem>
+        <para>
+         <!--
+         If <xref linkend="guc-child-life-time"> is set not 0,
+         the time before process restarting is displayed.
+         -->
+         <xref linkend="guc-child-life-time"> が0出ない場合
+         プロセスが再起動されるまでの時間が表示されます。
+        </para>
+       </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>client_connection_count</literal> counts the number of times
+      this process has been used by clients.
+      -->
+      <literal>client_connection_count</literal> はこのプロセスが使用された回数です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>database</literal> is the database name of the
+      currently active backend for this process.
+      -->
+      <literal>database</literal> はこのプロセスが接続しているデータベース名です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>username</literal> is the user name used in the
+      connection of the currently active backend for this
+      process.
+      -->
+      <literal>username</literal> はこのプロセスの接続で使用しているユーザ名です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>backend_connection_time</literal> is the creation time and
+      date of the connection.
+      -->
+      <literal>backend_connection_time</literal> はこの接続が作成された時刻です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>pool_counter</literal> counts the number of times
+      this pool of connections (process) has been used by
+      clients.
+      -->
+      <literal>pool_counter</literal> はこの接続が使用された回数です。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      <literal>status</literal> is current status of this process. Possible values are:
+      -->
+      <literal>status</literal> は現在のプロセスの状態です。以下のいずれかの値を取ります:
+        <itemizedlist>
+          <listitem>
+            <para>
+              <!--
+              <literal>Execute command</literal>: Executing a command.
+              -->
+              <literal>Execute command</literal>: コマンドを実行中です。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Idle</literal>: The process is waiting for a new client command.
+              -->
+              <literal>Idle</literal>: クライアントからのコマンドを待機しています。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Idle in transaction</literal>: The process is waiting for a new client command
+              in a transaction.
+              -->
+              <literal>Idle in transaction</literal>: トランザクション中にクライアントからのコマンドを待機しています。
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <!--
+              <literal>Wait for connection</literal>: The process is waiting for a new client connection.
+              -->
+              <literal>Wait for connection</literal>: クライアントからの接続を待機しています。
+            </para>
+          </listitem>
+      </itemizedlist>
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+  <para>
+   <!--
+   Here is an example session:
+   -->
+   ここでは例を示します。
+
+   <programlisting>
+test=# show pool_processes;
+ pool_pid |                      start_time                      | client_connection_count | database | username | backend_connection_time | pool_counter |       status
+----------+------------------------------------------------------+-------------------------+----------+----------+-------------------------+--------------+---------------------
+ 32641    | 2021-09-28 04:40:45                                  | 0                       |          |          |                         |              | Wait for connection
+ 32642    | 2021-09-28 04:40:45                                  | 0                       |          |          |                         |              | Wait for connection
+ 32643    | 2021-09-28 04:40:45                                  | 0                       | test     | kawamoto | 2021-09-28 04:40:48     | 1            | Idle
+ 32644    | 2021-09-28 04:40:45                                  | 0                       | test     | kawamoto | 2021-09-28 04:43:15     | 1            | Execute command
+ 32645    | 2021-09-28 04:40:45                                  | 0                       |          |          |                         |              | Wait for connection
+ 32646    | 2021-09-28 04:40:45                                  | 0                       |          |          |                         |              | Wait for connection
+ 32647    | 2021-09-28 04:40:45                                  | 0                       |          |          |                         |              | Wait for connection
+ 32648    | 2021-09-28 04:40:45 (3:15 before process restarting) | 2                       |          |          |                         |              | Wait for connection
+(8 rows)
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

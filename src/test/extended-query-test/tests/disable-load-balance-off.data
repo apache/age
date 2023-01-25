@@ -1,0 +1,117 @@
+# Test for disable_load_balance_on_write feature (off).
+#
+
+# Force load balance node to 1.
+##backend_weight0 = 0
+##backend_weight1 = 1
+##disable_load_balance_on_write = 'off'
+
+# Create test table
+'Q'	"DROP TABLE IF EXISTS pgproto_test1"
+'Y'
+'Q'	"CREATE TABLE pgproto_test1(i INT)"
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Parse SELECT. This should be sent to node 1.
+'P'	"S1"	"SELECT 1"	0
+
+# Issue INSERT
+'P'	""	"INSERT INTO pgproto_test1 VALUES(1)"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node.
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue another SELECT. This should be sent to standby node.
+'P'	""	"SELECT 2"
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Issue another SELECT. This should be sent to standby node.
+'P'	""	"SELECT 3"
+'B'	""	""	0	0	0
+'E'	""	0
+'S'
+'Y'
+
+# Start a transaction
+'P'	""	"BEGIN"	0
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue Bind/Execute SELECT. This should be sent to standby node because
+# disable_load_balance_on_write = 'off'.
+'B'	""	"S1"	0	0	0
+'E'	""	0
+
+# Issue another SELECT. This should be sent to standby node.
+'P'	""	"SELECT 4"
+'B'	""	""	0	0	0
+'E'	""	0
+
+# Issue COMMIT
+'P'	""	"COMMIT"	0
+'B'	""	""	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+'S'
+'Y'
+
+# Test for disable_load_balance_on_write = off feature
+# using simple queries.
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue Parse SELECT. This should be sent to node 1.
+'Q'	"SELECT 1"
+'Y'
+
+# Issue INSERT
+'Q'	"INSERT INTO pgproto_test1 VALUES(1)"
+'Y'
+
+# Issue another SELECT. This should be sent to standby node.
+'Q'	"SELECT 2"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+# Issue another SELECT. This should be sent to standby node.
+'Q'	"SELECT 3"
+'Y'
+
+# Start a transaction
+'Q'	"BEGIN"
+'Y'
+
+# Issue another SELECT. This should be sent to standby node.
+'Q'	"SELECT 4"
+'Y'
+
+# Issue COMMIT
+'Q'	"COMMIT"
+'Y'
+
+# DROP test table
+'Q'	"DROP TABLE pgproto_test1"
+'Y'
+
+'X'

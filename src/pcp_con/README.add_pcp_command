@@ -1,0 +1,51 @@
+How to add new PCP protocol
+
+src/pcp_con/pcp_worker.c is the server side process. We use "health
+check stats" as an example.
+
+1. In pcp_process_command() add case statement dedicated for each
+protocol. Typically server side protocol is indicated by single ASCII
+character (in the example 'H'). In the case statement,
+set_ps_display() is called to show what the PCP server is doing. Then
+"inform_xxx" function (in the example inform_health_check_stats) is
+called. this function is responsible for creating packet and sends to
+PCP frontend. The parameter is "pcp_frontend" which is the connection
+object to the PCP frontend and "buf" which includes data send from the
+PCP client.
+
+2. inform_xxx
+
+In inform_xxx (in the example inform_health_check_stats), first parse
+the data sent from client. In this particular example it's the backend
+id which should be used to create packet data.
+
+In the function first send character indicating the protocol using
+pcp_write(). Usually the character is lower case of the server side
+protocol character (in the example 'h').
+
+Next send an 4 byte integer representing the packet length in network
+byte order. Note that the length includes the integer itself.
+
+Finally send the protocol body followed by do_pcp_flush() which flush
+out the internal network write buffer.
+
+3. client side
+
+The main source code is src/tools/pcp/pcp_frontend_client.c.
+
+- output_xxx function needs to be defined.
+
+- add PCP_HEALTH_CHECK_STATS to enum PCP_UTILITIES.
+
+- add command name "pcp_health_check_stats" to struct AppTypes AllAppTypes[].
+
+- add 	"else if" below
+  	/*
+	 * Okay the connection is successful not call the actual PCP function
+	 */
+	if (current_app_type->app_type == PCP_ATTACH_NODE)
+
+- add call to the output_xxx function.
+
+		if (current_app_type->app_type == PCP_HEALTH_CHECK_STATS)
+			output_health_check_stats_result(pcpResInfo, verbose);

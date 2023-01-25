@@ -1,0 +1,96 @@
+<!--
+doc/src/sgml/ref/pcp_detach_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-DETACH-NODE">
+ <indexterm zone="pcp-detach-node">
+  <primary>pcp_detach_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_detach_node</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_detach_node</refname>
+  <refpurpose>
+   detaches the given node from Pgpool-II. Existing connections to Pgpool-II are forced to be disconnected.</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_detach_node</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+   <arg><replaceable>gracefully</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-DETACH-NODE-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_detach_node</command> detaches the given node from
+   <productname>Pgpool-II</productname>. If <xref
+   linkend="guc-failover-command"> and/or <xref
+   linkend="guc-follow-primary-command"> are specified, they are
+   executed too. Existing connections to
+   <productname>Pgpool-II</productname> are forced to be disconnected.
+  </para>
+  <para>
+   <command>pcp_detach_node</command> just detaches the node, and does
+   not touch running backend behind the node. This command is useful
+   when admin needs to maintain the
+   <productname>PostgreSQL</productname> node. He/she can shutdown or
+   stop the backend as many times as he/she wants.
+  </para>
+  <para>
+   The safest way to re-attach the detached node is, stopping the
+    backend and apply <xref linkend="pcp-recovery-node">. However if
+    you are sure that there's no replication delay (or the delay will
+    be recovered later on) and the role of the node (primary/standby)
+    will not be changed, you can use <xref linkend="pcp-attach-node">.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node_id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       The index of backend node to detach.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-g</option></term>
+     <term><option>--gracefully</option></term>
+     <listitem>
+      <para>
+       wait until all clients are disconnected (unless client_idle_limit_in_recovery is -1 or recovery_timeout is expired).
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>Other options </option></term>
+     <listitem>
+      <para>
+       See <xref linkend="pcp-common-options">.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

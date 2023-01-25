@@ -1,0 +1,185 @@
+<!--
+doc/src/sgml/ref/pcp_promote_node.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-PROMOTE-NODE">
+ <indexterm zone="pcp-promote-node">
+  <primary>pcp_promote_node</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_promote_node</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_promote_node</refname>
+  <refpurpose>
+   <!--
+   promotes the given node as new main to Pgpool-II</refpurpose>
+   -->
+   <productname>Pgpool-II</productname> のノードをプライマリに昇格させる</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_promote_node</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+   <arg><replaceable>node_id</replaceable></arg>
+   <arg><replaceable>gracefully</replaceable></arg>
+   <arg><replaceable>switchover</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-PROMOTE-NODE-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <command>pcp_promote_node</command>
+   は <productname>Pgpool-II</productname> のノードをプライマリに昇格させます。
+   これは、ストリーミングレプリケーション構成の場合のみ使用できます。
+   <literal>switchover</literal>オプションが指定されない限り、このコマンドは実際に <productname>PostgreSQL</productname> のスタンバイサーバを昇格するわけではないことに注意してください。
+   単に <productname>Pgpool-II</productname> の内部ステータスを変更するだけです。
+   ですから、ユーザはこのコマンドを使う際には自分で <productname>PostgreSQL</productname> のスタンバイを昇格させるようにしてください。
+  </para>
+
+  <para>
+   <literal>switchover</literal>が指定されると、<productname>Pgpool-II</productname>は現在のプライマリを切り離し（内部状態をダウンにします）、新しいメインノード引数に指定されたノードIDをセットしながら<xref linkend="guc-failover-command">を起動します。
+   ほとんどのフェイルオーバースクリプトはメインノードを昇格させるので、指定されたノードは新しいプライマリになります。
+   以前のプライマリをスタンバイにするには、<xref linkend="guc-follow-primary-command">が正しく設定されていることが必要です。
+  </para>
+
+  <para>
+   <literal>switchover</literal>が指定されていなければ、<command>pcp_promote_node</command>は、起動された後以下を行います。
+   <xref linkend="guc-follow-primary-command">が設定されている場合はそれも起動されるので、十分な注意が必要です。
+   通常は<xref linkend="guc-follow-primary-command">を無効にしてからこのコマンドを実行することをお勧めします。
+
+   <orderedlist>
+
+    <listitem>
+     <para>
+      指定されたスタンバイ<productname>PostgreSQL</productname>のステータスをstandbyからprimaryに変更します。
+      これは<productname>Pgpool-II</productname> の内部ステータスを変更するだけで、実際に<productname>PostgreSQL</productname> のスタンバイサーバを昇格するわけではありません。
+     </para>
+    </listitem>     
+
+    <listitem>
+     <para>
+      引数で指定された以外の<productname>PostgreSQL</productname>ノードのステータスをdownに変更します。
+      これは<productname>Pgpool-II</productname> の内部ステータスを変更するだけで、実際に<productname>PostgreSQL</productname>のスタンバイサーバをダウンさせるわけではありません。
+     </para>
+    </listitem>     
+
+    <listitem>
+     <para>
+      <xref linkend="guc-follow-primary-command">が設定されている場合は、2でダウンさせた<productname>PostgreSQL</productname>ノードに対して<xref linkend="guc-follow-primary-command">を実行します。
+     </para>
+    </listitem>     
+
+   </orderedlist>
+  </para>
+
+  <para>
+   <literal>switchover</literal>が指定されていれば、<command>pcp_promote_node</command>は、起動された後以下を行います。
+   <xref linkend="guc-follow-primary-command">が設定されている場合はそれも起動されます。
+   フェイルオーバースクリプトは、新しいプライマリを作り、他のノードはスタンバイになる必要があるので、このコマンドを実行する前に、<xref linkend="guc-follow-primary-command">を設定する必要があります。
+
+   <orderedlist>
+
+    <listitem>
+     <para>
+      プライマリ<productname>PostgreSQL</productname>ノードのステータスをdownに変更します。
+      これにより、新しいメインノード引数に指定されたノードIDが設定された上で<xref linkend="guc-failover-command">が起動します。
+      ほとんどのフェイルオーバースクリプトはメインノードを昇格させるので、指定されたノードは新しいプライマリになります。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      引数で指定された以外の<productname>PostgreSQL</productname>ノードのステータスをdownに変更します。
+      これは<productname>Pgpool-II</productname> の内部ステータスを変更するだけで、実際に<productname>PostgreSQL</productname>のスタンバイサーバをダウンさせるわけではありません。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <xref linkend="guc-follow-primary-command">が設定されている場合は、2でダウンさせた<productname>PostgreSQL</productname>ノードに対して<xref linkend="guc-follow-primary-command">を実行します。
+     </para>
+    </listitem>
+
+   </orderedlist>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">node_id</replaceable></option></term>
+     <term><option>--node-id=<replaceable class="parameter">node_id</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       The index of backend node to promote as new main node.
+       -->
+       プライマリに昇格させるバックエンドノードのインデックスを指定します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-g </option></term>
+     <term><option>--gracefully</option></term>
+     <listitem>
+      <para>
+       <!--
+       Wait until all clients are disconnected (unless client_idle_limit_in_recovery is -1 or recovery_timeout is expired).
+       -->
+       すべてのクライアントが接続を終了するまでノードを復帰しません。
+       （ただし、<xref linkend="guc-client-idle-limit-in-recovery"> が -1 あるいは、
+	<xref linkend="guc-recovery-timeout"> が設定されている場合を除く）
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s </option></term>
+     <term><option>--switchover</option></term>
+     <listitem>
+      <para>
+       <xref linkend="guc-failover-command">を起動することにより、指定されたノードを実際に昇格させます。
+       また、現在のプライマリの状態をダウンにします。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <!--
+     <term><option>Other options </option></term>
+     -->
+     <term><option>その他 </option></term>
+     <listitem>
+      <para>
+       <!--
+       See <xref linkend="pcp-common-options">.
+       -->
+       <xref linkend="pcp-common-options"> を参照してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

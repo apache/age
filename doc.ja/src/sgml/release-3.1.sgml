@@ -1,0 +1,83 @@
+<!-- doc/src/sgml/release-3.1.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id="release-3-1-21">
+ <!--
+ <title>Release 3.1.21</title>
+ -->
+ <title>リリース 3.1.21</title>
+
+ <note>
+  <!--
+  <title>Release Date</title>
+  -->
+  <title>リリース日</title>
+  <simpara>2016-12-26</simpara>
+ </note>
+
+ <sect2>
+  <!--
+  <title>Bug fixes</title>
+  -->
+  <title>不具合修正</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2016-10-27 [f37c592]
+    -->
+    <para>
+     <!--
+     Do not cancel a query when the query resulted in an error other than in native replication mode. (Tatsuo Ishii)
+     -->
+     ネイティブレプリケーションモード以外の場合、エラーが発生した場合は、クエリをキャンセルしないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     It was intended to keep the consistency, but there's no point in other
+     than native replication mode.
+     -->
+     本来は一貫性を維持するためにキャンセルされるようになっていましたが、ネイティブレプリケーションモード以外の場合ではキャンセルする必要がないので、修正しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-09 [8231f65]
+    -->
+    <para>
+     <!--
+     Do not use random() while generating MD5 salt. (Tatsuo Ishii)
+     -->
+     MD5 salt を生成するときに、<function>random()</function> を使用しないように修正しました。(Tatsuo Ishii)
+    </para>
+    <para>
+     <!--
+     random() should not be used in security related applications.  To
+     replace random(), import PostmasterRandom() from PostgreSQL.  Also
+     store current time at the start up of Pgpool-II main process for later
+     use.
+     -->
+     <function>random()</function>関数はセキュリティ関連のアプリケーションで使用すべきではありません。
+     <function>random()</function>の代わりに<productname>PostgreSQL</productname>の<function>PostmasterRandom()</function> 使用するように変更しました。
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-06 [891ce0f]
+    -->
+    <para>
+     <!--
+     Don't ignore sync message from frontend when query cache is enabled. (Tatsuo Ishii)
+     -->
+     クエリキャッシュが有効な場合、sync メッセージが廃棄されないよう修正しました。(Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>

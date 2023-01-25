@@ -1,0 +1,84 @@
+<!--
+doc/src/sgml/ref/set.sgml
+PostgreSQL documentation
+-->
+
+<refentry id="SQL-PGPOOL-SET">
+ <indexterm zone="sql-pgpool-set">
+  <primary>SET</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>PGPOOL SET</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>PGPOOL SET</refname>
+  <refpurpose>change a configuration parameter</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   PGPOOL SET  <replaceable class="PARAMETER">configuration_parameter</replaceable> { TO | = } { <replaceable class="PARAMETER">value</replaceable> | '<replaceable class="PARAMETER">value</replaceable>' | DEFAULT }
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+  <para>
+
+   The <command>PGPOOL SET</command> command changes the value of
+   <productname>Pgpool-II</productname> configuration parameters for the current session.
+
+   This command is similar to the
+   <ulink url="https://www.postgresql.org/docs/current/static/sql-set.html">
+    <command>SET</command></ulink> command in PostgreSQL with an addition
+   of <acronym>PGPOOL</acronym> keyword to distinguish it from the
+   PostgreSQL SET command.
+   Many of the configuration parameters listed in
+   <xref linkend="runtime-config"> can be changed on-the-fly with
+    <command>PGPOOL SET</command> and it only affects the value used by the current
+    session.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Change the value of <xref linkend="guc-client-idle-limit"> parameter:
+    <programlisting>
+     PGPOOL SET client_idle_limit = 350;
+    </programlisting>
+  </para>
+
+  <para>
+   Reset the value of <xref linkend="guc-client-idle-limit"> parameter to default:
+    <programlisting>
+     PGPOOL SET client_idle_limit TO DEFAULT;
+    </programlisting>
+  </para>
+
+  <para>
+   Change the value of <xref linkend="guc-log-min-messages"> parameter:
+    <programlisting>
+     PGPOOL SET log_min_messages TO INFO;
+    </programlisting>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>See Also</title>
+
+  <simplelist type="inline">
+   <member><xref linkend="SQL-PGPOOL-RESET"></member>
+   <member><xref linkend="SQL-PGPOOL-SHOW"></member>
+  </simplelist>
+ </refsect1>
+
+</refentry>

@@ -1,0 +1,336 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-streaming-replication-check">
+ <title>Streaming Replication Check</title>
+
+ <para>
+  <productname>Pgpool-II</productname> can work with <productname>PostgreSQL</> native
+  Streaming Replication, that is available since <productname>PostgreSQL</> 9.0.
+  To configure <productname>Pgpool-II</productname> with streaming
+  replication, set
+   <xref linkend="guc-backend-clustering-mode"> to <literal>'streaming-replication'</literal>.
+ </para>
+ <para>
+  <productname>Pgpool-II</productname> assumes that Streaming Replication
+  is configured with Hot Standby on PostgreSQL, which means that the
+  standby database can handle read-only queries.
+ </para>
+
+ <variablelist>
+
+  <varlistentry id="guc-sr-check-period" xreflabel="sr_check_period">
+   <term><varname>sr_check_period</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>sr_check_period</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the time interval in seconds to check the streaming
+     replication delay.
+     The default is 10.
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-sr-check-user" xreflabel="sr_check_user">
+   <term><varname>sr_check_user</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>sr_check_user</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the <productname>PostgreSQL</> user name to perform streaming replication check.
+     The user must have LOGIN privilege and exist on all the
+     <productname>PostgreSQL</> backends.
+    </para>
+    <para>
+     If <link linkend="runtime-ssl">SSL</link> is enabled, the
+     streaming replication check process may use SSL connection.
+    </para> 
+    <note>
+     <para>
+      <xref linkend="guc-sr-check-user"> and <xref
+      linkend="guc-sr-check-password"> are used even when <xref
+      linkend="guc-sr-check-period"> is set to 0 (disabled) for the
+      identification of the primary server.
+     </para>
+    </note>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-sr-check-password" xreflabel="sr_check_password">
+   <term><varname>sr_check_password</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>sr_check_password</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the password of the <xref linkend="guc-sr-check-user"> <productname>PostgreSQL</> user
+      to perform the streaming replication checks.
+      Use <literal>''</literal> (empty string) if the user does not requires a password.
+    </para>
+    <para>
+     If <varname>sr_check_password</varname> is left blank <productname>Pgpool-II</productname>
+     will first try to get the password for <xref linkend="guc-sr-check-user"> from
+      <xref linkend="guc-pool-passwd"> file before using the empty password.
+    </para>
+
+    <para>
+     <productname>Pgpool-II</productname> accepts following forms
+     of password in either <varname>sr_check_password</varname>
+     or <xref linkend="guc-pool-passwd"> file:
+      <variablelist>
+
+       <varlistentry>
+	<term>AES256-CBC encrypted password</term>
+	<listitem>
+	 <para>
+	  Most secure and recommended way to store password. The
+	  password string must be prefixed
+	  with <literal>AES</literal>.
+	  You can use <xref linkend="PG-ENC"> utility to create the correctly formatted
+	   <literal>AES</literal> encrypted password strings.
+	   <productname>Pgpool-II</productname> will require a valid decryption key at the
+	   startup to use the encrypted passwords.
+	   see <xref linkend="auth-aes-decryption-key"> for more details on providing the
+	    decryption key to <productname>Pgpool-II</productname>
+	 </para>
+	</listitem>
+       </varlistentry>
+
+       <varlistentry>
+	<term>MD5 hashed password</term>
+	<listitem>
+	 <para>
+	  Not so secure as AES256, but still better than clear
+	  text password. The password string must be prefixed
+	  with <literal>MD5</literal>. Note that the backend
+	  must set up MD5 authentication as well.  You can
+	  use <xref linkend="PG-MD5"> utility to create the
+	   correctly formatted
+	   <literal>MD5</literal> hashed password strings.
+	 </para>
+	</listitem>
+       </varlistentry>
+
+       <varlistentry>
+	<term>Plain text password</term>
+	<listitem>
+	 <para>
+	  Not encrypted, clear text password. You should avoid
+	  to use this if possible. The password string must be
+	  prefixed with <literal>TEXT</literal>. For example if
+	  you want to set <literal>mypass</literal> as a
+	  password, you should
+	  specify <literal>TEXTmypass</literal> in the password
+	  field.  In the absence of a valid
+	  prefix, <productname>Pgpool-II</productname> will
+	  considered the string as a plain text password.
+	 </para>
+	</listitem>
+       </varlistentry>
+
+      </variablelist>
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-sr-check-database" xreflabel="sr_check_database">
+   <term><varname>sr_check_database</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>sr_check_database</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the database to perform streaming replication delay checks.
+     The default is <literal>"postgres"</literal>.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-delay-threshold" xreflabel="delay_threshold">
+   <term><varname>delay_threshold</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>delay_threshold</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the maximum tolerance level of replication delay in
+     <acronym>WAL</acronym> bytes on the standby server against the
+     primary server. If the delay exceeds this configured level,
+     <productname>Pgpool-II</productname> stops sending the <acronym>
+      SELECT</acronym> queries to the standby server and starts routing
+     everything to the primary server even if <xref linkend="guc-load-balance-mode">
+      is enabled, until the standby catches-up with the primary.
+      Setting this parameter to 0 disables the delay checking.
+      This delay threshold check is performed every <xref linkend="guc-sr-check-period">.
+       Default is 0.
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-delay-threshold-by-time" xreflabel="delay_threshold_by_time">
+   <term><varname>delay_threshold_by_time</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>delay_threshold_by_time</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies the maximum tolerance level of replication delay in
+     seconds on the standby server against the primary server.  If the
+     specified value is greater than
+     0, <xref linkend="guc-delay-threshold"> is ignored.  If the delay
+     exceeds this configured level,
+     <productname>Pgpool-II</productname> stops sending the <acronym>
+      SELECT</acronym> queries to the standby server and starts routing
+     everything to the primary server even if <xref linkend="guc-load-balance-mode">
+      is enabled, until the standby catches-up with the primary.
+      Setting this parameter to 0 disables the delay checking.
+      This delay threshold check is performed every <xref linkend="guc-sr-check-period">.
+       Default is 0.
+    </para>
+
+    <para>
+      Replication delay is taken
+      from <productname>PostgreSQL</productname>'s system
+      view <structname>pg_stat_replication</structname>.<structfield>replay_lag</structfield>. The
+      view is available <productname>PostgreSQL</productname> 10 or
+      later. If earlier version
+      of <productname>PostgreSQL</productname> is
+      used, <productname>Pgpool-II</productname> automatically falls
+      back to <xref linkend="guc-delay-threshold">
+      and <xref linkend="guc-delay-threshold-by-time"> is ignored.
+    </para>
+
+    <para>
+      If this parameter is
+      enabled, <xref linkend="sql-show-pool-nodes">
+      and <xref linkend="pcp-node-info"> show replication delay in
+      seconds, rather than bytes.
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-prefer-lower-delay-standby" xreflabel="prefer_lower_delay_standby">
+    <term><varname>prefer_lower_delay_standby</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>prefer_lower_delay_standby</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      This parameter is valid only
+      when <xref linkend="guc-delay-threshold">
+      or <xref linkend="guc-delay-threshold-by-time"> is set to
+      greater than 0.  When set to on, if the delay of the load
+      balancing node is greater
+      than <xref linkend="guc-delay-threshold">
+      or <xref linkend="guc-delay-threshold-by-time">,
+      <productname>Pgpool-II</productname> does not send read queries
+      to the primary node but the least delay standby with
+      backend_weight to greater than 0. If delay of all standby nodes
+      are greater than <xref linkend="guc-delay-threshold">
+      or <xref linkend="guc-delay-threshold-by-time"> the primary
+      selected as the load balancing node
+      first, <productname>Pgpool-II</productname> sends to the
+      primary.  Default is off.
+     </para>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</productname> configurations.
+     </para>
+    </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-log-standby-delay" xreflabel="log_standby_delay">
+   <term><varname>log_standby_delay</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>log_standby_delay</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies when to log the replication delay. Below table contains the list
+     of all valid values for the parameter.
+    </para>
+
+    <table id="log-standby-delay-table">
+     <title>Log standby delay options</title>
+     <tgroup cols="2">
+      <thead>
+       <row>
+	<entry>Value</entry>
+	<entry>Description</entry>
+       </row>
+      </thead>
+
+      <tbody>
+       <row>
+	<entry><literal>'none'</literal></entry>
+	<entry>Never log the standby delay</entry>
+       </row>
+
+       <row>
+	<entry><literal>'always'</literal></entry>
+	<entry>Log the standby delay if it's greater than 0, every time the replication delay is checked</entry>
+       </row>
+
+       <row>
+	<entry><literal>'if_over_threshold'</literal></entry>
+	<entry>Only log the standby delay, when it exceeds <xref linkend="guc-delay-threshold"> or <xref linkend="guc-delay-threshold-by-time"> value (the default)</entry>
+       </row>
+      </tbody>
+     </tgroup>
+    </table>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+
+</sect1>

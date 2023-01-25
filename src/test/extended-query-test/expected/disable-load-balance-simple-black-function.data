@@ -1,0 +1,48 @@
+FE=> Query (query="DROP FUNCTION IF EXISTS f1")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M function f1() does not exist, skipping F dropcmds.c L 483 R does_not_exist_skipping )
+<= BE CommandComplete(DROP FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE FUNCTION f1(INTEGER) returns INTEGER AS 'SELECT $1' LANGUAGE SQL")
+<= BE CommandComplete(CREATE FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="BEGIN")
+<= BE CommandComplete(BEGIN)
+<= BE ReadyForQuery(T)
+FE=> Query (query="SELECT 1")
+<= BE RowDescription
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(T)
+FE=> Query (query="SELECT f1(1)")
+<= BE RowDescription
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(T)
+FE=> Query (query="SELECT 2")
+<= BE RowDescription
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(T)
+FE=> Query (query="COMMIT")
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Query (query="SELECT 3")
+<= BE RowDescription
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(I)
+FE=> Query (query="BEGIN")
+<= BE CommandComplete(BEGIN)
+<= BE ReadyForQuery(T)
+FE=> Query (query="SELECT 4")
+<= BE RowDescription
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(T)
+FE=> Query (query="COMMIT")
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP FUNCTION f1")
+<= BE CommandComplete(DROP FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Terminate

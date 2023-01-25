@@ -1,0 +1,13 @@
+# [pgpool-general: 7967] Hang with Skunk because Flush not honoured
+#
+'P'	""	"SELECT 1"	0
+'H'
+'z'
+'B'	""	""	0	0	0
+'H'
+'z'
+'E'	""	0
+'H'
+'S'
+'Y'
+'X'

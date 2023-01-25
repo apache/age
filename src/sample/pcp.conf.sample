@@ -1,0 +1,28 @@
+# PCP Client Authentication Configuration File
+# ============================================
+#
+# This file contains user ID and his password for pgpool
+# communication manager authentication.
+#
+# Note that users defined here do not need to be PostgreSQL
+# users. These users are authorized ONLY for pgpool 
+# communication manager.
+#
+# File Format
+# ===========
+#
+# List one UserID and password on a single line. They must
+# be concatenated together using ':' (colon) between them.
+# No spaces or tabs are allowed anywhere in the line.
+#
+# Example:
+# postgres:e8a48653851e28c69d0506508fb27fc5
+#
+# Be aware that there will be no spaces or tabs at the
+# beginning of the line! although the above example looks
+# like so.
+#
+# Lines beginning with '#' (pound) are comments and will
+# be ignored. Again, no spaces or tabs allowed before '#'.
+
+# USERID:MD5PASSWD

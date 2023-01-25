@@ -1,0 +1,162 @@
+<!-- doc/src/sgml/example-Aurora.sgml -->
+
+<sect1 id="example-Aurora">
+ <!--
+ <title>Aurora Configuration Example</title>
+ -->
+ <title>Auroraの設定例</title>
+
+ <para>
+  <!--
+  <productname>Amazon Aurora for PostgreSQL
+  Compatibility</productname> (Aurora) is a managed service for
+  <productname>PostgreSQL</productname>. From user's point of
+  view, <productname>Aurora</productname> can be regarded as a
+  streaming replication cluster with some exceptions. First,
+  fail over and online recovery are managed
+  by <productname>Aurora</productname>. So you don't need to
+  set <xref linkend="guc-failover-command">, <xref linkend="guc-follow-primary-command">,
+  and recovery related parameters. In this section we explain
+  how to set up <productname>Pgpool-II</productname> for Aurora.
+  -->
+  <productname>Amazon Aurora for PostgreSQL
+   Compatibility</productname> (Aurora) は、<productname>PostgreSQL</productname>用のマネージドサービスです。
+  ユーザから見ると、<productname>Aurora</productname>は、いくつか例外があるものの、ストリーミングレプリケーションのクラスタのように見えます。フェイルオーバやオンラインリカバリは<productname>Aurora</productname>によって管理されます。
+  ですから、<xref linkend="guc-failover-command">、<xref linkend="guc-follow-primary-command">、
+    それにオンラインリカバリ関連のパラメータは設定の必要がありません。
+    この章では、Aurora用の<productname>Pgpool-II</productname>設定を説明します。
+ </para>
+
+ <sect2 id="example-Aurora-config">
+  <!--
+  <title>Setting pgpool.conf for Aurora</title>
+  -->
+  <title>Auroraのためにpgpool.confを設定する</title>
+  <para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      Create <filename>pgpool.conf</filename>
+      from <filename>pgpool.conf.sample</filename>.
+      Make sure your <filename>pgpool.conf</filename> includes following line:
+      <programlisting>
+backend_clustering_mode = 'streaming_replication'
+      </programlisting>
+      -->
+      <filename>pgpool.conf.sample</filename>をコピーして<filename>pgpool.conf</filename>を作ります。
+      以下の行が<filename>pgpool.conf</filename>に含まれていることを確認してください。
+      <programlisting>
+backend_clustering_mode = 'streaming_replication'
+      </programlisting>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Set <xref linkend="guc-sr-check-period"> to 0 to
+      disable streaming replication delay checking.  This
+      is because <productname>Aurora</productname> does
+      not provide necessary functions to check the
+      replication delay.
+      -->
+      <xref linkend="guc-sr-check-period">を0にして、ストリーミングレプリケーション遅延チェックを無効にします。
+       <productname>Aurora</productname>では、ストリーミングレプリケーションの遅延をチェックするための関数が提供されないためです。
+     </para>
+     <programlisting>
+sr_check_period = 0
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Enable <xref linkend="guc-enable-pool-hba"> to on so
+      that md5 authentication is enabled
+      (<productname>Aurora</productname> always use md5
+      authentication).
+      -->
+      <xref linkend="guc-enable-pool-hba">をオンにし、md5認証を有効にします。
+       （<productname>Aurora</productname>では常にmd5認証が有効になっています)
+     </para>
+     <programlisting>
+enable_pool_hba = on
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Create <filename>pool_password</filename>. See <xref linkend="auth-md5">
+      for more details.
+      -->
+      <filename>pool_password</filename>を作成します。
+      詳細は<xref linkend="auth-md5">をご覧ください。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Set <xref linkend="guc-backend-hostname">0 for the Aurora cluster endpoint.
+	  Set <xref linkend="guc-backend-hostname">1 for the Aurora reader endpoint.
+	  Set appropriate <xref linkend="guc-backend-weight"> as usual.
+	  You don't need to set <xref linkend="guc-backend-data-directory">
+      -->
+      <xref linkend="guc-backend-hostname">0をAuroraのクラスタエンドポイントに設定します。
+      <xref linkend="guc-backend-hostname">1をAuroraの読み取りエンドポイントに設定します。
+	  通常どおり、適切な<xref linkend="guc-backend-weight">を設定します。
+      <xref linkend="guc-backend-data-directory">は設定の必要がありません。
+     </para>
+     <programlisting>
+backend_hostname0 = 'クラスタエンドポイント'
+backend_hostname1 = '読み取りエンドポイント'
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Set <varname>ALWAYS_PRIMARY</varname> flag to
+      the <xref linkend="guc-backend-flag"> for the primary
+      node.
+      -->
+      <xref linkend="guc-backend-hostname">0の<xref linkend="guc-backend-flag">の<varname>ALWAYS_PRIMARY</varname>をオンにします。
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Because failover is managed by Aurora, set <varname>DISALLOW_TO_FAILOVER</varname> flag to
+      the <xref linkend="guc-backend-flag">
+      for <xref linkend="guc-backend-hostname">0 and <xref linkend="guc-backend-hostname">1.
+      -->
+      フェイルオーバはAuroraによって管理されますので、<xref linkend="guc-backend-hostname">0と<xref linkend="guc-backend-hostname">1の<xref linkend="guc-backend-flag">の<varname>DISALLOW_TO_FAILOVER</varname>をオンにします。
+     </para>
+     <programlisting>
+backend_flag0 = 'ALWAYS_MASTER|DISALLOW_TO_FAILOVER'
+backend_flag1 = 'DISALLOW_TO_FAILOVER'
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Set <xref linkend="guc-health-check-period"> to 0 to disable health checking.
+      -->
+      <xref linkend="guc-health-check-period">を0にして、ヘルスチェックを無効にします。
+     </para>
+     <programlisting>
+health_check_period = 0
+     </programlisting>
+    </listitem>
+    <listitem>
+     <para>
+      <!--
+      Disable <xref linkend="guc-failover-on-backend-error">
+      to avoid failover when connecting to the backend or
+      detecting errors on backend side while executing
+      queries for the same reasons above.
+      -->
+      同様の理由により、接続時あるいは問い合わせ実行中のエラーによるフェイルオーバを避けるために、<xref linkend="guc-failover-on-backend-error">をオフにしてください。
+     </para>
+    </listitem>
+   </itemizedlist>
+  </para>
+ </sect2>
+</sect1>

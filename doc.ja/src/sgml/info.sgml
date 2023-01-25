@@ -1,0 +1,82 @@
+<!-- doc/src/sgml/info.sgml -->
+
+<sect1 id="resources">
+ <!--
+ <title>Further Information</title>
+ -->
+ <title>更なる情報</title>
+
+ <para>
+  <!--
+  Besides the documentation, that is, this book, there are other
+  resources about <productname>Pgpool-II</productname>:
+  -->
+  この文書、すなわち本書のことですが、以外にも<productname>Pgpool-II</productname>に関する情報があります。
+
+  <variablelist>
+
+   <varlistentry>
+    <!--
+    <term>Web Site</term>
+    -->
+    <term>Webサイト</term>
+    <listitem>
+     <para>
+      <!--
+      The <productname>Pgpool-II</productname>
+      <ulink url="http://pgpool.net">web site</ulink> is a central place providing official information regarding
+      <productname>Pgpool-II</productname>: downloads, documentation, FAQ, mailing list archives and more.
+      -->
+      <productname>Pgpool-II</productname><ulink url="http://pgpool.net">webサイト</ulink>は、<productname>Pgpool-II</productname>のダウンロード、ドキュメント、FAQ、メーリングリストアーカイブなどに関する公式情報を提供する中心的な場所です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Mailing Lists</term>
+    -->
+    <term>メーリングリスト</term>
+    <listitem>
+     <para>
+      <!--
+      The mailing lists are a good place to have your questions
+      answered, to share experiences with other users, and to contact
+      the developers.  Consult the <productname>pgpool-II</> web site
+      for details.
+      -->
+      メーリングリストは、質問に答えてもらったり、他のユーザと経験を共有したり、開発者に連絡するための良い場所です。
+      詳細は<productname>pgpool-II</>Webサイトを見てください。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <!--
+    <term>Yourself!</term>
+    -->
+    <term>あなた自身！</term>
+    <listitem>
+     <para>
+      <!--
+      <productname>pgpool-II</productname> is an open-source project.
+      As such, it depends on the user community for ongoing support.
+      As you begin to use <productname>Pgpool-II</productname>, you
+      will rely on others for help, either through the documentation
+      or through the mailing lists.  Consider contributing your
+      knowledge back. Read the mailing lists and answer questions.  If
+      you learn something which is not in the documentation, write it
+      up and contribute it.  If you add features to the code,
+      contribute them.
+      -->
+      <productname>Pgpool-II</productname>はオープンソースプロジェクトです。
+      そういうものなので、ユーザコミュニティの継続的なサポートに依存しています。
+      <productname>Pgpool-II</productname>を使いはじめるにあたっては、ドキュメントを通じて、あるいはメーリングリストを通じて、他の人の助けに頼ることでしょう。
+      ドキュメントにないことを学んだなら、それを書いて寄稿してください。
+      もしコードに機能を追加したら、それを寄稿してください。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </para>
+</sect1>

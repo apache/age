@@ -1,0 +1,431 @@
+<!--
+doc/src/sgml/ref/watchdog_setup.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="WATCHDOG-SETUP">
+ <indexterm zone="watchdog-setup">
+  <primary>watchdog_setup</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>watchdog_setup</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>watchdog_setup</refname>
+  <refpurpose>
+   Create a temporary installation of Pgpool-II clusters with watchdog</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>watchdog_setup</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-WATCHDOG-SETUP-1">
+  <title>
+   Description
+  </title>
+  <para>
+   <application>watchdog_setup</application> creates a temporary
+   installation of <productname>Pgpool-II</productname> clusters with watchdog enabled, which
+   includes a <productname>Pgpool-II</productname> installation and
+   specified number of <productname>PostgreSQL</productname>
+   installations under current directory.
+   Current directory must be empty before running <application>watchdog_setup</application>.
+  </para>
+  <para>
+   <application>watchdog_setup</application> is for testing purpose
+   only and should not be used to create production installations.
+   Also please note that heartbeat is not used.
+  </para>
+
+  <para>
+   <application>watchdog_setup</application>
+   uses <xref linkend="pgpool-setup"> as a workhorse.
+  </para>
+
+  <para>
+   Currently <application>watchdog_setup</application> supports streaming replication mode, snapshot isolation mode, native replication mode, logical replication mode and raw mode.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   <application>watchdog_setup</application> accepts the following command-line arguments:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-wn <replaceable class="parameter">num_pgpool</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the number of Pgpool-II installations.
+       If this is omitted, <literal>3</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-wp <replaceable class="parameter">watchdog_base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       Specify the starting base port number used by Pgpool-II and
+       PostgreSQL.  For the first Pgpool-II, Pgpool-II port is
+       watchdog_base_port. pcp port is watchdog_base_port + 1, watchdog port is
+       watchdog_base_port + 2. wd_heartbeat_port is
+       watchdog_base_port + 3 (though heartbeat is not used).  The
+       first PostgreSQL node's port is watchdog_base_port + 4,
+       second PostgreSQL node's port is watchdog_base_port + 5 and
+       so on.
+      </para>
+      <para>
+       If this is omitted, <literal>50000</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the running mode.  <replaceable>mode</replaceable>
+       can be <literal>r</literal> (native replication mode), <literal>i</literal> (snapshot isolation mode), <literal>s</literal> (streaming replication mode), <literal>l</literal> (logical replication mode) or <literal>n</literal> (raw mode).
+       If this is omitted, <literal>s</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">num_clusters</replaceable></option></term>
+     <listitem>
+      <para>
+       Specifies the number of PostgreSQL installations.
+       If this is omitted, <literal>2</literal> is used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>--no-stop</option></term>
+     <listitem>
+      <para>
+       Do not stop pgpool and PostgreSQL after the work.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <listitem>
+      <para>
+       Start pgpool with debug mode.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Environment variables</title>
+  <para>
+   <application>watchdog_setup</application> recognizes following environment variables:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>PGPOOL_SETUP</option></term>
+     <listitem>
+      <para>
+       Specifies the path to pgpool_setup command.  The default is
+       "pgpool_setup", thus it is assumed that pgpool_setup is in the
+       command search path.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOL_INSTALL_DIR</option></term>
+     <listitem>
+      <para>
+       Specifies the Pgpool-II installation directory. Pgpool-II
+       binaries is expected to be placed under PGPOOL_INSTALL_DIR/bin
+       and pgpool.conf and pool_hba.conf etc. are expected to be placed under
+       PGPOOL_INSTALL_DIR/etc. The default is /usr/local.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOLDIR</option></term>
+     <listitem>
+      <para>
+       Specifies the path to Pgpool-II configuration files.
+       The default is PGPOOL_INSTALL_DIR/etc.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGBIN</option></term>
+     <listitem>
+      <para>
+       Specifies the path to PostgreSQL commands such as initdb, pg_ctl and psql.
+       The default is /usr/local/pgsql/bin.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGLIB</option></term>
+     <listitem>
+      <para>
+       Specifies the path to PostgreSQL shared libraries.
+       The default is /usr/local/pgsql/lib.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGSOCKET_DIR</option></term>
+     <listitem>
+      <para>
+       Specifies the path to Unix socket directory.
+       The default is /tmp.
+      </para>
+     </listitem>
+    </varlistentry>
+    <varlistentry>
+     <term><option>INITDBARG</option></term>
+     <listitem>
+      <para>
+       Specifies the arguments for initdb command.
+       The default is "--no-locale -E UTF_8".
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   <screen>
+    $ watchdog_setup
+    Starting set up
+    ============= setting up pgpool 0 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | false             | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | true              | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool0/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50000
+    pcp port is 50001
+    The info above is in README.port.
+    ============= setting up pgpool 1 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool1/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50004
+    pcp port is 50005
+    The info above is in README.port.
+    ============= setting up pgpool 2 =============
+    Starting set up in streaming replication mode
+    creating startall and shutdownall
+    creating failover script
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/data0...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    creating database cluster /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/data1...done.
+    update postgresql.conf
+    creating pgpool_remote_start
+    creating basebackup.sh
+    creating recovery.conf
+    temporarily start data0 cluster to create extensions
+    temporarily start pgpool-II to create standby nodes
+    INFO:  unrecognized configuration parameter "debug_level"
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | down   | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    recovery node 1...pcp_recovery_node -- Command Successful
+    done.
+    creating follow primary script
+    Pager usage is off.
+    node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay
+    ---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------
+    0       | /tmp     | 51000 | up     | 0.500000  | primary | 0          | true              | 0
+    1       | /tmp     | 51001 | up     | 0.500000  | standby | 0          | false             | 0
+    (2 rows)
+
+    shutdown all
+
+    pgpool-II setting for streaming replication mode is done.
+    To start the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/startall.
+    To shutdown the whole system, use /home/t-ishii/work/pgpool-II/current/pgpool2/src/test/a/pgpool2/shutdownall.
+    pcp command user name is "t-ishii", password is "t-ishii".
+    Each PostgreSQL, pgpool-II and pcp port is as follows:
+    #1 port is 51000
+    #2 port is 51001
+    pgpool port is 50008
+    pcp port is 50009
+    The info above is in README.port.
+
+    $ ls
+    pgpool0  pgpool1  pgpool2  shutdownall	startall
+
+    $ sh startall
+    waiting for server to start....16123 2016-08-18 16:26:53 JST LOG:  redirecting log output to logging collector process
+    16123 2016-08-18 16:26:53 JST HINT:  Future log output will appear in directory "pg_log".
+    done
+    server started
+    waiting for server to start....16136 2016-08-18 16:26:54 JST LOG:  redirecting log output to logging collector process
+    16136 2016-08-18 16:26:54 JST HINT:  Future log output will appear in directory "pg_log".
+    done
+    server started
+
+    t-ishii@localhost: psql -p 50000 test
+
+    Pager usage is off.
+    psql (9.5.4)
+    Type "help" for help.
+
+    test=# \q
+
+    $ pcp_watchdog_info -p 50001 -v
+    Password:
+    Watchdog Cluster Information
+    Total Nodes              : 3
+    Remote Nodes             : 2
+	Member Remote Nodes      : 2
+	Nodes required for quorum: 2
+    Quorum state             : QUORUM EXIST
+    Alive Remote Nodes       : 2
+    VIP up on local node     : NO
+    Leader Node Name         : Linux_tishii-CF-SX3HE4BP_50004
+    Leader Host Name         : localhost
+
+    Watchdog Node Information
+    Node Name         : Linux_tishii-CF-SX3HE4BP_50000
+    Host Name         : localhost
+    Delegate IP       : Not_Set
+    Pgpool port       : 50000
+    Watchdog port     : 50002
+    Node priority     : 1
+    Status            : 7
+    Status Name       : STANDBY
+	Membership Status : MEMBER
+
+    Node Name         : Linux_tishii-CF-SX3HE4BP_50004
+    Host Name         : localhost
+    Delegate IP       : Not_Set
+    Pgpool port       : 50004
+    Watchdog port     : 50006
+    Node priority     : 1
+    Status            : 4
+    Status Name       : LEADER
+	Membership Status : MEMBER
+
+    Node Name         : Linux_tishii-CF-SX3HE4BP_50008
+    Host Name         : localhost
+    Delegate IP       : Not_Set
+    Pgpool port       : 50008
+    Watchdog port     : 50010
+    Node priority     : 1
+    Status            : 7
+    Status Name       : STANDBY
+	Membership Status : MEMBER
+
+   </screen>
+  </para>
+ </refsect1>
+
+</refentry>

@@ -1,0 +1,530 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-in-memory-query-cache">
+ <title>In Memory Query Cache</title>
+
+ <para>
+  In memory query cache can be used with all modes of
+  <productname>Pgpool-II</productname>.
+  The in memory query cache keeps the SELECT results and the results are reused.
+  When the underlying table gets updated, corresponding cache entries are deleted (in case <xref linkend="guc-memqcache-auto-cache-invalidation"> is on. This parameter is on by default), thus restarting <productname>Pgpool-II</productname> is not necessary.
+ </para>
+ <para>
+  In memory cache saves the pair of SELECT statement
+  and its result
+  (along with the Bind parameters, if the SELECT is an
+  extended query). If the same SELECTs comes in,
+  <productname>Pgpool-II</productname> returns the value from
+  cache. Since no <acronym>SQL</acronym> parsing nor access
+  to <productname>PostgreSQL</productname> are involved, the serving
+  of results from the in memory cache is extremely fast.
+ </para>
+
+ <note>
+  <para>
+   Basically following SELECTs will not be cached:
+   <programlisting>
+    SELECTs including non immutable functions
+    SELECTs including temp tables, unlogged tables
+    SELECTs including TIMESTAMP WITH TIMEZONE or TIME WITH TIMEZONE
+    SELECTs including CAST to TIMESTAMP WITH TIMEZONE or TIME WITH TIMEZONE
+    SELECTs including SQLValueFunction (CURRENT_TIME, CURRENT_USER etc.)
+    SELECT result is too large (memqcache_maxcache)
+    SELECT FOR SHARE/UPDATE
+    SELECT starting with "/*NO QUERY CACHE*/" comment
+    SELECT including system catalogs
+    SELECT uses TABLESAMPLE
+   </programlisting>
+   However, VIEWs and SELECTs accessing unlogged tables can be
+   cached by specifying in
+   the <xref linkend="guc-cache-safe-memqcache-table-list">.
+  </para>
+ </note>
+
+ <para>
+  On the other hand, it might be slower than the normal path
+  in some cases, because it adds some overhead to store cache.
+  Moreover when a table is updated, <productname>Pgpool-II
+  </productname> automatically deletes all the caches related to the
+  table. Therefore, the performance will be degraded by a system with
+  a lot of updates.  If the query cache hit ratio (it can be checked
+  by using <xref linkend="SQL-SHOW-POOL-CACHE">) is lower than 70%,
+   you might want to disable in memory cache.
+ </para>
+
+ <para>
+  A <literal>SELECT</literal> result is basically registered when
+  SELECT normally finishes.  If an explicit transaction is executing,
+  <literal>SELECT</literal> result is not registered until the
+  transaction is committed.  Also in extended query mode, the timing
+  of cache registration varies depending on <link
+  linkend="guc-backend-clustering-mode">clustering mode</link>.  In
+  <link linkend="runtime-config-streaming-replication-mode">streaming
+  replication mode</link> and <link
+  linkend="runtime-config-logical-replication-mode">logical
+  replication mode</link>, cache is registered when
+  <literal>Sync</literal> message is sent from frontend, and the
+  response (<literal>Ready for query</literal> message) is returned
+  from backend.  Thus even if commands are sent from frontend, the
+  second Execute (SELECT 1) will not use query cache.
+  <programlisting>
+   Parse (SELECT 1)
+   Bind (SELECT 1)
+   Execute (SELECT 1)
+   Parse (SELECT 1)
+   Bind (SELECT 1)
+   Execute (SELECT 1)
+   Sync
+  </programlisting>
+
+  On the other hand, in other clustering mode, since the result of
+  first Execute (SELECT 1) is registered, the second Execute (SELECT
+  1) will use the query cache.
+ </para>
+
+ <sect2 id="runtime-in-memory-query-cache-enabling">
+  <title>Enabling in memory query cache</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-memory-cache-enabled" xreflabel="memory_cache_enabled">
+    <term><varname>memory_cache_enabled</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>memory_cache_enabled</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on enables the memory cache.
+      Default is off.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+
+     <note>
+      <para>
+       The query cache will also be used by shared relation cache if
+       <xref linkend="guc-enable-shared-relcache"> is set to on. Moreover the
+       query cache is used even if <xref linkend="guc-memory-cache-enabled">
+       parameter is set to off. See <xref linkend="runtime-misc"> for more details to relation cache.
+      </para>
+     </note>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-choose-storage">
+  <title>Choosing cache storage</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-method" xreflabel="memqcache_method">
+    <term><varname>memqcache_method</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>memqcache_method</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the storage type to be used for the cache.
+      Below table contains the list of all valid values for the parameter.
+     </para>
+
+     <table id="memqcache-method-table">
+      <title>Memqcache method options</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <entry>Value</entry>
+	 <entry>Description</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry><literal>'shmem'</literal></entry>
+	 <entry>Use shared memory</entry>
+	</row>
+
+	<row>
+	 <entry><literal>'memcached'</literal></entry>
+	 <entry>Use <ulink url="http://memcached.org/">memcached</ulink></entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <para>
+      In general <varname>shmem</varname> is faster
+      than <varname>memcached</varname> because the former does not
+      involve any network access. However, the upper limit size of
+      <varname>memqcache_total_size</varname> is limited by the total
+      shared memory size defined by the system. The size is large
+      enough in modern Linux systems, but in other systems there maybe
+      smaller upper limit. In this case you need to change the system
+      settings regarding the maximum shared memory size. There's a
+      good explanation about shared memory
+      in <ulink url="https://www.postgresql.org/docs/current/kernel-resources.html#SYSVIPC"><productname>PostgreSQL</productname>
+      documentation</ulink>.
+     </para>
+     <para>
+      If you are not sure which memqcache_method to be used, start with <varname>shmem</varname>.
+     </para>
+     <para>
+      Default is <literal>'shmem'</literal>.
+     </para>
+
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-config">
+  <title>Common configurations</title>
+  <para>
+   These below parameter are valid for both <literal>shmem</literal>
+   and <literal>memcached</literal> type query cache.
+  </para>
+  <variablelist>
+
+   <varlistentry id="guc-memqcacheexpire" xreflabel="memqcache_expire">
+    <term><varname>memqcache_expire</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_expire</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the life time of query cache in seconds.
+      Default is 0. which means no cache expiration and cache remains
+      valid until the table is updated.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+
+     <note>
+      <para>
+       <varname>memqcache_expire</varname> and
+       <xref linkend="guc-memqcache-auto-cache-invalidation"> are orthogonal to each other.
+      </para>
+     </note>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-auto-cache-invalidation" xreflabel="memqcache_auto_cache_invalidation">
+    <term><varname>memqcache_auto_cache_invalidation</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>memqcache_auto_cache_invalidation</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Setting to on, automatically deletes the cache related to the updated tables.
+      When off, cache is not deleted.
+     </para>
+     <para>
+      Default is on.
+     </para>
+     <note>
+      <para>
+       This parameters <xref linkend="guc-memqcache-auto-cache-invalidation">
+	and <xref linkend="guc-memqcacheexpire"> are orthogonal to each other.
+      </para>
+     </note>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</productname> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-maxcache" xreflabel="memqcache_maxcache">
+    <term><varname>memqcache_maxcache</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_maxcache</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the maximum size in bytes of the SELECT query result to be cached.
+      The result with data size larger than this value will not be cached by
+      <productname>Pgpool-II</productname>.
+      When the caching of data is rejected because of the size constraint the following
+      message is shown.
+      <programlisting>
+       LOG:   pid 13756: pool_add_temp_query_cache: data size exceeds memqcache_maxcache. current:4095 requested:111 memq_maxcache:4096
+      </programlisting>
+     </para>
+     <note>
+      <para>
+       For the shared memory query(<literal>'shmem'</literal>) cache the
+       <varname>memqcache_maxcache</varname> must be set lower than
+       <xref linkend="guc-memqcache-cache-block-size"> and for <literal>'memcached'</literal>
+	it must be lower than the size of slab (default is 1 MB).
+      </para>
+     </note>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-cache-safe-memqcache-table-list" xreflabel="cache_safe_memqcache_table_list">
+    <term><varname>cache_safe_memqcache_table_list</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>cache_safe_memqcache_table_list</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+
+     <para>
+      Specifies a comma separated list of table names whose
+      SELECT results should be cached by
+      <productname>Pgpool-II</productname>.  This parameter only
+      applies to VIEWs and SELECTs accessing unlogged tables.
+      Regular tables can be cached unless specified
+      by <xref linkend="guc-cache-unsafe-memqcache-table-list">.
+     </para>
+
+     <para>
+      You can use regular expression into the list to match table name
+      (to which ^ and $ are automatically added).
+     </para>
+
+     <note>
+      <para>
+       If the queries can refer the table with and without the schema
+       qualification then you must add both entries(with and without
+       schema name) in the list.
+       <programlisting>
+	#For example:
+	#If the queries sometime use "table1" and other times "public.table1"
+	#to refer the table1 then the cache_safe_memqcache_table_list
+	#would be configured as follows.
+
+	cache_safe_memqcache_table_list = "table1,public.table1"
+
+       </programlisting>
+
+      </para>
+     </note>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</productname> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-cache-unsafe-memqcache-table-list" xreflabel="cache_unsafe_memqcache_table_list">
+    <term><varname>cache_unsafe_memqcache_table_list</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>cache_unsafe_memqcache_table_list</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies a comma separated list of table names whose SELECT
+      results should <emphasis>NOT</emphasis> be cached by the <productname>
+       Pgpool-II</productname>.
+     </para>
+
+     <para>
+      You can use regular expression into the list to match table name
+      (to which ^ and $ are automatically added),
+     </para>
+
+     <note>
+      <para>
+       If the queries can refer the table with and without the schema
+       qualification then you must add both entries(with and without
+       schema name) in the list.
+       <programlisting>
+	#For example:
+	#If the queries sometime use "table1" and other times "public.table1"
+	#to refer the table1 then the cache_unsafe_memqcache_table_list
+	#would be configured as follows.
+
+	cache_unsafe_memqcache_table_list = "table1,public.table1"
+
+       </programlisting>
+
+      </para>
+     </note>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</productname> configurations.
+     </para>
+     <note>
+      <para>
+       <varname>cache_unsafe_memqcache_table_list</varname>
+       precedence over <xref linkend="guc-cache-safe-memqcache-table-list">
+      </para>
+     </note>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-oiddir" xreflabel="memqcache_oiddir">
+    <term><varname>memqcache_oiddir</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>memqcache_oiddir</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the full path to the directory for storing the
+      <literal>oids</literal> of tables used by SELECT queries.
+     </para>
+     <para>
+      <varname>memqcache_oiddir</varname> directory contains the sub directories
+      for the databases. The directory name is the OID of the database. In addition, each
+      database directory contains the files for each table used by SELECT statement.
+      Again the name of the file is the OID of the table.
+      These files contains the pointers to query cache which are used as key for
+      deleting the caches.
+     </para>
+     <note>
+      <para>
+       Normal restart of <productname>Pgpool-II</productname> does not clear the
+       contents of <varname>memqcache_oiddir</varname>.
+      </para>
+     </note>
+     <para>
+      This parameter can be changed by reloading the <productname>Pgpool-II</productname> configurations.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-shmem-config">
+  <title>Configurations to use shared memory</title>
+
+  <para>
+   These are the parameters used with shared memory as the cache storage.
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-total-size" xreflabel="memqcache_total_size">
+    <term><varname>memqcache_total_size</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_total_size</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the shared memory cache size in bytes.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-max-num-cache" xreflabel="memqcache_max_num_cache">
+    <term><varname>memqcache_max_num_cache</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_max_num_cache</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the number of cache entries. This is used to define the size of cache management space.
+     </para>
+     <note>
+      <para>
+       The management space size can be calculated by:
+       <varname>memqcache_max_num_cache</varname> * 48 bytes.
+       Too small number will cause an error while registering cache.
+       On the other hand too large number will just waste space.
+      </para>
+     </note>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-cache-block-size" xreflabel="memqcache_cache_block_size">
+    <term><varname>memqcache_cache_block_size</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_cache_block_size</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the cache block size. <productname>Pgpool-II</productname> uses the
+      cache memory arranged in <varname>memqcache_cache_block_size</varname> blocks.
+      SELECT result is packed into the block and must fit in a single block.
+      And the results larger than <varname>memqcache_cache_block_size</varname> are
+      not cached.
+     </para>
+
+     <para>
+      <varname>memqcache_cache_block_size</varname> must be set to at least 512.
+     </para>
+
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-in-memory-query-cache-memcached-config">
+  <title>Configurations to use memcached</title>
+
+  <para>
+   These are the parameters used with memcached as the cache storage.
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-memqcache-memcached-host" xreflabel="memqcache_memcached_host">
+    <term><varname>memqcache_memcached_host</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>memqcache_memcached_host</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the host name or the IP address on which <literal>memcached</literal>
+      works. You can use <literal>'localhost'</literal> if <literal>memcached</literal>
+      and <productname>Pgpool-II</productname> resides on same server.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-memqcache-memcached-port" xreflabel="memqcache_memcached_port">
+    <term><varname>memqcache_memcached_port</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>memqcache_memcached_port</varname> configuration parameter</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      Specifies the port number of <acronym>memcached</acronym>.
+      Default is 11211.
+     </para>
+     <para>
+      This parameter can only be set at server start.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+</sect1>

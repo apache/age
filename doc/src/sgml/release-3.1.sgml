@@ -1,0 +1,58 @@
+<!-- doc/src/sgml/release-3.1.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+<sect1 id="release-3-1-21">
+ <title>Release 3.1.21</title>
+
+ <note>
+  <title>Release Date</title>
+  <simpara>2016-12-26</simpara>
+ </note>
+
+ <sect2>
+  <title>Bug fixes</title>
+
+  <itemizedlist>
+
+   <listitem>
+    <!--
+    2016-10-27 [f37c592]
+    -->
+    <para>
+     Do not cancel a query when the query resulted in an error other than in native replication mode. (Tatsuo Ishii)
+    </para>
+    <para>
+     It was intended to keep the consistency, but there's no point in other
+     than native replication mode.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-09 [8231f65]
+    -->
+    <para>
+     Do not use random() while generating MD5 salt. (Tatsuo Ishii)
+    </para>
+    <para>
+     random() should not be used in security related applications.  To
+     replace random(), import PostmasterRandom() from PostgreSQL.  Also
+     store current time at the start up of Pgpool-II main process for later
+     use.
+    </para>
+   </listitem>
+
+   <listitem>
+    <!--
+    2016-09-06 [891ce0f]
+    -->
+    <para>
+     Don't ignore sync message from frontend when query cache is enabled. (Tatsuo Ishii)
+    </para>
+   </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+</sect1>

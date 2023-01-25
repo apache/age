@@ -1,0 +1,21 @@
+#! /bin/sh
+
+if [ $# -ne 4 ]
+then
+    echo "pgpool_recovery datadir remote_host remote_datadir primary_port"
+    exit 1
+fi
+
+datadir=$1
+DEST=$2
+DESTDIR=$3
+PORT=$4
+
+rsync -acurz --delete -e ssh $datadir/global/ $DEST:$DESTDIR/global/ &
+rsync -acurz --delete -e ssh $datadir/base/ $DEST:$DESTDIR/base/ &
+rsync -acurz --delete -e ssh $datadir/pg_multixact/ $DEST:$DESTDIR/pg_multixact/ &
+rsync -acurz --delete -e ssh $datadir/pg_subtrans/ $DEST:$DESTDIR/pg_subtrans/ &
+rsync -acurz --delete -e ssh $datadir/pg_clog/ $DEST:$DESTDIR/pg_clog/ &
+rsync -acurz --delete -e ssh $datadir/pg_xlog/ $DEST:$DESTDIR/pg_xlog/ &
+rsync -acurz --delete -e ssh $datadir/pg_twophase/ $DEST:$DESTDIR/pg_twophase/ &
+wait

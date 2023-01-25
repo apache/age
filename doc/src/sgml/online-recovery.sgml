@@ -1,0 +1,512 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-online-recovery">
+ <title>Online Recovery</title>
+
+ <para>
+  <productname>Pgpool-II</productname> can synchronize database
+  nodes and attach a node without stopping the service.  This
+  feature is called <acronym>"online recovery"</acronym>.  Online
+  recovery can be executed by
+  using <xref linkend="pcp-recovery-node"> command.
+ </para>
+ <para>
+  For online recovery, the recovery target node must be in detached
+  state. This means the node must be either manually detached by
+  <xref linkend="pcp-detach-node"> or automatically detached
+   by <productname>Pgpool-II</productname> as a consequence of
+   failover.
+ </para>
+ <para>
+  If you wish to add a <productname>PostgreSQL</productname> server
+  node dynamically, reload the
+  <filename>pgpool.conf</filename> after adding the
+  <xref linkend="guc-backend-hostname"> and its associated
+   parameters.  This will register the new server
+   to <productname>Pgpool-II</productname> as a detached backend
+   node, after that you execute <xref linkend="pcp-recovery-node"> command,
+    the server is add.
+ </para>
+ <!--
+ <caution>
+ <para>
+ Make sure that <command>autovacuum</command> is stopped on the
+ main node (the first node which is up and running) before starting the
+ online recovery. Autovacuum can change the contents of the database which
+ can cause the inconsistency after the online recovery.
+    </para>
+ <para>
+ This applies only if you're recovering with a simple copy mechanism,
+ such as the <command>rsync</command> and doesn't apply when using
+ the PostgreSQL's PITR mechanism.
+    </para>
+  </caution>
+ -->
+ <note>
+  <para>
+   The recovery target <productname>PostgreSQL</> server must not
+   be running for performing the online recovery.  If the
+   target <productname>PostgreSQL</> server has already started,
+   you must shut it down before starting the online recovery.
+  </para>
+ </note>
+
+ <para>
+  Online recovery is performed in two phases. The first phase is
+  called "first stage" and the second phase is called "second
+  stage". Only <xref linkend="guc-replication-mode"> and <xref
+  linkend="guc-snapshot-isolation-mode"> require the second stage.
+  For other modes including streaming replication mode the second
+  stage is not performed and you don't need to provide a script for
+  the stage in <xref
+  linkend="guc-recovery-2nd-stage-command">. i.e. you can safely leave
+  it as an empty string.
+ </para>
+
+ <para>
+  In the first stage the standby (replica) node is created by using
+  <productname>PostgreSQL</productname>'s
+  <command>pg_basebackup</command>, for example, from a backup of the
+  main (primary) node. Update data while executing the first stage
+  will be logged into the <productname>PostgreSQL</productname>'s
+  transaction log.
+ </para>
+
+ <para>
+  In the second stage the target recovery node is started. The
+  transaction log will be replayed and the replica node will be
+  completely synced with the master node.
+ </para>
+
+ <para>
+  You need to provide scripts for each stage.  Complete sample scripts
+  are provided at <ulink
+  url="https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sample/scripts/recovery_1st_stage.sample;hb=refs/heads/master">/etc/pgpool-II/recovery_1st_stage.sample</ulink>
+  and <ulink
+  url="https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sample/scripts/recovery_2nd_stage.sample;hb=refs/heads/master">/etc/pgpool-II/recovery_2nd_stage.sample</ulink>.
+  Example installation using those scripts can be found in <xref
+  linkend="example-cluster-pgpool-config-online-recovery">.
+ </para>
+
+ <para>
+  Connections from clients are not allowed only in the second stage
+  while the data can be updated or retrieved during the first stage.
+ </para>
+ <para>
+  <productname>Pgpool-II</productname> performs the follows steps in online recovery:
+ </para>
+ <itemizedlist>
+
+  <listitem>
+   <para>
+    CHECKPOINT.
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    Execute first stage of online recovery.
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    Wait until all client connections have disconnected (only in <xref
+    linkend="guc-replication-mode"> and <xref
+    linkend="guc-snapshot-isolation-mode">).
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    CHECKPOINT (only in <xref linkend="guc-replication-mode"> and
+  <xref linkend="guc-snapshot-isolation-mode">).
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    Execute second stage of online recovery (only in <xref
+    linkend="guc-replication-mode"> and <xref
+    linkend="guc-snapshot-isolation-mode">).
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    Start up postmaster (perform <literal>pgpool_remote_start</literal>)
+   </para>
+   <para>
+    The <literal>pgpool_remote_start</literal> is script to start up the <productname>PostgreSQL</productname> node of recovery target.
+    <literal>pgpool_remote_start</literal> receives following 2 parameters:
+    <itemizedlist>
+     <listitem>
+      <para>
+       Hostname of the backend node to be recovered.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Path to the database cluster of the main(primary) node.
+      </para>
+     </listitem>
+    </itemizedlist>
+    The script example can be found in <xref linkend="example-cluster-pgpool-config-online-recovery">.
+     <note>
+      <para>
+       The script path and filename are hard coded, <command>$PGDATA/pgpool_remote_start</command> is executed on main(primary) node.
+      </para>
+     </note>
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    Node attach
+   </para>
+  </listitem>
+
+ </itemizedlist>
+ <note>
+  <para>
+   There is a restriction in the online recovery in
+   <xref linkend="guc-replication-mode">. If
+    <productname>Pgpool-II</productname> itself is installed
+    on multiple hosts, online recovery does not work correctly,
+    because <productname>Pgpool-II</productname> has to stop all
+    the clients during the 2nd stage of online recovery.
+    If there are several <productname>Pgpool-II</productname> hosts,
+    only one of them will have received the online recovery command and will
+    block the connections from clients.
+  </para>
+ </note>
+ <variablelist>
+
+  <varlistentry id="guc-recovery-user" xreflabel="recovery_user">
+   <term><varname>recovery_user</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>recovery_user</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the <productname>PostgreSQL</> user name to perform online recovery.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-password" xreflabel="recovery_password">
+   <term><varname>recovery_password</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>recovery_password</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the password for the <productname>PostgreSQL</> user name configured in
+     <xref linkend="guc-recovery-user"> to perform online recovery.
+    </para>
+    <para>
+     If <varname>recovery_password</varname> is left blank <productname>Pgpool-II</productname>
+     will first try to get the password for <xref linkend="guc-recovery-user"> from
+      <xref linkend="guc-pool-passwd"> file before using the empty password.
+    </para>
+    <para>
+     You can also specify AES256-CBC encrypted password in <varname>recovery_password</varname> field.
+     To specify the <literal>AES</literal> encrypted password, password string must be prefixed with
+     <literal>AES</literal> after encrypting (using <literal>aes-256-cbc</literal> algorithm) and
+     encoding to <literal>base64</literal>.
+    </para>
+    <para>
+     To specify the unencrypted clear text password, prefix the password string with
+     <literal>TEXT</literal>. For example if you want to set <literal>mypass</literal> as
+     a password, you should specify <literal>TEXTmypass</literal> in the password field.
+     In the absence of a valid prefix, <productname>Pgpool-II</productname> will considered
+     the string as a plain text password.
+    </para>
+    <para>
+     You can also use <xref linkend="PG-ENC"> utility to create the correctly formatted
+      <literal>AES</literal> encrypted password strings.
+      <note>
+       <para>
+	<productname>Pgpool-II</productname> will require a valid decryption key at the
+	startup to use the encrypted passwords.
+	see <xref linkend="auth-aes-decryption-key"> for more details on providing the
+	 decryption key to <productname>Pgpool-II</productname>
+       </para>
+      </note>
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-1st-stage-command" xreflabel="recovery_1st_stage_command">
+   <term><varname>recovery_1st_stage_command</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>recovery_1st_stage_command</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies a command to be run by main (primary) node at the
+     first stage of online recovery. The command file must be placed in the
+     database cluster directory for security reasons.
+     For example, if <varname>recovery_1st_stage_command</varname> = <literal>
+      'sync-command'</literal>, then <productname>Pgpool-II</productname> will
+     look for the command script in <literal>$PGDATA</literal> directory and will
+     try to execute <command>$PGDATA/sync-command</command>.
+    </para>
+    <para>
+     <varname>recovery_1st_stage_command</varname> receives following 7 parameters:
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       Path to the database cluster of the main (primary) node.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Hostname of the backend node to be recovered.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Path to the database cluster of the node to be recovered.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Port number of the main (primary) node (<productname>Pgpool-II</productname> 3.4 or after).
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Node number to be recovered (<productname>Pgpool-II</productname> 4.0 or after)
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Port number to be recovered (<productname>Pgpool-II</productname> 4.1 or after)
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Hostname of the main (primary) node
+       (<productname>Pgpool-II</productname> 4.3 or after)
+      </para>
+      <para>
+       Before the hostname of the main (primary) node was obtained by
+       using <command>hostname</command> command. This is mostly ok
+       since the script runs on the main (primary) node
+       anyway. However in some systems the hostname obtained
+       by <command>hostname</command> command is different from the
+       hostname defined in backend_hostname configuration parameter.
+       This could cause a trouble
+       in <xref linkend="guc-detach-false-primary"> because it checks
+       connectivity between primary and standby node by
+       using <literal>host</literal> parameter
+       in <varname>primary_conninfo</varname> parameter, which is
+       generated
+       by <varname>recovery_1st_stage_command</varname>. Thus it is
+       strongly recommended to use this parameter instead of
+       using <command>hostname</command> command to obtain the
+       hostname of the primary node
+       in <varname>recovery_1st_stage_command</varname>.
+      </para>
+     </listitem>
+    </itemizedlist>
+
+    <note>
+     <para>
+      <productname>Pgpool-II</productname> accept connections and queries
+      while <varname>recovery_1st_stage command</varname> is executed,
+      so you can retrieve and update data.
+     </para>
+    </note>
+
+    <caution>
+     <para>
+      <varname>recovery_1st_stage command</varname> runs as a <acronym>SQL</acronym>
+      command from PostgreSQL's point of view. So <varname>recovery_1st_stage command
+      </varname> can get prematurely killed by PostgreSQL if the PostgreSQL's
+      <varname>statement_time_out</varname> is configured with the value that is
+      smaller than the time <varname>recovery_1st_stage_command</varname> takes for
+      completion.
+     </para>
+     <para>
+      Typical error in such case is
+      <programlisting>
+       rsync used in the command is killed by signal 2 for example.
+      </programlisting>
+     </para>
+    </caution>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-2nd-stage-command" xreflabel="recovery_2nd_stage_command">
+   <term><varname>recovery_2nd_stage_command</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>recovery_2nd_stage_command</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     Specifies a command to be run by main node at the second
+     stage of online recovery. This command is required only
+     <xref linkend="guc-replication-mode">, so for other modes don't need
+      to provide a command file. The command file must be placed in the
+      database cluster directory for security reasons.
+      For example, if <varname>recovery_2nd_stage_command</varname> = <literal>
+       'sync-command'</literal>, then <productname>Pgpool-II</productname> will
+      look for the command script in <literal>$PGDATA</literal> directory and will
+      try to execute <command>$PGDATA/sync-command</command>.
+    </para>
+    <para>
+     <varname>recovery_2nd_stage_command</varname> receives following 7 parameters:
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       Path to the database cluster of the main(primary) node.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Hostname of the backend node to be recovered.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Path to the database cluster of the node to be recovered.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Port number of the main (primary) node (<productname>Pgpool-II</productname> 3.4 or after).
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Node number to be recovered (<productname>Pgpool-II</productname> 4.0 or after)
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Port number to be recovered (<productname>Pgpool-II</productname> 4.1 or after)
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Hostname of the main (primary) node
+       (<productname>Pgpool-II</productname> 4.3 or after)
+      </para>
+     </listitem>
+    </itemizedlist>
+
+    <note>
+     <para>
+      <productname>Pgpool-II</productname> <emphasis>does not</emphasis>
+      accept client connections and queries during the execution
+      of <varname>recovery_2nd_stage_command</varname> command, and waits
+      for the existing clients to close their connections before executing the
+      command.
+      Therefore, the <varname>recovery_2nd_stage_command</varname> may not execute
+      if the client stays connected for a long time.
+     </para>
+    </note>
+
+    <caution>
+     <para>
+      <varname>recovery_2nd_stage command</varname> runs as a <acronym>SQL</acronym>
+      command from PostgreSQL's point of view. Therefore, <varname>recovery_2nd_stage command
+      </varname> can get prematurely killed by PostgreSQL if the PostgreSQL's
+      <varname>statement_time_out</varname> is configured with the value that is
+      smaller than the time <varname>recovery_2nd_stage_command</varname> takes for
+      completion.
+     </para>
+    </caution>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-timeout" xreflabel="recovery_timeout">
+   <term><varname>recovery_timeout</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>recovery_timeout</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the timeout in seconds to cancel the online recovery if it
+     does not completes within this time.
+     Since <productname>Pgpool-II</productname> does not accepts the connections
+     during the second stage of online recovery, this parameter can be used to cancel
+     the online recovery to manage the service down time during the online recovery.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-client-idle-limit-in-recovery" xreflabel="client_idle_limit_in_recovery">
+   <term><varname>client_idle_limit_in_recovery</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>client_idle_limit_in_recovery</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the time in seconds to disconnect a client if it remains idle
+     since the last query during the online recovery.
+     <varname>client_idle_limit_in_recovery</varname> is similar to the
+     <xref linkend="guc-client-idle-limit"> but only takes effect during the
+      second stage of online recovery.
+    </para>
+    <para>
+     This is useful for preventing the <productname>Pgpool-II</productname>
+     recovery from being disturbed by the lazy clients or if the TCP/IP
+     connection between the client and <productname>Pgpool-II</productname>
+     is accidentally down (a cut cable for instance).
+    </para>
+
+    <note>
+     <para>
+      <varname>client_idle_limit_in_recovery</varname> must be smaller than
+      <xref linkend="guc-recovery-timeout">.
+       Otherwise, <xref linkend="guc-recovery-timeout"> comes
+	first and you will see following error while executing online recovery:
+	<programlisting>
+	 ERROR:  node recovery failed, waiting connection closed in the other pgpools timeout
+	</programlisting>
+     </para>
+    </note>
+
+    <para>
+     If set to -1, all clients get immediately disconnected when the second
+     stage of online recovery starts.
+     The default is 0, which turns off the feature.
+    </para>
+
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+      this parameter for a current session.
+    </para>
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+</sect1>

@@ -1,0 +1,12 @@
+DROP TABLE "foo"
+DROP OWNED BY "role_a"
+DROP OWNED BY "role_a" CASCADE
+DROP OWNED BY "role_a"
+DROP OWNED BY "role_a", "role_b", "role_c"
+REASSIGN OWNED BY "role_a" TO "role_b"
+REASSIGN OWNED BY "role_a", "role1" TO "role_b"
+DROP OPERATOR FAMILY "foo" USING "bar"
+DROP OPERATOR FAMILY IF EXISTS "foo" USING "bar"
+syntax error: DROP OPERATOR FAMILY foo USING
+DROP ROLE "foo"
+DROP ROLE IF EXISTS "foo"

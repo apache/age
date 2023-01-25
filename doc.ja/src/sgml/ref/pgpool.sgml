@@ -1,0 +1,328 @@
+<!--
+doc/src/sgml/ref/pgpool.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="pgpool">
+ <indexterm zone="pgpool">
+  <primary>pgpool</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool</refentrytitle>
+  <manvolnum>8</manvolnum>
+  <!--
+  <refmiscinfo>Server Commands</refmiscinfo>
+  -->
+  <refmiscinfo>サーバコマンド</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool</refname>
+  <refpurpose>
+   <!--
+   <productname>Pgpool-II</productname> main server</refpurpose>
+   -->
+   <productname>Pgpool-II</productname>メインサーバ</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>stop</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pgpool</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="plain"><replaceable>reload</replaceable></arg>
+  </cmdsynopsis>
+
+ </refsynopsisdiv>
+
+ <refsect1 id="R8-PGPOOL-8">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <!--
+   the <productname>Pgpool-II</productname> main server
+   -->
+   <productname>Pgpool-II</productname>メインサーバ
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Usages</title>
+  -->
+  <title>使用方法</title>
+  <para>
+   <!--
+   <command>pgpool</command> runs in 3 modes: start, stop and reload.
+   If none of stop or reload is given, it is assumed that "start" is specified.
+   -->
+   <command>pgpool</command>は3つのモードで実行されます。すなわち、start、stop、reloadです。
+   stopもしくはreloadが指定されていなければ、start モードが指定されているものとします。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Common options</title>
+  -->
+  <title>共通オプション</title>
+  <para>
+   <!--
+   These are common options for 3 modes.
+   -->
+   3つのモードに共通のオプションです。
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-a <replaceable class="parameter">hba_config_file</replaceable></option></term>
+     <term><option>--hba-file=<replaceable class="parameter">hba_config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Set the path to the <filename>pool_hba.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+       -->
+       <filename>pool_hba.conf</filename>設定ファイルへのパスを指定します。
+       そのファイルが標準の場所以外にある場合には必須です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f <replaceable class="parameter">config_file</replaceable></option></term>
+     <term><option>--config-file=<replaceable class="parameter">config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Set the path to the <filename>pgpool.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+       -->
+       <filename>pgpool.conf</filename>設定ファイルへのパスを指定します。
+       そのファイルが標準の場所以外にある場合には必須です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-F <replaceable class="parameter">pcp_config_file</replaceable></option></term>
+     <term><option>--pcp-file=<replaceable class="parameter">pcp_config_file</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Set the path to the <filename>pcp.conf</filename> configuration file.
+       Mandatory if the file is placed other than the standard location.
+       -->
+       <filename>pcp.conf</filename>設定ファイルへのパスを指定します。
+       そのファイルが標準の場所以外にある場合には必須です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-k <replaceable class="parameter">key_file</replaceable></option></term>
+     <term><option>--key-file=<replaceable class="parameter">key_file</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Set the path to the <filename>.pgpoolkey</filename> file.
+       Mandatory if you use AES256 encrypted password and the file is placed other than the standard location and used.
+       -->
+       <filename>.pgpoolkey</filename>ファイルへのパスを指定します。
+       AES256暗号化パスワードを使用し、このファイルが標準の場所以外にある場合には必須です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-h</option></term>
+     <term><option>--help</option></term>
+     <listitem>
+      <para>
+       <!--
+       Print help.
+       -->
+       ヘルプを表示します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+
+  <!--
+  <title>Starting <productname>Pgpool-II</productname> main server</title>
+  -->
+  <title><productname>Pgpool-II</productname>メインサーバの起動</title>
+  <para>
+   <!--
+   Here are options for the start mode.
+   -->
+   startモードのオプションです。
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <term><option>--debug</option></term>
+     <listitem>
+      <para>
+       <!--
+       Run <productname>Pgpool-II</productname> in debug mode.
+       Lots of debug messages are produced.
+       -->
+       <productname>Pgpool-II</productname>をデバッグモードで起動します。
+       大量のデバッグメッセージが出力されます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n</option></term>
+     <term><option>--dont-detach</option></term>
+     <listitem>
+      <para>
+       <!--
+       Don't run in daemon mode, does not detach control ttys.
+       -->
+       デーモンモードで起動しません。制御端末は切り離されません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-x</option></term>
+     <term><option>--debug-assertions</option></term>
+     <listitem>
+      <para>
+       <!--
+       Turns on various assertion checks, This is a debugging aid.
+       -->
+       アサーションチェックが有効になります。
+       これはデバッグ用の機能です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-C</option></term>
+     <term><option>--clear-oidmaps</option></term>
+     <listitem>
+      <para>
+       <!--
+       Clear query cache oidmaps when <xref linkend="guc-memqcache-method"> is
+       <varname>memcached</varname>.
+       -->
+       <xref linkend="guc-memqcache-method">の設定が<varname>memcached</varname>のときにクエリキャッシュのoidmapをクリアします。
+      </para>
+      <para>
+       <!--
+       If memqcache_method
+       is <varname>shmem</varname>, <productname>Pgpool-II</productname>
+       always discards oidmaps at the start-up time. So this option
+       is not necessary.
+       -->
+       <xref linkend="guc-memqcache-method">の設定が<varname>shmem</varname>のときは、<productname>Pgpool-II</productname>の起動時に常にoidmapをクリアするので、このオプションは不要です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-D</option></term>
+     <term><option>--discard-status</option></term>
+     <listitem>
+      <para>
+       <!--
+       Discard <filename>pgpool_status</filename> file and do not
+       restore previous status.
+       -->
+       <filename>pgpool_status</filename>ファイルを破棄し、以前の状態を復元しません。
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+
+  <!--
+  <title>Stopping <productname>Pgpool-II</productname> main server</title>
+  -->
+  <title><productname>Pgpool-II</productname>メインサーバの停止</title>
+  <para>
+   <!--
+   Here are options for the stop mode.
+   -->
+   stopモードのオプションです。
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">shutdown_mode</replaceable></option></term>
+     <term><option>--mode=<replaceable class="parameter">shutdown_mode</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Stop <productname>Pgpool-II</productname>.
+       <varname>shutdown_mode</varname> is
+       either <literal>smart</literal>, <literal>fast</literal>
+       or <literal>immediate</literal>.  If <literal>smart</literal>
+       is specified, <productname>Pgpool-II</productname> will wait
+       for all clients are disconnected. If <literal>fast</literal>
+       or <literal>immediate</literal> are
+       specified, <productname>Pgpool-II</productname> immediately
+       stops itself without waiting for all clients are
+       disconnected. There's no difference
+       between <literal>fast</literal>
+       and <literal>immediate</literal> in the current
+       implementation.
+       -->
+       <productname>Pgpool-II</productname>を停止します。
+       <varname>shutdown_mode</varname>は、<literal>smart</literal>、<literal>fast</literal>、<literal>immediate</literal>のいずれかです。
+       <literal>smart</literal>が指定されると、<productname>Pgpool-II</productname>はすべてのクライアントが接続を切るまで待ちます。
+       <literal>fast</literal>あるいは<literal>immediate</literal>が指定されると、すべてのクライアントが接続を切るまで待たず、直ちに終了します。
+       現在の実装では、<literal>fast</literal>と<literal>immediate</literal>の間に挙動の違いはありません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Reloading <productname>Pgpool-II</productname> configuration files</title>
+  -->
+  <title><productname>Pgpool-II</productname>設定ファイルの再読み込み</title>
+  <para>
+   <!--
+   Reload configuration file
+   of <productname>Pgpool-II</productname>. No specific options
+   exist for reload mode. Common options are applicable.
+   -->
+   <productname>Pgpool-II</productname>の設定ファイルを再読み込みします。
+   reloadモードには専用のオプションはありません。
+   共通オプションが使えます。
+  </para>
+ </refsect1>
+
+</refentry>

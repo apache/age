@@ -1,0 +1,70 @@
+<!--
+doc/src/sgml/ref/pcp_pool_status.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-POOL-STATUS">
+ <indexterm zone="pcp-pool-status">
+  <primary>pcp_pool_status</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_pool_status</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_pool_status</refname>
+  <refpurpose>
+   displays the parameter values as defined in <filename>pgpool.conf</filename></refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_pool_status</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-POOL-STATUS-1">
+  <title>Description</title>
+  <para>
+   <command>pcp_pool_status</command>
+   displays the parameter values as defined in <filename>pgpool.conf</filename>.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   See <xref linkend="pcp-common-options">.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+    $ pcp_pool_status -h localhost -U postgres
+    name : listen_addresses
+    value: localhost
+    desc : host name(s) or IP address(es) to listen to
+
+    name : port
+    value: 9999
+    desc : pgpool accepting port number
+
+    name : socket_dir
+    value: /tmp
+    desc : pgpool socket directory
+
+    name : pcp_port
+    value: 9898
+    desc : PCP port # to bind
+   </programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

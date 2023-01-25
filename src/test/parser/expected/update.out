@@ -1,0 +1,11 @@
+UPDATE "t" SET "a" = 1
+UPDATE "t" SET "a" = 3, "b" = 'a', "c" = NULL, "d" = DEFAULT
+UPDATE "t" SET "a" = 1 FROM "x"
+UPDATE "t" SET "a" = 1 FROM "x","y","z"
+UPDATE "t" SET "a" = 1 FROM "x" WHERE  ( ("x"<100 ) AND  ("y">200 ))
+UPDATE "t" SET "a" = 1
+UPDATE "foo" SET "a" = 1 RETURNING *
+UPDATE "foo" SET "a" = 1 RETURNING "a"
+UPDATE "foo" SET "a" = 1 RETURNING "a","b"
+syntax error: UPDATE foo SET a = 1 WHERE CURRENT OF $1
+UPDATE "foo" SET "a" = 1 WHERE CURRENT OF cur

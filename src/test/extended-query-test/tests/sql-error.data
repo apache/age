@@ -1,0 +1,23 @@
+# Test data for error case.
+#
+
+# Start a transaction
+'P'	"S1"	"BEGIN"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+# Issue SELECT
+'P'	"S2"	"SELECT * FROM non_existsing_table"	0
+'B'	""	"S2"	0	0	0
+'E'	""	0
+'C'	'S'	"S2"
+
+# Issue COMMIT
+'P'	"S1"	"COMMIT"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+'S'
+'Y'
+'X'

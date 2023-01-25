@@ -1,0 +1,887 @@
+<!-- doc/src/sgml/runtime.sgml -->
+
+<chapter id="runtime">
+ <!--
+ <title>Server Setup and Operation</title>
+ -->
+ <title>サーバの準備と運用</title>
+
+ <para>
+  <!--
+  This chapter discusses how to set up and run the <productname>Pgpool-II</> server
+  and its interactions with the operating system.
+  -->
+  本章では、<productname>Pgpool-II</>サーバの設定と実行方法、そしてオペレーティングシステムとの相互作用について説明します。 
+ </para>
+
+ <sect1 id="pgpool-II-user">
+  <!--
+  <title>The <productname>Pgpool-II</productname> User Account</title>
+  -->
+  <title><productname>Pgpool-II</productname>ユーザアカウント</title>
+
+  <indexterm>
+   <!--
+   <primary>Pgpool-II user</primary>
+   -->
+   <primary>Pgpool-IIユーザ</primary>
+  </indexterm>
+
+  <para>
+   <!--
+   As with any server daemon that is accessible to the outside world,
+   it is advisable to run <productname>Pgpool-II</productname> under a
+   separate user account. This user account should only own the data
+   that is managed by the server, and should not be shared with other
+   daemons. (For example, using the user <literal>nobody</literal> is a bad
+   idea.) It is not advisable to install executables owned by this
+   user because compromised systems could then modify their own
+   binaries.
+   -->
+   外部へアクセスできるサーバデーモンと同じように、<productname>Pgpool-II</productname>を独立したユーザアカウントで実行することをお勧めします。
+   このユーザアカウントは、サーバによって管理されるデータのみを所有する必要があります。
+   また、他のデーモンとアカウントを共有しない方が良いです。
+   （例えば、<literal>nobody</literal>ユーザの使用はお勧めできません。）
+   このユーザによって所有される実行プログラムをインストールすることも好ましくありません。
+   システムが攻撃を受けた場合などに、自分自身のバイナリを変更されてしまう可能性があるからです。 
+  </para>
+
+  <para>
+   <!--
+   To add a Unix user account to your system, look for a command
+   <command>useradd</command> or <command>adduser</command>. The user
+   name <systemitem>pgpool</systemitem> is often used, and is assumed
+   throughout this book, but you can use another name if you like.
+   -->
+   システムにUnixのユーザアカウントを追加するためには、コマンド<command>useradd</command>か<command>adduser</command>を使用してください。
+   <systemitem>pgpool</systemitem>というユーザ名がよく使われ、本書全体でも使用していますが、好みの名前を使用しても構いません。
+  </para>
+ </sect1>
+
+ <sect1 id="configuring-pcp-conf">
+  <!--
+  <title>Configuring pcp.conf</title>
+  -->
+  <title>pcp.confの設定</title>
+
+  <indexterm>
+   <!--
+   <primary>pcp configuration</primary>
+   -->
+   <primary>pcpの設定</primary>
+  </indexterm>
+
+  <para>
+   <!--
+   <productname>Pgpool-II</productname> provides a interface
+   for administrators to perform management operation, such as
+   getting <productname>Pgpool-II</productname> status or terminating
+   <productname>Pgpool-II</productname> processes
+   remotely. <filename>pcp.conf</filename> is the user/password file
+   used for authentication by this interface. All operation modes
+   require the <filename>pcp.conf</filename> file to be set. A
+   <filename>$prefix/etc/pcp.conf.sample</filename> file is created
+   during the installation
+   of <productname>Pgpool-II</productname>. Copy the file as 
+   <filename>$prefix/etc/pcp.conf</filename> and add your user name and password
+   to it.
+   -->
+   <productname>Pgpool-II</productname>は管理者が<productname>Pgpool-II</productname>のステータス取得や、リモートからの<productname>Pgpool-II</productname>プロセスの停止といった、管理操作を行うためのインターフェイスを提供しています。
+   <filename>pcp.conf</filename>はこのインタフェースの認証に使われるユーザ/パスワードのファイルです。
+   全ての動作モードにおいて<filename>pcp.conf</filename>の設定が必要です。
+   <productname>Pgpool-II</productname>のインストール中に<filename>$prefix/etc/pcp.conf.sample</filename>が作られます。
+   そのファイルを<filename>$prefix/etc/pcp.conf</filename>という名前でコピーしてユーザ名とパスワードを追加してください。
+
+   <screen>
+    <prompt>$</> <userinput>cp $prefix/etc/pcp.conf.sample $prefix/etc/pcp.conf</userinput>
+   </screen>
+
+   <!--
+   An empty line or a line starting with <literal>#</literal> is treated as a
+   comment and will be ignored. A user name and its associated
+   password must be written as one line using the following format:
+   -->
+   空白行や<literal>#</literal>で始まる行はコメントと見なされ無視されます。
+   ユーザ名とそれに対応するパスワードは以下の形式を使って１行で書かれなくてはなりません。 
+
+   <synopsis>
+    <!--
+    <replaceable>username</>:<replaceable>[md5 encrypted password]</>
+    -->
+    <replaceable>ユーザ名</>:<replaceable>[md5暗号化されたパスワード]</>
+   </synopsis>
+
+   <!--
+   <replaceable>[md5 encrypted password]</> can be produced with the <filename>$prefix/bin/pg_md5</> command.
+   -->
+   <replaceable>[md5暗号化されたパスワード]</>は、<filename>$prefix/bin/pg_md5</filename>コマンドで作成できます。 
+
+   <screen>
+    <prompt>$</> <userinput>pg_md5 your_password</userinput>
+    1060b7b46a3bd36b3a0d66e0127d0517
+   </screen>
+
+   <!--
+   If you don't want pass the password as the argument, execute <command>pg_md5 -p</command>.
+   -->
+   パスワードを引数に渡したくない場合は<command>pg_md5 -p</command>を実行してください。 
+
+   <screen>
+    <prompt>$</> <userinput>pg_md5 -p</userinput>
+    password: <userinput>your_password</userinput>
+   </screen>
+
+   <!--
+   The <filename>pcp.conf</filename> file must be readable by the
+   user who executes <productname>Pgpool-II</productname>.
+   -->
+   <filename>pcp.conf</filename>は、<productname>Pgpool-II</productname>を実行するユーザから読み取り可能になっていなければなりません。 
+  </para>
+
+ </sect1>
+
+ <sect1 id="configuring-pgpool">
+  <!--
+  <title>Configuring Pgpool-II</title>
+  -->
+  <title>Pgpool-IIの設定</title>
+
+  <indexterm>
+   <!--
+   <primary>Pgpool-II configuration</primary>
+   -->
+   <primary>Pgpool-IIの設定</primary>
+  </indexterm>
+
+  <sect2 id="configuring-pgpool-conf">
+   <!--
+   <title>Configuring pgpool.conf</title>
+   -->
+   <title>pgpool.confの設定</title>
+
+   <para>
+    <!--
+    <filename>pgpool.conf</filename> is the main configuration file
+    of <productname>Pgpool-II</productname>. You need to specify the
+    path to the file when
+    starting <productname>Pgpool-II</productname>
+    using <option>-f</option> option.
+    <filename>pgpool.conf</filename> is located
+    at <filename>$prefix/etc/pgpool.conf</filename> by default,
+    if it installed from source code.
+    -->
+    <filename>pgpool.conf</filename>は<productname>Pgpool-II</productname>のメインの設定ファイルです。
+    <productname>Pgpool-II</productname>の起動時には<option>-f</option>オプションでこのファイルのパスを指定する必要があります。
+    ソースコードからインストールした場合、デフォルトでは<filename>pgpool.conf</filename>は<filename>$prefix/etc/pgpool.conf</filename>に配置されます。
+   </para>
+
+   <para>
+    各<productname>Pgpool-II</productname>のクラスタリングモードについて設定のサンプルがあります。
+
+   </para>
+
+   <table id="backend-clustering-mode-table">
+    <!--
+    <title><xref linkend="guc-backend-clustering-mode"> value in pgpool.conf</title>
+    -->
+    <title>pgpool.conf中の<xref linkend="guc-backend-clustering-mode">の値</title>
+
+    <tgroup cols="2">
+     <thead>
+      <row>
+       <!--
+       <entry>Clustering mode</entry>
+       <entry>value</entry>
+       -->
+       <entry>クラスタリングモード</entry>
+       <entry>値</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <!--
+       <entry>Streaming replication mode</entry>
+       -->
+       <entry>ストリーミングレプリケーションモード</entry>
+       <entry><literal>streaming_replication</literal></entry>
+      </row>
+      <row>
+       <entry>ネイティブレプリケーションモード</entry>
+       <entry><literal>native_replication</literal></entry>
+      </row>
+      <row>
+       <entry>ロジカルレプリケーションモード</entry>
+       <entry><literal>logical_replication</literal> </entry>
+      </row>
+      <row>
+       <entry>slonyモード</entry>
+       <entry><literal>slony</literal></entry>
+      </row>
+      <row>
+       <entry>スナップショットアイソレーションモード</entry>
+       <entry><literal>snapshot_isolation</literal></entry>
+      </row>
+      <row>
+       <entry>Rawモード</entry>
+       <entry><literal>raw</literal> </entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
+
+   <para>
+    <!--
+    These configuration files are located at /usr/local/etc with
+    default installation from source code.
+    You can copy one of them as <filename>pgpool.conf</filename>.
+    (probably you need root privilege for this)
+    -->
+    これらの設定ファイルはデフォルトのソースコードからのインストールでは/usr/local/etcに配置されています。
+    これらを<filename>pgpool.conf</filename>としてコピーして使うことが可能です。
+    （もしかするとそのためにはroot権限が必要かもしれません。）
+    <programlisting>
+# cd /usr/local/etc
+# cp pgpool.conf.sample pgpool.conf
+    </programlisting>
+   </para>
+  </sect2>
+
+  <sect2 id="running-mode">
+   <!--
+   <title>Running mode of Pgpool-II</title>
+   -->
+   <title>Pgpool-IIのクラスタリングモード</title>
+   <indexterm zone="running-mode">
+    <!--
+    <primary>streaming replication mode</primary>
+    -->
+    <primary>ストリーミングレプリケーションモード</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <!--
+    <primary>native replication mode</primary>
+    -->
+    <primary>メインレプリカモード</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <!--
+    <primary>native replication mode</primary>
+    -->
+    <primary>ネィティブレプリケーションモード</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <!--
+    <primary>logical replication mode</primary>
+    -->
+    <primary>ロジカルレプリケーションモード</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <!--
+    <primary>snapshot isolation mode</primary>
+    -->
+    <primary>スナップショットアイソレーションモード</primary>
+   </indexterm>
+
+   <para>
+    <productname>Pgpool-II</>にはストリーミングレプリケーションモード、ロジカルレプリケーションモード、メインレプリカモード(Slonyモード)、ネイティブレプリケーションモード、スナップショットアイソレーションモード、rawモードの6つの<link linkend="guc-backend-clustering-mode">クラスタリングモード</link>があります。
+    いずれのモードにおいても、<productname>Pgpool-II</>はコネクションプーリング、自動フェイルオーバの機能を提供します。
+    ストリーミングレプリケーションモード、ネイティブレプリケーションモード、スナップショットアイソレーションモードでは、更新処理を受け付けながらデータベースノードの同期を取り直すオンラインリカバリが利用可能です。
+    オンラインリカバリの詳細については<xref linkend="runtime-online-recovery">を参照してください。
+   </para>
+
+   <para>
+    これらのモードは互いに排他的であり、サーバ起動後は変更することができません。
+    システム設計の初期の段階でどのモードを使うか決めなければなりません。
+    どれを使えば良いかわからない場合は、ストリーミングレプリケーションモードかスナップショットアイソレーションモードを使うことを推奨します。
+   </para>
+
+   <para>
+    <firstterm>ストリーミングレプリケーションモード</firstterm>はストリーミングレプリケーションを使用する<productname>PostgreSQL</>サーバ(AWSのAuroa、RDSを含みます)と一緒に使うことができます。
+    このモードでは、<productname>PostgreSQL</>がデータベースを同期する責任を持ちます。
+    このモードは広く使われており、最も推奨される<productname>Pgpool-II</>の使用法です。
+    このモードでは負荷分散が可能です。
+    ノードをまたがる可視性の一貫性は保証されません。
+   </para>
+
+   <para>
+    <firstterm>スナップショットアイソレーションモード</firstterm>では、<productname>Pgpool-II</productname>がデータベースを同期する責任を持ちます。
+    このモードの利点はデータベース同期が同期的に行われることです。
+    すなわち、データベースへの書き込みは全ての<productname>PostgreSQL</productname>サーバが書き込み操作を完了するまで返ってきません。
+    また、スナップショットアイソレーションモードは、ノードをまたがる可視性の一貫性を保証します。
+    これは簡単に言うと、単一サーバ上のトランザクション可視性ルールがそのまま複数サーバからなるクラスタでも適用されるということで、<productname>Pgpool-II</productname>のスナップショットアイソレーションモードが持つ著しい特徴です。
+    実際、<productname>PostgreSQL</productname>に改造を加えずにノードをまたがる可視性の一貫性を保証するシステムは、現時点では<productname>Pgpool-II</productname>のスナップショットアイソレーションモードだけです。
+    これにより、アプリケーションは単一の<productname>PostgreSQL</productname>ではなく複数<productname>PostgreSQL</productname>からなるクラスタを使っていることを意識しないで済むメリットがあります。
+    ただし、このモードではトランザクション分離レベルを<emphasis>REPEATABLE READにする必要があります</emphasis>。
+      具体的には、<filename>postgresql.conf</filename>に以下のように記述します。
+      <programlisting>
+default_transaction_isolation = 'repeatable read'
+      </programlisting>
+    また、トランザクションの一貫性を保つ仕組みのオーバヘッドにより、ストリーミングレプリケーションモードやネイティブレプリケーションモードに比べると性能が低下します。
+   </para>
+
+   <para>
+    <firstterm>ネイティブレプリケーションモード</firstterm>では、<productname>Pgpool-II</>がデータベースを同期する責任を持ちます。
+    このモードの利点は同期が同期的に行われることです。
+    すなわち、データベースへの書き込みは全ての<productname>PostgreSQL</>サーバが書き込み操作を完了するまで返ってきません。
+    このモードではノードをまたがる可視性の一貫性は保証されないので、トランザクション分離レベルをREPEATABLE READに限定したくない場合を除き、スナップショットアイソレーションモードを使うことをお勧めします。
+    このモードでは負荷分散が可能です。
+   </para>
+
+   <para>
+    <!--
+    The <firstterm>logical replication mode</firstterm> can be used
+    with <productname>PostgreSQL</> servers operating logical
+    replication. In this mode, <productname>PostgreSQL</> is
+    responsible for synchronizing tables. Load balancing is possible
+    in the mode. Since logical replication does not replicate all
+    tables, it's user's responsibility to replicate the table which
+    could be load balanced. <productname>Pgpool-II</> load balaces
+    all tables. This means that if a table is not
+    replicated, <productname>Pgpool-II</> may lookup outdated tables
+    in the subscriber side.
+    -->
+    <firstterm>ロジカルレプリケーションモード</firstterm>はロジカルレプリケーションを使用する<productname>PostgreSQL</>サーバと一緒に使うことができます。
+    このモードでは、<productname>PostgreSQL</>がテーブルを同期する責任を持ちます。
+    このモードでは負荷分散が可能です。
+    ロジカルレプリケーションは必ずしもすべてのテーブルをレプリケーションしないので、負荷分散させるテーブルがレプリケーションされるようにするのはユーザの責任です。
+    <productname>Pgpool-II</>はすべてのテーブルをロードバランスします。
+    このことは、テーブルがレプリケーションされていない場合には、<productname>Pgpool-II</>がサブスクライバー側の更新されていない古いテーブルを見てしまうかもしれないことを意味します。
+   </para>
+
+   <para>
+    <!--
+    The <firstterm>native replication mode</firstterm> mode (slony mode)
+    can be used with <productname>PostgreSQL</> servers
+    operating <productname>Slony</>. In this
+    mode, <productname>Slony</>/<productname>PostgreSQL</> is
+    responsible for synchronizing
+    databases. Since <productname>Slony-I</> is being obsoleted by
+    streaming replication, we do not recommend to use this mode
+    unless you have specific reason to
+    use <productname>Slony</>. Load balancing is possible in the
+    mode.
+    -->
+    <firstterm>メインレプリカモード</firstterm>(slonyモード)は<productname>Slony-I</>を使用する<productname>PostgreSQL</>サーバと一緒に使うことができます。
+    このモードでは、<productname>Slony</>/<productname>PostgreSQL</>がデータベースを同期する責任を持ちます。
+    <productname>Slony</>はストリーミングレプリケーションの登場により廃れつつあるため、<productname>Slony</>を使う特別な理由が無い限りこのモードの使用を推奨しません。
+    このモードでは負荷分散が可能です。
+   </para>
+
+
+   <para>
+    <!--
+    In the raw mode, <productname>Pgpool-II</> does not care about the database
+    synchronization. It's user's responsibility to make the whole
+    system does a meaningfull thing. Load balancing
+    is <emphasis>not</emphasis> possible in the mode.
+    -->
+    <firstterm>rawモード</firstterm>では、<productname>Pgpool-II</>はデータベースの同期に関しては関与しません。
+    システム全体に意味の有る動作をさせるのはユーザの責任となります。
+    このモードでは負荷分散は<emphasis>できません</emphasis>。
+   </para>
+  </sect2>
+
+  <sect2 id="process-management-mode">
+   <!--
+   <title>Process management modes</title>
+   -->
+   <title>プロセス管理モード</title>
+
+   <indexterm zone="running-mode">
+    <primary>dynamic process management</primary>
+   </indexterm>
+
+   <indexterm zone="running-mode">
+    <primary>static process management</primary>
+   </indexterm>
+   <para>
+    <!--
+    <productname>Pgpool-II</> implements a multi-process architecture where
+    each child process can handle exactly one client connection at any time.
+    The total number of concurrent client connections <productname>Pgpool-II</>
+    can handle is configured by the
+    <link linkend="guc-num-init-children">num_init_children</link> config parameter.
+    <productname>Pgpool-II</> supports two child process management modes.
+    <firstterm>Dynamic</firstterm> and <firstterm>Static</firstterm>.
+    In static process management mode, <productname>Pgpool-II</> pre-forks the
+    num_init_children number of child
+    process at startup, and each child process keeps listening for incoming
+    client connection. While with dynamic process management mode,
+    <productname>Pgpool-II</> keeps track of idle processes and forks or kills
+    processes to keep this number within the specified boundaries.
+    -->
+    <productname>Pgpool-II</>は、各子プロセスが常に1つのクライアント接続を処理できるマルチプロセスアーキテクチャを実装しています。
+    <productname>Pgpool-II</>が処理できるクライアントの最大同時接続数は、<xref linkend="guc-num-init-children">設定パラメーターによって設定されます。
+    <productname>Pgpool-II</>は、2つの子プロセス管理モード<firstterm>dynamic</firstterm>および<firstterm>static</firstterm>をサポートしています。
+    静的（<literal>static</literal>）プロセス管理モードでは、<productname>Pgpool-II</>は起動時に<varname>num_init_children</varname>の設定値の数の子プロセスを事前にフォークし、各子プロセスは、クライアント接続をリッスンし続けます。
+    動的（<literal>dynamic</literal>）プロセス管理モードでは、<productname>Pgpool-II</>はアイドル状態のプロセスを追跡し、プロセスの数を指定された範囲内に維持するために、プロセスをforkまたはkillします。
+   </para>
+   <para>
+    <!--
+    <varname>process_management_mode</varname> is not available prior to
+    <productname>Pgpool-II </productname><emphasis>V4.4</emphasis>.
+    -->
+    <xref linkend="guc-process-management-mode">は、<productname>Pgpool-II</> <emphasis>V4.4</emphasis>より以前のバージョンでは使用できません。
+   </para>
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="configuring-backend-info">
+  <!-- 
+  <title>Configuring backend information</title>
+  -->
+  <title>バックエンド情報の設定</title>
+
+  <para>
+   <!-- 
+   For <productname>Pgpool-II</productname> to recognize <productname>PostgreSQL</>
+   backend servers, you need to configure <varname>backend*</varname>
+   in <filename>pgpool.conf</filename>.  For starters, at
+   least <xref linkend="guc-backend-hostname">
+   and <xref linkend="guc-backend-port"> paramters are required to
+   be set up to start <productname>Pgpool-II</> server.
+   -->
+   <productname>Pgpool-II</>が<productname>PostgreSQL</>バックエンドサーバを認識するために、<filename>pgpool.conf</filename>の<varname>backend*</varname>を設定する必要があります。
+   手始めに、<productname>Pgpool-II</>を起動するには少なくても<xref linkend="guc-backend-hostname">と<xref linkend="guc-backend-port">パラメータが設定されている必要があります。
+  </para>
+
+  <sect2 id="backend-settings">
+   <!--  
+   <title>Backend Settings</title>
+   -->
+   <title>バックエンドの設定</title>
+
+   <para>
+    <!--  
+    Backend <productname>PostgreSQL</> used by <productname>Pgpool-II</> must be specified in <filename>pgpool.conf</filename>.
+    See <xref linkend="runtime-config-backend-settings">
+    -->
+    <productname>Pgpool-II</>に使用されるバックエンド<productname>PostgreSQL</>が<filename>pgpool.conf</filename>で指定されている必要があります。
+    <xref linkend="runtime-config-backend-settings">を参照してください。
+   </para>
+
+   <!--
+   <variablelist>
+
+   <varlistentry id="guc-backend-hostname" xreflabel="backend_hostname">
+   <term><varname>backend_hostname</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_hostname</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_hostname</varname> specifies where to
+   connect to the <productname>PostgreSQL</productname>
+   backend. It is used
+   by <productname>Pgpool-II</productname> to communicate
+   with the server.
+  </para>
+
+   <para>
+   For TCP/IP communication, this parameter can take a hostname
+   or an IP address. If this begins with a slash, it specifies
+   Unix-domain communication rather than TCP/IP; the value is
+   the name of the directory in which the socket file is
+   stored. The default behavior when backend_hostname is empty
+   ('') is to connect to a Unix-domain socket in /tmp.
+  </para>
+
+   <para>
+   Multiple backends can be specified by adding a number at the
+   end of the parameter name (e.g.backend_hostname0). This
+   number is referred to as "DB node ID", and it starts from
+   0. The backend which was given the DB node ID of 0 will be
+   called "Main DB". When multiple backends are defined, the
+   service can be continued even if the Main DB is down (not
+   true in some modes). In this case, the youngest DB node ID
+   alive will be the new Main DB.
+  </para>
+
+   <para>
+   Please note that the DB node which has id 0 has no special
+   meaning if operated in streaming replication mode. Rather,
+   you should care about if the DB node is the "primary node" or
+   not. See Streaming Replication for more details.
+  </para>
+
+   <para>
+   If you plan to use only one PostgreSQL server, specify it by
+   backend_hostname0.
+  </para>
+
+   <para>
+   New nodes can be added in this parameter by reloading a
+   configuration file. However, values cannot be updated so
+   you must restart <productname>Pgpool-II</productname> in
+   that case.
+  </para>
+
+  </listitem>
+
+  </varlistentry>
+
+   <varlistentry id="guc-backend-port" xreflabel="backend_port">
+   <term><varname>backend_port</varname> (<type>integer</type>)
+   <indexterm>
+   <primary><varname>backend_port</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_port</varname> specifies the port number
+   of the backends. Multiple backends can be specified by
+   adding a number at the end of the parameter name
+   (e.g. backend_port0). If you plan to use only one
+   PostgreSQL server, specify it by backend_port0.
+  </para>
+   <para>
+   New backend ports can be added in this parameter by
+   reloading a configuration file. However, values cannot be
+   updated so you must
+   restart <productname>Pgpool-II</productname> in that case.
+  </para>
+  </listitem>
+  </varlistentry>
+
+   <varlistentry id="guc-backend-data-directory" xreflabel="backend_data_directory">
+   <term><varname>backend_data_directory</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_data_directory</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_data_directory</varname> specifies the
+   database directory. Multiple backends can be
+   specified by adding a number at the end of the parameter
+   name (e.g. backend_data_directory0). If you plan to use
+   only one PostgreSQL server, specify it by
+   backend_data_directory0.
+  </para>
+   <para>
+   New backend data_directorys can be added in this parameter
+   by reloading a configuration file. However, values cannot
+   be updated so you must
+   restart <productname>Pgpool-II</productname> in that case.
+  </para>
+  </listitem>
+  </varlistentry>
+
+   <varlistentry id="guc-backend-flag" xreflabel="backend_flag">
+   <term><varname>backend_flag</varname> (<type>string</type>)
+   <indexterm>
+   <primary><varname>backend_flag</varname> configuration parameter</primary>
+  </indexterm>
+  </term>
+
+   <listitem>
+   <para>
+   <varname>backend_flag</varname> controls various backend
+   behavior. Multiple backends can be specified by adding a
+   number at the end of the parameter name
+   (e.g. backend_flag0). If you plan to use only one
+   PostgreSQL server, specify it by backend_flag0.
+  </para>
+   <para>
+   New backend flags can be added in this parameter by
+   reloading a configuration file.  Currently followings are
+   allowed. Multiple flags can be specified by using "|".
+  </para>
+
+   <table id="backend-flag-table">
+   <title>Backend flags</title>
+   <tgroup cols="2">
+   <thead>
+   <row>
+   <entry>Flag</entry>
+   <entry>Description</entry>
+  </row>
+  </thead>
+
+   <tbody>
+   <row>
+   <entry><literal>ALLOW_TO_FAILOVER</literal></entry>
+   <entry>Allow to failover or detaching backend. This
+   is the default. You cannot specify with
+   DISALLOW_TO_FAILOVER at a same time.</entry>
+  </row>
+   <row>
+   <entry><literal>DISALLOW_TO_FAILOVER</literal></entry>
+   <entry>This is useful when you protect backend by
+   using HA (High Availability) softwares such as
+   Heartbeat or Pacemaker. You cannot specify with
+   ALLOW_TO_FAILOVER at a same time.
+  </entry>
+  </row>
+  </tbody>
+  </tgroup>
+  </table>
+
+  </listitem>
+  </varlistentry>
+
+  </variablelist>
+
+   -->
+
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="server-start">
+<!--
+  <title>Starting Pgpool-II and PostgreSQL</title>
+-->
+  <title>Pgpool-IIとPostgreSQLの起動</title>
+
+  <para>
+<!--
+   To start <productname>Pgpool-II</productname>, execute:
+-->
+   <productname>Pgpool-II</productname>を起動するには、以下を実行してください。
+<screen>
+$ <userinput>pgpool -f /usr/local/etc/pgpool.conf -F /usr/local/etc/pcp.conf</userinput>
+</screen>
+<!--
+   which will start the server running in the background. "-f"
+   specifies the path to the main pgpool configuration file and "-F"
+   specifies the path to the configuration file of pcp server, which
+   is the control server for <productname>Pgpool-II</productname>. For
+   other options of the command please take a look at <xref
+   linkend="pgpool"> manual.
+-->
+   これにより、サーバがバックグラウンドモードで起動します。
+   "-f"はpgpoolの主設定ファイルへのパスを指定します。
+   "-F"は<productname>Pgpool-II</productname>の管理サーバであるpcpサーバの設定ファイルへのパスを指定します。
+   他のオプションに関しては、<xref linkend="pgpool">のマニュアルを見てください。
+  </para>
+
+  <para>
+<!--
+   Before starting <productname>Pgpool-II</productname>, you must
+   start <productname>PostgreSQL</productname> because if
+   <productname>PostgreSQL</productname> has not started yet,
+   <productname>Pgpool-II</productname> triggers failover process and
+   makes <productname>PostgreSQL</productname> is in down status.
+-->
+   <productname>Pgpool-II</productname>を起動する前に、<productname>PostgreSQL</productname>を起動しなければなりません。
+   なぜなら、もし<productname>PostgreSQL</productname>が起動していなければ、<productname>Pgpool-II</productname>はフェイルオーバの処理を起動し、<productname>PostgreSQL</productname>をダウン状態にしてしまうからです。
+  </para>
+
+  <para>
+<!--
+   If you have difficulty in controlling the startup sequence of
+   <productname>PostgreSQL</productname>, for example
+   <productname>Pgpool-II</productname> and
+   <productname>PostgreSQL</productname> are installed on different
+   servers, you can make <xref
+   linkend="guc-search-primary-node-timeout"> longer (the default is 5
+   minutes) so that <productname>Pgpool-II</productname> waits for
+   <productname>PostgreSQL</productname> starts up until <xref
+   linkend="guc-search-primary-node-timeout"> expires. If
+   <productname>PostgreSQL</productname> starts up before <xref
+   linkend="guc-search-primary-node-timeout"> expires,
+   <productname>Pgpool-II</productname> should start up without
+   problem. If <xref linkend="guc-search-primary-node-timeout">
+   expires before <productname>PostgreSQL</productname> starts up, no
+   primary node will be detected, which means you cannot execute
+   DML/DDL. You need to restart <productname>Pgpool-II</productname>
+   in this case. To confirm that the primary node exists you can use
+   <xref linkend="sql-show-pool-nodes"> command.
+-->
+たとえば<productname>Pgpool-II</productname>と<productname>PostgreSQL</productname>が別のサーバにインストールされているような理由で<productname>PostgreSQL</productname>の起動順序を制御するのが難しい場合は、<xref linkend="guc-search-primary-node-timeout">を長めにし（デフォルトは5分です)、<productname>Pgpool-II</productname>が、<xref linkend="guc-search-primary-node-timeout">が終了するまで<productname>PostgreSQL</productname>の起動を待つようにすることができます。
+<productname>PostgreSQL</productname>が、<xref linkend="guc-search-primary-node-timeout">が完了するまでの間に起動すれば問題ありません。
+もし<productname>PostgreSQL</productname>が起動する前に<xref linkend="guc-search-primary-node-timeout">が完了すると、プライマリノードが検出されず、DML/DDLを実行できなくなります。
+こうなったら、<productname>Pgpool-II</productname>を再起動する必要があります。
+プライマリノードが存在するかどうかを確認するには、<xref linkend="sql-show-pool-nodes">コマンドを使ってください。
+  </para>
+
+  <para>
+<!--
+   Please note <xref linkend="guc-search-primary-node-timeout"> can
+   only be used in the streaming replication mode because the
+   parameter is only valid in the mode. See <xref
+   linkend="running-mode"> for more details about streaming
+   replication mode. For other mode, tweak the health check (see <xref
+   linkend="runtime-config-health-check">) parameters so that there's
+   enough time before <productname>PostgreSQL</productname> becomes
+   available.
+-->
+<xref linkend="guc-search-primary-node-timeout">はストリーミングレプリケーションモードでのみ使用できることに注意してください。
+そのパラメータはストリーミングレプリケーションモードにしかないからです。
+ストリーミングレプリケーションモードの詳細は<xref linkend="running-mode">をご覧ください。
+他のモードでは、ヘルスチェック（<xref linkend="runtime-config-health-check">参照）のパラメータを調整し、<productname>PostgreSQL</productname>が使えるようになるまでに十分時間が取れるようにしてください。
+  </para>
+
+  <para>
+<!--
+   If health check detects that <productname>PostgreSQL</productname>
+   is not available before <productname>Pgpool-II</productname> starts
+   up, some or all <productname>PostgreSQL</productname> are
+   recognized in "down" status. In this case you need to manually put
+   the <productname>PostgreSQL</productname> server in "up" state by
+   using <xref linkend="pcp-attach-node"> command.  If a client tries
+   to connect to <productname>Pgpool-II</productname> before
+   <productname>PostgreSQL</productname> is available, failover could
+   be triggered. In this case you also need to execute <xref
+   linkend="pcp-attach-node"> command to put the
+   <productname>PostgreSQL</productname> server in "up" state.
+-->
+<productname>Pgpool-II</productname>が起動するまでに<productname>PostgreSQL</productname>が使えないことをヘルスチェックが検出すると、<productname>PostgreSQL</productname>のいくつかが「down」状態であると認識されます。
+この場合は手動で<xref linkend="pcp-attach-node">コマンドを使って<productname>PostgreSQL</productname>サーバを「up」状態にしなければなりません。
+クライアントが<productname>PostgreSQL</productname>が利用可能になる前に<productname>Pgpool-II</productname>に接続しようとすると、フェイルオーバが起こることがあります。
+この場合も<xref linkend="pcp-attach-node">コマンドを使って<productname>PostgreSQL</productname>サーバを「up」状態にしなければなりません。
+  </para>
+ </sect1>
+
+ <sect1 id="server-stop">
+<!--
+  <title>Stopping Pgpool-II and PostgreSQL</title>
+-->
+  <title>Pgpool-IIとPostgreSQLの停止</title>
+
+  <indexterm zone="server-stop">
+   <primary>shutdown</primary>
+  </indexterm>
+
+  <para>
+<!--
+   To stop <productname>Pgpool-II</productname>, execute:
+-->
+<productname>Pgpool-II</productname>を停止するには、以下を実行してください。
+<screen>
+$ <userinput>pgpool -f /usr/local/etc/pgpool.conf -F /usr/local/etc/pcp.conf -m fast stop</userinput>
+</screen>
+<!--
+   "-m" option specifies how gently stops
+   <productname>Pgpool-II</productname>. "fast" means shutdown
+   <productname>Pgpool-II</productname> immediately even if there are
+   existing connections from clients. You can specify "smart" to the
+   option, which force <productname>Pgpool-II</productname> to wait
+   until all clients are disconnected from
+   <productname>Pgpool-II</productname>. But this could make
+   <productname>Pgpool-II</productname> wait forever and this may
+   result in sending SIGKILL signal from the operating system and
+   leaving garbage, which will bring troubles next time when you start
+   <productname>Pgpool-II</productname>.
+-->
+"-m"オプションは<productname>Pgpool-II</productname>をどのくらい優しく停止するかを指定します。
+"fast"は接続済みのクライアントがあっても<productname>Pgpool-II</productname>を直ちに停止することを指定します。
+"smart"を指定すると、<productname>Pgpool-II</productname>はすべてのクライアントが接続を切るまで待つことを余儀なくされます。
+しかし、これは<productname>Pgpool-II</productname>を永遠に待たせることになり、結果的にオペレーティングシステムが送信したSIGKILLシグナルを受け取ってゴミを残すことになるかも知れません。
+そうすると、次に<productname>Pgpool-II</productname>を起動した時に問題が起きるでしょう。
+  </para>
+
+  <para>
+<!--
+   After shutting down <productname>Pgpool-II</productname>, you can
+   shutdown <productname>PostgreSQL</productname>.
+-->
+<productname>Pgpool-II</productname>を停止してから<productname>PostgreSQL</productname>を停止することができます。
+  </para>
+ </sect1>
+
+ <sect1 id="server-temporarily-shutdown">
+<!--
+  <title>Temporarily Shutting Down PostgreSQL</title>
+-->
+  <title>PostgreSQLの一時的な停止</title>
+
+  <indexterm zone="server-temporarily-shutdown">
+   <primary>shutdown</primary>
+  </indexterm>
+
+  <para>
+<!--
+   Sometimes you want to temporarily stop or restart
+   <productname>PostgreSQL</productname> to maintain or version up
+   it. In this section how to perform the task with minimum downtime.
+-->
+保守やバージョンアップの目的で一時的に<productname>PostgreSQL</productname>を停止したいことがあります。
+この節では最小限の停止時間でこの仕事を実行する方法を説明します。
+  </para>
+
+  <sect2 id="using-pcp-detach-node">
+   <title>pcp_detach_nodeコマンドの活用</title>
+   <para>
+    <command>pg_ctl</command>で<productname>PostgreSQL</productname>を停止すると、<productname>Pgpool-II</productname>がそのことをヘルスチェックで検知するまではフェイルオーバが発生せず、ヘルスチェックの設定によっては<productname>PostgreSQL</productname>の切り離しに時間がかかります。
+    とりわけ<link linkend="tutorial-watchdog">Watchdog</link>が有効かつ<xref linkend="guc-failover-require-consensus">がonなら、<productname>Pgpool-II</productname>は過半数のWatchdogが<productname>PostgreSQL</productname>の停止に合意するまで、フェイルオーバを開始しません。
+    <xref linkend="pcp-detach-node">でノードを切り離せば、ヘルスチェックの設定に関わらず直ちにフェイルオーバが開始されます。
+     切り離されたノードは実際には<productname>PostgreSQL</productname>が停止しておらず、必要なら手動で停止させなければならないことに注意してください。
+   </para>
+  </sect2>
+
+  <sect2 id="using-backend-flag">
+   <title>backend_flagの活用</title>
+   <para>
+    <!--
+    Stopping or restarting <productname>PostgreSQL</productname>
+    causes failover. If the running mode is not streaming replication
+    mode, or the server is a standby server in streaming replication
+    mode, probably that's not a big deal because clients can always
+    use other servers in the cluster. However if the server is primary
+    server, it will cause change of primary server by promoting one of
+    the standby servers. Moreover if there's only one server remains
+    in the cluster, there are no alternative server or standby server
+    which can be promoted.
+    -->
+    <productname>PostgreSQL</productname>を停止、再起動するとフェイルオーバが発生します。
+    ストリーミングレプリケーションモードでない場合、あるいはストリーミングレプリケーションモードであってもサーバがスタンバイサーバであればあまり大きな問題にはなりませ
+    ん。
+    しかし、サーバがクラスタのプライマリサーバなら、スタンバイサーバの一つが昇格してしまいます。
+    更には、クラスタに1台のサーバしか残っていなければ、昇格できるスタンバイサーバがないことになります。
+   </para>
+
+   <para>
+    <!--
+    In this case you can use <xref linkend="guc-backend-flag"> to avoid
+    failover.  By setting below in pgpool.conf will avoid failover of
+    backend0.
+    -->
+    この場合は<xref linkend="guc-backend-flag">を使ってフェイルオーバを避けることができます。
+     以下のようにpgpool.confを設定すると、backend0のフェイルオーバが起こりません。
+     <programlisting>
+backend_flag0 = DISALLOW_TO_FAILOVER
+     </programlisting>
+     <!--
+     This will take effect by reloading or restarting
+     <productname>Pgpool-II</productname>. If this flag is set, failover
+     will not happen if the backend is not available. While the backend
+     is not available, clients wil get error message:
+     -->
+     この設定は、<productname>Pgpool-II</productname>の再読込か再起動で有効になります。
+     このフラグが設定されると、バックエンドが使用不可能になってもフェイルオーバが起きません。
+     バックエンドが使用不可の間、クライアントは以下のエラーメッセージを受け取ります。
+     <programlisting>
+psql: error: could not connect to server: FATAL:  failed to create a backend connection
+DETAIL:  executing failover on backend
+     </programlisting>
+     <!--
+     After restarting the backend, clients can connect as usual.
+
+     To allow failover on the backend again, you can set:
+     -->
+     バックエンドを再起動すると、クライアントは通常通り接続ができます。
+     再びフェイルオーバを有効にするには、以下を設定します。
+     <programlisting>
+backend_flag0 = ALLOW_TO_FAILOVER
+     </programlisting>
+     <!--
+     and reload or restart <productname>Pgpool-II</productname>.
+     -->
+     そして、<productname>Pgpool-II</productname>の再読込か、再起動を行います。
+   </para>
+  </sect2>
+ </sect1>
+
+</chapter>

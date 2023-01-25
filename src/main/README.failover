@@ -1,0 +1,46 @@
+When a fail over occurs, all of existing client sessions will be
+killed because all child process are forced to restart. However in
+certain cases we do not need to restart all of the child process. For
+now on, we assume pgpool-II operates in streaming replication mode and
+the PostgreSQL server going down is a standby server.
+
+case 1: pcp_detach_node
+
+pcp_detach_node is a command to request a switch over (the standby
+server may or may not go down in this case). It is desirable that an
+admin could use the command to make a standby server out of use
+without disturbing existing sessions.
+
+From pgpool-II 3.6, some of client sessions could survive if following
+conditions are all met:
+
+- the load balancing node assigned to the session is not the node in
+  question.
+
+- the node is not the primary.
+
+When pcp_detach_node is executed, pgpool-II parent process checks the
+load balancing node info on the shared memory called "ProcessInfo". If
+pgpool-II child process associated with the session uses the load
+balancing node, the pgpool-II parent sends a signal to the child
+process to request exiting. Thus the session will be killed.  In other
+cases, the session will survive. Suppose we have two DB nodes, a
+primary and a standby. Chances for the session to survive will be 50%
+assuming that the weight parameters are equal among the nodes.
+
+In practice, following operations are recommended to avoid sudden
+session killing.
+
+- Change the weight parameter for the node scheduled to be down to 0 in
+  pgpool.conf.
+
+- Do "pgpool reload" to reflect the change to pgpool-II.
+
+- Wait until all existing sessions to the node finish.
+
+- Execute pcp_detach_node.
+
+- Shutdown the node.
+
+case 2: PostgreSQL shutdown
+

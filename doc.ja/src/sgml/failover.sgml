@@ -1,0 +1,1066 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-config-failover">
+ <!--
+ <title>Failover and Failback</title>
+ -->
+ <title>フェイルオーバとフェイルバック</title>
+
+ <para>
+  <emphasis>フェイルオーバ</emphasis>は、<productname>Pgpool-II</productname>から見て使用できなくなった<productname>PostgreSQL</productname>バックエンドノードを<productname>Pgpool-II</productname>が自動的に切り離す処理を指します。
+  これは<productname>Pgpool-II</productname>の設定に関わらず、自動的に行われるいわゆる<emphasis>自動フェイルオーバ</emphasis>処理です。
+  <productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>バックエンドノードが使用できなくなったことを、以下の方法で確認します。
+
+  　　　<itemizedlist>
+   <listitem>
+    <para>
+     定期的に実行されるヘルスチェック処理で確認する(詳細は<xref linkend="runtime-config-health-check">を参照)。
+      ヘルスチェックは、<productname>Pgpool-II</productname>から<productname>PostgreSQL</productname>バックエンドノードへ接続を試行することによって<productname>PostgreSQL</productname>バックエンドノードが正常に動いていることを確認します。
+      正常に接続できない場合、<productname>Pgpool-II</productname>から<productname>PostgreSQL</productname>へのネットワーク接続のどこかがおかしいか、<productname>PostgreSQL</productname>自体が正常に動作していないか、あるいはその両方である可能性がありますが、<productname>Pgpool-II</productname>はそれを特に区別せず、単にヘルスチェックが失敗したら、該当<productname>PostgreSQL</productname>ノードが使用できないと判断します。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <productname>PostgreSQL</productname>ノードへの接続の際、あるいは接続中にネットワークレベルのエラーが発生した場合。
+     ただし、<xref linkend="guc-failover-on-backend-error">がオフの場合はそのようなエラーの場合でも<productname>Pgpool-II</productname>は単にエラーをレポートしセッションが切断するのみです。
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     クライアントが<productname>Pgpool-II</productname>に接続済みであり、<productname>PostgreSQL</productname>においてシャットダウン処理が実施された場合（クライアントがまったく<productname>Pgpool-II</productname>に接続していない場合は、<productname>PostgreSQL</productname>がシャットダウンされてもフェイルオーバしないことに注意してください）。
+    </para>
+   </listitem>
+  </itemizedlist>
+
+ </para>
+
+ <para>
+  <xref linkend="guc-failover-command">が設定済みでフェイルオーバが行われると、<xref linkend="guc-failover-command">が起動されます。
+  <xref linkend="guc-failover-command">はユーザが記述すべきものです。
+  4.1からはフェイルオーバコマンド用のサンプルスクリプトが<filename>failover.sh.sample</filename>として提供されており、スクリプトを書く際の良い例になるでしょう。
+  フェイルオーバコマンドの主な役割としては、たとえばストリーミングレプリケーションのプライマリサーバがダウンした時に、新しいプライマリサーバをスタンバイサーバの中から選択して昇格させることなどが上げられます。
+  そのほか、ファイルオーバが発生したことを管理者にメールで通知することなども考えられます。
+ </para>
+
+ <para>
+  フェイルオーバはこのように障害時に発生しますが、手動で意図的にフェイルオーバさせることもできます。
+  これを<emphasis>スイッチオーバ</emphasis>と呼びます。
+  たとえば、スイッチオーバで<productname>PostgreSQL</productname>を意図的に切り離して、その間にバックアップを取得するなどの運用が考えられます。
+  スイッチオーバでは、単に<productname>Pgpool-II</productname>内の状態情報をダウン状態にするだけ（ただし、<xref linkend="guc-failover-command">は起動される）で、<productname>PostgreSQL</productname>をダウンさせるわけではないことに注意してください。
+  スイッチオーバは<xref linkend="PCP-DETACH-NODE">コマンドで実行できます。
+ </para>
+
+ <para>
+  フェイルオーバないしスイッチオーバで切り離された<productname>PostgreSQL</productname>ノードは、デフォルト設定においては自動でもとの状態（アタッチ状態）には戻りません。
+  -D オプションを指定して<productname>Pgpool-II</productname>を再起動するか、<xref linkend="PCP-ATTACH-NODE">コマンドを使用します。
+   その際、<xref linkend="SQL-SHOW-POOL-NODES">を使って、replication_stateが"streaming"になっていることを確認することをお勧めします。
+    これは、スタンバイサーバがプライマリサーバとストリーミングレプリケーションで正常に接続されており、データベース内容の整合性が取れていることを示します。
+ </para>
+ <para>
+  4.1から<xref linkend="guc-auto-failback">という新しいパラメータが上に書いてあることを自動で行ってくれます。
+  詳細は<xref linkend="guc-auto-failback">をご覧ください。
+ </para>
+
+ <sect2 id="runtime-config-failover-settings">
+  <!--
+  <title>Failover and Failback Settings</title>
+  -->
+  <title>フェイルオーバとフェイルバックの設定</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-failover-command" xreflabel="failover_command">
+    <term><varname>failover_command</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>failover_command</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a user command to run when a <productname>PostgreSQL</> backend node gets detached.
+      <productname>Pgpool-II</productname> replaces the following special characters
+      with the backend specific information before executing the command.
+      -->
+      <productname>PostgreSQL</>バックエンドノードが切り離される時に実行するユーザコマンドを指定します。
+      <productname>Pgpool-II</productname>はコマンド実行の前に、以下の特殊文字をバックエンドの具体的な情報に置き換えます。
+     </para>
+
+     <table id="failover-command-table">
+      <!--
+      <title>failover command options</title>
+      -->
+      <title>フェイルオーバコマンドオプション</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <!--
+	 <entry>Special character</entry>
+	 <entry>Description</entry>
+	 -->
+	 <entry>特殊文字</entry>
+	 <entry>説明</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry>%d</entry>
+	 <!--
+	 <entry>DB node ID of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのDBノードID</entry>
+	</row>
+	<row>
+	 <entry>%h</entry>
+	 <!--
+	 <entry>Hostname of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%p</entry>
+	 <!--
+	 <entry>Port number of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%D</entry>
+	 <!--
+	 <entry>Database cluster directory of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%m</entry>
+	 <!--
+	 <entry>New main node ID</entry>
+	 -->
+	 <entry>新しいメインノードのID</entry>
+	</row>
+	<row>
+	 <entry>%H</entry>
+	 <!--
+	 <entry>Hostname of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%M</entry>
+	 <!--
+	 <entry>Old main node ID</entry>
+	 -->
+	 <entry>古いメインノードのID</entry>
+	</row>
+	<row>
+	 <entry>%P</entry>
+	 <!--
+	 <entry>Old primary node ID</entry>
+	 -->
+	 <entry>古いプライマリノードのID</entry>
+	</row>
+	<row>
+	 <entry>%r</entry>
+	 <!--
+	 <entry>Port number of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%R</entry>
+	 <!--
+	 <entry>Database cluster directory of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%N</entry>
+	 <!--
+	 <entry>Hostname of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのホスト名(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%S</entry>
+	 <!--
+	 <entry>Port number of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのポート番号(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%%</entry>
+	 <!--
+	 <entry>'%' character</entry>
+	 -->
+	 <entry>'%'文字</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <note>
+      <para>
+       <!--
+       The "main node" refers to a node which has the
+       "youngest (or the smallest) node id" among live the
+       database nodes. In <link linkend="running-mode">streaming
+	replication mode</link>, this may be different from
+       primary node. In <xref linkend="failover-command-table">,
+	%m is the new main node chosen
+	by <productname>Pgpool-II</productname>. It is the node
+	being assigned the youngest (smallest) node id which is
+	alive. For example if you have 3 nodes, namely node 0, 1,
+	2. Suppose node 1 the primary and all of them are healthy
+	(no down node). If node 1 fails, failover_command is
+	called with %m = 0. And, if all standby nodes are down and primary node
+    failover happens, failover_command is called with %m = -1 and %H,%R,$r = "".
+       -->
+       メインノードは、生きているデータベースノードの中から一番若い(小さい)ノードIDを持つノードを参照します。
+       <link linkend="running-mode">ストリーミングレプリケーションモード</link>では、このノードはプライマリノードとは異なる場合があります。
+       <xref linkend="failover-command-table">内では、 %mは<productname>Pgpool-II</productname>によって選出された新しいメインノードとなります。
+       新しいメインノードには生きているノードで一番若い(小さい)ノードが割り当てられます。
+       例えば、ノード0、1、2という3つのノードを持ち、ノード1がプライマリノード、全てのノードは正常である（ダウンしているノードがない）と仮定します。
+      ノード1がダウンした場合、failover_command は %m = 0 で呼び出されます。
+      また、全てのスタンバイノードがダウンした状態でプライマリノードのフェイルオーバが起きた場合、failover_commandは %m = -1、および%H,%R,%r = "" で呼び出されます。
+      </para>
+     </note>
+
+     <note>
+      <para>
+       <!--
+       When a failover is performed,
+       basically <productname>Pgpool-II</productname> kills all
+       its child processes, which will in turn terminate all the
+       active sessions to
+       <productname>Pgpool-II</productname>. After that <productname>Pgpool-II</productname>
+       invokes the <command>failover_command</command> and after the command completion
+       <productname>Pgpool-II</productname> starts new child processes
+       which makes it ready again to accept client connections.
+       -->
+       フェイルオーバーが実行されると、基本的に<productname>Pgpool-II</productname>は子プロセスを切断します。
+       これにより、<productname>Pgpool-II</productname>への全てのアクティブセッションが終了されます。
+       その後、<productname>Pgpool-II</productname>は<command>failover_command</command>を実行し、コマンドが完了した後に<productname>Pgpool-II</productname>はクライアントからの接続を再び受け付ける準備のため新しい子プロセスを起動します。
+      </para>
+      <para>
+       しかし、<productname>Pgpool-II</productname> 3.6以降では、そのセッションがダウンしたスタンバイを使用していない場合には、フェイルオーバが起こってもセッションが切断されません。
+       (ただし、フェイルオーバ処理中にそのセッションを使って問い合わせを発行すると、そのセッションは切断されるので注意してください。)
+       プライマリサーバがダウンしたときには、依然としてすべてのセッションが切断されます。
+       ヘルスチェックがタイムアウトした場合にも、すべてのセッションが切断されます。
+       それ以外のケース、たとえばヘルスチェックの再試行回数がオーバーした場合には、全セッションの切断は起きません。
+      </para>
+     </note>
+
+     <note>
+      <para>
+       <!--
+       You can run <command>psql</command> (or whatever command)
+       against backend to retrieve some information in the
+       script, but you cannot run <command>psql</command> against
+       <productname>Pgpool-II</productname> itself, since the
+       script is called from <productname>Pgpool-II</productname>
+       and it needs to run
+       while <productname>Pgpool-II</productname> is working on
+       failover.
+       -->
+       スクリプトの中で<command>psql</command>やその他のコマンドを使ってバックエンドにアクセスし、情報を取り出すことはできますが、<command>psql</command>を <productname>Pgpool-II</productname>自体に対して実行することはできません。
+       スクリプトは<productname>Pgpool-II</productname>から呼ばれ、<productname>Pgpool-II</productname>がフェイルオーバーを実行している間に動作するからです。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      A complete failover_command example can be found
+      in <xref linkend="example-cluster">.
+      -->
+      failover_commandの完全な例が<xref linkend="example-cluster">にあります。
+     </para>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-failback-command" xreflabel="failback_command">
+    <term><varname>failback_command</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>failback_command</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a user command to run when a <productname>PostgreSQL</> backend node gets attached to
+      <productname>Pgpool-II</productname>. <productname>Pgpool-II</productname>
+      replaces the following special characters with the backend specific information.
+      before executing the command.
+      -->
+      <productname>PostgreSQL</>バックエンドノードが<productname>Pgpool-II</productname>に復帰された時に実行するユーザコマンドを指定します。
+      <productname>Pgpool-II</productname>はコマンド実行の前に、以下の特殊文字をバックエンドの具体的な情報に置き換えます。
+     </para>
+
+     <table id="failback-command-table">
+      <!--
+      <title>failback command options</title>
+      -->
+      <title>フェイルバックコマンドオプション</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <!--
+	 <entry>Special character</entry>
+	 <entry>Description</entry>
+	 -->
+	 <entry>特殊文字</entry>
+	 <entry>説明</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry>%d</entry>
+	 <!--
+	 <entry>DB node ID of the attached node</entry>
+	 -->
+	 <entry>復帰したノードのDBノードID</entry>
+	</row>
+	<row>
+	 <entry>%h</entry>
+	 <!--
+	 <entry>Hostname of the attached node</entry>
+	 -->
+	 <entry>復帰したノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%p</entry>
+	 <!--
+	 <entry>Port number of the attached node</entry>
+	 -->
+	 <entry>復帰したノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%D</entry>
+	 <!--
+	 <entry>Database cluster directory of the attached node</entry>
+	 -->
+	 <entry>復帰したノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%m</entry>
+	 <!--
+	 <entry>New main node ID</entry>
+	 -->
+	 <entry>新しいメインノードのID</entry>
+	</row>
+	<row>
+	 <entry>%H</entry>
+	 <!--
+	 <entry>Hostname of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%M</entry>
+	 <!--
+	 <entry>Old main node ID</entry>
+	 -->
+	 <entry>古いメインノードのID</entry>
+	</row>
+	<row>
+	 <entry>%P</entry>
+	 <!--
+	 <entry>Old primary node ID</entry>
+	 -->
+	 <entry>古いプライマリノードのID</entry>
+	</row>
+	<row>
+	 <entry>%r</entry>
+	 <!--
+	 <entry>Port number of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%R</entry>
+	 <!--
+	 <entry>Database cluster directory of the new main node</entry>
+	 -->
+	 <entry>新しいメインノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%N</entry>
+	 <!--
+	 <entry>Hostname of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのホスト名(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%S</entry>
+	 <!--
+	 <entry>Port number of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのポート番号(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%%</entry>
+	 <!--
+	 <entry>'%' character</entry>
+	 -->
+	 <entry>'%'文字</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <note>
+      <para>
+       <!--
+       You can run <command>psql</command> (or whatever command)
+       against backend to retrieve some information in the
+       script, but you cannot run <command>psql</command> against
+       <productname>Pgpool-II</productname> itself, since the
+       script is called from <productname>Pgpool-II</productname>
+       and it needs to run
+       while <productname>Pgpool-II</productname> is working on
+       failback.
+       -->
+       スクリプトの中で<command>psql</command>やその他のコマンドを使ってバックエンドにアクセスし、情報を取り出すことはできますが、<command>psql</command>を <productname>Pgpool-II</productname>自体に対して実行することはできません。
+       スクリプトは<productname>Pgpool-II</productname>から呼ばれ、<productname>Pgpool-II</productname>がフェイルバックを実行している間に動作するからです。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-follow-primary-command" xreflabel="follow_primary_command">
+    <term><varname>follow_primary_command</varname> (<type>string</type>)
+     <indexterm>
+      <primary><varname>follow_primary_command</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+
+     <para>
+      <!--
+      Specifies a user command to run after failover on the
+      primary node failover. In case of standby node failover, the
+      command will not be executed. This command also runs if a
+      node promote request is issued by
+      <xref linkend="PCP-PROMOTE-NODE"> command. This works only
+      in streaming replication mode.
+      -->
+      プライマリノードのフェイルオーバー後に実行するユーザコマンドを指定します。
+      スタンバイがフェイルオーバーした際にはこのコマンドは実行されません。
+      このコマンドは、<xref linkend="PCP-PROMOTE-NODE">コマンドによってノードを昇格する要求があった場合にも起動されます。
+       この機能は、ストリーミングレプリケーションモードでのみ有効です。
+     </para>
+
+     <para>
+      <!--
+      Since the command is executed within a child process forked
+      off by <productname>Pgpool-II</productname> after failover
+      is completed, execution of follow primary command does not
+      block the service
+      of <productname>Pgpool-II</productname>. Here is a pseud
+      code to illustrate how the command is executed:
+      -->
+      このコマンドは、フェイルオーバが完了した後に Pgpool-II によりフォークされた子プロセス内で実行されるので、
+      follow_primary_command の実行は<productname>Pgpool-II</productname>のサービスを妨げることはありません。
+      以下で、このコマンドがどのように実行されるのかを疑似コードで説明します。
+      <programlisting>
+for each backend node
+{
+    if (the node is not the new primary)
+        set down node status to shared memory status
+        memorize that follow primary command is needed to execute
+}
+if (we need to executed follow primary command)
+{
+    fork a child process
+    (within the child process)
+
+    for each backend node
+    {
+        if (the node status in shared memory is down)
+            execute follow primary command
+    }
+}
+      </programlisting>
+     </para>
+
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> replaces the following special characters
+      with the backend specific information before executing the command.
+      -->
+      <productname>Pgpool-II</productname>はコマンド実行の前に、以下の特殊文字をバックエンドの具体的な情報に置き換えます。
+
+     </para>
+
+     <table id="follow-primary-command-table">
+      <!--
+      <title>follow primary command options</title>
+      -->
+      <title>フォロープライマリコマンドオプション</title>
+      <tgroup cols="2">
+       <thead>
+	<row>
+	 <!--
+	 <entry>Special character</entry>
+	 <entry>Description</entry>
+	 -->
+	 <entry>特殊文字</entry>
+	 <entry>説明</entry>
+	</row>
+       </thead>
+
+       <tbody>
+	<row>
+	 <entry>%d</entry>
+	 <!--
+	 <entry>DB node ID of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのDBノードID</entry>
+	</row>
+	<row>
+	 <entry>%h</entry>
+	 <!--
+	 <entry>Hostname of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%p</entry>
+	 <!--
+	 <entry>Port number of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%D</entry>
+	 <!--
+	 <entry>Database cluster directory of the detached node</entry>
+	 -->
+	 <entry>切り離されたノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%m</entry>
+	 <!--
+	 <entry>New primary node ID</entry>
+	 -->
+	 <entry>新しいプライマリノードのID</entry>
+	</row>
+	<row>
+	 <entry>%H</entry>
+	 <!--
+	 <entry>Hostname of the new primary node</entry>
+	 -->
+	 <entry>新しいプライマリノードのホスト名</entry>
+	</row>
+	<row>
+	 <entry>%M</entry>
+	 <!--
+	 <entry>Old main node ID</entry>
+	 -->
+	 <entry>古いメインノードのID</entry>
+	</row>
+	<row>
+	 <entry>%P</entry>
+	 <!--
+	 <entry>Old primary node ID</entry>
+	 -->
+	 <entry>古いプライマリノードのID</entry>
+	</row>
+	<row>
+	 <entry>%r</entry>
+	 <!--
+	 <entry>Port number of the new primary node</entry>
+	 -->
+	 <entry>新しいプライマリノードのポート番号</entry>
+	</row>
+	<row>
+	 <entry>%R</entry>
+	 <!--
+	 <entry>Database cluster directory of the new primary node</entry>
+	 -->
+	 <entry>新しいプライマリノードのデータベースクラスタパス</entry>
+	</row>
+	<row>
+	 <entry>%N</entry>
+	 <!--
+	 <entry>Hostname of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのホスト名(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%S</entry>
+	 <!--
+	 <entry>Port number of the old primary node</entry>
+	 -->
+	 <entry>古いプライマリノードのポート番号(<productname>Pgpool-II</productname> 4.1以降)</entry>
+	</row>
+	<row>
+	 <entry>%%</entry>
+	 <!--
+	 <entry>'%' character</entry>
+	 -->
+	 <entry>'%'文字</entry>
+	</row>
+
+       </tbody>
+      </tgroup>
+     </table>
+
+     <note>
+      <para>
+       <!--
+       If <varname>follow_primary_command</varname>> is not empty, then after failover
+       on the primary node gets completed in streaming replication mode,
+       <productname>Pgpool-II</productname> degenerates all nodes excepted the new primary
+       and starts new child processes to be ready again to accept connections from the clients.
+       After this, <productname>Pgpool-II</productname> executes the command configured
+       in the <varname>follow_primary_command</varname> for each degenerated backend nodes.
+       -->
+       <varname>follow_primary_command</varname>が空文字列でない場合、ストリーミングレプリケーションモードでプライマリノードのフェイルオーバーが完了した後に、<productname>Pgpool-II</productname>は新しいプライマリ以外のすべてのノードを切り離し、クライアントから再び接続を受け付ける準備のため再度新しい子プロセスを起動します。
+       その後、<productname>Pgpool-II</productname>は切り離されたそれぞれのノードに対して<varname>follow_primary_command</varname>に設定したコマンドを実行します。
+      </para>
+     </note>
+     <para>
+      <!-- Typically <varname>follow_primary_command</varname> command is
+      used to recover the standby from the new primary by calling
+      the pcp_recovery_node command.  In
+      the <varname>follow_primary_command</varname>, it is
+      recommended to check whether
+      target <productname>PostgreSQL</productname> node is running
+      or not using pg_ctl since already stopped node usually has a
+      reason to be stopped: for example, it's broken by hardware
+      problems or administrator is maintaining the node.  If the
+      node is stopped, skip the node. If the node is running, stop
+      the node first and recovery it.  A
+      complete <varname>follow_primary_command</varname> example
+      can be found in <xref linkend="example-cluster">.
+      -->
+      通常は、<varname>follow_primary_command</varname>コマンドは<xref linkend="PCP-RECOVERY-NODE">コマンドを呼んで新しいプライマリからスタンバイをリカバリするために使用します。
+       <varname>follow_primary_command</varname>中では、pg_ctlを使ってターゲットの<productname>PostgreSQL</productname>ノードが動いているかどうかを確認することをお勧めします。
+       たとえば、そのノードはハードウェア障害で停止しているかも知れませんし、管理者が保守のために停止しているのかも知れません。
+       ノードが停止している場合は、そのノードをスキップしてください。
+       ノードが動いている場合は、まずそのノードを停止してからリカバリしてください。
+       <varname>follow_primary_command</varname>の完全な例は、<xref linkend="example-cluster">にあります。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-failover-on-backend-shutdown" xreflabel="failover_on_backend_shutdown">
+    <term><varname>failover_on_backend_shutdown</varname> (<type>boolean</type>)
+     <indexterm>
+<!--
+      <primary><varname>failover_on_backend_shutdown</varname> configuration parameter</primary>
+-->
+      <primary><varname>failover_on_backend_shutdown</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+<!--
+      When set to on, <productname>Pgpool-II</productname> detects a
+      backend shutdown event by checking particular error code
+      <literal>57P01</literal> and <literal>57P02</literal> on a
+      session established between the client and backend. If it
+      detects those error codes, a failover is triggered on that node.
+      When this is set to off, <productname>Pgpool-II</productname>
+      only report an error and disconnect the session in case of such
+      errors.  The default is off.
+-->
+      onに設定した場合、<productname>Pgpool-II</productname>は確立したクライアントとバックエンドのセッション上で特定のエラーコード：<literal>57P01</literal>と<literal>57P02</literal>をチェックすることにより、バックエンドのシャットダウンイベントを検出します。
+      それらのエラーコードを検出すると、そのノードでフェイルオーバが起動されます。
+      offに設定した場合、そのようなエラーの場合でも<productname>Pgpool-II</productname>は単にエラーをレポートしセッションが切断するのみです。
+      デフォルトはoffです。
+     </para>
+     <para>
+<!--
+      If no client is connected,
+      <productname>Pgpool-II</productname> will not detect the event
+      even if the parameter is on.
+-->
+      クライアントが接続されていなければ、このパラメータがonでも<productname>Pgpool-II</productname>はシャットダウンを検出しません。
+     </para>
+     <para>
+<!--
+      Please note that <literal>57P01</literal> is not only sent at a
+      shutdown event, but also sent when the backend currently
+      connected is killed by <function>pg_terminate_backend</function>
+      or SIGTERM signal. This is annoying because it results in
+      unwanted failover. To avoid this, turn off this parameter.
+-->
+      <literal>57P01</literal>はシャットダウンだけでなく、現在接続中のバックエンドが<function>pg_terminate_backend</function>あるいはSIGTERMシグナルによって終了させられた場合にも送られてくることに注意してください。
+      これは望まないフェイルオーバを引き起こすので困りものです。
+      これを防ぐには、このパラメータをoffにしてください。
+     </para>
+
+     <note>
+      <para>
+<!--
+       It is recommended to turn on the backend health checking
+       (see <xref linkend="runtime-config-health-check">)
+	when <varname>failover_on_backend_shutdown</varname> is set to off.
+-->
+       <varname>failover_on_backend_shutdown</varname>をoffにする場合は、バックエンドのヘルスチェックを有効にすることをお勧めします（<xref linkend="runtime-config-health-check">をご覧ください）。
+      </para>
+     </note>
+
+     <para>
+<!--
+      This parameter is available
+      in <productname>Pgpool-II</productname> 4.3 or later.  This
+      parameter can be changed by reloading
+      the <productname>Pgpool-II</productname> configurations.
+-->
+      このパラメータは<productname>Pgpool-II</productname> 4.3以降で利用可能です。
+      4.2以前では、このパラメータが常にonであるのと同じ動作をします。
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-failover-on-backend-error" xreflabel="failover_on_backend_error">
+    <term><varname>failover_on_backend_error</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>failover_on_backend_error</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, <productname>Pgpool-II</productname> considers the reading/writing
+      errors on the <productname>PostgreSQL</> backend connection as the backend node failure, and trigger the
+      failover on that node after disconnecting the current session.
+      When this is set to off, <productname>Pgpool-II</productname> only report an error
+      and disconnect the session in case of such errors.
+      -->
+      onに設定した場合、<productname>Pgpool-II</productname>は<productname>PostgreSQL</>バックエンド接続からの読み出し、書き込みのエラーをバックエンドノードの故障と見なし、現在のセッションを切断した後にそのノードをフェイルオーバします。
+      offに設定した場合、そのようなエラーの場合でも<productname>Pgpool-II</productname>は単にエラーをレポートしセッションが切断するのみです。
+     </para>
+     <note>
+      <para>
+       <!--
+       It is recommended to turn on the backend health checking
+       (see <xref linkend="runtime-config-health-check">)
+       when <varname>failover_on_backend_error</varname> is set to off.
+       Note, however, that <productname>Pgpool-II</productname> still triggers the
+       failover when it detects the administrative shutdown of
+       <productname>PostgreSQL</> backend server if <xref linkend="guc-failover-on-backend-shutdown"> is on.
+       -->
+       <varname>failover_on_backend_error</varname>をoffにする場合は、バックエンドのヘルスチェックを有効にすることをお勧めします（<xref linkend="runtime-config-health-check">をご覧ください）。
+	なお、<xref linkend="guc-failover-on-backend-shutdown">がonなら、<productname>PostgreSQL</>バックエンドサーバが管理コマンドでシャットダウンされたことを<productname>Pgpool-II</productname>が検知した場合には、依然としてフェイルオーバが起こることに注意してください。
+      </para>
+     </note>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+     <note>
+      <para>
+       <!--
+       Prior to <productname>Pgpool-II</productname> <emphasis>V4.0</emphasis>,
+       this configuration parameter name was <varname>fail</varname><emphasis>_</emphasis><varname>over_on_backend_error</varname>
+       -->
+       <productname>Pgpool-II</productname> <emphasis>V4.0</emphasis>より前では、この設定パラメータの名前は<varname>fail</varname><emphasis>_</emphasis><varname>over_on_backend_error</varname>でした。
+      </para>
+     </note>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-search-primary-node-timeout" xreflabel="search_primary_node_timeout">
+    <term><varname>search_primary_node_timeout</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>search_primary_node_timeout</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the maximum amount of time in seconds to search for the
+      primary node when a failover scenario occurs.
+      <productname>Pgpool-II</productname> will give up looking for the primary
+      node if it is not found with-in this configured time.
+      Default is 300. Setting this parameter to 0 means keep trying forever.
+      -->
+      フェイルオーバが起きた時にプライマリノードを検索するための最大時間を秒単位で指定します。
+      <productname>Pgpool-II</productname>は、ここで設定した時間の間にプライマリノードを見つけられなかった場合、探すのを諦めます。
+      デフォルト値は300です。
+      0を指定すると、永久に検索し続けます。
+     </para>
+     <para>
+      <!--
+      This parameter is only applicable in streaming replication mode.
+      -->
+      このパラメータはストリーミングレプリケーションモードの場合のみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-detach-false-primary" xreflabel="detach_false_primary">
+    <term><varname>detach_false_primary</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>detach_false_primary</varname> configuration parameter</primary>
+      -->
+      <primary><varname>detach_false_primary</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      If set to on, detach false primary node. The default is
+      off. This parameter is only valid in streaming replication
+      mode and for <productname>PostgreSQL</productname> 9.6 or
+      after since this feature
+      uses <function>pg_stat_wal_receiver</function>.
+      If <productname>PostgreSQL</productname> 9.5.x or older
+      version is used, no error is raised, just the feature is
+      ignored.
+      -->
+      onにすると、不正なプライマリを切り離します。
+      デフォルトはoffです。
+      このパラメータは、ストリーミングレプリケーションモードでかつ、<productname>PostgreSQL</productname> 9.6以降を使っている場合にのみ有効です。
+      というのも、<function>pg_stat_wal_receiver</function>を使っているからです。
+      <productname>PostgreSQL</productname> 9.5以前を使っている場合は、エラーは報告されず、単にこの設定は無視されます。
+     </para>
+     <para>
+      <!--
+      If there's no primary node, no checking will be performed.
+      -->
+      プライマリノードが存在しない場合は、検査を実施しません。
+     </para>
+     <para>
+      <!--
+      If there's no standby node, and there's only one primary
+      node, no checking will be performed.
+      -->
+      スタンバイノードが存在せず、プライマリノードがひとつだけ存在する場合は検査を実施しません。
+     </para>
+     <para>
+      <!--
+      If there's no standby node, and there's multiple primary
+      nodes, leave the primary node which has the youngest node
+      id and detach rest of primary nodes.
+      -->
+      スタンバイノードが存在せず、プライマリノードが複数存在する場合は、もっとも若いノード番号を持つプライマリノードだけを残し、それ以外は切り離します。
+     </para>
+     <para>
+      <!--
+      If there are one or more primaries and one or more standbys,
+      check the connectivity between primary and standby nodes by
+      using <function>pg_stat_wal_receiver</function>
+      if <productname>PostgreSQL</productname> 9.6 or after. In
+      this case if a primary node connects to all standby nodes,
+      the primary is regarded as "true" primary. Other primaries
+      are regarded as "false" primary and the false primaries will
+      be detached if <varname>detach_false_primary</varname> is
+      true.  If no "true" primary is found, nothing will happen.
+      -->
+      もし複数のプライマリと一つ以上のスタンバイがある場合は、<productname>PostgreSQL</productname> 9.6以降であれば、プライマリとスタンバイノードの間の接続性を<function>pg_stat_wal_receiver</function>で検証します。
+      もしあるプライマリがすべてのスタンバイに接続している場合は、そのプライマリは「正しい」と見なされ、それ以外のプライマリは「不正」と見なされ、<varname>detach_false_primary</varname>がonなら不正なプライマリは切り離されます。
+      もし、正しいプライマリが見つからない場合は、何も起きません。
+     </para>
+     <para>
+      <!--
+      When <productname>Pgpool-II</productname> starts, the
+      checking of false primaries are performed only once in
+      the <productname>Pgpool-II</productname> main
+      process. If <xref linkend="guc-sr-check-period"> is greater
+      than 0, the false primaries checking will be performed at
+      the same timing of streaming replication delay checking.
+      -->
+      <productname>Pgpool-II</productname>が起動した時、不正なプライマリのチェックは<productname>Pgpool-II</productname>のメインプロセスの中で一度だけ行われます。
+      もし<xref linkend="guc-sr-check-period">が0より大きければ、不正なプライマリのチェックは、ストリーミングレプリケーションの遅延チェックと同じタイミングで行われます。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       <xref linkend="guc-sr-check-user"> must
+       be <productname>PostgreSQL</productname> super user or
+       in "pg_monitor" group to use this feature. To
+       make <xref linkend="guc-sr-check-user"> in pg_monitor
+       group, execute following SQL command
+       by <productname>PostgreSQL</productname> super user
+       (replace "sr_check_user" with the setting
+       of <xref linkend="guc-sr-check-user">):
+       -->
+       この機能を使うためには、<xref linkend="guc-sr-check-user">は<productname>PostgreSQL</productname>のスーパーユーザーであるか、"pg_monitor"グループに所属していなければなりません。
+	<xref linkend="guc-sr-check-user">をpg_monitorグループに所属させるには、以下のSQLコマンドを<productname>PostgreSQL</productname>スーパーユーザーで実行してください（"sr_check_user"を<xref linkend="guc-sr-check-user">の設定値で置き換えてください）
+	  <programlisting>
+	   GRANT pg_monitor TO sr_check_user;
+	  </programlisting>
+	  <!--
+	  For <productname>PostgreSQL</productname> 9.6, there's
+	  no pg_monitor group
+	  and <xref linkend="guc-sr-check-user"> must
+	  be <productname>PostgreSQL</productname> super user.
+	  -->
+	  <productname>PostgreSQL</productname> 9.6にはpg_monitorグループがないので、<xref linkend="guc-sr-check-user">は<productname>PostgreSQL</productname>のスーパーユーザーでなければなりません。
+      </para>
+     </note>
+
+     <para>
+      <!--
+      This parameter is only applicable in the streaming replication mode.
+      -->
+      このパラメータは、ストリーミングレプリケーションモードの時だけに適用されます。
+     </para>
+     <para>
+      <!--
+      This parameter can be changed by reloading
+      the <productname>Pgpool-II</productname> configurations.
+      -->
+      このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     </para>
+
+     <para>
+      <figure>
+       <!--
+       <title>Detecting false primaries</title>
+       -->
+       <title>不正なプライマリの検出</title>
+       <mediaobject>
+	<imageobject>
+	 <imagedata fileref="detach_false_primary.gif">
+	</imageobject>
+       </mediaobject>
+      </figure>
+     </para>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-auto-failback" xreflabel="auto_failback">
+    <term><varname>auto_failback</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>auto_failback</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, standby node be automatically failback, if the node status
+      is down but streaming replication works normally. This is useful when
+      standby node is degenerated by pgpool because of the temporary network failure.
+      -->
+      onに設定した場合、ストリーミングレプリケーションが正常に動作しており、かつバックエンドノードのステータスがダウンのとき、スタンバイノードを自動で復帰させることができます。
+      これは、一時的なネットワーク障害などによりスタンバイノードが認識できず縮退が行われた場合などに役立ちます。
+
+     </para>
+     <para>
+      この機能を使用するためには、streaming replication check (<xref linkend="runtime-streaming-replication-check">参照)が有効であり、バックエンドノードとして<productname>PostgreSQL</productname>が9.1以降である必要があります。
+       この機能は、プライマリノードで<function>pg_stat_replication</function>を実行します。自動フェイルバックはスタンバイノードに対してのみ実行されます。
+       failback_commandが空でなければ、failback_commandも実行されることに注意してください。
+       メンテナンスなどで、一時的にスタンバイノードを切り離す場合は、このパラメータをOFFにしてから実施してください。
+       意図せずスタンバイノードが復帰してしまう可能性があります。
+     </para>
+     <para>
+      <!--
+      The default is off. This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+      -->
+      デフォルトはoffです。
+      このパラメータは<productname>Pgpool-II</productname>の設定を再読み込みすることで変更可能です。
+     </para>
+
+     <note>
+      <para>
+       <!--
+       <xref linkend="guc-auto-failback"> may not work, when replication slot is used.
+       There’s possibility that the streaming replication is stopped, because
+       <xref linkend="guc-failover-command"> is executed and replication slot is deleted by
+       the command.
+       -->
+       レプリケーションスロットを使用している場合、<xref linkend="guc-auto-failback">が動作しない可能性があることに注意してください。
+       スタンバイノードがダウンした際に<xref linkend="guc-failover-command">によりスタンバイのレプリケーションスロットが削除され、レプリケーションが停止している可能性があるためです。
+      </para>
+     </note>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-auto-failback-interval" xreflabel="auto_failback_interval">
+    <term><varname>auto_failback_interval</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>auto_failback_interval</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the minimum amount of time in seconds for execution interval of auto failback.
+      Next auto failback won't execute until that specified time have passed
+      after previous auto failback. When <productname>Pgpool-II</productname> frequently detect
+      backend down because of network error for example, you may avoid repeating
+      failover and failback by setting this parameter to large enough value.
+      The default is 60. Setting this parameter to 0 means that auto failback don't wait.
+      -->
+      自動フェイルバックの実行間隔の最小時間を秒単位で指定します。
+      次の自動フェイルバックは前回の自動フェイルバックから指定した時間経過するまで実行されません。
+      ネットワークのエラーなどにより<productname>Pgpool-II</productname>が頻繁にバックエンドのDOWNを検出するような場合、大きい値を設定することでフェイルバックとフェイルオーバが繰り返される事を防ぐことができます。
+      デフォルトは60です。
+      0を指定すると自動フェイルバックは待ちません。
+      このパラメータは<productname>Pgpool-II</productname>の設定を再読み込みすることで変更可能です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="runtime-config-failover-in-the-raw-mode">
+
+  <!--
+  <title>Failover in the raw Mode</title>
+  -->
+  <title>rawモードにおけるフェイルオーバ</title>
+
+  <para>
+   <!--
+   Failover can be performed in raw mode if multiple backend servers are defined.
+   <productname>Pgpool-II</> usually accesses the backend specified by
+   <literal>backend_hostname0</> during normal operation. If the
+   <literal>backend_hostname0</> fails for some reason,
+   <productname>Pgpool-II</> tries to access the backend specified by
+   <literal>backend_hostname1</>. If that fails, <productname>Pgpool-II</>
+   tries the <literal>backend_hostname2, 3</> and so on.
+   -->
+   rawモードにおいて、複数のバックエンドサーバが定義されている場合、フェイルオーバが可能です。
+   通常の動作では<productname>Pgpool-II</>は<literal>backend_hostname0</>で指定したバックエンドにアクセスします。
+   何らかの理由で<literal>backend_hostname0</>のサーバに障害が発生すると、<productname>Pgpool-II</>は<literal>backend_hostname1</>へのアクセスを試みます。
+   これが失敗した場合には<productname>Pgpool-II</>は<literal>backend_hostname2, 3</>と以下同様に試みます。
+  </para>
+
+ </sect2>
+
+</sect1>

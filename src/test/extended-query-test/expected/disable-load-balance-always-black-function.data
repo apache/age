@@ -1,0 +1,83 @@
+FE=> Query (query="DROP FUNCTION IF EXISTS f1")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M function f1() does not exist, skipping F dropcmds.c L 483 R does_not_exist_skipping )
+<= BE CommandComplete(DROP FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE FUNCTION f1(INTEGER) returns INTEGER AS 'SELECT $1' LANGUAGE SQL")
+<= BE CommandComplete(CREATE FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S1", query="SELECT 1")
+FE=> Parse(stmt="", query="SELECT f1(1)")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="SELECT 2")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="SELECT 3")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="SELECT 4")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE CloseComplete
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP FUNCTION f1")
+<= BE CommandComplete(DROP FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Terminate

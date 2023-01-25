@@ -1,0 +1,375 @@
+<!-- doc/src/sgml/restrictions.sgml -->
+
+<sect1 id="restrictions" xreflabel="restrictions">
+ <title>Restrictions</title>
+
+ <para>
+  This section describes current restrictions of <productname>Pgpool-II</productname>.
+
+  <variablelist>
+
+   <varlistentry>
+    <term>Using pg_terminate_backend</term>
+    <listitem>
+     <para>
+      If you use <function>pg_terminate_backend()</function> to stop a
+      backend, this will trigger a failover.  The reason why this
+      happens is that <productname>PostgreSQL</productname> sends
+      exactly the same message for a terminated backend as for a full
+      postmaster shutdown.  There is no workaround prior of version
+      3.6. From version 3.6, this limitation has been mitigated. If
+      the argument to the function (that is a process id) is a
+      constant, you can safely use the function. In extended protocol
+      mode, you cannot use the function though.  In 4.3 or later you
+      can completely prevent the failover caused
+      by <function>pg_terminate_backend()</function> by
+      setting <literal>off</literal>
+      to <xref linkend="guc-failover-on-backend-shutdown">, this will
+      prevent failover caused by termination of postmaster though.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Load Balancing</term>
+    <listitem>
+     <para>
+      Multi-statement queries (multiple SQL commands on single line)
+      are always sent to primary node (in streaming replication mode)
+      or main node (in other
+      modes). Usually <productname>Pgpool-II</productname> dispatch
+      query to appropriate node, but it's not applied to
+      multi-statement queries.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Authentication/Access Controls</term>
+    <listitem>
+     <para>
+      In the replication mode or native replication mode, trust and pam methods are supported. md5 is also
+      supported since <productname>Pgpool-II</productname> 3.0.  md5
+      is supported by using an authentication file <filename>pool_passwd</filename>.
+      scram-sha-256, cert, and clear text password is also supported since
+      <productname>Pgpool-II</productname> 4.0.
+      <filename>pool_passwd</filename> is default name of the
+      authentication file. Here are the
+      steps to enable md5 authentication:
+     </para>
+
+     <orderedlist>
+
+      <listitem>
+       <para>
+	Login as the database's operating system user and type:
+	<programlisting>
+	 pg_md5 --md5auth --username=<literal>your_username</literal> <literal>your_passwd</literal>
+	</programlisting>
+	user name and md5 encrypted password are registered into
+	pool_passwd.  If pool_passwd does not exist yet, pg_md5
+	command will automatically create it for you.  The format
+	of pool_passwd
+	is <literal>username:encrypted_passwd</literal>.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	You also need to add an appropriate md5 entry to
+	pool_hba.conf.  See <xref linkend="auth-pool-hba-conf"> for more details.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	Please note that the user name and password must be
+	identical to those registered
+	in <productname>PostgreSQL</productname>.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+	After changing md5 password (in both pool_passwd and
+	PostgreSQL of course), you need to
+	execute <application>pgpool reload</application>.
+       </para>
+      </listitem>
+     </orderedlist>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Large objects</term>
+    <listitem>
+     <para>
+      In streaming replication
+      mode, <productname>Pgpool-II</productname> supports large
+      objects.
+     </para>
+     <para>
+      In native replication
+      mode, <productname>Pgpool-II</productname> supports large
+      objects if the backend
+      is <productname>PostgreSQL</productname> 8.1 or later.  For
+      this, you need to enable lobj_lock_table directive
+      in <filename>pgpool.conf</filename>.  Large object replication
+      using backend function <function>lo_import</function> is not
+      supported, however.
+     </para>
+     <para>
+      In other mode, including Slony mode, large
+      objects are not supported.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Temporary tables</term>
+    <listitem>
+     <para>
+      Creating/inserting/updating/deleting temporary tables are
+      always executed on the primary in native replication mode.
+      SELECT on these tables is executed on primary as well.  However
+      if the temporary table name is used as a literal in SELECT,
+      there's no way to detect it, and the SELECT will be load
+      balanced.  That will trigger a "not found the table" error or
+      will find another table having same name.  To avoid the
+      problem, use SQL comment.
+     </para>
+     <para>
+      Note that such literal table names used in queries to access
+      system catalogs do cause problems described above.  psql's \d
+      command produces such that query:
+      <programlisting>
+       SELECT 't1'::regclass::oid;
+      </programlisting>
+      In such that case <productname>Pgpool-II</productname> always
+      sends the query to primary and will not cause the problem.
+     </para>
+
+     <para>
+      Tables created by <command>CREATE TEMP TABLE</command> will be
+      deleted at the end of the session by specifying DISCARD ALL in
+      reset_query_list if you are using PostgreSQL 8.3 or later.
+     </para>
+     <para>
+      For 8.2.x or earlier, tables created by <command>CREATE TEMP
+       TABLE</command> will not be deleted after exiting a
+      session. It is because of the connection pooling which, from
+      PostgreSQL's backend point of view, keeps the session
+      alive. To avoid this, you must explicitly drop the temporary
+      tables by issuing <command>DROP TABLE</command>, or
+      use <command>CREATE TEMP TABLE ... ON COMMIT DROP</command>
+      inside the transaction block.
+     </para>
+
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Functions, etc. In Native Replication mode</term>
+    <listitem>
+     <para>
+      There is no guarantee that any data provided using a
+      context-dependent mechanism (e.g. random number, transaction
+      ID, OID, SERIAL, sequence), will be replicated correctly on
+      multiple backends. For SERIAL, enabling insert_lock will help
+      replicating data.  insert_lock also helps SELECT setval() and
+      SELECT nextval().
+     </para>
+     <para>
+      INSERT/UPDATE
+      using <function>CURRENT_TIMESTAMP</function>, <function>CURRENT_DATE</function>,
+      <function>now()</function> will be replicated
+      correctly. INSERT/UPDATE for tables
+      using <function>CURRENT_TIMESTAMP</function>, <function>CURRENT_DATE</function>,
+      <function>now()</function> as their DEFAULT values will also
+      be replicated correctly.  This is done by replacing those
+      functions by constants fetched from primary at query execution
+      time.  There are a few limitations however:
+     </para>
+     <para>
+      In <productname>Pgpool-II</productname> 3.0 or before, the
+      calculation of temporal data in table default value is not
+      accurate in some cases. For example, the following table
+      definition:
+      <programlisting>
+       CREATE TABLE rel1(
+       d1 date DEFAULT CURRENT_DATE + 1
+       )
+      </programlisting>
+      is treated the same as:
+      <programlisting>
+       CREATE TABLE rel1(
+       d1 date DEFAULT CURRENT_DATE
+       )
+      </programlisting>
+      <productname>Pgpool-II</productname> 3.1 or later handles
+      these cases correctly.  Thus the column "d1" will have
+      tomorrow as the default value.  However this enhancement does
+      not apply if extended protocols (used in JDBC, PHP PDO for
+      example) or PREPARE are used.
+     </para>
+     <para>
+      Please note that if the column type is not a temporal one,
+      rewriting is not performed. Such example:
+      <programlisting>
+       foo bigint default (date_part('epoch'::text,('now'::text)::timestamp(3) with time zone) * (1000)::double precision)
+      </programlisting>
+      Suppose we have the following table:
+      <programlisting>
+       CREATE TABLE rel1(
+       c1 int,
+       c2 timestamp default now()
+       )
+      </programlisting>
+      We can replicate
+      <programlisting>
+       INSERT INTO rel1(c1) VALUES(1)
+      </programlisting>
+
+      since this turn into
+
+      <programlisting>
+       INSERT INTO rel1(c1, c2) VALUES(1, '2009-01-01 23:59:59.123456+09')
+      </programlisting>
+
+      However,
+      <programlisting>
+       INSERT INTO rel1(c1) SELECT 1
+      </programlisting>
+      cannot to be transformed, thus cannot be properly replicated in the current implementation.
+      Values will still be inserted, with no transformation at all.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>SQL type commands</term>
+    <listitem>
+     <para>
+      <link linkend="sql-commands">SQL type commands</link> cannot
+      be used in extended query mode.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Multi-byte Characters</term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> does not perform encoding conversion between client and
+      <productname>PostgreSQL</productname> for multi-byte characters.
+      The encoding for the client and backends must be the same.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Multi-statement Query</term>
+    <listitem>
+     <para>
+      <productname>Pgpool-II</productname> cannot process multi-statement queries.
+      However, when <productname>Pgpool-II</productname> is connected by <command>psql</command>, It is no problem.
+      <command>psql</command> parse multi-statement, send a statement one by one.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>libpq</term>
+    <listitem>
+     <para>
+      libpq is linked while building <productname>Pgpool-II</productname>.
+      libpq version must be 3.0 or later. Building <productname>Pgpool-II</productname> with libpq version 2.0 will fail.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>ParameterStatus</term>
+    <listitem>
+     <para>
+       When a client connects
+       to <productname>PostgreSQL</productname>, <productname>PostgreSQL</productname>
+       sends back some parameter/value pairs to clients. This protocol
+       is
+       called <ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#id-1.10.5.7.3"><firstterm>ParameterStatus</firstterm></ulink>.
+       The parameter/value pairs can be extracted by using some APIs
+       such as <function>PQParameterStatus</function> of libpq.  The
+       actual parameter names can be
+       found <ulink url="https://www.postgresql.org/docs/14/protocol-flow.html#PROTOCOL-ASYNC">here</ulink>.
+       <productname>Pgpool-II</productname> collects ParameterStatus
+       values from multiple <productname>PostgreSQL</productname>
+       servers and it is possible that the values vary among the
+       servers. A typical example is <literal>in_hot_standby</literal>,
+       which is introduced in <productname>PostgreSQL</productname>
+       14. The value for the variable is <literal>off</literal> on
+       primary server and <literal>on</literal> on standby
+       servers. Problem is, <productname>Pgpool-II</productname> has
+       to return client only one of them. In this case it chooses the
+       value reported by the primary
+       server. So <function>PQParameterStatus</function> will
+       return <literal>off</literal>. On the other hand, when the
+       client issues <literal>show in_hot_standby</literal>, the
+       returned value can either <literal>on</literal>
+       or <literal>off</literal> depending on which is the load
+       balance node for the session.
+     </para>
+     <para>
+       Note that if the values differ among
+       servers, <productname>Pgpool-II</productname> will emit a log
+       message except <literal>in_hot_standby</literal>. This is to
+       prevent the log file from being flooded
+       since <literal>in_hot_standby</literal> always differs.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>set_config</term>
+    <listitem>
+     <para>
+       <productname>PostgreSQL</productname>
+       has <function>set_config</function> function which allows to
+       change parameter values within current session
+       like <command>SET</command> command
+       (actually <function>set_config</function> has more feature than
+       SET. See <productname>PostgreSQL</productname> manual for more
+       details).  When <productname>Pgpool-II</productname> is
+       operated
+       with <link linkend="guc-backend-clustering-mode">clustering
+       mode</link> being set to
+       <literal>streaming_replication</literal>, it sends the function
+       only to the primary server. As the function is not sent to the
+       standby servers, the parameter values are different among each
+       servers. To avoid the problem, you can
+       use <command>SET</command> command instead
+       of <function>set_config</function>.
+       Since <command>SET</command> command is sent to all servers
+       used for this session, the issue will not happen.  However, if
+       you use more than 2 <productname>PostgreSQL</productname>
+       servers, you need to
+       disable <xref linkend="guc-statement-level-load-balance"> and
+       use <command>SET</command> command. This is because,
+       if <xref linkend="guc-statement-level-load-balance"> enabled,
+       queries might be sent to the third server in addition to the
+       primary server and the server which is assigned to the load
+       balance node.
+     </para>
+     <para>
+       If you need to use <function>set_config</function>, turn off
+       load balancing for the session (not only
+       for <function>set_config</function>, load balancing should be
+       disabled in the whole session).  You can avoid the issue by
+       sacrificing performance.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </para>
+</sect1>

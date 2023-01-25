@@ -1,0 +1,274 @@
+FE=> Query (query="DROP TABLE IF EXISTS tb_dml_insert")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_dml_insert" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_dml_insert(a INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="INSERT INTO tb_dml_insert VALUES(1)")
+<= BE CommandComplete(INSERT 0 1)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_dml_update")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_dml_update" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_dml_update(a INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="INSERT INTO tb_dml_update VALUES(1)")
+<= BE CommandComplete(INSERT 0 1)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_dml_delete")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_dml_delete" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_dml_delete(a INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="INSERT INTO tb_dml_delete VALUES(1)")
+<= BE CommandComplete(INSERT 0 1)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_t1")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_t1" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_t1(a INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_t2")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_t2" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_t2(b INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE OR REPLACE FUNCTION insert_tb_t2_func() RETURNS TRIGGER AS $example_table$ BEGIN INSERT INTO tb_t2 VALUES (1); RETURN NEW; END; $example_table$ LANGUAGE plpgsql")
+<= BE CommandComplete(CREATE FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TRIGGER insert_tb_t2_trigger AFTER INSERT ON tb_t1 FOR EACH ROW EXECUTE PROCEDURE insert_tb_t2_func()")
+<= BE CommandComplete(CREATE TRIGGER)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_f")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_f" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_f(f INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP FUNCTION IF EXISTS insert_tb_f_func")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M function insert_tb_f_func() does not exist, skipping F dropcmds.c L 491 R does_not_exist_skipping )
+<= BE CommandComplete(DROP FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE FUNCTION insert_tb_f_func(integer) RETURNS void AS $$ INSERT INTO tb_f VALUES ($1); $$ LANGUAGE SQL")
+<= BE CommandComplete(CREATE FUNCTION)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP TABLE IF EXISTS tb_v CASCADE")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M table "tb_v" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE TABLE tb_v(v INT)")
+<= BE CommandComplete(CREATE TABLE)
+<= BE ReadyForQuery(I)
+FE=> Query (query="DROP VIEW IF EXISTS tb_v_view")
+<= BE NoticeResponse(S NOTICE V NOTICE C 00000 M view "tb_v_view" does not exist, skipping F tablecmds.c L 1183 R DropErrorMsgNonExistent )
+<= BE CommandComplete(DROP VIEW)
+<= BE ReadyForQuery(I)
+FE=> Query (query="CREATE VIEW tb_v_view AS SELECT * FROM tb_v")
+<= BE CommandComplete(CREATE VIEW)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S1", query="SELECT * FROM tb_dml_insert")
+FE=> Parse(stmt="S_SELECT_1", query="SELECT 1")
+FE=> Parse(stmt="", query="INSERT INTO tb_dml_insert VALUES(1)")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(INSERT 0 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE DataRow
+<= BE CommandComplete(SELECT 2)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S2", query="SELECT * FROM tb_dml_update")
+FE=> Parse(stmt="", query="UPDATE tb_dml_update SET a = 2")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S2", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(UPDATE 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S3", query="SELECT * FROM tb_dml_delete")
+FE=> Parse(stmt="", query="DELETE FROM tb_dml_delete")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S3", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(DELETE 1)
+<= BE BindComplete
+<= BE CommandComplete(SELECT 0)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S4", query="SELECT * FROM tb_t2")
+FE=> Parse(stmt="", query="INSERT INTO tb_t1 VALUES(1)")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S4", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(INSERT 0 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S5", query="SELECT * FROM tb_f")
+FE=> Parse(stmt="", query="SELECT insert_tb_f_func(6)")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S5", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="", query="BEGIN")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="S6", query="SELECT * FROM tb_v_view")
+FE=> Parse(stmt="", query="INSERT INTO tb_v VALUES(8)")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S6", portal="")
+FE=> Execute(portal="")
+FE=> Bind(stmt="S_SELECT_1", portal="")
+FE=> Execute(portal="")
+FE=> Parse(stmt="", query="COMMIT")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE ParseComplete
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(INSERT 0 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(COMMIT)
+<= BE ReadyForQuery(I)
+FE=> Terminate

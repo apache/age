@@ -1,0 +1,1970 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-watchdog-config">
+ <title>Watchdog</title>
+
+ <indexterm zone="runtime-watchdog-config">
+  <!--
+  <primary>configuring watchdog</primary>
+  -->
+  <primary>Watchdogの設定</primary>
+ </indexterm>
+ <para>
+  <!--
+  Watchdog configuration parameters are described in pgpool.conf.
+  There is sample configuration in the WATCHDOG section of
+  <filename>pgpool.conf.sample</filename> file.
+  All following options are required to be specified in watchdog process.
+  -->
+  Watchdogの設定パラメータはpgpool.confに記述されています。
+  <filename>pgpool.conf.sample</filename>のWATCHDOG節に設定の例があります。
+  以下のすべてのオプションがwatchdogプロセスでは指定されている必要があります。
+ </para>
+
+ <sect2 id="config-enable-watchdog">
+  <!--
+  <title>Enable watchdog</title>
+  -->
+  <title>Watchdogを有効にする</title>
+
+  <variablelist>
+   <varlistentry id="guc-use-watchdog" xreflabel="use_watchdog">
+    <term><varname>use_watchdog</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>use_watchdog</varname> configuration parameter</primary>
+      -->
+      <primary><varname>use_watchdog</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      If on, activates the watchdog. Default is off
+      -->
+      onならwatchdogを有効にします。
+      デフォルトはoffです。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+     <para>
+      <productname>Pgpool-II</productname> 4.2より前では、watchdogは自ノードとそれを基準に他ノードの設定を記述するため、
+      ノードごとに異なる設定を記述する必要がありました。
+      <productname>Pgpool-II</productname> 4.2以降では、watchdogの設定はノード間で共通するようにしました。
+      そのため、<productname>Pgpool-II</productname> 4.2以降、<literal>Watchdog</literal>機能が有効になっている場合、
+      どの設定がどのホストであるかを区別するには、
+      設定ファイル<filename>pgpool.conf</filename>を格納するディレクトリに<filename>pgpool_node_id</filename>ファイルの作成が必要になります。
+      そのファイルにpgpool(watchdog)ホストを識別するためのノード番号(0、1、2など)を指定します。
+     </para>
+     <example id="example-pgpool-node-id-1">
+      <title>pgpool_node_idの設定例</title>
+      <para>
+       Pgpool ノードが3つあり、それぞれのホスト名が server1、server2、server3 の場合、各ホスト上で<filename>pgpool_node_id</filename>ファイルを以下のように作成します。
+       RPMからインストールした場合は、<filename>pgpool.conf</filename>が<filename>/etc/pgpool-II/</filename>配下にインストールされます。
+      </para>
+      <itemizedlist>
+       <listitem>
+        <para>
+         <literal>server1</literal>
+        </para>
+        <programlisting>
+[server1]# cat /etc/pgpool-II/pgpool_node_id
+0
+        </programlisting>
+       </listitem>
+       <listitem>
+        <para>
+         <literal>server2</literal>
+        </para>
+        <programlisting>
+[server2]# cat /etc/pgpool-II/pgpool_node_id
+1
+        </programlisting>
+       </listitem>
+       <listitem>
+        <para>
+         <literal>server3</literal>
+        </para>
+        <programlisting>
+[server3]# cat /etc/pgpool-II/pgpool_node_id
+2
+        </programlisting>
+       </listitem>
+      </itemizedlist>
+     </example>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-communication-watchdog">
+  <!--
+  <title>Watchdog communication</title>
+  -->
+  <title>Watchdog通信</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-hostname" xreflabel="hostname">
+    <term><varname>hostnameX</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>hostnameX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>hostnameX</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the hostname or IP address of
+      <productname>Pgpool-II</productname> server.
+      This is used for sending/receiving queries and packets,
+      and also as an identifier of the watchdog node.
+      The number at the end of the parameter name is referred
+      as "pgpool node id", and it starts from 0 (e.g. hostname0).
+      -->
+      <productname>Pgpool-II</productname>サーバのホスト名またはIPアドレスを指定します。
+      クエリやパケットの送受信の他、watchdogの識別子としても用います。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばhostname0)。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-port" xreflabel="wd_port">
+    <term><varname>wd_portX</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_portX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_port</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the port number to be used by watchdog
+      process to listen for connections. Default is 9000.
+      The number at the end of the parameter name is referred
+      as "pgpool node id", and it starts from 0 (e.g. wd_port0).
+      -->
+      watchdogが接続を受け付けるために監視するポート番号です。
+      デフォルト値は9000です。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばwd_port0)。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-pgpool-port" xreflabel="pgpool_port">
+    <term><varname>pgpool_portX</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>pgpool_portX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>pgpool_portX</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the <productname>Pgpool-II</productname> port number.
+      Default is 9999.
+      The number at the end of the parameter name is referred
+      as "pgpool node id", and it starts from 0 (e.g. pgpool_port0).
+      -->
+      <productname>Pgpool-II</productname>サーバのポート番号を指定します。
+      デフォルト値は9999です。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばpgpool_port0)。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+     <example id="example-watchdog-1">
+      <!--
+      <title>Watchdog configuration</title>
+      -->
+      <title>Watchdogの設定例</title>
+      <para>
+       <!--
+       If you have 3 pgpool nodes with hostname server1, server2 and server3,
+       you can set the <xref linkend="guc-hostname">,
+       <xref linkend="guc-wd-port"> and <xref linkend="guc-pgpool-port"> like below:
+       -->
+       Pgpool ノードが3つあり、それぞれのホスト名が server1、server2、server3 の場合、
+       <xref linkend="guc-hostname">、<xref linkend="guc-wd-port">
+       及び<xref linkend="guc-pgpool-port">を以下のように設定します。
+    <programlisting>
+     hostname0 = 'server1'
+     wd_port0 = 9000
+     pgpool_port0 = 9999
+
+     hostname1 = 'server2'
+     wd_port1 = 9000
+     pgpool_port1 = 9999
+
+     hostname2 = 'server3'
+     wd_port2 = 9000
+     pgpool_port2 = 9999
+    </programlisting>
+      </para>
+     </example>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-authkey" xreflabel="wd_authkey">
+    <term><varname>wd_authkey</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_authkey</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_authkey</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the authentication key used for all watchdog communications.
+      All <productname>Pgpool-II</productname> must have the same key.
+      Packets from watchdog having different key will get rejected.
+      This authentication is also applied to the heartbeat signals
+      when the <literal>heartbeat</> mode is used as a lifecheck method.
+      -->
+      watchdog間通信で用いられる認証キーを指定します。
+      全ての<productname>Pgpool-II</productname>で同じキーを指定する必要があります。
+      認証キーが異なるwatchdogからの通信は拒絶されます。
+      死活監視を<literal>heartbeat</>モードで行う場合には、この認証はハートビート信号にも適用されます。
+     </para>
+     <para>
+      <!--
+      Since in <productname>Pgpool-II</productname><emphasis>V3.5</emphasis> or beyond
+      <varname>wd_authkey</varname> is also used to authenticate
+      the watchdog IPC clients,
+      all clients communicating with <productname>Pgpool-II</productname>
+      watchdog process needs to provide this wd_authkey value
+      for <literal>"IPCAuthKey"</literal> key in the JSON data
+      of the command.
+      -->
+      <productname>Pgpool-II</productname><emphasis>V3.5</emphasis>以降では<varname>wd_authkey</varname>がwatchdog IPCクライアントの認証にも使われるため、<productname>Pgpool-II</productname>と通信するwatchdogプロセスは、<literal>"IPCAuthKey"</literal>のコマンドのJSONデータにwd_authkey値を設定しなければなりません。
+     </para>
+     <para>
+      <!--
+      Default is <literal>''</literal> (empty) which means disables
+      the watchdog authentication.
+      -->
+      デフォルトは<literal>''</literal>（空文字）で、この場合watchdogの認証は行われません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-upstream-connections">
+  <!--
+  <title>Upstream server connection</title>
+  -->
+  <title>上流サーバへの接続</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-trusted-servers" xreflabel="trusted_servers">
+    <term><varname>trusted_servers</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>trusted_servers</varname> configuration parameter</primary>
+      -->
+      <primary><varname>trusted_servers</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the list of trusted servers to check the up stream connections.
+      Each server in the list is required to respond to ping.
+      Specify a comma separated list of servers such as
+      <literal>"hostA,hostB,hostC"</literal>.
+      If none of the server are reachable, watchdog will regard it as
+      failure of the <productname>Pgpool-II</productname>.
+      Therefore, it is recommended to specify multiple servers.
+      Please note that you should not assign PostgreSQL servers to this parameter.
+      -->
+      上位接続を確認するための信頼できるサーバのリストを指定します。
+      リスト中の各サーバは、pingの応答に答える必要があります。
+      <literal>"hostA,hostB,hostC"</literal>のようにカンマで区切って複数のサーバを指定できます。
+      全てのサーバに到達できなくなると、watchdogは<productname>Pgpool-II</productname>に障害が発生したと判断します。
+      そのため、複数のサーバを指定することを推奨します。
+      なお、このパラメータにPostgreSQLサーバを指定することはしないでください。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-trusted-server-command" xreflabel="trusted_server_command">
+    <term><varname>trusted_server_command</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>trusted_server_command</varname> configuration parameter</primary>
+      -->
+      <primary><varname>trusted_server_command</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies a user command to run when <productname>Pgpool-II</productname> check
+      that trusted servers respond to ping. Any %h in the string is replaced by each host
+      name specified <varname>trusted_servers</varname>. Default is
+      <literal>ping -q -c3 %h</literal>.
+      -->
+      信頼できるサーバのping応答を確認するユーザコマンドを指定します。
+      %hは<varname>trusted_servers</varname>で指定された各ホスト名に置換されます。
+      デフォルトは<literal>ping -q -c3 %h</literal>です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-vip-control">
+  <!--
+  <title>Virtual IP control</title>
+  -->
+  <title>仮想IP制御</title>
+
+  <variablelist>
+
+   <varlistentry id="guc-delegate-ip" xreflabel="delegate_ip">
+    <term><varname>delegate_ip</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>delegate_ip</varname> configuration parameter</primary>
+      -->
+      <primary><varname>delegate_ip</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the virtual IP address (VIP) of pgpool-II that is
+      connected from client servers (application servers etc.).
+      When a <productname>Pgpool-II</productname> is switched from standby to active,
+      the <productname>Pgpool-II</productname> takes over
+      this VIP.
+      Default is <literal>''</literal>(empty): which means virtual
+      IP will never be brought up.
+      -->
+      （アプリケーションサーバなど）クライアントサーバから接続される<productname>Pgpool-II</productname>の仮想IP（VIP） アドレスを指定します。
+      <productname>Pgpool-II</productname>がスタンバイからアクティブに切り替わった時、<productname>Pgpool-II</productname>はこのVIPを引き継ぎます。
+      <emphasis>クォーラムが存在しなければVIPは立ち上がりません</emphasis>。
+      デフォルトは<literal>''</literal>（空文字）で、この場合仮想IPは決して立ち上がりません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-if-cmd-path" xreflabel="if_cmd_path">
+    <term><varname>if_cmd_path</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>if_cmd_path</varname> configuration parameter</primary>
+      -->
+      <primary><varname>if_cmd_path</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the path to the command that <productname>Pgpool-II</productname>
+      will use to switch the virtual IP on the system.
+      Set only the path of the directory containing the binary,
+      such as <literal>"/sbin"</literal> or such directory.
+      If <xref linkend="guc-if-up-cmd"> or <xref linkend="guc-if-down-cmd"> starts with "/",
+      this parameter will be ignored.
+      -->
+      <productname>Pgpool-II</productname>が仮想IPを切り替えるために使用するコマンドへのパスを指定します。
+      <literal>"/sbin"</literal>のようにパスだけを指定します。
+      <varname>if_up_cmd</varname>や<varname>if_down_cmd</varname>に指定したコマンドが"/"で始まる場合、
+      フルパスとみなし<varname>if_cmd_path</varname>の設定を無視します。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-if-up-cmd" xreflabel="if_up_cmd">
+    <term><varname>if_up_cmd</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>if_up_cmd</varname> configuration parameter</primary>
+      -->
+      <primary><varname>if_up_cmd</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the command to bring up the virtual IP.
+      Set the command and parameters such as
+      <literal>"ip addr add $_IP_$/24 dev eth0 label eth0:0"</literal>.
+      Since root privilege is required to execute this command,
+      use <command>setuid</command> on <command>ip</command> command or
+      allow Pgpool-II startup user (<literal>postgres</literal> user by default)
+      to run <command>sudo</command> command without a password, and specify it such as
+      <literal>"/usr/bin/sudo /sbin/ip addr add $_IP_$/24 dev eth0 label eth0:0"</literal>.
+      <literal>$_IP_$</literal> will get replaced by the IP address
+      specified in the <xref linkend="guc-delegate-ip">.
+      -->
+      仮想IPを起動するために実行するコマンドを指定します。
+      <command>"ip addr add $_IP_$/24 dev eth0 label eth0:0"</command>のようにコマンドとパラメータを指定します。
+      このコマンドを実行するには<literal>root</literal>権限が必要となりますので、一般ユーザが実行できるように
+      <command>ip</command>コマンドに<command>setuid</command>を設定するか、
+      <productname>Pgpool-II</productname>起動ユーザ(デフォルトでは<literal>postgres</literal>)がパスワードなしに<command>sudo</command>を実行できるように設定し、
+      <command>sudo</command>を介したコマンドを<literal>"/usr/bin/sudo /sbin/ip addr add $_IP_$/24 dev eth0 label eth0:0"</literal>のように指定します。
+      <literal>$_IP_$</literal>は<xref linkend="guc-delegate-ip">で指定されたIPアドレスに置換されます。
+     </para>
+     <para>
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-if-down-cmd" xreflabel="if_down_cmd">
+    <term><varname>if_down_cmd</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>if_down_cmd</varname> configuration parameter</primary>
+      -->
+      <primary><varname>if_down_cmd</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the command to bring down the virtual IP.
+      Set the command and parameters such as
+      <literal>"ip addr del $_IP_$/24 dev eth0"</literal>.
+      Since root privilege is required to execute this command,
+      use <command>setuid</command> on <command>ip</command> command or
+      allow Pgpool-II startup user (<literal>postgres</literal> user by default)
+      to run <command>sudo</command> command without a password, and specify it such as
+      <literal>"/usr/bin/sudo /sbin/ip addr del $_IP_$/24 dev eth0"</literal>.
+      <literal>$_IP_$</literal> will get replaced by the IP address
+      specified in the <xref linkend="guc-delegate-ip">.
+      -->
+      仮想IPを停止するために実行するコマンドを指定します。
+      <literal>"ip addr del $_IP_$/24 dev eth0"</literal>のようにコマンドとパラメータを指定します。
+      このコマンドを実行するにはroot権限が必要となりますので、一般ユーザが実行できるように
+      <command>ip</command>コマンドに<command>setuid</command>を設定するか、
+      <productname>Pgpool-II</productname>起動ユーザ(デフォルトでは<literal>postgres</literal>)がパスワードなしに<command>sudo</command>を実行できるように設定し、
+      <command>sudo</command>を介したコマンドを<literal>"/usr/bin/sudo /sbin/ip addr del $_IP_$/24 dev eth0"</literal>のように指定します。
+      <literal>$_IP_$</literal>は<xref linkend="guc-delegate-ip">で指定されたIPアドレスに置換されます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-arping-path" xreflabel="arping_path">
+    <term><varname>arping_path</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>arping_path</varname> configuration parameter</primary>
+      -->
+      <primary><varname>arping_path</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the path to the command that <productname>Pgpool-II</productname>
+      will use to send the ARP requests after the virtual IP switch.
+      Set only the path of the directory containing the binary,
+      such as <literal>"/usr/sbin"</literal> or such directory.
+      If <xref linkend="guc-arping-cmd"> starts with "/",
+      this parameter will be ignored.
+      -->
+      IPアドレス切り替え後に<productname>Pgpool-II</productname>がARPリクエストを送信するコマンドへのパス指定します。
+      <literal>"/usr/sbin"</literal>のようにパスだけを指定します。
+      <varname>arping_cmd</varname>に指定したコマンドが"/"で始まる場合、
+      フルパスとみなし<varname>arping_path</varname>の設定を無視します。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-arping-cmd" xreflabel="arping_cmd">
+    <term><varname>arping_cmd</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>arping_cmd</varname> configuration parameter</primary>
+      -->
+      <primary><varname>arping_cmd</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the command to use for sending the ARP requests
+      after the virtual IP switch.
+      Set the command and parameters such as
+      <literal>"arping -U $_IP_$ -w 1 -I eth0"</literal>.
+      Since root privilege is required to execute this command,
+      use <command>setuid</command> on <command>ip</command> command or
+      allow Pgpool-II startup user (<literal>postgres</literal> user by default)
+      to run <command>sudo</command> command without a password, and specify it such as
+      <literal>"/usr/bin/sudo /usr/sbin/arping -U $_IP_$ -w 1 -I eth0"</literal>.
+      <literal>$_IP_$</literal> will get replaced by
+      the IP address specified in the <varname>delegate_ip</varname>.
+      -->
+      IPアドレス切り替え後にARPリクエストを送信するコマンドです。
+      <literal>"arping -U $_IP_$ -w 1 -I eth0"</literal>のようにコマンドとパラメータを指定します。
+      このコマンドを実行するにはroot権限が必要となりますので、一般ユーザが実行できるように
+      <command>arping</command>コマンドに<literal>setuid</literal>を設定するか、
+      <productname>Pgpool-II</productname>起動ユーザ(デフォルトでは<literal>postgres</literal>ユーザ)がパスワードなしに<command>sudo</command>を実行できるように設定し、
+      <command>sudo</command>を介したコマンドを<literal>"/usr/bin/sudo /usr/sbin/arping -U $_IP_$ -w 1 -I eth0"</literal>のように設定します。
+      <literal>$_IP_$</literal>は<xref linkend="guc-delegate-ip">で指定されたIPアドレスに置換されます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-ping-path" xreflabel="ping_path">
+    <term><varname>ping_path</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>ping_path</varname> configuration parameter</primary>
+      -->
+      <primary><varname>ping_path</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the path of a ping command to check startup of the virtual IP.
+      Set the only path of the directory containing the ping utility,
+      such as <literal>"/bin"</literal> or such directory.
+      -->
+      仮想IPの起動を確認するために利用するpingコマンドのパスを指定します。
+      <literal>"/bin"</literal>のようにパスだけを指定します。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-escalation-de-escalation">
+  <!--
+  <title>Behavior on escalation and de-escalation</title>
+  -->
+  <title>昇格および降格時の振る舞い</title>
+  <para>
+   <!--
+   Configuration about behavior when <productname>Pgpool-II</productname>
+   escalates to active (virtual IP holder)
+   -->
+   <productname>Pgpool-II</productname>がアクティブ（仮想IPを保持しているステータス）に昇格した時の振る舞いを指定します。
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-clear-memqcache-on-escalation" xreflabel="clear_memqcache_on_escalation">
+    <term><varname>clear_memqcache_on_escalation</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>clear_memqcache_on_escalation</varname> configuration parameter</primary>
+      -->
+      <primary><varname>clear_memqcache_on_escalation</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When set to on, watchdog clears all the query cache in the shared memory
+      when pgpool-II escalates to active. This prevents the new active <productname>Pgpool-II</productname>
+      from using old query caches inconsistences to the old active.
+      -->
+      このオプションがonの場合、pgpool-II がアクティブに昇格した時に、共有メモリ上のクエリキャッシュを全て削除します。
+      これにより、新しいアクティブの<productname>Pgpool-II</productname>が旧アクティブと非整合な古いクエリキャッシュを使うことを防止します。
+     </para>
+     <para>
+      <!--
+      Default is on.
+      -->
+      デフォルトはonです。
+     </para>
+     <para>
+      <!--
+      This works only if <xref linkend="guc-memqcache-method">
+      is <literal>'shmem'</literal>.
+      -->
+      <xref linkend="guc-memqcache-method">が'shmem'の場合のみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-escalation-command" xreflabel="wd_escalation_command">
+    <term><varname>wd_escalation_command</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_escalation_command</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_escalation_command</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Watchdog executes this command on the node that is escalated
+      to the leader watchdog.
+      -->
+      リーダーwatchdogに昇格した時に、ここで指定したコマンドがwatchdogによって実行されます。
+     </para>
+     <para>
+      <!--
+      This command is executed just before bringing up the
+      virtual IP if that is configured on the node.
+      -->
+      コマンドは、そのノードに仮想IPが設定されていた場合、それが立ち上がる直前のタイミングで実行されます。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-de-escalation-command" xreflabel="wd_de_escalation_command">
+    <term><varname>wd_de_escalation_command</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_de_escalation_command</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_de_escalation_command</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Watchdog executes this command on the leader <productname>Pgpool-II</productname>
+      watchdog node when that node resigns from the leader node responsibilities.
+      A leader watchdog node can resign from being a leader node,
+      when the leader node <productname>Pgpool-II</productname> shuts down, detects a network
+      blackout or detects the lost of quorum.
+      -->
+      <productname>Pgpool-II</productname>のリーダーwatchdogが責務を辞退し降格するときに、ここで指定したコマンドが実行されます。
+      リーダーwatchdogノードは、そのリーダーノードの<productname>Pgpool-II</productname>が停止したとき、ネットワーク切断や<firstterm>クォーラム(quorum)</firstterm><indexterm><primary>クォーラム</primary></indexterm><indexterm><primary>quorum</primary></indexterm>が失われたことを検出した時に、リーダーから辞任します。
+     </para>
+     <para>
+      <!--
+      This command is executed before bringing down the virtual/floating IP address
+      if it is configured on the watchdog node.
+      -->
+      このコマンドは、watchdogノードに仮想IPアドレスが設定されていた場合、それが停止される直前のタイミングで実行されます。
+     </para>
+     <para>
+      <!--
+      <varname>wd_de_escalation_command</varname> is not available prior to
+      <productname>Pgpool-II</productname><emphasis>V3.5</emphasis>.
+      -->
+      <varname>wd_de_escalation_command</varname>は、<productname>Pgpool-II</productname><emphasis>V3.5</emphasis>より前のバージョンには提供されていません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-failover-behavior">
+  <!--
+  <title>Controlling the Failover behavior</title>
+  -->
+  <title>フェイルオーバの挙動の制御</title>
+
+  <para>
+   <!--
+   These settings are used to control the behavior of backend node failover when the watchdog is enabled.
+   The effect of these configurations is limited to the failover/degenerate requests initiated by
+   <productname>Pgpool-II</productname> internally, while the user initiated detach backend requests
+   (using PCP command) by-pass these configuration settings.
+   -->
+   これらの設定は、<application>watchdog</application>機能が有効な場合に、バックエンドノードのフェイルオーバの動作を制御するために使用されます。
+   これらの設定は、内部的な<productname>Pgpool-II</productname>のフェイルオーバ/縮退要求のみに影響します。
+   一方、(PCPコマンドを使った)ユーザが起動したバックエンド切り離し操作では、これらの設定項目は迂回され適用されません。
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-failover-when-quorum-exists" xreflabel="failover_when_quorum_exists">
+    <term><varname>failover_when_quorum_exists</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>failover_when_quorum_exists</varname> configuration parameter</primary>
+      -->
+      <primary><varname>failover_when_quorum_exists</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      このパラメータを有効にすると、<productname>Pgpool-II</productname>がバックエンドノードの縮退/フェイルオーバを実行する際にクォーラム<indexterm><primary>quorum</primary></indexterm><indexterm><primary>クォーラム</primary></indexterm>が存在するかどうかを考慮するようになります。
+     </para>
+     <para>
+      「クォーラムが存在する」とは、生きているwatchdogノードの数(<productname>Pgpool-II</productname>の数)を全部足して、すべてのwatchdogノードの数に対して多数派を形成できる場合のことを指します。
+      たとえば、watchdogノード数が5のとき、生きているノード数が3以上なら多数派を形成できるのでクォーラムは存在しますが、生きているノード数が2以下なら多数派を形成できないのでクォーラムは存在しません。
+     </para>
+     <para>
+      クォーラムが存在すると、一つのwatchdogノードがバックエンドの障害を誤検知しても他の多数派のノードに否決されるので、障害誤検知に対して堅牢になります。
+      これは<xref linkend="guc-failover-require-consensus">がオン(デフォルト)の動作ですが、設定によって多数派を形成しなくても直ちにフェイルオーバするようにすることもできます。
+       バックエンドの障害を誤って検出した<productname>Pgpool-II</productname>ノードは、障害の発生したバックエンドノードを隔離します。
+     </para>
+     <para>
+      クォーラムの存在の有無は、<xref linkend="pcp-watchdog-info">コマンドを<literal>--verbose</literal>オプション付きで起動することで確認できます。
+       <literal>Quorum state</literal>が<literal>QUORUM EXIST</literal>または<literal>QUORUM IS ON THE EDGE</literal>ならクォーラムは存在します。
+       <literal>Quorum state</literal>が<literal>QUORUM ABSENT</literal>ならクォーラムは存在しません。
+     </para>
+
+     <para>
+      クォーラムが存在しない場合、クォーラムが再び存在するまで、バックエンドの障害を検出した<productname>Pgpool-II</productname>ノードは、障害の発生したバックエンドノードを隔離します。
+     </para>
+
+     <para>
+      隔離されたノードを<command>pcp_detach_node</command>コマンドで強制的にフェイルオーバさせることは可能ですが、<command>pcp_attach_node</command>コマンドで再びアタッチ状態にすることはできません。
+     </para>
+     <para>
+      <!--
+      The quarantine nodes behaves similar to the detached backend nodes but unlike failed/degenerated backends
+      the quarantine status is not propagated to the other <productname>Pgpool-II</productname> nodes in the
+      watchdog cluster, So even if the backend node is in the quarantine state on one
+      <productname>Pgpool-II</productname> node, other <productname>Pgpool-II</productname> nodes may
+      still continue to use that backend.
+      -->
+      <indexterm><primary>quarantine</primary></indexterm><indexterm><primary>隔離</primary></indexterm>隔離されたノードの動作は切り離されたバックエンドノードと似ていますが、フェイルオーバ/縮退と異なり、隔離ステータスはwatchdogクラスタ内の他の<productname>Pgpool-II</productname>ノードに伝播されません。
+      したがって、他の<productname>Pgpool-II</productname>ノードは引き続きそのバックエンドを使用し続ける可能性があります。
+     </para>
+     <para>
+      <!--
+      Although there are many similarities in quarantine and failover operations, but they both differ in a very
+      fundamental way. The quarantine operations does not executes the <xref linkend="guc-failover-command">
+      and silently detaches the problematic node, So in the case when the primary backend node is quarantined, the
+      <productname>Pgpool-II</productname> will not promote the standby to take over the primary responsibilities
+      and until the primary node is quarantined the <productname>Pgpool-II</productname> will not have
+      any useable primary backend node.
+      -->
+      隔離とフェイルオーバ操作には多くの類似点がありますが、どちらも非常に基本的な方法で異なります。
+      隔離操作は<xref linkend="guc-failover-command">を実行せず、障害の発生したノードを隔離します。
+       この隔離されたノードがマスタの場合、<productname>Pgpool-II</productname>はスタンバイをマスタに昇格させないので、マスタノードが隔離されている間は、使用可能なマスタバックエンドノードはありません。
+     </para>
+     <para>
+      更に、障害ノードとは違い、<productname>Pgpool-II</productname>は隔離されたノードに対してはヘルスチェックを実行し続けます。
+      隔離されたノードが到達可能になり次第、そのノードは自動的に再度アタッチされます。
+      これは<productname>Pgpool-II </productname><emphasis>V4.1</emphasis>以降にのみ適用されることに注意してください。
+      それ以前のバージョンをお使いの場合は、隔離されたノードに対する接続性の問題が解決されたら、<xref linkend="pcp-attach-node">を使ってそのノードを復帰させなければなりません。
+     </para>
+
+     <para>
+      <productname>Pgpool-II </productname><emphasis>V4.1</emphasis>以後では、プライマリノードのフェイルオーバに関してwatchdogのマスタノードが合意形成に失敗し、その結果プライマリバックエンドが隔離状態になった場合、そのマスタノードはマスタ/コーディネータの役割を辞退し、次のリーダの選挙の際にwd_priorityを引き下げることにより、クラスタが新しいリーダを選ぶように仕向けます。
+      <note>
+       <para>
+	スタンバイバックエンドの障害時にマスタノードが合意形成に失敗した場合は、特にアクションは起こしません。
+	watchdogマスタが管理する隔離されたスタンバイバックエンドは新しいリーダの選挙を引き起こしません。
+       </para>
+      </note>
+     </para>
+     <para>
+      このパラメータがoffなら、クォーラムが存在しなくても障害が発生するとフェイルオーバします。
+     </para>
+
+     <para>
+      <!--
+      Default is on.
+      -->
+      デフォルト値はonです。
+     </para>
+     <para>
+      <!--
+      <varname>failover_when_quorum_exists</varname> is not available prior to
+      <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>.
+      -->
+      failover_when_quorum_existsは<productname>Pgpool-II </productname><emphasis>V3.7</emphasis>より前では利用できません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバーの起動時にのみ設定できます。
+     </para>
+     <note>
+      <para>
+       <!--
+       enabling <varname>failover_when_quorum_exists</varname> is not allowed in native replication mode.
+       -->
+       ネイティブレプリケーションモードでは<varname>failover_when_quorum_exists</varname>機能は利用できません。
+      </para>
+     </note>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-failover-require-consensus" xreflabel="failover_require_consensus">
+    <term><varname>failover_require_consensus</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>failover_require_consensus</varname> configuration parameter</primary>
+      -->
+      <primary><varname>failover_require_consensus</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      When enabled, <productname>Pgpool-II</productname> will perform the degenerate/failover on a
+      backend node if the watchdog quorum exists and at-least minimum number of nodes necessary
+      for the quorum vote for the failover.
+      -->
+      このパラメータを有効にすると、<productname>Pgpool-II</productname>は、<application>watchdog</application>クォーラムが存在し、少なくともクォーラム投票に必要なノードの最小数があれば、バックエンドノードで縮退/フェイルオーバを実行します。
+     </para>
+     <para>
+      <!--
+      For example, in a three node watchdog cluster, the failover will only be performed until at
+      least two nodes ask for performing the failover on the particular backend node.
+      -->
+      たとえば、3ノードの<application>watchdog</application>のクラスタでは、フェイルオーバは、少なくとも2つのノードが特定のバックエンドノードに対してフェイルオーバの実行要求をするときのみ実行されます。
+     </para>
+
+     <para>
+      このパラメータがoffなら、投票で合意が取れなくてもフェイルオーバします。
+     </para>
+
+     <para>
+      <!--
+      Default is on.
+      -->
+      デフォルト値はonです。
+     </para>
+     <para>
+
+      <!--
+      <caution>
+      <para>
+      When <varname>failover_require_consensus</varname> is
+      enabled, <productname>Pgpool-II</productname> does not
+      execute the failover until it get enough votes from
+      other <productname>Pgpool-II</productname> nodes. So it is
+      strongly recommended to enable the backend health check on
+      all
+      <productname>Pgpool-II</productname> nodes to ensure
+      proper detection of backend node failures.  For more
+      details of health check,
+      see <xref linkend="runtime-config-health-check">.
+     </para>
+     </caution>
+      -->
+      <caution>
+       <para>
+	<varname>failover_require_consensus</varname>が有効な場合、<productname>Pgpool-II</productname>は他            の<productname>Pgpool-II</productname>ノードから充分な投票を得るまでフェイルオーバしません。
+	ですから、正しくバックエンドの障害を検出するために、すべての<productname>Pgpool-II</productname>ノードでヘルスチェックを有効にすることを強く推奨します。
+	ヘルスチェックに関する詳細については、<xref linkend="runtime-config-health-check">をご覧ください。
+       </para>
+      </caution>
+
+      <note>
+       <para>
+        <!--
+        enabling <varname>failover_require_consensus</varname> is not allowed in native replication mode.
+        -->
+        ネイティブレプリケーションモードでは<varname>failover_require_consensus</varname>機能は利用できません。
+       </para>
+      </note>
+
+      <!--
+      <varname>failover_require_consensus</varname> is not available prior to
+      <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>. and it is only
+      effective when <xref linkend="guc-failover-when-quorum-exists"> is enabled
+      -->
+      <productname>Pgpool-II</productname> <emphasis>V3.7</emphasis>より前では<varname>failover_require_consensus</varname>は利用できません。
+      <xref linkend="guc-failover-when-quorum-exists">が有効な場合にのみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバの起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-allow-multiple-failover-requests-from-node" xreflabel="allow_multiple_failover_requests_from_node">
+    <term><varname>allow_multiple_failover_requests_from_node</varname> (<type>boolean</type>)
+     <indexterm>
+      <!--
+      <primary><varname>allow_multiple_failover_requests_from_node</varname> configuration parameter</primary>
+      -->
+      <primary><varname>allow_multiple_failover_requests_from_node</varname> 設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      This parameter works in connection with the
+      <xref linkend="guc-failover-require-consensus">. When enabled, a single <productname>Pgpool-II</productname>
+      node can cast multiple votes for the failover.
+      -->
+      このパラメータは、<xref linkend="guc-failover-require-consensus">と連携して動作します。
+       有効にすると、単一の<productname>Pgpool-II</productname>ノードが複数のフェイルオーバ投票をできます。
+     </para>
+     <para>
+      <!--
+      For example, in a three node watchdog cluster, if one <productname>Pgpool-II</productname> node sends two
+      failover requests for a particular backend node failover, Both requests will be counted as a separate
+      vote in the favor of the failover and <productname>Pgpool-II</productname> will execute the failover,
+      even if it does not get the vote from any other <productname>Pgpool-II</productname> node.
+      -->
+      たとえば、3ノードの<application>watchdog</application>クラスタでは、1つの<productname>Pgpool-II</productname>ノードが特定のバックエンドノードのフェイルオーバに対して2つのフェイルオーバ要求を送信すると、両方の要求が別の投票としてカウントされ、たとえ他の<productname>Pgpool-II</productname>ノードからの投票を得なくても、<productname>Pgpool-II</productname>がフェイルオーバを実行します。 
+     </para>
+
+     <para>
+      たとえば、ヘルスチェックでエラーが検出されても有効投票数に達しない場合、障害が引き続き発生していて次のヘルスチェックで再度エラーが検出されれば、都合2票が投票されることになります。ほかのwatchdogが検出しない恒久的な障害が発生した際にフェイルオーバを引き起こしたい時に有用です。
+     </para>
+
+     <para>
+      <!--
+      Default is off.
+      -->
+      デフォルト値はoffです。
+     </para>
+     <para>
+      <!--
+      <varname>allow_multiple_failover_requests_from_node</varname> is not available prior to
+      <productname>Pgpool-II </productname><emphasis>V3.7</emphasis>. and it is only
+      effective when both <xref linkend="guc-failover-when-quorum-exists"> and
+      <xref linkend="guc-failover-require-consensus"> are enabled
+      -->
+      <varname>allow_multiple_failover_requests_from_node</varname>は、<productname>Pgpool-II </productname><emphasis>V3.7</emphasis>以前では利用できません。
+      <xref linkend="guc-failover-when-quorum-exists">と<xref linkend="guc-failover-require-consensus">の両方が有効な場合にのみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバの起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-enable-consensus-with-half-votes" xreflabel="enable_consensus_with_half_votes">
+    <term><varname>enable_consensus_with_half_votes</varname> (<type>boolean</type>)
+     <indexterm>
+      <primary><varname>enable_consensus_with_half_votes</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      このパラメータは<productname>Pgpool-II</productname>が、クォーラムとフェイルオーバにおける合意を解決する際に、どのように多数決ルールにおける計算を行うかを設定します。
+     </para>
+
+     <note>     
+      <para>
+       このパラメータはバックエンドのフェイルオーバの挙動のみならず、<productname>Pgpool-II</productname>自身のクォーラムとフェイルオーバの挙動にも影響を与えます。
+      </para>
+     </note>
+
+     <para>
+      このパラメータがオンなら、クォーラムとフェイルオーバの合意のために、全体のうち半数の投票だけでよくなります。
+      そうでなければ、全体のうち少なくとも半数に加えて1票の投票が必要になります。
+      フェイルオーバにおいては、これは<xref linkend="guc-failover-require-consensus">と同期して動作します。
+      クォーラムの存在決定、フェイルオーバにおける合意形成の両方において、watchdogクラスタが偶数の<productname>Pgpool-II</productname>ノードから構成されている場合にのみこのパラメータは効果があります。
+      参加者が奇数のwatchdogクラスタにおける多数決決定の際には、このパラメータの設定値は影響しません。
+     </para>
+     <para>
+      たとえば、このパラメータがオンのときは、2ノードのwatchdogクラスタではクォーラムが存在するためには一つの<productname>Pgpool-II</productname>ノードが生きている必要があります。
+      このパラメータがオフのときは、2ノードのwatchdogクラスタではクォーラムが存在するためには2つの<productname>Pgpool-II</productname>ノードが生きている必要があります。
+     </para>
+     <para>
+      このパラメータがオンのときは、4ノードのwatchdogクラスタではクォーラムが存在するためには2つの<productname>Pgpool-II</productname>ノードが生きている必要があります。
+      このパラメータがオフのときは、4ノードのwatchdogクラスタではクォーラムが存在するためには3つの<productname>Pgpool-II</productname>ノードが生きている必要があります。
+     </para>
+     <para>
+      このパラメータがオンのときは、split-brainが発生するリスクがあることに注意してください。
+      たとえば、ノードA, B, C, Dからなる4ノードのクラスタでは、(A, B)と(C, D)の分断された2つのネットワークになる可能性があります。
+      (A, B)と(C, D)にとっては、それぞれ生きた2つのノードが存在するので、クォーラムは依然として存在します。
+      各々のグループはそれぞれのマスタwatchdogを選び、これはすなわちsplit-brainです。
+     </para>
+     <para>
+      デフォルト値はオフです。
+     </para>
+     <para>
+      <varname>enable_consensus_with_half_votes</varname>は<productname>Pgpool-II</productname><emphasis>V4.1</emphasis>よりも前には存在しません。
+      以前のバージョンは、あたかもこのパラメータがオンであるかのように動作します。
+     </para>
+     <para>
+      このパラメータは、サーバの起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-cluster-membership">
+<!--
+  <title>Controlling the watchdog cluster membership </title>
+-->
+  <title>watchdogクラスタメンバーシップの管理</title>
+  <para>
+<!--
+	By default the watchdog cluster consists of all watchdog nodes
+	that are defined in the <filename>pgpool.conf</filename> file
+	irrespective of the current state of the node. Whether the node
+	is <literal>LOST</literal>, <literal>SHUTDOWN</literal>
+	or never started, the node is considered as the member of the
+	watchdog cluster definition as long as it is configured in the
+	configuration file.
+	All the majority rule computations for identifying the existence
+	of a quorum and resolving the consensus are made based on the
+	number of watchdog nodes that makes up the watchdog cluster.
+-->
+   デフォルトではwatchdogクラスタは、現在のノードの状態とは無関係に<filename>pgpool.conf</filename>ファイルに定義されたすべてのwatchdogノードから構成されます。
+   ノードが<literal>LOST</literal>、<literal>SHUTDOWN</literal>、あるいはノードが起動されなかった場合でも、設定ファイルにて設定されている限りはそのノードはwatchdogクラスタの定義に含まれると考えられます。
+   クォーラムの存在と、合意の解決のためのすべての多数決ルールの計算は、watchdogクラスタを構成するwatchdogノードの数に基づいて行われます。
+  </para>
+
+  <para>
+<!--
+	<productname>Pgpool-II</productname> <emphasis>V4.3</emphasis> enables
+	dynamic cluster definition by introducing the concept of
+	<emphasis>Member</emphasis> and <emphasis>Nonmember</emphasis>.
+	If the node's membership gets revoked from the watchdog cluster,
+	then the cluster re-calibrate itself dynamically to adjust all
+	subsequent majority rule computations.
+-->
+    <productname>Pgpool-II</productname> <emphasis>V4.3</emphasis>では<emphasis>メンバー</emphasis>と<emphasis>非メンバー</emphasis>の概念を導入することにより動的にクラスタの定義を変えることができるようになりました。
+	</para>
+	<para>
+<!--
+	All majority rule computations are done based on the number of
+	member watchdog nodes instead of total number of configured nodes.
+-->
+   設定されたノードの合計数ではなく、メンバーwatchdogの数に基づいてすべての多数決ルールの計算が行われます。
+  </para>
+
+  <para>
+<!--
+	For example: In a five node cluster (<filename>pgpool.conf</filename> has five
+	watchdog nodes defined) at-least three nodes need to be alive to make the quorum.
+	With the dynamic cluster membership mechanism the cluster can re-adjust
+	itself to only count the <emphasis>MEMBER</emphasis> nodes
+	(Member node doesn't necessarily need to be alive).
+	That means effectively a single alive node
+	can also fulfill the quorum requirements (depending on the membership criteria settings)
+	if at some point in time the cluster only has one or two member nodes.
+-->
+   たとえば5つのノードのクラスタ(<filename>pgpool.conf</filename>に5つのwatchdogノードが定義されています)では、クォーラムを作成するためには少なくとも3つのノードが生きていることが必要です。
+   動的なクラスタメンバー管理の機構では、クラスタは<emphasis>メンバー</emphasis>ノード(メンバーノードは必ずしも生きている必要はありません)だけを数えるために、自分自身を再調整できます。
+   このことは、ある時点でクラスタが1つあるいは2つのノードだけから構成されているときに、実質的に単一の生きているノードが（メンバーシップ管理の設定によって）クォーラム存在の条件を満たすことができることを意味します。
+  </para>
+
+  <para>
+	<caution>
+		<para>
+<!--
+		Using the dynamic cluster membership has an associated risk of causing a split-brain.
+		So it is strongly recommended to carefully review if the setup requires the dynamic cluster
+		membership and consider using conservative values for related settings.
+-->
+      動的クラスタメンバーシップを使うことにより、split-brainが起こるリスクがあります。
+      設定において動的クラスタメンバーシップが必要かどうかを注意深くレビューし、関連する設定に保守的な設定を行うことを検討することを強く推奨します。
+		</para>
+	</caution>
+  </para>
+
+  <para>
+<!--
+  These settings configures when the node is marked as Nonmember.
+  Leaving all these settings to default values retains the
+  pre <emphasis>V4.3</emphasis> behaviour.
+-->
+   これらの設定項目は非メンバーであると印をつけられたノードを設定します。
+   これらの設定をデフォルト値のままにしておくと、<emphasis>V4.3</emphasis>以前の振る舞いになります。
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-wd-remove-shutdown-nodes" xreflabel="wd_remove_shutdown_nodes">
+    <term><varname>wd_remove_shutdown_nodes</varname> (<type>boolean</type>)
+     <indexterm>
+<!--
+      <primary><varname>wd_remove_shutdown_nodes</varname> configuration parameter</primary>
+-->
+      <primary><varname>wd_remove_shutdown_nodes</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+<!--
+	 When enabled, the <literal>SHUTDOWN</literal> nodes are immediately marked as Nonmember
+	 and removed from the cluster. If the previously shutdown node starts again,
+	 it gets added to cluster automatically.
+-->
+      有効ならば、<literal>SHUTDOWN</literal>ノードは直ちに非メンバーであると印を付けられ、クラスタから削除されます。
+      以前停止されたノードが再起動すると、自動的にクラスタに追加されます。
+     </para>
+<!--
+	 <para> Default is off. </para>
+-->
+	 <para>デフォルトはoffです。</para>
+	</listitem>
+   </varlistentry>
+
+
+   <varlistentry id="guc-wd-lost-node-removal-timeout" xreflabel="wd_lost_node_removal_timeout">
+    <term><varname>wd_lost_node_removal_timeout</varname> (<type>integer</type>)
+     <indexterm>
+<!--
+      <primary><varname>wd_lost_node_removal_timeout</varname> configuration parameter</primary>
+-->
+      <primary><varname>wd_lost_node_removal_timeout</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+<!--
+      Timeout in seconds to mark the <literal>LOST</literal> watchdog node as
+	  Nonmember and remove from the cluster.
+	  When LOST node re-connects to the cluster, its cluster membership is restored.
+-->
+      <literal>LOST</literal>状態のwatchdogノードに非メンバーであると印を付けて、クラスタから削除するまでのタイムアウトの秒単位の時間です。
+      LOSTノードが再接続すると、クラスタメンバーシップは復元されます。
+     </para>
+	 <para>
+<!--
+	 Setting the timeout to <literal>0</literal> disables the removal
+	 of LOST nodes from cluster.
+-->
+      タイムアウトを<literal>0</literal>にすると、LOSTノードをクラスタから削除しません。
+	 </para>
+<!--
+	 <para> Default is 0. </para>
+-->
+
+	 <para>デフォルトは0です。</para>
+	</listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-no-show-node-removal-timeout" xreflabel="wd_no_show_node_removal_timeout">
+    <term><varname>wd_no_show_node_removal_timeout</varname> (<type>integer</type>)
+     <indexterm>
+<!--
+      <primary><varname>wd_no_show_node_removal_timeout</varname> configuration parameter</primary>
+-->
+      <primary><varname>wd_no_show_node_removal_timeout</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+<!--
+      Timeout in seconds to mark the node as Nonmember if it doesn't show up
+	  at cluster initialisation. Nonmember node becomes the cluster Member as
+	  soon as it starts up and connects to the cluster.
+-->
+      クラスタ起動時にノードが現れない(NO-SHOW)場合に、非メンバーであると印を付けるまでのタイムアウトの秒単位の時間です。
+      そのノードが起動してクラスタに接続すると、直ちにその非メンバーノードはクラスタメンバーになります。
+	 </para>
+	 <para>
+<!--
+	 Setting the timeout to <literal>0</literal> disables the removal
+	 of <literal>NO-SHOW</literal> nodes from cluster.
+-->
+      タイムアウトを<literal>0</literal>にすると、<literal>NO-SHOW</literal>ノードをクラスタから削除しません。
+	 </para>
+<!--
+	 <para> Default is 0. </para>
+-->
+	 <para>デフォルトは0です。</para>
+	</listitem>
+  </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-lifecheck">
+  <!--
+  <title>Life checking <productname>Pgpool-II</productname> </title>
+  -->
+  <title><productname>Pgpool-II</productname>の死活監視</title>
+
+  <para>
+   <!--
+   Watchdog checks pgpool-II status periodically. This is called "life check".
+   -->
+   Watchdogは、定期的にpgpool-IIの状態を監視します。
+
+  </para>
+
+  <variablelist>
+
+   <varlistentry id="guc-wd-lifecheck-method" xreflabel="wd_lifecheck_method">
+    <term><varname>wd_lifecheck_method</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_lifecheck_method</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_lifecheck_method</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the method of life check. This can be either of <literal>'heartbeat'</literal> (default),
+      <literal>'query'</literal> or <literal>'external'</literal>.
+      -->
+      死活監視の方法を指定します。
+      指定できる値は <literal>'heartbeat'</literal> (デフォルト)、<literal>'query'</literal>、または<literal>'external'</literal> です。
+     </para>
+     <para>
+      <!--
+      <literal>heartbeat</literal>: In this mode, watchdog sends the heartbeat signals (<acronym>UDP</acronym> packets)
+      periodically to other <productname>Pgpool-II</productname>. Similarly watchdog also receives the signals
+      from other <productname>Pgpool-II</productname> .
+      If there are no signal for a certain period, watchdog regards is as failure
+      of the <productname>Pgpool-II</productname> .
+      -->
+      <literal>'heartbeat'</literal>を指定した場合には、監視は「ハートビートモード」で行われます。
+      watchdog は一定間隔でハートビート信号（UDP パケット）を他の<productname>Pgpool-II</productname>へ送信します。
+      またwatchdogは他の<productname>Pgpool-II</productname>から送られてくる信号を受信します。
+      これが一定時間以上途絶えた場合にはその<productname>Pgpool-II</productname>に障害が発生したと判断します。
+     </para>
+     <para>
+      <!--
+      <literal>query</literal>: In this mode, watchdog sends the monitoring queries
+      to other <productname>Pgpool-II</productname> and checks the response.
+      When installation location between <productname>Pgpool-II</productname>
+      servers is far, <literal>query</literal> may be useful.
+      -->
+      <literal>query</literal>: このモードではwatchdogは監視用のクエリを<productname>Pgpool-II</productname>に発行し、それが成功するかどうかで pgpool-II が生きているかどうかを判断します。
+      <productname>Pgpool-II</productname>サーバ間の設置場所が離れている場合、<literal>query</literal>モードが有効かもしれません。
+      <caution>
+       <para>
+	<!--
+        In query mode, you need to set <xref linkend="guc-num-init-children">
+        large enough if you plan to use watchdog.
+        This is because the watchdog process connects to
+        <productname>Pgpool-II</productname> as a client.
+	-->
+	クエリモードでは、<xref linkend="guc-num-init-children">を十分大きな値にしてください。
+	 watchdogプロセスも<productname>Pgpool-II</productname>にクライアントとして接続するからです。
+       </para>
+      </caution>
+     </para>
+     <para>
+      <!--
+      <literal>external</literal>: This mode disables the built
+      in lifecheck of <productname>Pgpool-II</productname> watchdog
+      and relies on external system to provide node health checking
+      of local and remote watchdog nodes.
+      -->
+      <literal>external</literal>: このモードでは、<productname>Pgpool-II</productname>に組み込みの死活監視は無効になり、watchdogはローカルとリモートのノード死活監視を行うために外部システムを使います。
+     </para>
+
+     <para>
+      <!--
+      <literal>external</literal> mode is not available in versions prior to
+      <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>.
+      -->
+      <literal>external</literal>モードは<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>よりも前のバージョンでは提供されていません。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-monitoring-interfaces-list" xreflabel="wd_monitoring_interfaces_list">
+    <term><varname>wd_monitoring_interfaces_list</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_monitoring_interfaces_list</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_monitoring_interfaces_list</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specify a comma separated list of network device names, to be monitored by the watchdog process
+      for the network link state. If all network interfaces in the list becomes inactive
+      (disabled or cable unplugged), the watchdog will consider it as a complete network failure
+      and the <productname>Pgpool-II</productname> node will commit the suicide.
+      Specifying an <literal>''</literal>(empty) list disables the network interface monitoring.
+      Setting it to <literal>'any'</literal> enables the monitoring on all available network interfaces
+      except the loopback. Default is <literal>''</literal> empty list (monitoring disabled).
+      -->
+      watchdogプロセスがネットワークリンクの状態を監視するネットワークデバイス名をカンマ区切りのリストで指定します。
+      リスト中の全てのネットワークインタフェースが（無効化あるいはケーブルを抜かれることで）非アクティブになると、watchdog はネットワークが完全に故障したと見なし自らを停止させます。
+      <literal>''</literal>（空リスト）を指定するとネットワークインタフェースの監視が無効になります。
+      <literal>'any'</literal>を指定すると、ループバック以外の存在する全てのネットワークインタフェースを監視します。
+      デフォルトの値は<literal>''</literal>空リスト '' （監視は無効）です。
+     </para>
+
+     <para>
+      <!--
+      <varname>wd_monitoring_interfaces_list</varname> is not available in versions prior to
+      <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>.
+      -->
+      <varname>wd_monitoring_interfaces_list</varname>は、<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>よりも前のバージョンでは提供されていません。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-interval" xreflabel="wd_interval">
+    <term><varname>wd_interval</varname> (<type>integer</type>)
+     <indexterm>
+      <primary><varname>wd_interval</varname> configuration parameter</primary>
+      <!--
+      <primary><varname>wd_interval</varname>設定パラメータ</primary>
+      -->
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the interval between life checks of <productname>Pgpool-II</productname>
+      in seconds. (A number greater than or equal to 1) Default is 10.
+      -->
+      <productname>Pgpool-II</productname>が死活監視を行う間隔を秒単位で指定します（１以上の数字）。
+      デフォルトは10です。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-priority" xreflabel="wd_priority">
+    <term><varname>wd_priority</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_priority</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_priority</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      This parameter can be used to elevate the local watchdog node priority in the elections
+      to select leader watchdog node.
+      The node with the higher <varname>wd_priority</varname> value will get selected
+      as leader watchdog node when cluster will be electing its new leader node
+      in the event of old leader watchdog node failure.
+      <varname>wd_priority</varname> is also valid at the time of cluster startup.
+      When some watchdog nodes start up at same time,a node with the higher <varname>wd_priority</varname>
+      value is selected as a leader node.
+      So we should start watchdog nodes in order of <varname>wd_priority</varname> priority to prevent 
+      unintended nodes from being selected as leader.
+      -->
+      このパラメータによってローカルのwatchdogノードがリーダーに選ばれる優先度を上げることができます。
+      古いリーダーノードが故障した状況でクラスタがリーダーノードの選択を行う際に、<varname>wd_priority</varname>が高いノードがリーダーwatchdogノードに選ばれます。
+      <varname>wd_priority</varname>はクラスタの初期起動時にも有効なので、
+      複数のwatchdogノードを同時に起動した場合、<varname>wd_priority</varname>が高いノードがリーダーwatchdogノードに選ばれます。
+      このため、watchdogノードは意図しないノードがリーダーに選ばれることが無いように<varname>wd_priority</varname>の優先順位が高い順に起動するべきです。
+     </para>
+     <para>
+      <!--
+      <varname>wd_priority</varname> is not available in versions prior to
+      <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>.
+      -->
+      <varname>wd_priority</varname>は、<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>よりも前のバージョンでは提供されていません。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-ipc-socket-dir" xreflabel="wd_ipc_socket_dir">
+    <term><varname>wd_ipc_socket_dir</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_ipc_socket_dir</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_ipc_socket_dir</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      The directory where the <acronym>UNIX</acronym> domain socket
+      accepting <productname>Pgpool-II</productname>
+      watchdog <acronym>IPC</acronym> connections will be created.
+      Default is <literal>'/tmp'</literal>.
+      Be aware that this socket might be deleted by a cron job.
+      We recommend to set this value to <literal>'/var/run'</literal> or such directory.
+      -->
+      <productname>Pgpool-II</productname> watchdog の<acronym>IPC</acronym>通信で受け付ける UNIX ドメインソケットが作成されるディレクトリを指定します。
+      デフォルトは<literal>'/tmp'</literal>です。
+      このソケットが cron ジョブで削除されることのないよう気をつけてください。
+      この値は <literal>'/var/run'</literal>などのディレクトリに設定することを推奨します。
+     </para>
+     <para>
+      <!--
+      <varname>wd_ipc_socket_dir</varname> is not available in versions prior to
+      <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>.
+      -->
+      <varname>wd_ipc_socket_dir</varname>は、<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>よりも前のバージョンでは提供されていません。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-lifecheck-heartbeat">
+  <!--
+  <title>Lifecheck Heartbeat mode configuration</title>
+  -->
+  <title>死活監視：ハートビートモードの設定</title>
+
+  <variablelist>
+   <varlistentry id="guc-heartbeat-hostname" xreflabel="heartbeat_hostname">
+    <term><varname>heartbeat_hostnameX</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>heartbeat_hostnameX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>heartbeat_hostnameX</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the <acronym>IP</acronym> address or <acronym>hostname</acronym> of
+      for sending and receiving the heartbeat signals.
+      Multiple destinations can be configured for the heartbeat signals,
+      the number at the end of the parameter name is
+      referred as the "pgpool node id", that starts from 0.
+      -->
+      ハートビート信号を送受信するための<acronym>IP</acronym>アドレスまたは <acronym>ホスト名</acronym>を指定します。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばheartbeat_hostname0)。
+      複数のハートビート信号の送り先をセミコロン(;)で区切って指定することができます。
+     </para>
+     <para>
+      <!--
+      <varname>heartbeat_hostnameX</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'heartbeat'</literal>
+      -->
+      <varname>heartbeat_hostnameX</varname>は、<xref linkend="guc-wd-lifecheck-method">が<literal>'heartbeat'</literal>に設定されている場合のみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-heartbeat-port" xreflabel="heartbeat_port">
+    <term><varname>heartbeat_portX</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>heartbeat_portX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>heartbeat_portX</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the port number for sending the heartbeat signals.
+      Multiple destinations can be configured for the heartbeat signals,
+      the number at the end of the parameter name is
+      referred as the "pgpool node id", that starts from 0.
+      -->
+      ハートビート信号を受信するためのUDPポート番号を指定します。
+      1つのみを指定してください。デフォルトは9694です。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばheartbeat_port0)。
+     </para>
+     <para>
+      <!--
+      <varname>heartbeat_portX</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'heartbeat'</literal>
+      -->
+      <varname>heartbeat_portX</varname>は、<xref linkend="guc-wd-lifecheck-method"> が <literal>'heartbeat'</literal>に設定されている場合のみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-heartbeat-device" xreflabel="heartbeat_device">
+    <term><varname>heartbeat_deviceX</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>heartbeat_deviceX</varname> configuration parameter</primary>
+      -->
+      <primary><varname>heartbeat_deviceX</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the network device name for sending and receiving the heartbeat signals.
+      The number at the end of the parameter name is referred
+      as "pgpool node id", and it starts from 0 (e.g. heartbeat_device0).
+	  You can specify multiple network devices by separating them using semicolon (;).
+      -->
+      ハートビートの送受信に用いるネットワークデバイス名を指定します。
+      パラメータ名の最後にある数字は「pgpool ノードID」で、0から始まります(たとえばheartbeat_device0)。
+      複数のネットワークデバイス名をセミコロン(;)で区切って指定することができます。
+     </para>
+     <para>
+      <!--
+      <varname>heartbeat_deviceX</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'heartbeat'</literal>
+      -->
+      <varname>heartbeat_deviceX</varname>は、<productname>Pgpool-II</productname>をroot権限で起動しているときのみ使用可能です。
+      それ以外の場合は空文字('')のままにしておいてください。
+     </para>
+     <para>
+      <varname>heartbeat_deviceX</varname>は、<xref linkend="guc-wd-lifecheck-method">が<literal>'heartbeat'</literal>に設定されている場合のみ有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+     <example id="example-heartbeat-1">
+      <!--
+      <title>Heartbeat configuration</title>
+      -->
+      <title>Heartbeat 信号を用いた死活監視の設定例</title>
+      <para>
+       <!--
+       If you have 3 pgpool nodes with hostname server1, server2 and server3,
+       you can set the <xref linkend="guc-heartbeat-hostname">,
+       <xref linkend="guc-heartbeat-port"> and <xref linkend="guc-heartbeat-device"> like below:
+       -->
+       Pgpool ノードが3つあり、それぞれのホスト名が server1、server2、server3 の場合、
+       <xref linkend="guc-heartbeat-hostname">、<xref linkend="guc-heartbeat-port">
+       及び<xref linkend="guc-heartbeat-device">を以下のように設定します。
+      <programlisting>
+heartbeat_hostname0 = 'server1'
+heartbeat_port0 = 9694
+heartbeat_device0 = ''
+
+heartbeat_hostname1 = 'server2'
+heartbeat_port1 = 9694
+heartbeat_device1 = ''
+
+heartbeat_hostname2 = 'server3'
+heartbeat_port2 = 9694
+heartbeat_device2 = ''
+      </programlisting>
+      </para>
+     </example>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-heartbeat-keepalive" xreflabel="wd_heartbeat_keepalive">
+    <term><varname>wd_heartbeat_keepalive</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_heartbeat_keepalive</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_heartbeat_keepalive</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the interval time in seconds between sending the heartbeat signals.
+      Default is 2.
+      <varname>wd_heartbeat_keepalive</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'heartbeat'</literal>
+      -->
+      ハートビート信号を送信する間隔（秒）を指定します。
+      デフォルトは2です。
+      <varname>wd_heartbeat_keepalive</varname>は、<xref linkend="guc-wd-lifecheck-method">が<literal>'heartbeat'</literal>に設定されている場合のみ有効です。
+     </para>
+
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-heartbeat-deadtime" xreflabel="wd_heartbeat_deadtime">
+    <term><varname>wd_heartbeat_deadtime</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_heartbeat_deadtime</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_heartbeat_deadtime</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the time in seconds before marking the remote watchdog node as failed/dead node,
+      if no heartbeat signal is received within that time.
+      DDefault is <literal>30</literal>
+      <varname>wd_heartbeat_deadtime</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'heartbeat'</literal>
+      -->
+      このオプションで指定された間隔（秒）の間ハートビート信号が途絶えた場合、リモートのwatchdogに障害が発生したとみなされます。
+      デフォルトは<literal>30</literal>です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </sect2>
+
+ <sect2 id="config-watchdog-lifecheck-query">
+  <title>死活監視：クエリモードの設定</title>
+  <variablelist>
+
+   <varlistentry id="guc-wd-life-point" xreflabel="wd_life_point">
+    <term><varname>wd_life_point</varname> (<type>integer</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_life_point</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_life_point</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the number of times to retry a failed life check of pgpool-II.
+      Valid value could be a number greater than or equal to 1.
+      Default is 3.
+      -->
+      監視クエリの応答が得られなかった場合のリトライ回数を指定します。
+      有効な値は1以上の整数です。
+      デフォルトは3です。
+     </para>
+     <para>
+      <!--
+      <varname>wd_life_point</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'query'</literal>
+      -->
+      <xref linkend="guc-wd-lifecheck-method">が<literal>'query'</literal>の場合のみ、<varname>wd_life_point</varname>は有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-lifecheck-query" xreflabel="wd_lifecheck_query">
+    <term><varname>wd_lifecheck_query</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_lifecheck_query</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_lifecheck_query</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the query to use for the life check of remote <productname>Pgpool-II</productname>.
+      Default is <literal>"SELECT 1"</literal>.
+      -->
+      リモートの<productname>Pgpool-II</productname>の死活監視に使うクエリを指定します。
+      デフォルトは<literal>"SELECT 1"</literal>です。
+     </para>
+     <para>
+      <!--
+      <varname>wd_lifecheck_query</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'query'</literal>
+      -->
+      <xref linkend="guc-wd-lifecheck-method">が<literal>'query'</literal>の場合のみ、<varname>wd_lifecheck_query</varname>は有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-lifecheck-dbname" xreflabel="wd_lifecheck_dbname">
+    <term><varname>wd_lifecheck_dbname</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_lifecheck_dbname</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_lifecheck_dbname</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the database name for the connection used for the
+      life check of remote <productname>Pgpool-II</productname>.
+      Default is <literal>"template1"</literal>.
+      -->
+      リモートの<productname>Pgpool-II</productname>の死活監視用の接続先のデータベース名です。
+      デフォルトは<literal>'template1'</literal>です。
+     </para>
+     <para>
+      <!--
+      <varname>wd_lifecheck_dbname</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'query'</literal>
+      -->
+      <xref linkend="guc-wd-lifecheck-method">が<literal>'query'</literal>の場合のみ、<varname>wd_lifecheck_dbname</varname>は有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-lifecheck-user" xreflabel="wd_lifecheck_user">
+    <term><varname>wd_lifecheck_user</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_lifecheck_user</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_lifecheck_user</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the user name for the connection used for the life
+      check of remote <productname>Pgpool-II</productname>.
+      Default is <literal>"nobody"</literal>.
+      -->
+      リモートの<productname>Pgpool-II</productname>の死活監視用の接続先のユーザ名です。
+      デフォルトは<literal>'nobody'</literal>です。
+     </para>
+     <para>
+      <!--
+      <varname>wd_lifecheck_user</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'query'</literal>
+      -->
+      <xref linkend="guc-wd-lifecheck-method">が<literal>'query'</literal>の場合のみ、<varname>wd_lifecheck_user</varname>は有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="guc-wd-lifecheck-password" xreflabel="wd_lifecheck_password">
+    <term><varname>wd_lifecheck_password</varname> (<type>string</type>)
+     <indexterm>
+      <!--
+      <primary><varname>wd_lifecheck_password</varname> configuration parameter</primary>
+      -->
+      <primary><varname>wd_lifecheck_password</varname>設定パラメータ</primary>
+     </indexterm>
+    </term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the password for the user used for the life check of remote <productname>Pgpool-II</productname>.
+      Default is <literal>''</literal>(empty).
+      -->
+      リモートの<productname>Pgpool-II</productname>の死活監視用の接続先のパスワードです。
+      デフォルトは<literal>''</literal>（空文字）です。
+     </para>
+     <para>
+      <!--
+      If <varname>wd_lifecheck_password</varname> is left blank <productname>Pgpool-II</productname>
+      will first try to get the password for <xref linkend="guc-wd-lifecheck-user"> from
+      <xref linkend="guc-pool-passwd"> file before using the empty password.
+      -->
+      <varname>wd_lifecheck_password</varname>が空白のままであった場合、<productname>Pgpool-II</productname>は空のパスワードを使用する前に<xref linkend="guc-pool-passwd">ファイルから<xref linkend="guc-wd-lifecheck-user">のパスワードの取得を試みます。
+     </para>
+     <para>
+      <!--
+      You can also specify AES256-CBC encrypted password in <varname>wd_lifecheck_password</varname> field.
+      To specify the <literal>AES</literal> encrypted password, password string must be prefixed with
+      <literal>AES</literal> after encrypting (using <literal>aes-256-cbc</literal> algorithm) and
+      encoding to <literal>base64</literal>.
+      -->
+      <varname>wd_lifecheck_password</varname>にAES256-CBCで暗号化されたパスワードも指定することができます。
+      AESで暗号化されたパスワードを指定するためには、パスワード文字列は暗号化（<literal>aes-256-cbc</literal>アルゴリズムを使用）および<literal>base64</literal>でエンコードした後、<literal>AES</literal>を接頭辞として付けなければいけません。
+     </para>
+     <para>
+      <!--
+      To specify the unencrypted clear text password, prefix the password string with
+      <literal>TEXT</literal>. For example if you want to set <literal>mypass</literal> as
+      a password, you should specify <literal>TEXTmypass</literal> in the password field.
+      In the absence of a valid prefix, <productname>Pgpool-II</productname> will considered
+      the string as a plain text password.
+      -->
+      暗号化されていないクリアテキストパスワードを指定するためには、<literal>TEXT</literal>をパスワード文字列の前に付けます。
+      例えば、パスワードとして<literal>mypass</literal>を設定したい場合、パスワードフィールドに<literal>TEXTmypass</literal>と指定すべきです。
+     </para>
+     <para>
+      <!--
+      You can also use <xref linkend="PG-ENC"> utility to create the correctly formatted
+      <literal>AES</literal> encrypted password strings.
+      -->
+      正しくフォーマットされたAESで暗号化されたパスワード文字列を<xref linkend="PG-ENC">コマンドを使用して作成することもできます。
+       <note>
+	<para>
+	 <!--
+	 <productname>Pgpool-II</productname> will require a valid decryption key at the
+	 startup to use the encrypted passwords.
+	 see <xref linkend="auth-aes-decryption-key"> for more details on providing the
+	 decryption key to <productname>Pgpool-II</productname>
+	 -->
+	 <productname>Pgpool-II</productname>は暗号化されたパスワードを使うために起動時に有効な復号鍵を要求します。
+	 <productname>Pgpool-II</productname>に復号鍵を提供する方法の詳細は<xref linkend="auth-aes-decryption-key">を参照してください。
+	</para>
+
+       </note>
+     </para>
+     <para>
+
+      <!--
+      <varname>wd_lifecheck_password</varname> is only applicable if the
+      <xref linkend="guc-wd-lifecheck-method"> is set to <literal>'query'</literal>
+      -->
+      <xref linkend="guc-wd-lifecheck-method">が<literal>'query'</literal>の場合のみ、<varname>wd_lifecheck_password</varname>は有効です。
+     </para>
+     <para>
+      <!--
+      This parameter can only be set at server start.
+      -->
+      このパラメータは、サーバ起動時にのみ設定できます。
+     </para>
+     <para>
+      <!--
+      Default is <literal>''</literal>(empty).
+      -->
+      デフォルトは<literal>''</literal>（空文字）です.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </sect2>
+</sect1>

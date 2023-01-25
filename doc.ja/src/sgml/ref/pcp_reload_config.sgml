@@ -1,0 +1,74 @@
+<!--
+doc/src/sgml/ref/pcp_reload_config.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-RELOAD-CONFIG">
+ <indexterm zone="pcp-reload-config">
+  <primary>pcp_reload_config</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_reload_config</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_reload_config</refname>
+  <refpurpose>
+   Pgpool-IIの設定ファイルを再読込します</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_reload_config</command>
+   <arg rep="repeat"><replaceable>options</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-RELOAD-CONFIG-1">
+  <title>説明</title>
+  <para>
+   <command>pcp_reload_config</command>
+   Pgpool-IIの設定ファイルを再読込します。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>オプション</title>
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-s <replaceable class="parameter">scope</replaceable></option></term>
+     <term><option>--scope=<replaceable class="parameter">scope</replaceable></option></term>
+     <listitem>
+      <para>
+       コマンドの与える影響範囲を指定します。
+      </para>
+      <para>
+　　　　サポートされているコマンドスコープは以下です。
+       デフォルトは"local"です。
+       <itemizedlist>
+	<listitem><para>c, cluster : クラスタを構成するすべてのPgpool-IIの設定ファイルを再読込みします。</para></listitem>
+	<listitem><para>l, local : ローカルPgpool-IIの設定ファイルのみを再読込みします。</para></listitem>
+       </itemizedlist>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>その他のオプション</option></term>
+     <listitem>
+      <para>
+       <xref linkend="pcp-common-options"> を参照してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+</refentry>

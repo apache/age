@@ -1,0 +1,288 @@
+<!-- doc/src/sgml/healthcheck.sgml -->
+
+<sect1 id="runtime-config-health-check">
+ <title>Health Check</title>
+
+ <para>
+  <productname>Pgpool-II</productname> periodically connects to the configured
+  PostgreSQL backends to detect any error on the servers or networks.
+  This error check procedure is called "health check".
+ </para>
+ <para>
+  If <link linkend="runtime-ssl">SSL</link> is enabled, health check
+  process may use SSL connection.
+ </para> 
+ <para>
+  If an error is detected, <productname>Pgpool-II</productname> performs failover
+  or degeneration depending on the configurations.
+  <caution>
+   <para>
+    Health check requires one extra connection to each backend node,
+    so <literal>max_connections</literal> in the <filename>postgresql.conf</filename>
+    needs to be adjusted accordingly.
+   </para>
+  </caution>
+ </para>
+
+ <para>
+  The health check process collects various statistics data such as
+  number of health check count in total. To inspect the statistics
+  data, use <xref linkend="SQL-SHOW-POOL-HEALTH-CHECK-STATS">
+  command. Please note that the data is stored in the shared memory
+  area and it will be initialized upon
+  <productname>Pgpool-II</productname> starting up.
+ </para>
+
+ <para>
+  Following parameter names can also have numeric suffix at the end
+  of each name.  The suffix corresponds to backend id, which is
+  defined in backend information, such
+  as <xref linkend="guc-backend-hostname">.
+  For example, <varname>health_check_timeout0</varname> is applied to
+  backend 0's <varname>health_check_timeout</varname> value.
+ </para>
+ <para>
+  If there's no parameter with suffix, the value for the backend
+  is taken from the parameter name which does not have a suffix. In
+  this sense, parameter names without suffix work like "global
+  variables".
+ </para>
+
+ <variablelist>
+
+  <varlistentry id="guc-health-check-timeout" xreflabel="health_check_timeout">
+   <term><varname>health_check_timeout</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>health_check_timeout</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the timeout in seconds to give up connecting to the backend
+     <productname>PostgreSQL</> if the TCP connect does not succeed within this time.
+    </para>
+    <para>
+     This parameter serves to prevent the health check from waiting for a
+     long time when the network cable is unplugged.
+     Default value is 20. Setting it to 0, disables the timeout (waits until TCP/IP timeout).
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-period" xreflabel="health_check_period">
+   <term><varname>health_check_period</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>health_check_period</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the interval between the health checks in seconds.
+     Default is 0, which means health check is disabled.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-user" xreflabel="health_check_user">
+   <term><varname>health_check_user</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>health_check_user</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the <productname>PostgreSQL</> user name to perform health check.
+     The same user must exist in all the <productname>PostgreSQL</> backends.
+     Otherwise, health check causes an error.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-password" xreflabel="health_check_password">
+   <term><varname>health_check_password</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>health_check_password</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the password for the <productname>PostgreSQL</> user name configured in
+     <xref linkend="guc-health-check-user"> to perform health check.
+      The user and password must be same in all the <productname>PostgreSQL</> backends.
+      Otherwise, health check results in an error.
+    </para>
+    <para>
+     If <varname>health_check_password</varname> is left blank <productname>Pgpool-II</productname>
+     will first try to get the password for <xref linkend="guc-health-check-user"> from
+      <xref linkend="guc-pool-passwd"> file before using the empty password.
+    </para>
+    <para>
+     <productname>Pgpool-II</productname> accepts following forms
+     of password in either <varname>health_check_password</varname>
+     or <xref linkend="guc-pool-passwd"> file:
+      <variablelist>
+
+       <varlistentry>
+	<term>AES256-CBC encrypted password</term>
+	<listitem>
+	 <para>
+	  Most secure and recommended way to store password. The
+	  password string must be prefixed
+	  with <literal>AES</literal>.
+	  You can use <xref linkend="PG-ENC"> utility to create the correctly formatted
+	   <literal>AES</literal> encrypted password strings.
+	   <productname>Pgpool-II</productname> will require a valid decryption key at the
+	   startup to use the encrypted passwords.
+	   see <xref linkend="auth-aes-decryption-key"> for more details on providing the
+	    decryption key to <productname>Pgpool-II</productname>
+	 </para>
+	</listitem>
+       </varlistentry>
+
+       <varlistentry>
+	<term>MD5 hashed password</term>
+	<listitem>
+	 <para>
+	  Not so secure as AES256, but still better than clear
+	  text password. The password string must be prefixed
+	  with <literal>MD5</literal>. Note that the backend
+	  must set up MD5 authentication as well.  You can
+	  use <xref linkend="PG-MD5"> utility to create the
+	   correctly formatted
+	   <literal>MD5</literal> hashed password strings.
+	 </para>
+	</listitem>
+       </varlistentry>
+
+       <varlistentry>
+	<term>Plain text password</term>
+	<listitem>
+	 <para>
+	  Not encrypted, clear text password. You should avoid
+	  to use this if possible. The password string must be
+	  prefixed with <literal>TEXT</literal>. For example if
+	  you want to set <literal>mypass</literal> as a
+	  password, you should
+	  specify <literal>TEXTmypass</literal> in the password
+	  field.  In the absence of a valid
+	  prefix, <productname>Pgpool-II</productname> will
+	  considered the string as a plain text password.
+	 </para>
+	</listitem>
+       </varlistentry>
+
+      </variablelist>
+    </para>
+
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-database" xreflabel="health_check_database">
+   <term><varname>health_check_database</varname> (<type>string</type>)
+    <indexterm>
+     <primary><varname>health_check_database</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the PostgreSQL database name to perform health check.
+     The default is <literal>''</literal>(empty), which tries <literal>"postgres"</literal>
+     database first, then <literal>"template1"</literal> database until it succeeds
+    </para>
+    <para>
+     <varname>health_check_database</varname> was introduced in
+     <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-max-retries" xreflabel="health_check_max_retries">
+   <term><varname>health_check_max_retries</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>health_check_max_retries</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the maximum number of retries to do before giving up and
+     initiating failover when health check fails.
+     <tip>
+      <para>
+       This setting can be useful in spotty networks, when it is expected that
+       health checks will fail occasionally even when the primary node is fine.
+      </para>
+     </tip>
+     <tip>
+      <para>
+       It is advised that <xref linkend="guc-failover-on-backend-error"> must be disabled,
+	if you want to enable <varname>health_check_max_retries</>.
+      </para>
+     </tip>
+     Default is 0, which means do not retry.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-health-check-retry-delay" xreflabel="health_check_retry_delay">
+   <term><varname>health_check_retry_delay</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>health_check_retry_delay</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the amount of time in seconds to sleep between failed
+     health check retries (not used unless <xref linkend="guc-health-check-max-retries"> is > 0).
+      If 0, then retries are immediate without delay.
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-connect-timeout" xreflabel="connect_timeout">
+   <term><varname>connect_timeout</varname> (<type>integer</type>)
+    <indexterm>
+     <primary><varname>connect_timeout</varname> configuration parameter</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     Specifies the amount of time in milliseconds before giving up connecting
+     to backend using <function>connect()</> system call.
+     Default is 10000 ms (10 second). The flaky network user may want to increase the value.
+     0 means no timeout.
+     <note>
+      <para>
+       <varname>connect_timeout</varname> value is not only used for a health check,
+       but also for creating ordinary connection pools.
+      </para>
+     </note>
+    </para>
+    <para>
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+    </para>
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+</sect1>

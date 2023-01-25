@@ -1,0 +1,9 @@
+<!-- doc/src/sgml/problems.sgml -->
+
+<sect1 id="bug-reporting">
+ <title>Bug Reporting Guidelines</title>
+
+ <para>
+  When you find a bug in <productname>Pgpool-II</productname>, please register to our <ulink url="http://pgpool.net/mediawiki/index.php/Bug_tracking_system">bug tracking system</ulink>.
+ </para>
+</sect1>

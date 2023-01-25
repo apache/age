@@ -1,0 +1,700 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<sect1 id="runtime-online-recovery">
+ <!--
+ <title>Online Recovery</title>
+ -->
+ <title>オンラインリカバリ</title>
+
+ <para>
+  <!--
+  <productname>Pgpool-II</productname> can synchronize database
+  nodes and attach a node without stopping the service.  This
+  feature is called <acronym>"online recovery"</acronym>.  Online
+  recovery can be executed by
+  using <xref linkend="pcp-recovery-node"> command.
+  -->
+  <productname>Pgpool-II</productname> はサービスを止めることなくデータベースノードを同期させ、ノードを復帰させることができます。
+  この機能は「<acronym>オンラインリカバリ</acronym>」と呼ばれます。
+  オンラインリカバリは<xref linkend="pcp-recovery-node">コマンドで実行できます。
+ </para>
+ <para>
+  <!--
+  For online recovery, the recovery target node must be in detached
+  state. This means the node must be either manually detached by
+  <xref linkend="pcp-detach-node"> or automatically detached
+  by <productname>Pgpool-II</productname> as a consequence of
+  failover.
+  -->
+  オンラインリカバリを実施するためには、リカバリ対象のノードは<productname>Pgpool-II</productname>から切り離された状態になっていなければなりません。
+  このことは、そのノードが、<xref linkend="pcp-detach-node">で手動で切り離された状態にあるか、フェイルオーバの結果、<productname>Pgpool-II</productname>により自動的に切り離された状態にあるかのいずれかでなければならないことを意味します。
+ </para>
+ <para>
+  <!--
+  If you wish to add a <productname>PostgreSQL</productname> server
+  node dynamically, reload the
+  <filename>pgpool.conf</filename> after adding the
+  <xref linkend="guc-backend-hostname"> and its associated
+  parameters.  This will register the new server
+  to <productname>Pgpool-II</productname> as a detached backend
+  node, after that you execute <xref linkend="pcp-recovery-node"> command,
+  the server is add.
+  -->
+  新しい<productname>PostgreSQL</>サーバを動的に追加したい場合には、<xref linkend="guc-backend-hostname">および関連パラメータを追加した後に<filename>pgpool.conf</filename>を再読み込みします。
+   これにより新しいサーバが切り離された状態のバックエンドノードとして<productname>Pgpool-II</productname>に登録されるので、その後<xref linkend="pcp-recovery-node">コマンドを実行しサーバを追加できます。
+ </para>
+ <!--
+ <caution>
+ <para>
+ Make sure that <command>autovacuum</command> is stopped on the
+ main node (the first node which is up and running) before starting the
+ online recovery. Autovacuum can change the contents of the database which
+ can cause the inconsistency after the online recovery.
+ オンラインリカバリを実行する前に、メインノード(稼働中のノードのうち、一番番号が若いノード)上での<command>autovacuum</command>を停止してください。
+ オンラインリカバリ中に<command>autovacuum</command>が動作すると、データベースの内容が変化する可能性があるため、ノード間の同期がきちんと取れなくなる可能性があります。
+    </para>
+ <para>
+ This applies only if you're recovering with a simple copy mechanism,
+ such as the <command>rsync</command> and doesn't apply when using
+ the PostgreSQL's PITR mechanism.
+ この制限は、<command>rsync</command>などの単純なコピー方法を使っている場合にのみ適用されます。
+ PostgreSQLのPITRを使っている場合は適用されません。
+    </para>
+  </caution>
+ -->
+ <note>
+  <para>
+   <!--
+   The recovery target <productname>PostgreSQL</> server must not be running for performing the online recovery.
+   If the target <productname>PostgreSQL</> server has already started, you must shut it down before
+   starting the online recovery.
+   -->
+   オンラインリカバリ実行のためには、対象となる<productname>PostgreSQL</>サーバは稼働していてはいけません。
+   対象の<productname>PostgreSQL</>がすでに動作中であれば、オンラインリカバリを開始する前にシャットダウンしておいてください。 
+  </para>
+ </note>
+
+ <para>
+  <!--
+  Online recovery is performed in two phases. The first phase is
+  called "first stage" and the second phase is called "second
+  stage". You need to provide scripts for each
+  stage. Only <xref linkend="guc-replication-mode"> requires the
+  second stage.  For other modes including streaming replication
+  mode the second stage is not performed and you don't need to
+  provide a script for the stage
+  in <xref linkend="guc-recovery-2nd-stage-command">. i.e. you can
+  safely leave it as an empty string. Those scripts example can be found in
+  <xref linkend="example-cluster-pgpool-config-online-recovery">.
+  -->
+  オンラインリカバリは2段階に分けて実施されます。
+  第1段階は「ファーストステージ」、第2段階は「セカンドステージ」と呼ばれます。
+  <xref linkend="guc-replication-mode">あるいは<xref linkend="guc-snapshot-isolation-mode">の時のみセカンドステージが必要です。
+   ストリーミングレプリケーションモードを含むその他のモードでは、セカンドステージは実施されず、<xref linkend="guc-recovery-2nd-stage-command">用のスクリプトを用意する必要はありません。
+    つまり、そのエントリを空文字にしておいても問題ありません。
+ </para>
+
+ <para>
+  ファーストステージでは、<productname>PostgreSQL</productname>の<command>pg_basebackup</command>コマンドなどを利用してメイン(プライマリ)ノードのバックアップコピーからレプリカ(スタンバイ)ノードを作ります。
+  ファーストステージ中に更新されたデータは<productname>PostgreSQL</productname>のトランザクションログに記録されます。
+ </para>
+ <para>
+  セカンドステージでは、リカバリ対象のレプリカノードを起動します。
+  この時にトランザクションログが再生され、このレプリカノードは完全にメインノードと同期します。
+ </para>
+ <para>
+  それぞれのステージ用にスクリプトを用意する必要があります。
+  完全なサンプルスクリプトが<ulink url="https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sample/scripts/recovery_1st_stage.sample;hb=refs/heads/master">/etc/pgpool-II/recovery_1st_stage.sample</ulink>および<ulink url="https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sample/scripts/recovery_2nd_stage.sample;hb=refs/heads/master">/etc/pgpool-II/recovery_2nd_stage.sample</ulink>に用意されています。
+  これらのスクリプトを使ったインストール例は<xref linkend="example-cluster-pgpool-config-online-recovery">にあります。
+ </para>
+ <para>
+  <!--
+  Connections from clients are not allowed only in the second stage
+  while the data can be updated or retrieved during the first stage.
+  -->
+  ファーストステージではデータの更新や読み取りができますが、セカンドステージではクライアントからの接続は許されていません。
+ </para>
+ <para>
+  <!--
+  <productname>Pgpool-II</productname> performs the follows steps in online recovery:
+  -->
+  オンラインリカバリでは<productname>Pgpool-II</productname>は以下の手順を実施します。
+ </para>
+ <itemizedlist>
+
+  <listitem>
+   <para>
+    CHECKPOINT.
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    <!--
+    First stage of online recovery.
+    -->
+    オンラインリカバリのファーストステージ。
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    <!--
+    Wait until all client connections have disconnected.
+    -->
+    全てのクライアント接続が切断されるまで待機（<xref linkend="guc-replication-mode">あるいは<xref linkend="guc-snapshot-isolation-mode">のみ）。
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    CHECKPOINT.
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    <!--
+    Second stage of online recovery.
+    -->
+    オンラインリカバリのセカンドステージ（<xref linkend="guc-replication-mode">あるいは<xref linkend="guc-snapshot-isolation-mode">のみ）。
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    <!--
+    Start up postmaster (perform <literal>pgpool_remote_start</literal>)
+    -->
+    postmasterの起動（<literal>pgpool_remote_start</literal>の実施）
+   </para>
+   <para>
+    <!--
+    The <literal>pgpool_remote_start</literal> is script to start up the <productname>PostgreSQL</productname> node of recovery target.
+    <literal>pgpool_remote_start</literal> receives following 2 parameters:
+    -->
+    <literal>pgpool_remote_start</literal>は、リカバリ対象の<productname>PostgreSQL</productname>を起動するためのスクリプトです。
+    <literal>pgpool_remote_start</literal>は次の2つの引数を受けとります。
+    <itemizedlist>
+     <listitem>
+      <para>
+       <!--
+       Hostname of the backend node to be recovered.
+       -->
+       リカバリされるバックエンドノードのホスト名
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Path to the database cluster of the main(primary) node.
+       -->
+       リカバリされるバックエンドノードのデータベースクラスタへのパス
+      </para>
+     </listitem>
+    </itemizedlist>
+    <!--
+    The script example can be found in <xref linkend="example-cluster-pgpool-config-online-recovery">.
+    -->
+    スクリプトの例は<xref linkend="example-cluster-pgpool-config-online-recovery">にあります。
+     <note>
+      <para>
+       <!--
+       The script path and filename are hard coded, <command>$PGDATA/pgpool_remote_start</command> is executed on main(primary) node.
+       -->
+       スクリプトのパスおよびファイル名は固定されており、メイン(プライマリ)ノード上で<command>$PGDATA/pgpool_remote_start</command>が実行されます。
+
+      </para>
+     </note>
+   </para>
+  </listitem>
+  <listitem>
+   <para>
+    <!--
+    Node attach
+    -->
+    ノードの復帰
+   </para>
+  </listitem>
+
+ </itemizedlist>
+ <note>
+  <para>
+   <!--
+   There is a restriction in the online recovery in
+   <xref linkend="guc-replication-mode">. If
+   <productname>Pgpool-II</productname> itself is installed
+   on multiple hosts, online recovery does not work correctly,
+   because <productname>Pgpool-II</productname> has to stop all
+   the clients during the 2nd stage of online recovery.
+   If there are several <productname>Pgpool-II</productname> hosts,
+   only one of them will have received the online recovery command and will
+   block the connections from clients.
+   -->
+   <xref linkend="guc-replication-mode">あるいは<xref linkend="guc-snapshot-isolation-mode">でのオンラインリカバリには制限事項があります。
+    <productname>Pgpool-II</productname>が複数のホストにインストールされている場合、<productname>Pgpool-II</productname>はオンラインリカバリの2ndステージの間全てのクライアントを止める必要があるため、オンラインリカバリは正しく動作しません。
+    複数の<productname>Pgpool-II</productname>ホストがある場合、そのうちの１台のみがオンラインリカバコマンドを受け取り、クライアントからの接続をブロックします。
+  </para>
+ </note>
+ <variablelist>
+
+  <varlistentry id="guc-recovery-user" xreflabel="recovery_user">
+   <term><varname>recovery_user</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>recovery_user</varname> configuration parameter</primary>
+     -->
+     <primary><varname>recovery_user</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     <!--
+     Specifies the <productname>PostgreSQL</> user name to perform online recovery.
+     <varname>recovery_user</varname> must specify superuser,
+     because <function>pgpool_recovery</function> function is executed
+     during online recovery, require superuser privilege.
+     -->
+     オンラインリカバリを行うための<productname>PostgreSQL</>ユーザ名です。
+     オンラインリカバリで実行される<function>pgpool_recovery</function>関数はPostgreSQLのスーパーユーザ権限が必要なため、<varname>recovery_user</varname>にスーパーユーザを指定しなければなりません。
+    </para>
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-password" xreflabel="recovery_password">
+   <term><varname>recovery_password</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>recovery_password</varname> configuration parameter</primary>
+     -->
+     <primary><varname>recovery_password</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     <!--
+     Specifies the password for the <productname>PostgreSQL</> user name configured in
+     <xref linkend="guc-recovery-user"> to perform online recovery.
+     -->
+     オンラインリカバリを行うための PostgreSQL ユーザパスワードです。
+    </para>
+    <para>
+     <!--
+     If <varname>recovery_password</varname> is left blank <productname>Pgpool-II</productname>
+     will first try to get the password for <xref linkend="guc-recovery-user"> from
+     <xref linkend="guc-pool-passwd"> file before using the empty password.
+     -->
+     <varname>recovery_password</varname>が空のままの場合、 <productname>Pgpool-II</productname>は空のパスワードを使用する前にまず<xref linkend="guc-pool-passwd">ファイルから<xref linkend="guc-recovery-user">のパスワードを取得できるか試みます。
+    </para>
+    <para>
+     <!--
+     You can also specify AES256-CBC encrypted password in <varname>recovery_password</varname> field.
+     To specify the <literal>AES</literal> encrypted password, password string must be prefixed with
+     <literal>AES</literal> after encrypting (using <literal>aes-256-cbc</literal> algorithm) and
+     encoding to <literal>base64</literal>.
+     -->
+     <varname>recovery_password</varname>にAES256-CBCで暗号化されたパスワードも指定することができます。
+     <literal>AES</literal>で暗号化されたパスワードを指定するためには、パスワード文字列は暗号化（<literal>aes-256-cbc</literal>アルゴリズムを使用）および<literal>base64</literal>でエンコードした後、<literal>AES</literal>を接頭辞として付けなければいけません。
+    </para>
+    <para>
+     <!--
+     To specify the unencrypted clear text password, prefix the password string with
+     <literal>TEXT</literal>. For example if you want to set <literal>mypass</literal> as
+     a password, you should specify <literal>TEXTmypass</literal> in the password field.
+     In the absence of a valid prefix, <productname>Pgpool-II</productname> will considered
+     the string as a plain text password.
+     -->
+     暗号化されていないクリアテキストパスワードを指定するためには、<literal>TEXT</literal>をパスワード文字列の前に付けます。
+     例えば、パスワードとして<literal>mypass</literal>を設定したい場合、パスワードフィールドに<literal>TEXTmypass</literal>と指定すべきです。
+     有効な接頭辞がない場合、<productname>Pgpool-II</productname>は平文のパスワードとして文字列を見なします。
+    </para>
+    <para>
+     <!--
+     You can also use <xref linkend="PG-ENC"> utility to create the correctly formatted
+     <literal>AES</literal> encrypted password strings.
+     -->
+     正しくフォーマットされた<literal>AES</literal>暗号化パスワードを<xref linkend="PG-ENC">コマンドを使用して作成することもできます。
+      <note>
+       <para>
+	<!--
+	<productname>Pgpool-II</productname> will require a valid decryption key at the
+	startup to use the encrypted passwords.
+	see <xref linkend="auth-aes-decryption-key"> for more details on providing the
+	decryption key to <productname>Pgpool-II</productname>
+	-->
+	<productname>Pgpool-II</productname>は暗号化されたパスワードを使うために起動時に有効な復号鍵を要求します。
+	<productname>Pgpool-II</productname>に復号鍵を提供する方法の詳細は<xref linkend="auth-aes-decryption-key">を参照してください。
+       </para>
+      </note>
+    </para>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-1st-stage-command" xreflabel="recovery_1st_stage_command">
+   <term><varname>recovery_1st_stage_command</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>recovery_1st_stage_command</varname> configuration parameter</primary>
+     -->
+     <primary><varname>recovery_1st_stage_command</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     <!--
+     Specifies a command file to be run by main(primary) node at the
+     first stage of online recovery. The command file must be placed in the
+     database cluster directory for security reasons.
+     For example, if <varname>recovery_1st_stage_command</varname> = <literal>
+     'sync-command'</literal>, then <productname>Pgpool-II</productname> will
+     look for the command script in <literal>$PGDATA</literal> directory and will
+     try to execute <command>$PGDATA/sync-command</command>.
+     -->
+     オンラインリカバリのファーストステージでメイン（プライマリ）ノードで実行されるコマンドを指定します。
+     コマンドファイルはセキュリティ上の観点からデータベースクラスタ内に配置される必要があります。
+     例えば、<varname>recovery_1st_stage_command</varname> = <literal>'sync-command'</literal>となっている場合、<productname>Pgpool-II</productname>はコマンドスクリプトを<literal>$PGDATA</literal>ディレクトリの中で探し、<command>$PGDATA/sync-command</command>を起動しようとします。
+    </para>
+    <para>
+     <!--
+     <varname>recovery_1st_stage_command</varname> receives following 7 parameters:
+     -->
+     <varname>recovery_1st_stage_command</varname>は次の7つの引数を受けとります。 
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       <!--
+       Path to the database cluster of the main(primary) node.
+       -->
+       メイン（プライマリ）ノードのデータベースクラスタへのパス
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Hostname of the backend node to be recovered.
+       -->
+       リカバリされるバックエンドノードのホスト名
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Path to the database cluster of the node to be recovered.
+       -->
+       リカバリされるノードのデータベースクラスタへのパス
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Port number of the main(primary) node (<productname>Pgpool-II</productname> 3.4 or after).
+       -->
+       メイン（プライマリ）ノードのポート番号（<productname>Pgpool-II</productname> 3.4以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Node number to be recovered (<productname>Pgpool-II</productname> 4.0 or after)
+       -->
+       リカバリされるノードの番号（<productname>Pgpool-II</productname> 4.0以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Port number to be recovered (<productname>Pgpool-II</productname> 4.1 or after)
+       -->
+       リカバリされるノードのポート番号（<productname>Pgpool-II</productname> 4.1以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+	<!--
+       Hostname of the main (primary) node
+       (<productname>Pgpool-II</productname> 4.3 or after)
+	-->
+	main (primary)ノードのホスト名（<productname>Pgpool-II</productname> 4.3以降)
+      </para>
+      <para>
+	<!--
+       Before the hostname of the main (primary) node was obtained by
+       using <command>hostname</command> command. This is mostly ok
+       since the script runs on the main (primary) node
+       anyway. However in some systems the hostname obtained
+       by <command>hostname</command> command is different from the
+       hostname defined in backend_hostname configuration parameter.
+       This could cause a trouble
+       in <xref linkend="guc-detach-false-primary"> because it checks
+       connectivity between primary and standby node by
+       using <literal>host</literal> parameter
+       in <varname>primary_conninfo</varname> parameter, which is
+       generated
+       by <varname>recovery_1st_stage_command</varname>. Thus it is
+       strongly recommended to use this parameter instead of
+       using <command>hostname</command> command to obtain the
+       hostname of the primary node
+       in <varname>recovery_1st_stage_command</varname>.
+       -->
+       以前はmain (primary)ノードのホスト名は<command>hostname</command>コマンドを使って取得されていました。
+       スクリプトがmain (primary)ノードで実行されるため、これはほとんどの場合問題になりません。
+       しかし、ある種のシステムでは、<command>hostname</command>コマンドを使って取得したホスト名とbackend_hostname設定パラメータが一致しません。
+       これは<xref linkend="guc-detach-false-primary">で問題になります。
+       なぜなら、<varname>recovery_1st_stage_command</varname>が生成する<varname>primary_conninfo</varname> の<literal>host</literal>パラメータを使ってプライマリとスタンバイの接続性を確認するからです。
+       ですから、<varname>recovery_1st_stage_command</varname>においては、<command>hostname</command>コマンドではなく、このパラメータを使ってプライマリノードのホスト名を得るようにすることを強くおすすめします。
+      </para>
+     </listitem>
+    </itemizedlist>
+
+    <note>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> accept connections and queries
+      while <varname>recovery_1st_stage command</varname> is executed,
+      so you can retrieve and update data.
+      -->
+      <varname>recovery_1st_stage_command</varname>の実行中は<productname>Pgpool-II</productname>は接続やクエリを受け付けており、データの参照や更新を行うことができます。
+     </para>
+    </note>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-2nd-stage-command" xreflabel="recovery_2nd_stage_command">
+   <term><varname>recovery_2nd_stage_command</varname> (<type>string</type>)
+    <indexterm>
+     <!--
+     <primary><varname>recovery_2nd_stage_command</varname> configuration parameter</primary>
+     -->
+     <primary><varname>recovery_2nd_stage_command</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+
+    <para>
+     <!--
+     Specifies a command to be run by main node at the second
+     stage of online recovery. This command is required only
+     <xref linkend="guc-replication-mode">, so for other modes don't need
+     to provide a command file. The command file must be placed in the
+     database cluster directory for security reasons.
+     For example, if <varname>recovery_2nd_stage_command</varname> = <literal>
+     'sync-command'</literal>, then <productname>Pgpool-II</productname> will
+     look for the command script in <literal>$PGDATA</literal> directory and will
+     try to execute <command>$PGDATA/sync-command</command>.
+     -->
+     オンラインリカバリのセカンドステージでメインノードで実行されるコマンドを指定します。
+     これは<xref linkend="guc-replication-mode">あるいは<xref linkend="guc-snapshot-isolation-mode">時のみ必要であるため、他のモードではコマンドファイルを用意する必要はありません。
+      コマンドファイルはセキュリティ上の観点からデータベースクラスタ内に配置される必要があります。
+      例えば、<varname>recovery_2nd_stage_command</varname> = <literal>'sync-command'</literal>となっている場合、<productname>Pgpool-II</productname>はコマンドスクリプトを<literal>$PGDATA</literal>ディレクトリの中で探し、<command>$PGDATA/sync-command</command>を起動しようとします。
+    </para>
+    <para>
+     <!--
+     <varname>recovery_2nd_stage_command</varname> receives following 7 parameters:
+     -->
+     <varname>recovery_2nd_stage_command</varname>は次の7つの引数を受けとります。 
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       <!--
+       Path to the database cluster of the main(primary) node.
+       -->
+       メイン（プライマリ）ノードのデータベースクラスタへのパス
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Hostname of the backend node to be recovered.
+       -->
+       リカバリされるバックエンドノードのホスト名
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Path to the database cluster of the node to be recovered.
+       -->
+       リカバリされるノードのデータベースクラスタへのパス
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Port number of the main(primary) node (<productname>Pgpool-II</productname> 3.4 or after).
+       -->
+       メイン（プライマリ）ノードのポート番号（<productname>Pgpool-II</productname> 3.4以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Node number to be recovered (<productname>Pgpool-II</productname> 4.0 or after)
+       -->
+       リカバリされるノードの番号（<productname>Pgpool-II</productname> 4.0以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       <!--
+       Port number to be recovered (<productname>Pgpool-II</productname> 4.1 or after)
+       -->
+       リカバリされるノードのポート番号（<productname>Pgpool-II</productname> 4.1以降）
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+	<!--
+       Hostname of the main (primary) node
+       (<productname>Pgpool-II</productname> 4.3 or after)
+	-->
+	main (primary)ノードのホスト名（<productname>Pgpool-II</productname> 4.3以降)
+      </para>
+     </listitem>
+    </itemizedlist>
+
+    <note>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> <emphasis>does not</emphasis>
+      accept client connections and queries during the execution
+      of <varname>recovery_2nd_stage_command</varname> command, and waits
+      for the existing clients to close their connections before executing the
+      command.
+      Therefore, the <varname>recovery_2nd_stage_command</varname> may not execute
+      if the client stays connected for a long time.
+      -->
+      <varname>recovery_2nd_stage_command</varname>の実行中は、<productname>Pgpool-II</productname>はクライアントからの接続およびクエリを<emphasis>受け付けません</emphasis>。
+      また、コマンドを実行する前に既存のクライアントが接続を閉じるのを待ちます。
+      そのため、長時間接続したままのクライアントがいる場合、<varname>recovery_2nd_stage_command</varname>は実行されない可能性があります。
+     </para>
+    </note>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-recovery-timeout" xreflabel="recovery_timeout">
+   <term><varname>recovery_timeout</varname> (<type>integer</type>)
+    <indexterm>
+     <!--
+     <primary><varname>recovery_timeout</varname> configuration parameter</primary>
+     -->
+     <primary><varname>recovery_timeout</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     <!--
+     Specifies the timeout in seconds to cancel the online recovery if it
+     does not completes within this time.
+     Since <productname>Pgpool-II</productname> does not accepts the connections
+     during the second stage of online recovery, this parameter can be used to cancel
+     the online recovery to manage the service down time during the online recovery.
+     -->
+     時間内にオンラインリカバリが完了しなかった場合に、これをキャンセルするためのタイムアウトを秒単位で指定します。
+     <productname>Pgpool-II</productname>は、オンラインリカバリのセカンドステージの間は接続を受け付けないので、このパラメータはオンラインリカバリの最中のサーバがダウンした時にオンラインリカバリをキャンセルするのに使えます。
+    </para>
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+    </para>
+   </listitem>
+  </varlistentry>
+
+  <varlistentry id="guc-client-idle-limit-in-recovery" xreflabel="client_idle_limit_in_recovery">
+   <term><varname>client_idle_limit_in_recovery</varname> (<type>integer</type>)
+    <indexterm>
+     <!--
+     <primary><varname>client_idle_limit_in_recovery</varname> configuration parameter</primary>
+     -->
+     <primary><varname>client_idle_limit_in_recovery</varname> 設定パラメータ</primary>
+    </indexterm>
+   </term>
+   <listitem>
+    <para>
+     <!--
+     Specifies the time in seconds to disconnect a client if it remains idle
+     since the last query during the online recovery.
+     <varname>client_idle_limit_in_recovery</varname> is similar to the
+     <xref linkend="guc-client-idle-limit"> but only takes effect during the
+     second stage of online recovery.
+     -->
+     オンラインリカバリの最中で、クライアントが前回のクエリからアイドル状態のままでいるときに、それを切断するまでの時間を秒単位で指定します。
+     <varname>client_idle_limit_in_recovery</varname>は<xref linkend="guc-client-idle-limit">と似ていますが、オンラインリカバリのセカンドステージでのみ効果を持ちます。
+    </para>
+    <para>
+     <!--
+     This is useful for preventing the <productname>Pgpool-II</productname>
+     recovery from being disturbed by the lazy clients or if the TCP/IP
+     connection between the client and <productname>Pgpool-II</productname>
+     is accidentally down (a cut cable for instance).
+     -->
+     これは、だらしないクライアントや<productname>Pgpool-II</productname>の間のTCP/IPコネクションの不調（例えばケーブルの切断など）によって、<productname>Pgpool-II</productname>のリカバリが邪魔されるのを防止するのに役立ちます。
+    </para>
+
+    <note>
+     <para>
+      <!--
+      <varname>client_idle_limit_in_recovery</varname> must be smaller than
+      <xref linkend="guc-recovery-timeout">.
+      Otherwise, <xref linkend="guc-recovery-timeout"> comes
+      first and you will see following error while executing online recovery:
+      -->
+      <varname>client_idle_limit_in_recovery</varname>は、<xref linkend="guc-recovery-timeout">よりも小さな値でなければなりません。
+       さもないと、<xref linkend="guc-recovery-timeout">のタイムアウトが先に起こり、オンラインリカバリを実行中に以下のエラーとなります。
+	<programlisting>
+ERROR:  node recovery failed, waiting connection closed in the other pgpools timeout
+	</programlisting>
+     </para>
+    </note>
+
+    <para>
+     <!--
+     If set to -1, all clients get immediately disconnected when the second
+     stage of online recovery starts.
+     The default is 0, which turns off the feature.
+     -->
+     -1に設定すると、オンラインリカバリのセカンドステージが始まると全てのクライアントは直ちに切断されます。
+     デフォルト値は0で、この機能は無効です。
+    </para>
+
+    <para>
+     <!--
+     This parameter can be changed by reloading the <productname>Pgpool-II</> configurations.
+     You can also use <xref linkend="SQL-PGPOOL-SET"> command to alter the value of
+     this parameter for a current session.
+     -->
+     このパラメータは<productname>Pgpool-II</>の設定を再読み込みすることで変更可能です。
+     現在のセッションでのパラメータ値は、<xref linkend="SQL-PGPOOL-SET">コマンドで変更することもできます。
+    </para>
+   </listitem>
+  </varlistentry>
+
+ </variablelist>
+</sect1>

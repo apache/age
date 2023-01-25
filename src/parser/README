@@ -1,0 +1,49 @@
+Generating minimal and standard parser files
+--------------------------------------------
+To generate minimal and standard grammar files issue 'make generate_parsers'
+from Pgpool-II/src/parser directory. This will use gram_template.y file and
+will generate two grammar files. gram_minimal.y (for the minimal parser) and
+gram.y (for the standard parser).
+
+'make generate_parsers' uses sunifdef (http://www.linuxcertif.com/man/1/sunifdef/) 
+utility to generate the parsers. And If the 'sunifdef' utility is present on the
+the system in the standard path then the configure will automatically pick it up
+by itself. But in the case when the sunifdef is not present in the default path
+then you can use "--with-sunifdef=sunifdef_dir' configure switch to provide the
+'sunifdef' path.
+
+Notes on importing the PostgreSQL parser
+----------------------------------------
+To import the PostgreSQL parser, merge all the changes in gram_template.y file
+from PostgreSQL's gram.y, and then run 'make generate_parsers' to generate
+updated minimal and standard grammar files for Pgpool-II
+
+Controlling minimal and standard parser output
+-----------------------------------------------
+All the code in gram_template.y file inside  #ifdef pgpool_minimal_parser section
+will only gets included in the gram_minimal.y file while the code inside
+#ifndef pgpool_minimal_parser section will only be included in the standard parser
+file.
+Similarly, the unconditional code which is not in either
+#ifndef pgpool_minimal_parser or #ifdef pgpool_minimal_parser will become part of
+both the parser.
+
+Example:1
+---------
+#ifdef pgpool_minimal_parser
+code only for the minimal parser
+#else
+code only for the standard parser
+#endif
+code for both parsers
+..
+
+Example:2
+---------
+#ifndef pgpool_minimal_parser
+code only for the standard parser
+#else
+code only for the minimal parser
+#endif
+code for both parsers
+

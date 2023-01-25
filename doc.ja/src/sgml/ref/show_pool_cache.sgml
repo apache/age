@@ -1,0 +1,81 @@
+<!--
+    doc/src/sgml/ref/show_pool_cache.sgml
+    Pgpool-II documentation
+  -->
+
+<refentry id="SQL-SHOW-POOL-CACHE">
+ <indexterm zone="sql-show-pool-cache">
+  <primary>SHOW</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>SHOW POOL_CACHE</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SHOW POOL_CACHE</refname>
+  <refpurpose>
+   <!--
+   displays cache storage statistics
+   -->
+   クエリキャッシュのヒット率や、キャッシュストレージの状況を表示する
+  </refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <synopsis>
+   SHOW POOL_CACHE
+  </synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+
+  <para>
+   <command>SHOW POOL_CACHE</command>
+   <!--
+   displays <link linkend="runtime-in-memory-query-cache">in memory
+   query cache </link> statistics if in memory query cache is
+   enabled.  Here is an example session:
+   -->
+   は <link linkend="runtime-in-memory-query-cache"> インメモリクエリキャッシュ</link> が有効である場合に、
+   クエリキャッシュのヒット率や、キャッシュストレージの状況を表示します。 例を示します。
+   <programlisting>
+    test=# \x
+    \x
+    Expanded display is on.
+    test=# show pool_cache;
+    show pool_cache;
+    -[ RECORD 1 ]---------------+---------
+    num_cache_hits              | 891703
+    num_selects                 | 99995
+    cache_hit_ratio             | 0.90
+    num_hash_entries            | 131072
+    used_hash_entries           | 99992
+    num_cache_entries           | 99992
+    used_cache_entries_size     | 12482600
+    free_cache_entries_size     | 54626264
+    fragment_cache_entries_size | 0
+   </programlisting>
+
+  </para>
+
+  <note>
+   <para>
+<!--
+    If the cache storage is <literal>memcached</literal>, values for
+    all columns except num_cache_hits, num_selects and cache_hit_ratio
+    show 0.
+-->
+    キャッシュストレージが<literal>memcached</literal>のときは、num_cache_hits, num_selects, cache_hit_ratio以外の列の値は0になります。
+   </para>
+  </note>
+
+ </refsect1>
+
+</refentry>

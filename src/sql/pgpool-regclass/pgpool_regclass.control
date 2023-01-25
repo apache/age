@@ -1,0 +1,5 @@
+# pgpool-regclass extension
+comment = 'replacement for regclass'
+default_version = '1.0'
+module_pathname = '$libdir/pgpool-regclass'
+relocatable = true

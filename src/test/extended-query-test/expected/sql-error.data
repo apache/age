@@ -1,0 +1,20 @@
+FE=> Parse(stmt="S1", query="BEGIN")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Parse(stmt="S2", query="SELECT * FROM non_existsing_table")
+FE=> Bind(stmt="S2", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S2")
+FE=> Parse(stmt="S1", query="COMMIT")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE CloseComplete
+<= BE ErrorResponse(S ERROR V ERROR C 42P01 M relation "non_existsing_table" does not exist P 15 F parse_relation.c L 1180 R parserOpenTable )
+<= BE ReadyForQuery(E)
+FE=> Terminate

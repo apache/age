@@ -1,0 +1,4 @@
+./run-test parse_schedule
+testcase insert:	OK
+testcase update:	OK
+testcase misc:	OK

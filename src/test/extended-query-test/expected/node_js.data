@@ -1,0 +1,11 @@
+FE=> Parse(stmt="", query="SELECT 1")
+FE=> Bind(stmt="", portal="")
+FE=> Execute(portal="")
+FE=> Flush
+<= BE ParseComplete
+<= BE BindComplete
+<= BE DataRow
+<= BE CommandComplete(SELECT 1)
+FE=> Sync
+<= BE ReadyForQuery(I)
+FE=> Terminate

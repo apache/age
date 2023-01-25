@@ -1,0 +1,6 @@
+UPDATE "rel1" SET "c1" = DEFAULT, "c2" = '2009-01-01 23:59:59.123456+09'
+UPDATE rel2 SET c1 = DEFAULT, c2 = DEFAULT
+UPDATE "rel1" SET "c1" = "pg_catalog"."timestamptz"('2009-01-01 23:59:59.123456+09'::text), "c2" = '2009-01-01 23:59:59.123456+09'::text::date
+UPDATE "rel1" SET ("c3", "c4") = ('2009-01-01 23:59:59.123456+09'::text::timestamptz,'2009-01-01 23:59:59.123456+09'::text::timetz)
+UPDATE "rel1" SET "c1" = '2009-01-01 23:59:59.123456+09'::text::timestamp, "c2" = '2009-01-01 23:59:59.123456+09'::text::time
+PREPARE "q" (int4,timestamptz) AS UPDATE "rel1" SET "c1" = $1, "c2" = $2::text::date

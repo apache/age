@@ -1,0 +1,549 @@
+<!--
+doc/src/sgml/ref/pgpool_setup.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PGPOOL-SETUP">
+ <indexterm zone="pgpool-setup">
+  <primary>pgpool_setup</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pgpool_setup</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Other Commands</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgpool_setup</refname>
+  <refpurpose>
+   <!--
+   Create a temporary installation of Pgpool-II cluster</refpurpose>
+   -->
+   <productname>Pgpool-II</productname> クラスタのテスト環境を構築するツール</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgpool_setup</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PGPOOL-SETUP-1">
+  <!--
+  <title>Description</title>
+  -->
+  <title>説明</title>
+  <para>
+   <application>pgpool_setup</application>
+   <!--
+   creates a temporary
+   installation of <productname>Pgpool-II</productname> cluster, which
+   includes a <productname>Pgpool-II</productname> installation and
+   specified number of <productname>PostgreSQL</productname>
+   installations under current directory.
+   Current directory must be empty before running <application>pgpool_setup</application>.
+   -->
+   はカレントディレクトリで <productname>Pgpool-II</productname>
+   とノード数が指定できる複数の <productname>PostgreSQL</productname>
+   のクラスタテスト環境を構築するツールです。
+   カレントディレクトリは空である必要があります。
+  </para>
+  <para>
+   <!--
+   <application>pgpool_setup</application> is for testing purpose
+   only and should not be used to create production installations.
+   -->
+   <application>pgpool_setup</application> はテストのために使うツールなので、
+   実際の業務システムで利用することはおすすめしません。
+  </para>
+
+  <para>
+   <application>pgpool_setup</application> はlocalhostに対して<application>ssh</application>を実行します。
+   パスワード無しで<application>ssh</application>でlocalhostにログインできるように事前に設定してください。
+  </para>
+
+  <para>
+   <!--
+   Currently <application>pgpool_setup</application> supports
+   streaming replication mode, native replication mode, raw mode and
+   logical replication mode.  To support watchdog,
+   see <xref linkend="WATCHDOG-SETUP"> for details.
+   -->
+   現在、「ストリーミングレプリケーションモード」、「ネイティブレプリケーションモード」、「raw モード」、「ロジカルレプリケーションモード」及び「スナップショットアイソレーションモード」に対応しています。
+   Watchdog  の対応については  <xref linkend="WATCHDOG-SETUP"> をご参照下さい。
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Options</title>
+  -->
+  <title>オプション</title>
+  <para>
+   <!--
+   <application>pgpool_setup</application> accepts the following command-line arguments:
+   -->
+   <application>pgpool_setup</application> は以下のコマンドライン引数を受け付けます:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the running mode.  <replaceable>mode</replaceable>
+       can be <literal>r</literal> (native replication mode), <literal>s</literal> (streaming replication mode),
+       <literal>n</literal> (raw mode), <literal>l</literal>
+       (logical replication mode) or <literal>y</literal> (slony mode).  If this is
+       omitted, <literal>s</literal> is assumed.
+       -->
+       動作モードを指定します。<replaceable>mode</replaceable>は
+       <literal>r</literal> (ネイティブレプリケーションモード), <literal>s</literal> (ストリーミングレプリケーションモード)、<literal>n</literal> (raw モード)、<literal>l</literal> (ロジカルレプリケーションモード)、<literal>y</literal>（slonyモード）及び<literal>i</literal>（スナップショットアイソレーションモード）を指定できます。
+       指定しない場合は、<literal>s</literal> (ストリーミングレプリケーションモード) を指定したと見なされます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n <replaceable class="parameter">num_clusters</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the number of PostgreSQL installations.
+       If this is omitted, <literal>2</literal> is used.
+       -->
+       PostgreSQL のノード数を指定します。指定しない場合は、ノード数が 2 です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-p <replaceable class="parameter">base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specify the base port number used by Pgpool-II and PostgreSQL.
+       Pgpool-II port is base_port. pcp port is base_port + 1. The
+       first PostgreSQL node's port is base_port + 2, second
+       PostgreSQL node's port is base_port + 3 and so on.
+       ベースとなるポート番号を指定します。
+       -->
+       ベースとなるポート番号を指定します。
+       Pgpool-II のポートは base_port、pcp のポートは base_port + 1、
+       最初の PostgreSQL ノードのポートは base_port + 2、
+       2 番目の PostgreSQL ノードのポートは base_port + 3 というようになります。
+      </para>
+      <para>
+       <!--
+       If -pg option is specified, the first PostgreSQL node's port is
+       assigned to pg_base_port, the second PostgreSQL node's port is
+       pg_base_port + 1 and so on.
+       -->
+       -pg オプションを指定した場合、 最初の PostgreSQL ノードのポートは pg_base_port、
+       2 番目の PostgreSQL ノードのポートは pg_base_port + 1 というように割り当てていきます。
+
+      </para>
+      <para>
+       <!--
+       If this is omitted, <literal>11000</literal> is used.
+       -->
+       指定しない場合、ベースとなるポート番号は 11000 です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-pg <replaceable class="parameter">pg_base_port</replaceable></option></term>
+     <listitem>
+      <para>
+       <!--
+       Specify the base port number used by PostgreSQL.
+       The first PostgreSQL node's port is base_port + 2, second
+       PostgreSQL node's port is base_port + 3 and so on.
+       -->
+       <productname>PostgreSQL</productname> のベースとなるポート番号を指定します。
+       最初の <productname>PostgreSQL</productname> ノードのポートは <literal>pg_base_port</literal>、
+       2 番目の <productname>PostgreSQL</productname> ノードのポートは <literal>pg_base_port</literal> + 1 というようになります。
+      </para>
+      <para>
+       <!--
+       If this is omitted, <literal>base_port</literal>+2 is used.
+       -->
+       省略した場合は、 <literal>base_port</literal>+2 が使われます。
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>--no-stop</option></term>
+     <listitem>
+      <para>
+       <!--
+       Do not stop pgpool and PostgreSQL after the work.
+       -->
+       セットアップ終了後に <productname>Pgpool-II</productname>, PostgreSQL を終了しません。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <listitem>
+      <para>
+       <!--
+       Start pgpool with debug mode.
+       -->
+       デバッグモードで <productname>Pgpool-II</productname> を起動します。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-s</option></term>
+     <listitem>
+      <para>
+       <!--
+
+       In streaming replication mode, use replication slot instead
+       of archive.  Since the archive directory is shared by all
+       <productname>PostgreSQL</productname> clusters, if a standby
+       is promoted, the time line in the archive directory will be
+       changed and other standby servers will be stopped. Using a
+       replication slot does not have this problem and is always
+       preferable if you can
+       use <productname>PostgreSQL</productname> 9.4 or later, which
+       supports replication slot. The replication slot name used
+       by <application>pgpool_setup</application>
+       is <literal>pgpool_setup_slot</literal>.
+
+       -->
+       ストリーミングレプリケーションモードの時に、アーカイブの代わりにレプリケーションスロットを使います。
+       アーカイブディレクトリは<productname>PostgreSQL</productname>クラスタに共有されているので、スタンバイが昇格すると、アーカイアブディレクトリ内のタイムラインが変わり、他のスタンバイが停止してしまいます。
+       レプリケーションスロットを使うとこの問題が起きないので、レプリケーションスロットをサポートしている<productname>PostgreSQL</productname> 9.4以降が使えるのであれば、常にレプリケーションスロットを使うのがお勧めです。
+       <application>pgpool_setup</application>が使うレプリケーションスロット名は、<literal>pgpool_setup_slot</literal>です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-r</option></term>
+     <listitem>
+      <para>
+       <!--
+       Use <command>pg_rewind</command> command in recovery script
+       (basebackup.sh).  If the command fails, switch to use ordinal
+       rsync command.  In certain cases recovery
+       using <command>pg_rewind</command> is much faster than rsync
+       since it does not copy whole database cluster.
+       -->
+       リカバリスクリプト(basebackup.sh)中で<command>pg_rewind</command>を使います。
+       このコマンドが失敗すると、通常のrsyncを使います。
+       <command>pg_rewind</command>は、データベースクラスタのすべてをコピーしないので、rsyncに比べてずっと高速になることがあります。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-e</option></term>
+     <listitem>
+      <para>
+<!--
+       Omit to create <productname>PostgreSQL</productname> database
+       clusters. This option is intended to be used by
+       <command>watchdog_setup</command> and probably useless for
+       other purposes.
+-->
+       <productname>PostgreSQL</productname>データベースクラスタの作成を省略します。このオプションは<command>watchdog_setup</command>で使われることを想定しており、おそらく他の目的の役には立たないでしょう。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-t</option></term>
+     <listitem>
+      <para>
+<!--
+       Set some additional parameters to pgpool.conf so that the
+       regression test can performs tests against existing
+       installation.  Currently the parameter is
+       <xref linkend="guc-health-check-test">.
+-->
+       regression testが既存のインストールに対して実行できるように、pgpool.confに追加のパラメータを設定します。
+       今の所、そのようなパラメータとしては<xref linkend="guc-health-check-test">があります。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-c</option></term>
+     <listitem>
+      <para>
+<!--
+       Use the sample scripts and configuration files installed in
+       <filename>/etc/pgpool-II/</filename> directory.
+-->
+       <filename>/etc/pgpool-II/</filename>ディレクトリにインストールされているサンプルスクリプトと設定ファイルを使います。
+      </para>
+      <para>
+<!--
+       This option was added for the purpose of testing the sample scripts and
+       configuration files contained in <productname>Pgpool-II</productname> RPM packages.
+       Make sure you have installed the sample scripts and configuration files in
+       <filename>/etc/pgpool-II/</filename> directory before you specify this option.
+-->
+       このオプションは、<productname>Pgpool-II</productname>のRPMパッケージに含まれているサンプルスクリプトと設定ファイルをテストする目的で追加されたオプションです。
+       このオプションを指定する前に、サンプルスクリプトと設定ファイルが<filename>/etc/pgpool-II/</filename>ディレクトリにインストールされていることを確認してください。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Environment variables</title>
+  -->
+  <title>環境変数</title>
+  <para>
+   <!--
+   <application>pgpool_setup</application> recognizes following environment variables:
+   -->
+   <application>pgpool_setup</application> は以下の環境変数を使用します:
+
+   <variablelist>
+
+    <varlistentry>
+     <term><option>PGPOOL_INSTALL_DIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the Pgpool-II installation directory. Pgpool-II
+       binaries is expected to be placed under PGPOOL_INSTALL_DIR/bin
+       and pgpool.conf and pool_hba.conf etc. are expected to be placed under
+       PGPOOL_INSTALL_DIR/etc. The default is /usr/local.
+       -->
+       <productname>Pgpool-II</productname> のインストールディレクトリを指定します。
+       <productname>Pgpool-II</productname> バイナリーは PGPOOL_INSTALL_DIR/bin ディレクトリ以下、
+       <filename>pgpool.conf</filename> と <filename>pool_hba.conf</filename>
+       などは PGPOOL_INSTALL_DIR/etc ディレクトリ以下にインストールされます。
+       デフォルトでは /usr/local ディレクトリ以下にインストールされます。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGPOOLDIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to Pgpool-II configuration files.
+       The default is PGPOOL_INSTALL_DIR/etc.
+       -->
+       <productname>Pgpool-II</productname> 設定ファイルへのパスを指定します。
+       デフォルトでは PGPOOL_INSTALL_DIR/etc です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGBIN</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to PostgreSQL commands such as initdb, pg_ctl and psql.
+       The default is /usr/local/pgsql/bin.
+       -->
+       initdb、pg_ctl と psql など <productname>PostgreSQL</productname> コマンドへのパスを指定します。
+       デフォルトでは、/usr/local/pgsql/bin です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGLIB</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to PostgreSQL shared libraries.
+       The default is /usr/local/pgsql/lib.
+       -->
+       <productname>PostgreSQL</productname> の共有ライブラリへのパスを指定します。
+       デフォルトでは、/usr/local/pgsql/lib です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>PGSOCKET_DIR</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the path to Unix socket directory.
+       The default is /tmp.
+       -->
+       Unixソケットのディレクトリへのパスを指定します。
+       デフォルトでは /tmp です。
+      </para>
+     </listitem>
+    </varlistentry>
+    <varlistentry>
+     <term><option>INITDBARG</option></term>
+     <listitem>
+      <para>
+       <!--
+       Specifies the arguments for initdb command.
+       The default is "no-locale -E UTF_8".
+       -->
+       initdb コマンドの引数を指定します。
+       デフォルトでは "--no-locale -E UTF_8" です。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>USE_REPLICATION_SLOT</option></term>
+     <listitem>
+      <para>
+       <!--
+       If "true", in streaming replication mode, use replication slot instead
+       of archive. This brings the same effect as "-s" option is specified.
+       -->
+       ストリーミングレプリケーション環境において、この環境変数が"true"に指定されると、アーカイブログの代わりにレプリケーションスロットを使います。
+       これは、"-s"オプションを使ったのと同じ効果をもたらします。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>USE_PG_REWIND</option></term>
+     <listitem>
+      <para>
+       <!--
+       If "true", in streaming replication mode, use <command>pg_rewind</command> in basebackup.sh script.
+       This brings the same effect as "-r" option is specified.
+       -->
+       ストリーミングレプリケーション環境において、この環境変数が"true"に指定されると、basebackup.sh中で<command>pg_rewind</command>を使います。
+       これは、"-r"オプションを使ったのと同じ効果をもたらします。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>ENABLE_TEST</option></term>
+     <listitem>
+      <para>
+<!--
+       If "true", act as if "-t" option is specified.
+-->
+       "true"ならあたかも"-t"オプションが与えられたかのように振る舞います。
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>TEST_SAMPLES</option></term>
+     <listitem>
+      <para>
+<!--
+       If "true", act as if "-c" option is specified.
+-->
+       "true"ならあたかも"-c"オプションが与えられたかのように振る舞います。
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <!--
+  <title>Example</title>
+  -->
+  <title>出力例</title>
+  <para>
+   <screen>
+$ pgpool_setup 
+PostgreSQL major version: 124
+Starting set up in streaming replication mode
+creating startall and shutdownall
+creating failover script
+creating database cluster /tmp/test/data0...done.
+update postgresql.conf
+creating pgpool_remote_start
+creating basebackup.sh
+creating recovery.conf
+creating database cluster /tmp/test/data1...done.
+update postgresql.conf
+creating pgpool_remote_start
+creating basebackup.sh
+creating recovery.conf
+temporarily start data0 cluster to create extensions
+temporarily start pgpool-II to create standby nodes
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:19
+ 1       | /tmp     | 11003 | down   | 0.500000  | standby | 0          | false             | 0                 |                   |                        | 2020-08-18 13:50:18
+(2 rows)
+
+recovery node 1...pcp_recovery_node -- Command Successful
+done.
+creating follow primary script
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:19
+ 1       | /tmp     | 11003 | up     | 0.500000  | standby | 0          | false             | 0                 |                   |                        | 2020-08-18 13:50:23
+(2 rows)
+
+shutdown all
+
+pgpool-II setting for streaming replication mode is done.
+To start the whole system, use /tmp/test/startall.
+To shutdown the whole system, use /tmp/test/shutdownall.
+pcp command user name is "t-ishii", password is "t-ishii".
+Each PostgreSQL, pgpool-II and pcp port is as follows:
+#1 port is 11002
+#2 port is 11003
+pgpool port is 11000
+pcp port is 11001
+The info above is in README.port.
+t-ishii$ ./startall 
+waiting for server to start....5744 2020-08-18 13:50:27 JST LOG:  starting PostgreSQL 12.4 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit
+5744 2020-08-18 13:50:27 JST LOG:  listening on IPv4 address "0.0.0.0", port 11002
+5744 2020-08-18 13:50:27 JST LOG:  listening on IPv6 address "::", port 11002
+5744 2020-08-18 13:50:27 JST LOG:  listening on Unix socket "/tmp/.s.PGSQL.11002"
+5744 2020-08-18 13:50:27 JST LOG:  redirecting log output to logging collector process
+5744 2020-08-18 13:50:27 JST HINT:  Future log output will appear in directory "log".
+ done
+server started
+waiting for server to start....5757 2020-08-18 13:50:27 JST LOG:  starting PostgreSQL 12.4 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit
+5757 2020-08-18 13:50:27 JST LOG:  listening on IPv4 address "0.0.0.0", port 11003
+5757 2020-08-18 13:50:27 JST LOG:  listening on IPv6 address "::", port 11003
+5757 2020-08-18 13:50:27 JST LOG:  listening on Unix socket "/tmp/.s.PGSQL.11003"
+5757 2020-08-18 13:50:27 JST LOG:  redirecting log output to logging collector process
+5757 2020-08-18 13:50:27 JST HINT:  Future log output will appear in directory "log".
+ done
+server started
+t-ishii$ psql -p 11000 test
+psql (12.4)
+Type "help" for help.
+
+test=# show pool_nodes;
+ node_id | hostname | port  | status | lb_weight |  role   | select_cnt | load_balance_node | replication_delay | replication_state | replication_sync_state | last_status_change  
+---------+----------+-------+--------+-----------+---------+------------+-------------------+-------------------+-------------------+------------------------+---------------------
+ 0       | /tmp     | 11002 | up     | 0.500000  | primary | 0          | true              | 0                 |                   |                        | 2020-08-18 13:50:32
+ 1       | /tmp     | 11003 | up     | 0.500000  | standby | 0          | false             | 0                 | streaming         | async                  | 2020-08-18 13:50:32
+(2 rows)
+
+   </screen>
+  </para>
+ </refsect1>
+
+</refentry>

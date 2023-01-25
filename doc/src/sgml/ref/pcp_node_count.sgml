@@ -1,0 +1,59 @@
+<!--
+doc/src/sgml/ref/pcp_node_count.sgml
+Pgpool-II documentation
+-->
+
+<refentry id="PCP-NODE-COUNT">
+ <indexterm zone="pcp-node-count">
+  <primary>pcp_node_count</primary>
+ </indexterm>
+
+ <refmeta>
+  <refentrytitle>pcp_node_count</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>PCP Command</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pcp_node_count</refname>
+  <refpurpose>
+   displays the total number of database nodes</refpurpose>
+ </refnamediv>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pcp_node_count</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-PCP-NODE-COUNT-1">
+  <title>
+   Description
+  </title>
+  <para>
+   <command>pcp_node_count</command>
+   displays the total number of database nodes defined in <filename>pgpool.conf</filename>. It does
+   not distinguish between nodes status, ie attached/detached. ALL nodes are counted.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+  <para>
+   See <xref linkend="pcp-common-options">.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Example</title>
+  <para>
+   Here is an example output:
+   <programlisting>
+    $ pcp_node_count -p 11001
+    Password:
+    2
+   </programlisting>
+  </para>
+ </refsect1>
+</refentry>

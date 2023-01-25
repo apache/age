@@ -1,0 +1,384 @@
+<!-- doc/src/sgml/performance.sgml -->
+
+<chapter id="performance">
+ <title>Performance Considerations</title>
+
+ <indexterm>
+  <primary>performance</primary>
+  <secondary>of the server</secondary>
+ </indexterm>
+
+ <para>
+  There are number of configuration parameters that affect the
+  performance of
+  <productname>Pgpool-II</productname>. In this chapter we present
+  how to tune them.
+ </para>
+
+ <sect1 id="resource-requirement">
+  <title>Resource Requirement</title>
+
+  <para>
+   <productname>Pgpool-II</productname> does not consume too much
+   resource. However there are minimum requirements for
+   resource. In this section we are going to explain one by one.
+  </para>
+
+  <sect2 id="memory-requirement">
+   <title>Memory Requirement</title>
+
+   <para>
+    There are two types of memory usage
+    in <productname>Pgpool-II</productname>: shared memory and
+    process private memory. The former is allocated at the startup
+    of <productname>Pgpool-II</productname> main server process
+    and will not be freed until
+    whole <productname>Pgpool-II</productname> servers shut down.
+    The latter is allocated within
+    each <productname>Pgpool-II</productname> child process and
+    will be freed at the end of the process.
+   </para>
+
+   <sect3 id="shared-memory-requirement">
+    <title>Shared Memory Requirement</title>
+
+    <para>
+     Here is a formula to calculate the shared memory requirement.
+     <programlisting>
+      Shared memory requirement (in mega bytes) = 10 + <xref linkend="guc-num-init-children"> * <xref linkend="guc-max-pool"> * 0.02
+     </programlisting>
+     For example if you have <varname>num_init_children</varname> = 32 (the default) and <varname>max_pool</varname> = 4 (the
+     default), then you will need 10 + 32 * 4 * 0.02 = 12.6 MB.
+    </para>
+
+    <para>
+     If you plan to use in memory query cache
+     (see <xref linkend="runtime-in-memory-query-cache"> for more
+      details) in the shared memory, you will need more RAM for
+      it. See
+      <xref linkend="guc-memqcache-total-size"> and
+       <xref linkend="guc-memqcache-max-num-cache"> for required RAM
+	size.
+    </para>
+
+    <para>
+     Note that, however, in <productname>Pgpool-II</productname> 4.1
+     or after, even if the in memory query cache is not enabled, it
+     consumes additional 128MB of shared memory, if <xref
+     linkend="guc-enable-shared-relcache"> is enabled (it is enabled
+     by default).
+    </para>
+   </sect3>
+   
+   <sect3 id="process-memory-requirement">
+    <title>Process Memory Requirement</title>
+    <para>
+
+     Here is a formula to calculate the process memory requirement.
+     <programlisting>
+      Process memory requirement in total (in mega bytes) = <xref linkend="guc-num-init-children"> * 0.16
+     </programlisting>
+     For example if you have <varname>num_init_children</varname> = 32
+     (the default), you will need 5.2MB.  Please note that this is
+     minimum memory requirement
+     upon <productname>Pgpool-II</productname> child process starting
+     up. Once the process runs, it will consume more memory depending
+     on the message packet sizes and other factors. It is recommended
+     to measure the amount of memory actually used by the process
+     before starting production use.
+    </para>
+   </sect3>
+  </sect2>
+
+  <sect2 id="disk-requirement">
+   <title>Disk Requirement</title>
+   <para>
+    <productname>Pgpool-II</productname> does not consume much
+    disk space. Also it does not require high speed disk because
+    disk I/O traffic caused
+    by <productname>Pgpool-II</productname> is small. However,
+    if you plan to emit much logs, of course you need disk space
+    for them.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="managing-client-connections">
+  <title>Managing Client Connections</title>
+  <para>
+   As the number of client connections accepted is growing, the
+   number of <productname>Pgpool-II</productname> child process
+   which can accept new connections from client is decreasing and
+   finally reaches to 0. In this situation new clients need to wait
+   until a child process becomes free. Under heavy load, it could
+   be possible that the queue length of waiting clients is getting
+   longer and longer and finally hits the system's limit (you might
+   see "535 times the listen queue of a socket overflowed"
+   error"). In this case you need to increase the queue
+   limit. There are several ways to deal with this problem.
+  </para>
+
+  <sect2 id="controlling-num-init-children">
+   <title>Controlling num_init_children</title>
+   <para>
+    The obvious way to deal with the problem is increasing the
+    number of child process. This can be done by
+    tweaking <xref linkend="guc-num-init-children">. However
+     increasing child process requires more CPU and memory
+     resource. Also you have to be very careful about
+     max_connections parameter
+     of <productname>PostgreSQL</productname> because once the
+     number of child process is greater than
+     max_connections, <productname>PostgreSQL</productname> refuses
+     to accept new connections, and failover will be triggered.
+   </para>
+   <para>
+    Another drawback of increasing num_init_children is, so called
+    "thundering herd problem".  When new connection request comes
+    in, the kernel wake up any sleeping child process to issue
+    accept() system call. This triggers fight of process to get
+    the socket and could give heavy load to the system. To
+    mitigate the problem, you could set serialize_accept to on so
+    that there's only one process to grab the accepting socket.
+    However notice that the performance may be dropped when the number
+    of concurrent clients is small.
+   </para>
+   <para>
+    In <productname>Pgpool-II</productname> 4.4 or later, it is
+    possible to use <xref linkend="guc-process-management-mode"> for
+    more efficient management.  By
+    setting <varname>process-management-mode</varname>
+    to <literal>dynamic</literal>, when the number of concurrent
+    clients is small, the number of child process
+    of <productname>Pgpool-II</productname> can be decreased thus we
+    can save the resource consumption.  On the other hand when the
+    number of concurrent clients gets larger, the number of child
+    process increases so that it can respond to the more demand of
+    connections. However, notice that the time for connection
+    establishment could be increasing because new process need to be
+    started to have more child process.
+   </para>
+   <para>
+    See also <xref linkend="process-management-mode"> for
+    understanding <varname>process-management-mode</varname>.
+   </para>
+  </sect2>
+
+  <sect2 id="controlling-listen-backlog-multiplier">
+   <title>Controlling listen_backlog_multiplier</title>
+   <para>
+    Another solution would be increasing the connection request
+    queue. This could be done by
+    increasing <xref linkend="guc-listen-backlog-multiplier">.
+   </para>
+  </sect2>
+
+  <sect2 id="when-to-use-reserved-connections">
+   <title>When to use reserved_connections</title>
+   <para>
+    However, none of above solutions guarantees that the
+    connection accepting the queue would not be filled up. If a
+    client connection request arrives quicker than the rate of
+    processing queries, the queue will be filled in someday. For
+    example, if there are some heavy queries that take long time,
+    it could easily trigger the problem.
+   </para>
+   <para>
+    The solution is
+    setting <xref linkend="guc-reserved-connections"> so that
+     overflowed connection requests are rejected
+     as <productname>PostgreSQL</productname> already does. This
+     gives visible errors to applications ("Sorry max_connections
+     already") and force them retrying. So the solution should only
+     be used when you cannot foresee the upper limit of system
+     load.
+   </para>
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="read-query-load-balancing">
+  <title>Read Query Load Balancing</title>
+  <para>
+   If there are multiple <productname>PostgreSQL</productname>
+   nodes and <productname>Pgpool-II</productname> operates in
+   streaming replication mode, logical replication mode, slony mode
+   or replication mode (for those running mode
+   see <xref linkend="running-mode"> for more details), it is
+    possible to distribute read queries among those database nodes
+    to get more throughput since each database nodes processes
+    smaller number of queries. To enable the feature you need to
+    turn on <xref linkend="guc-load-balance-mode">.
+  </para>
+
+  <para>
+   At this point vast majority of systems use streaming replication
+   mode, so from now on we focus on the mode.
+  </para>
+
+  <sect2 id="session-level-load-balancing-vs-statement-level-load-balancing">
+   <title>Session Level Load Balancing vs. Statement Level Load Balancing</title>
+   <para>
+    By default load balance mode is "session level" which means
+    the node read queries are sent is determined when a client
+    connects to <productname>Pgpool-II</productname>. For example,
+    if we have node 0 and node 1, one of the node is selected
+    randomly each time new session is created. In the long term,
+    the possibility which node is chosen will be getting closer to
+    the ratio specified by <xref linkend="guc-backend-weight">0
+     and
+     <xref linkend="guc-backend-weight">1. If those two values are
+      equal, the chance each node is chosen will be even.
+   </para>
+
+   <para>
+    On the other hand, if
+    <xref linkend="guc-statement-level-load-balance"> is set to
+     on, the load balance node is determined at the time each query
+     starts.  This is useful in case that application has its own
+     connection pooling which keeps on connecting
+     to <productname>Pgpool-II</productname> and the load balance
+     node will not be changed once the application starts. Another
+     use case is a batch application. It issues tremendous number
+     of queries but there's only 1 session. With statement level
+     load balancing it can utilize multiple servers.
+   </para>
+  </sect2>
+
+  <sect2 id="creating-specific-purpose-database-node">
+   <title>Creating Specific Purpose Database Node</title>
+   <para>
+    In OLAP environment sometimes it is desirable to have a large
+    read-only database for specific purpose. By creating such a
+    database is possible by creating a replica database using
+    streaming replication. In this case it is possible to redirect
+    read queries to the database in two ways: specifying database
+    names(s) or specifying application name(s). For former,
+    use <xref linkend="guc-database-redirect-preference-list">. For
+     latter use <xref linkend="guc-app-name-redirect-preference-list">.
+   </para>
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="in-memory-query-caching">
+  <title>In Memory Query Caching</title>
+  <para>
+   <productname>Pgpool-II</productname> allows to cache read query
+   results for later use. This will bring huge benefit for a type
+   of applications which issue same read queries many times. If
+   there are two queries and the query strings (parameter for
+   prepared statements if any) are identical, two queries are
+   regarded as "same". For the first time the query is
+   sent, <productname>Pgpool-II</productname> saves the query
+   result, and use it for the second query without asking anything
+   to <productname>PostgreSQL</productname>. This technique is
+   explained in <xref linkend="runtime-in-memory-query-cache">.
+  </para>
+
+  <sect2 id="when-not-to-use-in-memory-query-caching">
+   <title>When not to Use in Memory Query Caching</title>
+   <para>
+    When a table is modified, query results against the table
+    could be changed. To avoid
+    inconsistency, <productname>Pgpool-II</productname> discards
+    query cache data when corresponding table is modified. So
+    frequently updated database will not be suitable to use in
+    memory query caching. You can check if your database is
+    suitable to use query caching or not, you could
+    use <xref linkend="SQL-SHOW-POOL-CACHE">. If query cache hit
+     ration is lower than 70%, probably you want to avoid using the
+     query cache.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="relation-cache">
+  <title>Relation Cache</title>
+  <para>
+   Except in raw mode (see <xref linkend="running-mode">)
+    or <xref linkend="guc-load-balance-mode"> is set to off,
+     sometimes <productname>Pgpool-II</productname> needs to
+     ask <productname>PostgreSQL</productname> to get meta
+     information, such as whether a table is a temporary one or
+     not. To get those
+     information, <productname>Pgpool-II</productname> sends queries
+     primary <productname>PostgreSQL</productname> which could be up
+     to as many as 10 queries (in 4.1 or after, the number of queries
+     has been decreased, it is not zero, however). To reduce the
+     overhead, <productname>Pgpool-II</productname> maintains
+     "relation cache". Next time same table is included in a
+     query, <productname>Pgpool-II</productname> extracts the
+     information from the cache.
+  </para>
+  <para>
+   There are some parameters to configure the relation
+   cache. See <xref linkend="guc-relcache-expire">, <xref linkend="guc-relcache-size">, <xref linkend="guc-check-temp-table">, <xref linkend="guc-check-unlogged-table">
+       for more details.
+  </para>
+
+  <sect2 id="shared-relation-cache">
+   <title>Shared Relation Cache</title>
+   <para>
+    The relation cache basically lives in process private memory,
+    which is bound to a process. So even if a relation cache is
+    created to for a table, in different process the relation
+    cache might not be created yet. After all, until a relation
+    cache entry is created in all process, queries continue to
+    sent to <productname>PostgreSQL</productname>.
+    <productname>Pgpool-II</productname> 4.1 overcomes the issue
+    by creating relation cache in shared memory. If a session
+    creates a relation cache entry in the shared memory, other
+    sessions will get the cache result by looking at the shared
+    relation
+    cache. See <xref linkend="guc-enable-shared-relcache">
+     configuration parameter section for more details. This feature
+     is pretty effective and we recommend this feature be enabled.
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="other-performance-considerations">
+  <title>Other Performance Considerations</title>
+  <para>
+   This section introduces some other performance considerations.
+  </para>
+
+  <sect2 id="thundering-herd-problem">
+   <title>Thundering Herd Problem</title>
+   <para>
+    If <xref linkend="guc-num-init-children"> is large, it is
+     possible that many <productname>Pgpool-II</productname> process
+     are woke up and heavy context switching happens. This leads to
+     high system load and hurt the overall system performance. This
+     problem is called "the thundering herd
+     problem". Enabling <xref linkend="guc-serialize-accept"> could
+      solve the problem. Please note that for
+      smaller <xref linkend="guc-num-init-children">, <xref linkend="guc-serialize-accept">
+	might make the system performance worse. Please take a look at
+	the guidance in <xref linkend="guc-serialize-accept"> section.
+   </para>
+  </sect2>
+
+  <sect2 id="disaster-recovery-settings">
+   <title>Disaster recovery settings</title>
+   <para>
+    To create a disaster recovery setting, it is possible to deploy a
+    <productname>Pgpool-II</productname> plus
+    <productname>PostgreSQL</productname> primary server, and another
+    <productname>Pgpool-II</productname> plus standby
+    <productname>PostgreSQL</productname> server in a geographically
+    distant place. Clients close to the standby server send read only
+    queries to the <productname>Pgpool-II</productname>, being close
+    to the standby server. However, since standby
+    <productname>Pgpool-II</productname> sends internal queries to
+    system catalog of primary <productname>PostgreSQL</productname>
+    server, query performance may be getting worse. To avoid the
+    problem, it is possible to use <xref
+    linkend="guc-relcache-query-target"> so that such queries are sent
+    to the standby. See <xref linkend="guc-relcache-query-target"> for
+    more details.
+   </para>
+  </sect2>
+ </sect1>
+</chapter>

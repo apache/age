@@ -1,0 +1,1122 @@
+<!-- doc/src/sgml/advanced.sgml -->
+
+<chapter id="tutorial-watchdog">
+ <title>Watchdog</title>
+
+ <sect1 id="tutorial-watchdog-intro">
+  <!--
+  <title>Introduction</title>
+  -->
+  <title>はじめに</title>
+
+  <para>
+   <!--
+   <firstterm>Watchdog</firstterm> is a sub process of <productname>Pgpool-II</productname>
+   to add high availability. Watchdog is used to resolve the single
+   point of failure by coordinating multiple <productname>Pgpool-II</productname>
+   nodes. The watchdog was first introduced in <productname>Pgpool-II</productname>
+   <emphasis>V3.2</emphasis> and is significantly enhanced in
+   <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>, to ensure the presence of a
+   quorum at all time. This new addition to watchdog makes it more fault tolerant
+   and robust in handling and guarding against the split-brain syndrome
+   and network partitioning. However to ensure the quorum mechanism properly
+   works, the number of pgpool-II nodes must be odd in number and greater than or
+   equal to 3.
+   -->
+   <firstterm>Watchdog</firstterm>は、高可用性のための<productname>Pgpool-II</productname>のサブプロセスです。
+   Watchdogは、単一障害点を除くために複数の<productname>Pgpool-II</productname>を使用する際に使用されます。
+   Watchdogは、最初に<productname>Pgpool-II</productname> <emphasis>V3.2</emphasis>で導入され、<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>で常にクォーラムを保つように大きく改善されました。
+   この機能追加により、watchdogはより対障害性が増し、スプリットブレイン障害とネットワーク分割に対する対処および防止が強固になりました。
+   また、<emphasis>V3.7</emphasis>ではクォーラムフェイルオーバ (<xref linkend="config-watchdog-failover-behavior">参照)が導入され、<productname>PostgreSQL</productname>サーバの故障誤検知によるフェイルオーバが起こりにくくなりました。
+    <emphasis>クォーラム機構を正しく動かすためには、<productname>Pgpool-II</productname>ノードの数は奇数であり、かつ3以上でなければなりません。</emphasis>
+  </para>
+
+  <sect2 id="tutorial-watchdog-coordinating-nodes">
+   <!--
+   <title>Coordinating multiple <productname>Pgpool-II</productname> nodes</title>
+   -->
+   <title>複数<productname>Pgpool-II</productname>ノードを協調させる</title>
+
+   <indexterm zone="tutorial-watchdog-coordinating-nodes">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    Watchdog coordinates multiple <productname>Pgpool-II</productname> nodes
+    by exchanging information with each other.
+    -->
+    watchdogは、お互いに情報をやり取りすることにより、複数の<productname>Pgpool-II</productname>ノードを協調させます。
+   </para>
+   <para>
+    <!--
+    At the startup, if the watchdog is enabled, <productname>Pgpool-II</productname> node
+    sync the status of all configured backend nodes from the leader watchdog node.
+    And if the node goes on to become a leader node itself it initializes the backend
+    status locally. When a backend node status changes by failover etc..,
+    watchdog notifies the information to other <productname>Pgpool-II</productname>
+    nodes and synchronizes them. When online recovery occurs, watchdog restricts
+    client connections to other <productname>Pgpool-II</productname>
+    nodes for avoiding inconsistency between backends.
+    -->
+    もしwatchdogが有効なら、<productname>Pgpool-II</productname>ノードは起動時にリーダーwatchdogノードの情報を使ってバックエンドの状態の同期を取ります。
+    そのノードが自分自身をリーダーに昇格中であれば、バックエンド状態をローカルに初期化します。
+    フェイルオーバなどでバックエンドの状態が変更したら、watchdogは他の<productname>Pgpool-II</productname>ノードに通知し、同期を取ります。
+    オンラインリカバリを実行すると、バックエンドの不整合を防ぐために、watchdogはクライアントが他の<productname>Pgpool-II</productname>ノードに接続するのを防ぎます。
+   </para>
+
+   <para>
+    <!--
+    Watchdog also coordinates with all connected <productname>Pgpool-II</productname> nodes to ensure
+    that failback, failover and follow_primary commands must be executed only on one <productname>pgpool-II</productname> node.
+    -->
+    また、watchdogは、接続したすべての<productname>Pgpool-II</productname>ノードを調停し、フェイルバック、フェイルオーバ、フォロープライマリコマンドがただひとつの<productname>Pgpool-II</productname>で実行されるようにします。
+   </para>
+
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-lifechecking">
+   <!--
+   <title>Life checking of other <productname>Pgpool-II</productname> nodes</title>
+   -->
+   <title>他の<productname>Pgpool-II</productname>ノードの死活監視</title>
+
+   <indexterm zone="tutorial-watchdog-lifechecking">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    Watchdog lifecheck is the sub-component of watchdog to monitor
+    the health of <productname>Pgpool-II</productname> nodes participating
+    in the watchdog cluster to provide the high availability.
+    Traditionally <productname>Pgpool-II</productname> watchdog provides
+    two methods of remote node health checking. <literal>"heartbeat"</literal>
+    and <literal>"query"</literal> mode.
+    The watchdog in <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>
+    adds a new <literal>"external"</literal> to <xref linkend="guc-wd-lifecheck-method">,
+    which enables to hook an external third party health checking
+    system with <productname>Pgpool-II</productname> watchdog.
+    -->
+    watchdog死活監視は、高可用性のために、watchdogクラスタに所属する<productname>Pgpool-II</productname>ノードの健全性を監視するための下位コンポーネントです。
+    伝統的に、<productname>Pgpool-II</productname> watchdogは2種類のリモートの死活監視方法を提供しています。
+    <literal>"heartbeat"</literal>と<literal>"query"</literal>モードです。
+    <productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>で、<xref linkend="guc-wd-lifecheck-method">に新しく<literal>"external"</literal>が追加され、<productname>Pgpool-II</productname> watchdogが外部サードパーティのシステムを呼び出すことが可能になりました。
+   </para>
+   <para>
+    <!--
+    Apart from remote node health checking watchdog lifecheck can also check
+    the health of node it is installed on by monitoring the connection to upstream servers.
+    If the monitoring fails, watchdog treats it as the local <productname>Pgpool-II</productname>
+    node failure.
+    -->
+    リモートノードの死活監視の他に、watchdog死活監視は、上位サーバへの接続を監視することにより、稼働しているノードの健全性をチェックすることができます。
+    監視がエラーを返したら、watchdogはローカル<productname>Pgpool-II</productname>ノードの障害として扱います。
+   </para>
+
+   <para>
+    <!--
+    In <literal>heartbeat</literal> mode, watchdog monitors other <productname>Pgpool-II</productname>
+    processes by using <literal>heartbeat</literal> signal.
+    Watchdog receives heartbeat signals sent by other <productname>Pgpool-II</productname>
+    periodically. If there is no signal for a certain period,
+    watchdog regards this as the failure of the <productname>Pgpool-II</productname>.
+    For redundancy you can use multiple network connections for heartbeat
+    exchange between <productname>Pgpool-II</productname> nodes.
+    This is the default and recommended mode to be used for health checking.
+    -->
+    <literal>heartbeat</literal>モードでは、watchdogは他の<productname>Pgpool-II</productname>プロセスをハートビート信号で監視します。
+    watchdogは、定期的に他の<productname>Pgpool-II</productname>から送られたハートビート信号を受信します。
+    一定期間信号が受信されなければ、watchdogはその<productname>Pgpool-II</productname>に障害が起こったとみなします。
+    冗長性のために<productname>Pgpool-II</productname>ノード間で取り交わされるハートビート通信のためのネットワーク接続を複数使うことができます。
+    これがデフォルトかつ推奨される死活監視のモードです。
+   </para>
+
+   <para>
+    <!--
+    In <literal>query</literal> mode, watchdog monitors <productname>Pgpool-II</productname>
+    service rather than process. In this mode watchdog sends queries to other
+    <productname>Pgpool-II</productname> and checks the response.
+    -->
+    <literal>query</literal>モードでは、watchdogは<productname>Pgpool-II</productname>のプロセスではなく、サービスを監視します。
+    このモードでは、watchdogは他の<productname>Pgpool-II</productname>にクエリを送り、結果をチェックします。
+    <note>
+     <para>
+      <!--
+      Note that this method requires connections from other <productname>Pgpool-II</productname>,
+      so it would fail monitoring if the <xref linkend="guc-num-init-children"> parameter isn't large enough.
+      This mode is deprecated and left for backward compatibility.
+      -->
+      この方法では、他の<productname>Pgpool-II</productname>からの接続が必要で、<xref linkend="guc-num-init-children">が十分に大きくないと失敗します。
+       このモードは非推奨で、後方互換性のために残されています。
+     </para>
+    </note>
+   </para>
+
+   <para>
+    <!--
+    <literal>external</literal> mode is introduced by <productname>Pgpool-II</productname>
+    <emphasis>V3.5</emphasis>. This mode basically disables the built in lifecheck
+    of <productname>Pgpool-II</productname> watchdog and expects that the external system
+    will inform the watchdog about health of local and all remote nodes participating in the watchdog cluster.
+    -->
+    <literal>external</literal>モードは、<productname>Pgpool-II</productname> <emphasis>V3.5</emphasis>で導入されました。
+    このモードでは、基本的に<productname>Pgpool-II</productname> watchdogの組み込み死活監視は無効になり、watchdogは外部システムがローカルと、watchdogクラスタに所属しているすべてのリモートノードの健全性について報告することを期待します。
+   </para>
+
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-consistency-of-config">
+   <!--
+   <title>Consistency of configuration parameters on all <productname>Pgpool-II</productname> nodes</title>
+   -->
+   <title>すべての<productname>Pgpool-II</productname>ノードの設定パラメータの一貫性</title>
+
+   <indexterm zone="tutorial-watchdog-consistency-of-config">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    At startup watchdog verifies the <productname>Pgpool-II</productname>
+    configuration of the local node for	the consistency with the configurations
+    on the leader watchdog node and warns the user of any differences.
+    This eliminates the likelihood of undesired behavior that can happen
+    because of different configuration on different <productname>Pgpool-II</productname> nodes.
+    -->
+    起動時に、watchdogはローカルノードの<productname>Pgpool-II</productname>の設定パラメータを、リーダーノードのwatchdog上の設定パラメータとの一貫性を確認し、違いがあれば警告を出します。
+    これにより、異なる<productname>Pgpool-II</productname>ノードにおける設定パラメータの違いによる好ましくない振る舞いが起きる可能性を減らします。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-changing-active">
+   <!--
+   <title>Changing active/standby state when certain fault is detected</title>
+   -->
+   <title>障害が検出された際のアクティブ/スタンバイ状態の切換</title>
+
+   <indexterm zone="tutorial-watchdog-changing-active">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    When a fault of <productname>Pgpool-II</productname> is detected,
+    watchdog notifies the other watchdogs of it.
+    If this is the active <productname>Pgpool-II</productname>,
+    watchdogs decide the new active <productname>Pgpool-II</productname>
+    by voting and change active/standby state.
+    -->
+    <productname>Pgpool-II</productname>の障害が検出されると、watchdogは他のwatchdogにそのことを通知します。
+    障害が起きたのがアクティブな<productname>Pgpool-II</productname>であれば、watchdogは投票によって新しいアクティブ<productname>Pgpool-II</productname>を決定し、active/standby状態を変更します
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-automatic-vip">
+   <!--
+   <title>Automatic virtual IP switching</title>
+   -->
+   <title>自動仮想IP切換</title>
+
+   <indexterm zone="tutorial-watchdog-automatic-vip">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    When a standby <productname>Pgpool-II</productname> server promotes to active,
+    the new active server brings up virtual IP interface. Meanwhile, the previous
+    active server brings down the virtual IP interface. This enables the active
+    <productname>Pgpool-II</productname> to work using the same
+    IP address even when servers are switched.
+    -->
+    スタンバイ<productname>Pgpool-II</productname>サーバが昇格すると、新しいアクティブサーバは仮想IPインターフェイスを立ち上げます。
+    一方、以前のアクティブサーバは、仮想IPインターフェイスを停止します。
+    これにより、サーバが切り替わっても<productname>Pgpool-II</productname>は同じIPアドレスを使うことができます。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-changing-automatic-register-in-recovery">
+   <!--
+   <title>Automatic registration of a server as a standby in recovery</title>
+   -->
+   <title>リカバリ時にサーバをスタンバイとして自動的に登録</title>
+
+   <indexterm zone="tutorial-watchdog-changing-automatic-register-in-recovery">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    When the broken server recovers or new server is attached, the watchdog process
+    notifies this to the other watchdogs in the cluster along with the information of the new server,
+    and the watchdog process receives information on the active server and
+    other servers. Then, the attached server is registered as a standby.
+    -->
+    故障したサーバが復帰あるいは新しいサーバが追加されると、watchdogプロセスは新しいサーバの情報と共に、クラスタ内の他のwatchdogに通知します。
+    アクティブサーバとそれ以外のサーバ上のwatchdogはその情報を受けとります。
+    そして、復帰したサーバはスタンバイとして登録されます。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-start-stop">
+   <!--
+   <title>Starting/stopping watchdog</title>
+   -->
+   <title>watchdogの起動と停止</title>
+
+   <indexterm zone="tutorial-watchdog-start-stop">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    The watchdog process starts and stops automatically as sub-processes
+    of the <productname>Pgpool-II</productname>, therefore there is no
+    dedicated command to start and stop watchdog.
+   </para>
+    <para>
+    Watchdog controls the virtual IP interface, the commands executed by
+    the watchdog for bringing up and bringing down the VIP require the
+    root privileges. <productname>Pgpool-II</productname> requires the
+    user running <productname>Pgpool-II</productname> to have root
+    privileges when the watchdog is enabled along with virtual IP.
+    This is however not good security practice to run the
+    <productname>Pgpool-II</productname> as root user, the alternative
+    and preferred way is to run the <productname>Pgpool-II</productname>
+    as normal user and use either the custom commands for
+    <xref linkend="guc-if-up-cmd">, <xref linkend="guc-if-down-cmd">,
+    and <xref linkend="guc-arping-cmd"> using <command>sudo</command>
+    or use <command>setuid</command> ("set user ID upon execution")
+    on <literal>if_*</literal> commands
+   </para>
+    <para>
+    Lifecheck process is a sub-component of watchdog, its job is to monitor the
+    health of <productname>Pgpool-II</productname> nodes participating in
+    the watchdog cluster. The Lifecheck process is started automatically
+    when the watchdog is configured to use the built-in life-checking,
+    it starts after the watchdog main process initialization is complete.
+    However lifecheck process only kicks in when all configured watchdog
+    nodes join the cluster and becomes active. If some remote node fails
+    before the Lifecheck become active that failure will not get caught by the lifecheck.
+    -->
+    watchdogは、<productname>Pgpool-II</productname>の下位プロセスとして自動的に起動、停止されます。
+    したがって、専用の起動、停止コマンドはありません。
+   </para>
+   <para>
+    watchdogは仮想IPインターフェイスを制御します。
+    VIPを起動、停止するために実行されるコマンドにはroot権限が必要です。
+    watchdogが仮想IPを伴って起動される際には、<productname>Pgpool-II</productname>は、<productname>Pgpool-II</productname>を実行しているユーザがroot権限を持つことを要求します。
+    しかし、<productname>Pgpool-II</productname>をrootユーザで実行するのは良いセキュリティの実践とは言えません。
+    別の推奨する方法は、<productname>Pgpool-II</productname>を通常のユーザとして起動し、<command>sudo</command>を使って<xref linkend="guc-if-up-cmd">、<xref linkend="guc-if-down-cmd">、<xref linkend="guc-arping-cmd">にカスタムコマンドを設定するか、<literal>if_*</literal>コマンドに<command>setuid</command>("set user ID upon execution")することです。
+   </para>
+   <para>
+    死活監視プロセスはwatchdogの下位コンポーネントです。
+    その仕事は、watchdogクラスタに参加している<productname>Pgpool-II</productname>ノードの健全さを監視することです。
+    死活監視プロセスは、組み込みの死活監視を使用するようにwatchdogが設定されている場合、自動的に起動されます。
+    死活監視プロセスは、watchdogのメインプロセスの初期化が完了した後に起動します。
+    watchdogの組み込み死活監視は、すべての<productname>Pgpool-II</productname>ノードが起動してから始まります。
+    ただし、死活監視プロセスは、設定されているすべてのwatchdogノードがクラスタに参加し、アクティブになった時にだけ起動されます。
+    死活監視がアクティブになる前にリモートノードに障害が起こると、その障害が死活監視によって捕捉されません。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="tutorial-watchdog-integrating-external-lifecheck">
+  <!--
+  <title>Integrating external lifecheck with watchdog</title>
+  -->
+  <title>watchdogに外部死活監視を組み込む</title>
+
+  <para>
+   <!--
+   <productname>Pgpool-II</productname> watchdog process uses the
+   <acronym>BSD</acronym> sockets for communicating with
+   all the <productname>Pgpool-II</productname> processes and the
+   same <acronym>BSD</acronym> socket can also be used by any third
+   party system to provide the lifecheck function for local and remote
+   <productname>Pgpool-II</productname> watchdog nodes.
+   The <acronym>BSD</acronym> socket file name for IPC is constructed
+   by appending <productname>Pgpool-II</productname> wd_port after
+   <literal>"s.PGPOOLWD_CMD."</literal> string and the socket file is
+   placed in the <xref linkend="guc-wd-ipc-socket-dir"> directory.
+   -->
+   <productname>Pgpool-II</productname> watchdogプロセスは、すべての<productname>Pgpool-II</productname>プロセスと<acronym>BSD</acronym>ソケットを使って通信します。
+   その<acronym>BSD</acronym>ソケットは、ローカルとリモートの<productname>Pgpool-II</productname> watchdogノードをサードパーティのシステムが死活監視するために使用することができます。
+   IPCのための<acronym>BSD</acronym>ソケットの名前は、<literal>"s.PGPOOLWD_CMD."</literal>文字列の後に<productname>Pgpool-II</productname>のwd_portを付けたもので、そのソケットファイルは<xref linkend="guc-wd-ipc-socket-dir">ディレクトリに置かれます。
+  </para>
+
+  <sect2 id="tutorial-watchdog-ipc-command-packet">
+   <!--
+   <title>Watchdog IPC command packet format</title>
+   -->
+   <title>watchdogのIPCコマンドパケットフォーマット</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-command-packet">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    The watchdog IPC command packet consists of three fields.
+    Below table details the message fields and description.
+    -->
+    watchdogのIPCコマンドパケットは3つのフィールドから構成されます。
+    以下のテーブルはメッセージフィールドの詳細な説明です。
+   </para>
+
+   <table id="wd-ipc-command-format-table">
+    <!--
+    <title>Watchdog IPC command packet format</title>
+    -->
+
+    <title>watchdogのIPCコマンドパケットフォーマット</title>
+    <tgroup cols="3">
+     <thead>
+      <row>
+       <!--
+       <entry>Field</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+       -->
+       <entry>フィールド</entry>
+       <entry>型</entry>
+       <entry>説明</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <!--
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>Command Type</entry>
+      </row>
+       <row>
+       <entry>LENGTH</entry>
+       <entry>INT32 in network byte order</entry>
+       <entry>The length of data to follow</entry>
+      </row>
+       <row>
+       <entry>DATA</entry>
+       <entry>DATA in <acronym>JSON</acronym> format</entry>
+       <entry>Command data in <acronym>JSON</acronym> format</entry>
+       -->
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>コマンド型</entry>
+      </row>
+      <row>
+       <entry>LENGTH</entry>
+       <entry>ネットワークバイトオーダーのINT32</entry>
+       <entry>データ部の長さ</entry>
+      </row>
+      <row>
+       <entry>DATA</entry>
+       <entry><acronym>JSON</acronym>フォーマットのデータ</entry>
+       <entry><acronym>JSON</acronym>フォーマットのコマンドデータ</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-ipc-result-packet">
+   <!--
+   <title>Watchdog IPC result packet format</title>
+   -->
+   <title>watchdogのIPC結果パケットフォーマット</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-result-packet">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    The watchdog IPC command result packet consists of three fields.
+    Below table details the message fields and description.
+    -->
+    watchdogのIPCコマンド結果パケットは3つのフィールドから構成されます。
+    以下のテーブルはメッセージフィールドの詳細な説明です。
+   </para>
+
+   <table id="wd-ipc-result-format-table">
+    <!--
+    <title>Watchdog IPC result packet format</title>
+    -->
+    <title>watchdogのIPC結果パケットフォーマット</title>
+    <tgroup cols="3">
+     <thead>
+      <row>
+       <!--
+       <entry>Field</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+       -->
+       <entry>フィールド</entry>
+       <entry>型</entry>
+       <entry>説明</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <!--
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>Command Type</entry>
+      </row>
+       <row>
+       <entry>LENGTH</entry>
+       <entry>INT32 in network byte order</entry>
+       <entry>The length of data to follow</entry>
+      </row>
+       <row>
+       <entry>DATA</entry>
+       <entry>DATA in <acronym>JSON</acronym> format</entry>
+       <entry>Command result data in <acronym>JSON</acronym> format</entry>
+       -->
+       <entry>TYPE</entry>
+       <entry>BYTE1</entry>
+       <entry>コマンド型</entry>
+      </row>
+      <row>
+       <entry>LENGTH</entry>
+       <entry>ネットワークバイトオーダーのINT32</entry>
+       <entry>データ部の長さ</entry>
+      </row>
+      <row>
+       <entry>DATA</entry>
+       <entry><acronym>JSON</acronym>フォーマットのデータ</entry>
+       <entry><acronym>JSON</acronym>フォーマットのコマンド結果データ</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-ipc-command-packet-types">
+   <!--
+   <title>Watchdog IPC command packet types</title>
+   -->
+   <title>watchdogのIPCコマンドパケット型</title>
+
+   <indexterm zone="tutorial-watchdog-ipc-command-packet-types">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    The first byte of the IPC command packet sent to watchdog process
+    and the result returned by watchdog process is identified as the
+    command or command result type.
+    The below table lists all valid types and their meanings
+    -->
+    watchdogプロセスに送られ、またwatchdogプロセスから返却されるIPCコマンドのパケットの最初のバイトは、コマンドまたはコマンド結果型と認識されます。
+   </para>
+
+   <table id="wd-ipc-command-packet--types-table">
+    <title>Watchdog IPC command packet types</title>
+    <tgroup cols="4">
+     <thead>
+      <row>
+       <!--
+       <entry>Name</entry>
+       <entry>Byte Value</entry>
+       <entry>Type</entry>
+       <entry>Description</entry>
+       -->
+       <entry>名前</entry>
+       <entry>バイト値</entry>
+       <entry>型</entry>
+       <entry>説明</entry>
+      </row>
+     </thead>
+
+     <tbody>
+      <row>
+       <!--
+       <entry>REGISTER FOR NOTIFICATIONS</entry>
+       <entry>'0'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to register the current connection to receive watchdog notifications</entry>
+      </row>
+       <row>
+       <entry>NODE STATUS CHANGE</entry>
+       <entry>'2'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to inform watchdog about node status change of watchdog node</entry>
+      </row>
+       <row>
+       <entry>GET NODES LIST</entry>
+       <entry>'3'</entry>
+       <entry>Command packet</entry>
+       <entry>Command to get the list of all configured watchdog nodes</entry>
+      </row>
+       <row>
+       <entry>NODES LIST DATA</entry>
+       <entry>'4'</entry>
+       <entry>Result packet</entry>
+       <entry>The <acronym>JSON</acronym> data in packet contains the list of all configured watchdog nodes</entry>
+      </row>
+       <row>
+       <entry>CLUSTER IN TRANSITION</entry>
+       <entry>'7'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when it is not possible to process the command because the cluster is transitioning.</entry>
+      </row>
+       <row>
+       <entry>RESULT BAD</entry>
+       <entry>'8'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when the IPC command fails</entry>
+      </row>
+       <row>
+       <entry>RESULT OK</entry>
+       <entry>'9'</entry>
+       <entry>Result packet</entry>
+       <entry>Watchdog returns this packet type when IPC command succeeds</entry>
+       -->
+       <entry>REGISTER FOR NOTIFICATIONS</entry>
+       <entry>'0'</entry>
+       <entry>コマンドパケット</entry>
+       <entry>現在の接続をwatchdog通知を受け取るために登録するコマンド</entry>
+      </row>
+      <row>
+       <entry>NODE STATUS CHANGE</entry>
+       <entry>'2'</entry>
+       <entry>コマンドパケット</entry>
+       <entry>watchdogノードの状態変化をwatchdogに通知するためのコマンド</entry>
+      </row>
+      <row>
+       <entry>GET NODES LIST</entry>
+       <entry>'3'</entry>
+       <entry>コマンドパケット</entry>
+       <entry>全ての設定済み watchdog ノードのリストを要求します</entry>
+      </row>
+      <row>
+       <entry>NODES LIST DATA</entry>
+       <entry>'4'</entry>
+       <entry>結果パケット</entry>
+       <entry>パケット中の<acronym>JSON</acronym>データにすべてのwatchdogノードのリストが含まれます</entry>
+      </row>
+      <row>
+       <entry>CLUSTER IN TRANSITION</entry>
+       <entry>'7'</entry>
+       <entry>結果パケット</entry>
+       <entry>クラスタが遷移中なのでコマンドを処理できないときにwatchdogはこのパケットを返します</entry>
+      </row>
+      <row>
+       <entry>RESULT BAD</entry>
+       <entry>'8'</entry>
+       <entry>結果パケット</entry>
+       <entry>IPCコマンドが失敗すると、watchdogはこのパケット型を返します</entry>
+      </row>
+      <row>
+       <entry>RESULT OK</entry>
+       <entry>'9'</entry>
+       <entry>結果パケット</entry>
+       <entry>IPCコマンドが成功すると、watchdogはこのパケット型を返します</entry>
+      </row>
+
+     </tbody>
+    </tgroup>
+   </table>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-external-lifecheck-ipc">
+   <!--
+   <title>External lifecheck IPC packets and data</title>
+   -->
+   <title>外部死活監視のIPCパケットとデータ</title>
+
+   <indexterm zone="tutorial-watchdog-external-lifecheck-ipc">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    "GET NODES LIST" ,"NODES LIST DATA" and "NODE STATUS CHANGE"
+    IPC messages of watchdog can be used to integration an external
+    lifecheck systems. Note that the built-in lifecheck of pgpool
+    also uses the same channel and technique.
+    -->
+    watchdogの"GET NODES LIST"、"NODES LIST DATA"、"NODE STATUS CHANGE"IPCメッセージは、外部死活監視システムを統合するために使用できます。
+    pgpoolの組み込み死活監視も同じチャンネルと技術を使っていることに注意してください。
+   </para>
+
+   <sect3 id="tutorial-watchdog-external-lifecheck-get-nodes">
+    <!--
+    <title>Getting list of configured watchdog nodes</title>
+    -->
+    <title>構成されているwatchdogノードのリストの取得</title>
+
+    <indexterm zone="tutorial-watchdog-external-lifecheck-get-nodes">
+     <primary>WATCHDOG</primary>
+    </indexterm>
+    <para>
+     <!--
+     Any third party lifecheck system can send the "GET NODES LIST"
+     packet on watchdog IPC socket with a <acronym>JSON</acronym>
+     data containing the authorization key and value if
+     <xref linkend="guc-wd-authkey"> is set or empty packet data
+     when <xref linkend="guc-wd-authkey"> is not configured to get
+     the "NODES LIST DATA" result packet.
+     -->
+     サードパーティの死活監視システムは、<xref linkend="guc-wd-authkey">が設定されている時は認証キーとデータを含む<acronym>JSON</acronym>データを、<xref linkend="guc-wd-authkey">が設定されていない時は空のパケットデータを含む"GET NODES LIST"パケットをwatchdogのIPCソケットに送ることにより、"NODES LIST DATA"結果パケットを入手できます。
+    </para>
+    <para>
+     <!--
+     The result packet returnd by watchdog for the "GET NODES LIST"
+     will contains the list of all configured watchdog nodes to do
+     health check on in the <acronym>JSON</acronym> format.
+     The <acronym>JSON</acronym> of the watchdog nodes contains the
+     <literal>"WatchdogNodes"</literal> Array of all watchdog nodes.
+     Each watchdog <acronym>JSON</acronym> node contains the
+     <literal>"ID"</literal>, <literal>"NodeName"</literal>,
+     <literal>"HostName"</literal>, <literal>"DelegateIP"</literal>,
+     <literal>"WdPort"</literal> and <literal>"PgpoolPort"</literal>
+     for each node.
+     -->
+     "GET NODES LIST"に対するwatchdogに返却される結果パケットは、死活監視を実施する対象となる、構成されているすべてのwatchdogノードのリストを含む<acronym>JSON</acronym>フォーマットです。
+    </para>
+    <para>
+     <programlisting>
+      -- The example JSON data contained in "NODES LIST DATA"
+
+      {
+      "NodeCount":3,
+      "WatchdogNodes":
+      [
+      {
+      "ID":0,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9999",
+      "HostName":"watchdog-host1",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9999
+      },
+      {
+      "ID":1,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9991",
+      "HostName":"watchdog-host2",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9991
+      },
+      {
+      "ID":2,
+      "State":1,
+      "NodeName":"Linux_ubuntu_9992",
+      "HostName":"watchdog-host3",
+      "DelegateIP":"172.16.5.133",
+      "WdPort":9000,
+      "PgpoolPort":9992
+      }
+      ]
+      }
+
+      -- Note that ID 0 is always reserved for local watchdog node
+
+     </programlisting>
+    </para>
+    <para>
+     <!--
+     After getting the configured watchdog nodes information from the
+     watchdog the external lifecheck system can proceed with the
+     health checking of watchdog nodes, and when it detects some status
+     change of any node it can inform that to watchdog using the
+     "NODE STATUS CHANGE" IPC messages of watchdog.
+     The data in the message should contain the <acronym>JSON</acronym>
+     with the node ID of the node whose status is changed
+     (The node ID must be same as returned by watchdog for that node
+     in WatchdogNodes list) and the new status of node.
+     -->
+     構成されているwatchdogノード情報をwatchdogから入手したら、外部死活監視システムはwatchdogノードの死活監視を実施できます。
+     ノードの状態変化を検知したら、watchdogの"NODE STATUS CHANGE"IPCメッセージを使って、watchdogに通知できます。
+     メッセージには、状態変化したノードIDとノードの新しい状態を伴う<acronym>JSON</acronym>でデータを格納してください（ノードIDは、watchdogから返却されたWatchdogNodesリスト中のノードと同じノードIDを使わなければなりません）。
+    </para>
+    <para>
+     <programlisting>
+      -- The example JSON to inform pgpool-II watchdog about health check
+      failed on node with ID 1 will look like
+
+      {
+      "NodeID":1,
+      "NodeStatus":1,
+      "Message":"optional message string to log by watchdog for this event"
+      "IPCAuthKey":"wd_authkey configuration parameter value"
+      }
+
+      -- NodeStatus values meanings are as follows
+      NODE STATUS DEAD  =  1
+      NODE STATUS ALIVE =  2
+
+     </programlisting>
+    </para>
+   </sect3>
+  </sect2>
+ </sect1>
+ <sect1 id="tutorial-watchdog-restrictions">
+  <!--
+  <title>Restrictions on watchdog</title>
+  -->
+  <title>watchdogの制限事項</title>
+
+  <indexterm zone="tutorial-watchdog-restrictions">
+   <primary>WATCHDOG</primary>
+  </indexterm>
+
+  <sect2 id="tutorial-watchdog-restrictions-query-mode">
+   <!--
+   <title>Watchdog restriction with query mode lifecheck</title>
+   -->
+   <title>クエリモードの死活監視におけるwatchdogの制限事項</title>
+   <indexterm zone="tutorial-watchdog-restrictions-query-mode">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+
+   <para>
+    <!--
+    In query mode, when all the DB nodes are detached from a
+    <productname>Pgpool-II</productname> due to PostgreSQL server
+    failure or pcp_detach_node issued, watchdog regards that the
+    <productname>Pgpool-II</productname> service is in the down
+    status and brings the virtual IP assigned to watchdog down.
+    Thus clients of <productname>Pgpool-II</productname> cannot
+    connect to <productname>Pgpool-II</productname> using the
+    virtual IP any more. This is neccessary to avoid split-brain,
+    that is, situations where there are multiple active
+    <productname>Pgpool-II</productname>.
+    -->
+    クエリモードでは、PostgreSQLサーバの障害やpcp_detach_nodeによってすべてのDBノードが<productname>Pgpool-II</productname>から切り離されると、watchdogは<productname>Pgpool-II</productname>サービスが停止状態にあるとみなし、watchdogに割り当てられた仮想IPを停止します。
+    ですので、<productname>Pgpool-II</productname>のクライアントは仮想IPを使って<productname>Pgpool-II</productname>に接続できなくなります。
+    これは、複数のアクティブ<productname>Pgpool-II</productname>が存在するスプリットブレインを回避するために必要です。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-down-watchdog-mode">
+   <!--
+   <title>Connecting to <productname>Pgpool-II</productname> whose watchdog status is down</title>
+   -->
+   <title>watchdogが停止している<productname>Pgpool-II</productname>に接続する</title>
+   <indexterm zone="tutorial-watchdog-restrictions-down-watchdog-mode">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    Don't connect to <productname>Pgpool-II</productname> in down
+    status using the real IP. Because a <productname>Pgpool-II</productname>
+    in down status can't receive information from other
+    <productname>Pgpool-II</productname> watchdogs so it's backend status
+    may be different from other the <productname>Pgpool-II</productname>.
+    -->
+    watchdog が停止状態の<productname>Pgpool-II</productname>に実IPで接続しないでください。
+    なぜなら、watchdog がダウン状態の<productname>Pgpool-II</productname>は、他の<productname>Pgpool-II</productname> watchdogから情報を受け取れないので、他の<productname>Pgpool-II</productname>から、バックエンドの状態がずれるかもしれないからです。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-down-watchdog-require-restart">
+   <!--
+   <title><productname>Pgpool-II</productname> whose watchdog status is down requires restart</title>
+   -->
+   <title>watchdogが停止している<productname>Pgpool-II</productname>は再起動が必要です</title>
+   <indexterm zone="tutorial-watchdog-restrictions-down-watchdog-require-restart">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    <productname>Pgpool-II</productname> in down status can't become active
+    nor the standby <productname>Pgpool-II</productname>.
+    Recovery from down status requires the restart of <productname>Pgpool-II</productname>.
+    -->
+    watchdog が停止状態の<productname>Pgpool-II</productname>は、アクティブの<productname>Pgpool-II</productname>にもスタンバイの<productname>Pgpool-II</productname>にもなれません。
+    停止状態からの復帰には<productname>Pgpool-II</productname>の再起動が必要です。
+   </para>
+  </sect2>
+
+  <sect2 id="tutorial-watchdog-restrictions-active-take-time">
+   <!--
+   <title>Watchdog promotion to active takes few seconds</title>
+   -->
+   <title>watchdogの昇格には数秒を要します</title>
+   <indexterm zone="tutorial-watchdog-restrictions-active-take-time">
+    <primary>WATCHDOG</primary>
+   </indexterm>
+   <para>
+    <!--
+    After the active <productname>Pgpool-II</productname> stops,
+    it will take a few seconds until the standby <productname>Pgpool-II</productname>
+    promote to new active, to make sure that the former virtual IP is
+    brought down before a down notification packet is sent to other
+    <productname>Pgpool-II</productname>.
+    -->
+    停止通知パケットが他の<productname>Pgpool-II</productname>に送られる前に、以前の仮想IPが停止したことを確認するので、アクティブ<productname>Pgpool-II</productname>が停止してからスタンバイ<productname>Pgpool-II</productname>が新しいアクティブに昇格するまでには数秒を要します。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="tutorial-advanced-arch">
+  <!--
+  <title>Architecure of the watchdog</title>
+  -->
+  <title>watchdogの構造</title>
+
+  <para>
+   <!--
+   Watchdog is a sub process of <productname>Pgpool-II</productname>,
+   which adds the high availability and resolves the single point of
+   failure by coordinating multiple <productname>Pgpool-II</productname>.
+   The watchdog process automatically starts (if enabled) when the
+   <productname>Pgpool-II</productname> starts up and consists of two
+   main components, Watchdog core and the lifecheck system.
+   -->
+   watchdogは<productname>Pgpool-II</productname>の下位プロセスで、複数の<productname>Pgpool-II</productname>を調整して、高可用性を追加し、単一障害点を除きます。
+   （もし有効なら）watchdogプロセスは<productname>Pgpool-II</productname>が起動した際に自動的に起動されます。
+   watchdogは、コアシステムと死活監視システムの2つの主なコンポーネントから構成されます。
+  </para>
+
+  <sect2 id="tutorial-advanced-arch-wd-core">
+   <!--
+   <title>Watchdog Core</title>
+   -->
+   <title>watchdogコア</title>
+   <para>
+    <!--
+    Watchdog core referred as a "watchdog" is a
+    <productname>Pgpool-II</productname> child process that
+    manages all the watchdog related communications with the
+    <productname>Pgpool-II</productname> nodes present in the
+    cluster and also communicates with the <productname>Pgpool-II</productname>
+    parent and lifecheck processes.
+    -->
+    "watchdog"として参照されるwatchdogコアは、クラスタに存在する<productname>Pgpool-II</productname>ノードとのwatchdog関連の通信を管理します。
+    また、<productname>Pgpool-II</productname>親プロセスと死活監視プロセスとも通信します。
+   </para>
+   <para>
+    <!--
+    The heart of a watchdog process is a state machine that starts
+    from its initial state (<literal>WD_LOADING</literal>) and transit
+    towards either standby (<literal>WD_STANDBY</literal>) or
+    leader/coordinator (<literal>WD_COORDINATOR</literal>) state.
+    Both standby and leader/coordinator states are stable states of the
+    watchdog state machine and the node stays in standby or
+    leader/coordinator state until some problem in local
+    <productname>Pgpool-II</productname> node is detected or a
+    remote <productname>Pgpool-II</productname> disconnects from the cluster.
+    -->
+    watchdogプロセスの中心はステートマシンで、初期状態(<literal>WD_LOADING</literal>)から出発し、スタンバイ状態(<literal>WD_STANDBY</literal>)かリーダー/コーディネーター状態(<literal>WD_COORDINATOR</literal>)へと遷移します。
+    スタンバイ状態もリーダー/コーディネーター状態も、watchdogステートマシンとしては安定状態です。
+    ローカルの<productname>Pgpool-II</productname>ノードに問題が起きるか、リモートの<productname>Pgpool-II</productname>ノードがクラスタから切り離されるまでその状態を保ちます。
+   </para>
+   <para>
+    <!--
+    The watchdog process performs the following tasks:
+    -->
+    watchdogプロセスは以下のタスクを実行します。
+
+   </para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      Manages and coordinates the local node watchdog state.
+      -->
+      ローカルノードのwatchdog状態の管理と調停
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Interacts with built-in or external lifecheck system
+      for the of local and remote <productname>Pgpool-II</productname>
+      node health checking.
+      -->
+      ローカルあるいはリモートの<productname>Pgpool-II</productname>を対象とする組み込みあるいは外部死活監視との通信
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Interacts with <productname>Pgpool-II</productname> main
+      process and provides the mechanism to
+      <productname>Pgpool-II</productname> parent process for
+      executing the cluster commands over the watchdog channel.
+      -->
+      watchdogチャンネルを通じて<productname>Pgpool-II</productname>親プロセスがクラスタコマンドを実行するための機構を提供するために、<productname>Pgpool-II</productname>メインプロセスと通信する
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Communicates with all the participating <productname>Pgpool-II
+     </productname> nodes to coordinate the selection of
+      leader/coordinator node and to ensure the quorum in the cluster.
+      -->
+      参加しているすべての<productname>Pgpool-II</productname>ノードと通信し、リーダー/コーディネーターノードの選択を調停し、クラスタのクォーラムを確実にする
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Manages the Virtual-IP on the active/coordinator node and
+      allow the users to provide custom scripts for
+      escalation and de-escalation.
+      -->
+      リーダー/コーディネーターノード上の仮想IPを管理し、ユーザが昇格と降格用のカスタムスクリプトを書けるようにする
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Verifies the consistency of <productname>Pgpool-II</productname>
+      configurations across the participating <productname>Pgpool-II
+     </productname> nodes in the watchdog cluster.
+      -->
+      watchdogクラスタ中の<productname>Pgpool-II</productname>ノードの設定の一貫性を検証する
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Synchronize the status of all PostgreSQL backends at startup.
+      -->
+      起動時にすべてのPostgreSQLバックエンドの状態を同期する
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Provides the distributed locking facility to
+      <productname>Pgpool-II</productname> main process
+      for synchronizing the different failover commands.
+      -->
+      複数のフェイルオーバコマンドを直列化するために<productname>Pgpool-II</productname>メインプロセスに対して分散ロック機能を提供する
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+   <sect3 id="tutorial-advanced-arch-wd-core-comm">
+    <!--
+    <title>Communication with other nodes in the Cluster</title>
+    -->
+    <title>クラスタの他のノードとの通信</title>
+    <para>
+     <!--
+     Watchdog uses TCP/IP sockets for all the communication with other nodes.
+     Each watchdog node can have two sockets opened with each node. One is the
+     outgoing (client) socket which this node creates and initiate the
+     connection to the remote node and the second socket is the one which
+     is listening socket for inbound connection initiated by remote
+     watchdog node. As soon as the socket connection to remote node succeeds
+     watchdog sends the ADD NODE (<literal>WD_ADD_NODE_MESSAGE</literal>)
+     message on that socket. And upon receiving the ADD NODE message the
+     watchdog node verifies the node information encapsulated in the message
+     with the Pgpool-II configurations for that node, and if the node passes
+     the verification test it is added to the cluster otherwise the connection
+     is dropped.
+     -->
+     watchdogはほかのすべてのノードとの通信にTCP/IPソケットを使っています。
+     各々のwatchdogノードはそれぞれのノードに2つのソケットを開くことができます。
+     ひとつはこのノードが作った出て行く（クライアント）ソケットで、他のノードとの通信を開始します。
+     2つ目は、リモートwatchdogノードが開いた通信から入ってくるのを待ち受けるソケットです。
+     リモートノードとのソケット接続が成功すると、直ちにwatchdogはADD NODE (<literal>WD_ADD_NODE_MESSAGE</literal>)メッセージをそのソケットに送ります。
+     ADD NODEメッセージを受信したwatchdogノードは、メッセージにカプセル化されたノード情報をそのノードのPgpool-II設定と照合し、照合テストが成功すればノードをクラスタに追加します。
+     照合テストが失敗すると、接続は切断されます。
+    </para>
+   </sect3>
+
+   <sect3 id="tutorial-advanced-arch-wd-ipc-data">
+    <!--
+    <title>IPC and data format</title>
+    -->
+    <title>IPCとデータフォーマット</title>
+    <para>
+     <!--
+     Watchdog process exposes a <acronym>UNIX</acronym> domain socket
+     for IPC communications, which accepts and provides the data in
+     <acronym>JSON</acronym> format. All the internal <productname>Pgpool-II
+    </productname> processes, including <productname>Pgpool-II's</productname>
+     built-in lifecheck and <productname>Pgpool-II</productname> main process
+     uses this IPC socket interface to interact with the watchdog.
+     This IPC socket can also be used by any external/3rd party system
+     to interact with watchdog.
+     -->
+     watchdogプロセスはIPC通信のために<acronym>UNIX</acronym>ドメインソケットを公開し、<acronym>JSON</acronym>形式のデータを受付、また提供します。
+     <productname>Pgpool-II</productname>の組み込み死活監視とメインプロセスも含めて、すべての<productname>Pgpool-II</productname>の内部プロセスは、このIPCソケットを使ってwatchdogと通信します。
+     IPCソケットは、watchdogと通信する外部/サードパーティシステムも利用することができます。
+    </para>
+    <para>
+     <!--
+     See <xref linkend="tutorial-watchdog-integrating-external-lifecheck"> for details
+     on how to use watchdog IPC interface for integrating external/3rd party systems.
+     -->
+     外部/サードパーティシステムと統合するための、watchdog IPCインターフェイスの使い方の詳細は<xref linkend="tutorial-watchdog-integrating-external-lifecheck">をご覧ください。
+    </para>
+   </sect3>
+  </sect2>
+
+  <sect2 id="tutorial-advanced-arch-wd-lifecheck">
+   <!--
+   <title>Watchdog Lifecheck</title>
+   -->
+   <title>Watchdogにおける死活監視</title>
+   <para>
+    <!--
+    Watchdog lifecheck is the sub-component of watchdog that monitors the health
+    of <productname>Pgpool-II</productname> nodes participating in the watchdog
+    cluster. <productname>Pgpool-II</productname> watchdog provides three built-in
+    methods of remote node health checking, "heartbeat", "query" and "external" mode.
+    -->
+    Watchdogにおける死活監視は、watchdogクラスタに参加している<productname>Pgpool-II</productname>ノードの健全性を監視するwatchdogの下位コンポーネントです。
+    <productname>Pgpool-II</productname> watchdogは、リモートノードの健全性をチェックする3つの方法、"heartbeat"と"query"と"external"モードを提供します。
+   </para>
+   <para>
+    <!--
+    In "heartbeat" mode, The lifecheck process sends and receives the data over
+    <acronym>UDP</acronym> socket to check the availability of remote nodes and
+    for each node the parent lifecheck process spawns two child process one for
+    sending the heartbeat signal and another for receiving the heartbeat.
+    While in "query" mode, The lifecheck process uses the PostgreSQL libpq
+    interface for querying the remote <productname>Pgpool-II</productname>.
+    And in this mode the lifecheck process creates a new thread for each health
+    check query which gets destroyed as soon as the query finishes.
+    While in "external" mode, this mode disables the built in lifecheck of
+    <productname>Pgpool-II</productname>, and expects that the external system will monitor local and remote node instead.
+    -->
+    "heartbeat"モードでは、死活監視プロセスは<acronym>UDP</acronym>を使ってリモートノードにアクセスできるかどうか確認します。
+    各ノード毎に死活監視の親プロセスは2つの子プロセスを起動します。
+    ひとつはハートビート信号の送信のため、もうひとつはハートビートの受信のためです。
+    "query"モードでは、死活監視プロセスはPostgreSQLのlibpqインターフェイスを使ってリモートの<productname>Pgpool-II</productname>に問い合わせを送ります。
+    このモードでは、各死活監視プロセスは、死活監視のために新しくスレッドを作成します。
+    クエリが終了すると、直ちにそのスレッドは破棄されます。
+    "external"モードでは、<productname>Pgpool-II</productname>の死活監視は無効になり、代わりに外部システムがローカルノードとリモートノードを監視することを期待します。
+   </para>
+   <para>
+    <!--
+    Apart from remote node health checking watchdog lifecheck can also check the
+    health of node it is installed on by monitoring the connection to upstream servers.
+    For monitoring the connectivity to the upstream server <productname>Pgpool-II
+   </productname> lifecheck uses <literal>execv()</literal> function to executes
+    <command>'ping -q -c3 hostname'</command> command.
+    So a new child process gets spawned for executing each ping command.
+    This means for each health check cycle a child process gets created and
+    destroyed for each configured upstream server.
+    For example, if two upstream servers are configured in the lifecheck and it is
+    asked to health check at ten second intervals, then after each ten second
+    lifecheck will spawn two child processes, one for each upstream server,
+    and each process will live until the ping command is finished.
+    -->
+    リモートノードの死活監視以外にも、watchdogの死活監視は、上位サーバへの接続を監視することにより、インストールされたノードの健全性をチェックできます。
+    上位サーバへの接続を監視するために、<productname>Pgpool-II</productname>の死活監視は<literal>execv()</literal>を使って<command>'ping -q -c3 hostname'</command>コマンドを実行します。
+    各pingコマンドを実行するために新しい子プロセスが生成されます。
+    つまり、各々の死活監視のサイクルごとに、それぞれの上位サーバのために子プロセスが作られ、破棄されます。
+    たとえば、死活監視の設定で2つの上位サーバがあり、10秒ごとに死活監視を行うとすると、死活監視は10秒ごとに2つの子プロセスを起動し、各上位サーバ用に1個ずつプロセスが割り当てられます。
+    それぞれのプロセスは、pingコマンドが完了するまで生存します。
+   </para>
+  </sect2>
+
+ </sect1>
+
+</chapter>

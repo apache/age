@@ -1,0 +1,698 @@
+<!-- doc.ja/src/sgml/installation.sgml -->
+
+<chapter id="installation">
+ <!--
+ <title>Installation of <productname>Pgpool-II</productname></title>
+ -->
+ <title><productname>Pgpool-II</productname>のインストール</title>
+ <indexterm zone="installation">
+  <!--
+  <primary>installation</primary>
+  -->
+  <primary>インストール</primary>
+ </indexterm>
+
+ <sect1 id="planning">
+  <title>プランニング</title>
+  <para>
+   <productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>を管理するツールなので、まずは<productname>PostgreSQL</productname>の利用形態を決めなければなりません。
+   加えて、<productname>Pgpool-II</productname>ではそれ自体の可用性を高めるために、複数の<productname>Pgpool-II</productname>を導入することができます。
+   何本の<productname>Pgpool-II</productname>を導入するのが適切なのかを事前に計画しなければなりません。
+   この節では最初に<productname>PostgreSQL</productname>の動作モードを議論し、次に<productname>Pgpool-II</productname>の導入形態を議論します。
+  </para>
+
+  <sect2 id="planning-postgresql">
+   <title>PostgreSQLのクラスタリングモード</title>
+   <para>
+    <productname>PostgreSQL</productname>の導入台数は1以上が可能ですが、1台ではその<productname>PostgreSQL</productname>がダウンした時にデータベースシステム全体が使えなくなるため、通常2台以上の<productname>PostgreSQL</productname>を導入します。
+    2台以上の<productname>PostgreSQL</productname>を用いる場合、何らかの方法でそれらのデータベース内容を同じになるようにしなければなりません。
+    データベースの同期方法の違いをここでは「クラスタリングモード」と呼びます。
+    もっとも広く使われているクラスタリングモードは、「ストリーミングレプリケーションモード」です。
+    特に何か特別な考慮が必要でなければ、ストリーミングレプリケーションモードを選択することをお勧めします。
+    動作モードの詳細については<xref linkend="running-mode">をご覧ください。
+   </para>
+   <para>
+    次に考えなければならないのは、何台の<productname>PostgreSQL</productname>を使うかです。
+    2台あれば最低限片方の<productname>PostgreSQL</productname>がダウンしてもデータベースの運用は継続できますが、検索処理を複数のサーバで分担させる検索負荷分散処理を行うのであれば、3台以上の<productname>PostgreSQL</productname>を使うことも珍しくありません。
+    <productname>Pgpool-II</productname>は豊富な負荷分散の調整パラメータを用意しています。
+    詳細は<xref linkend="runtime-config-load-balancing">をご覧ください。
+   </para>
+   <para>
+    <productname>Pgpool-II</productname>では柔軟に<productname>PostgreSQL</productname>サーバを後から追加できるので、とりあえず<productname>Pgpool-II</productname>を使ってみたい、という方は2台の<productname>PostgreSQL</productname>から始めるのが良いでしょう。
+   </para>
+  </sect2>
+
+  <sect2 id="planning-pgpool">
+   <title>Pgpool-IIの導入形態</title>
+   <para>
+    <productname>Pgpool-II</productname>は1台でも利用が可能ですが、その<productname>Pgpool-II</productname>が停止するとデータベース全体が利用できなくなるので、複数の<productname>Pgpool-II</productname>を導入することをお勧めします。
+    複数の<productname>Pgpool-II</productname>はwatchdogと言う仕組みで連携を取りつつお互いを監視し、その中の1台が「リーダー」と呼ばれて仮想IPを持つので、クライアントはその仮想IPにアクセスすればよく、複数の<productname>Pgpool-II</productname>が導入されていることを意識する必要はありません。
+    (watchdogについては<xref linkend="tutorial-watchdog-intro">をご覧ください。)
+    もしある<productname>Pgpool-II</productname>がダウンすると、別の<productname>Pgpool-II</productname>が取って代わってリーダーになります。
+   </para>
+   <para>
+    リーダーは複数存在してはいけないので、新しいリーダーを決める際にはwatchdogは投票を行ないます。
+    この時<productname>Pgpool-II</productname>が偶数台だと多数決でリーダーを決めることができなくなってしまいます。
+    ですから<productname>Pgpool-II</productname>は3台以上の奇数台で構成することをお勧めします。
+   </para>
+   <para>
+    なお、<productname>Pgpool-II</productname>と<productname>PostgreSQL</productname>は同じサーバに同居していても構いません。
+    たとえば、リソースを節約するために3台のサーバのみを用意し、それぞれに<productname>Pgpool-II</productname>と<productname>PostgreSQL</productname>を動かすこともできます。
+   </para>
+   <para>
+    <productname>Pgpool-II</productname>3台、<productname>PostgreSQL</productname>2台をストリーミングレプリケーションモードで動作させる本格的な例が
+    <xref linkend="example-cluster">で詳しく紹介されているので、すぐにプロダクションレベルで<productname>Pgpool-II</productname>を動かしたい方はそれを参考にすると良いでしょう。
+   </para>
+  </sect2>
+ </sect1>
+
+ <sect1 id="install-source">
+  <!--
+  <title>Installation of Pgpool-II</title>
+  -->
+  <title>Pgpool-IIのインストール</title>
+  <para>
+   <!--
+   This chapter describes the installation
+   of <productname>Pgpool-II</productname>.  First, installation from
+   source code distribution is explained. Then installation from RPM
+   packages is explained.
+   -->
+   この章は<productname>Pgpool-II</productname>のインストールについて書かれています。
+   最初に、ソースコード配布物からのインストールについて説明します。
+   その後、RPMパッケージからのインストールについて説明します。
+  </para>
+ </sect1>
+
+ <sect1 id="install-requirements">
+  <!--
+  <title>Requirements</title>
+  -->
+  <title>必要条件</title>
+
+  <para>
+   <!--
+   In general, a modern Unix-compatible platform should be able to run
+   <productname>Pgpool-II</>. Windows is not supported.
+   -->
+   通常、最近のUnix互換プラットフォームならば<productname>Pgpool-II</>を動作させることができるはずです。
+   Windows はサポートされてません。
+  </para>
+
+  <para>
+   <!--
+   The following software packages are required for building
+   <productname>Pgpool-II</>:
+   -->
+   <productname>Pgpool-II</>を構築するには以下のソフトウェアパッケージが必要です。
+   <itemizedlist>
+    <listitem>
+     <para>
+      <indexterm>
+       <primary>make</primary>
+      </indexterm>
+
+      <!--
+      <acronym>GNU</> <application>make</> version 3.80 or newer is required; other
+      <application>make</> programs or older <acronym>GNU</> <application>make</> versions will <emphasis>not</> work.
+      (<acronym>GNU</> <application>make</> is sometimes installed under
+      the name <filename>gmake</filename>.)  To test for <acronym>GNU</acronym>
+      <application>make</application> enter:
+      -->
+      <acronym>GNU</> <application>make</>のバージョン3.80以上が必要です。
+      他の<application>make</>や古い<acronym>GNU</> <application>make</>では<emphasis>動作しません</>。
+      (<acronym>GNU</> <application>make</>はときどき<filename>gmake</filename>という名前でインストールされます。)
+      <acronym>GNU</acronym> <application>make</>の試験を行うためには以下を実行してください。
+      <screen>
+       <userinput>make --version</userinput>
+      </screen>
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      You need an <acronym>ISO</>/<acronym>ANSI</> C compiler (at least
+      C89-compliant). Recent
+      versions of <productname>GCC</> are recommended, but
+      <productname>Pgpool-II</> is known to build using a wide variety
+      of compilers from different vendors.
+      -->
+      <acronym>ISO</>/<acronym>ANSI</> Cコンパイラ（最低限C89-準拠）が必要です。
+      <productname>GCC</> の最近のバージョンをお勧めしますが、<productname>Pgpool-II</>は異なるベンダの、様々なコンパイラを使用して構築できることで知られています。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <application>tar</> is required to unpack the source
+      distribution, in addition to <application>gzip</>.
+      -->
+      配布物を展開するために、<application>tar</>および<application>gzip</>が必要です。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      Several packages of <productname>PostgreSQL</productname> are required to
+      install <productname>Pgpool-II</productname>. You install postgresql-libs
+      and postgresql-devel packages from rpm.
+      -->
+      <productname>Pgpool-II</productname>をインストールするためには<productname>PostgreSQL</productname>のいくつかのパッケージが必要となります。
+      <productname>PostgreSQL</productname>をソースコードからインストールする、もしくは<application>postgresql-libs</application>,<application>postgresql-devel</application>のパッケージをインストールしてください。
+     </para>
+    </listitem>
+
+   </itemizedlist>
+  </para>
+
+  <para>
+   <!--
+   If you are building from a <productname>Git</productname> tree instead of
+   using a released source package, or if you want to do server development,
+   you also need the following packages:
+   -->
+   リリースされたソースパッケージではなく<productname>Git</productname>ツリーからの構築の場合、またはサーバ開発を行いたい場合には、以下のパッケージも必要となります。
+  </para>
+
+  <para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      <indexterm>
+       <primary>flex</primary>
+      </indexterm>
+      <indexterm>
+       <primary>lex</primary>
+      </indexterm>
+      <indexterm>
+       <primary>bison</primary>
+      </indexterm>
+      <indexterm>
+       <primary>yacc</primary>
+      </indexterm>
+
+      <!--
+      <application>Flex</> and <application>Bison</>
+      are needed to build from a Git checkout, or if you changed the actual
+      scanner and parser definition files. If you need them, be sure
+      to get <application>Flex</> 2.5.31 or later and
+      <application>Bison</> 1.875 or later. Other <application>lex</>
+      and <application>yacc</> programs cannot be used.
+      -->
+      <application>Flex</>および<application>Bison</>は、Gitチェックアウトから構築する場合や、実際のスキャナとパーサの定義ファイルを変更した場合に必要となります。
+      それらが必要な場合は、<application>Flex</> 2.5.31以降と<application>Bison</> 1.875以降を使うようにしてください。
+      他の<application>lex</>と<application>yacc</>プログラムは使用できません。
+     </para>
+    </listitem>
+
+   </itemizedlist>
+  </para>
+
+  <para>
+   <!--
+   If you need to get a <acronym>GNU</acronym> package, you can find
+   it at your local <acronym>GNU</acronym> mirror site (see <ulink
+   url="http://www.gnu.org/order/ftp.html"></>
+   for a list) or at <ulink
+   url="ftp://ftp.gnu.org/gnu/"></ulink>.
+   -->
+   <acronym>GNU</acronym>パッケージの入手が必要な場合、近くの<acronym>GNU</acronym>ミラーサイトから探してください（ミラーサイトの一覧は<ulink url="http://www.gnu.org/order/ftp.html"></>にあります）。
+   または、<ulink url="ftp://ftp.gnu.org/gnu/"></ulink>から探してください。
+  </para>
+
+  <para>
+   <!--
+   Also check that you have sufficient disk space. You will need about
+   40 MB for the source tree during compilation and about 20 MB for
+   the installation directory. If you are going to
+   run the regression tests you will temporarily need up to an extra
+   4 GB. Use the <command>df</command> command to check free disk
+   space.
+   -->
+   また、十分なディスク領域があることも確認してください。
+   コンパイル中、ソースツリーのために40メガバイト、インストールディレクトリに20メガバイトほど必要となります。
+   リグレッションテストを実行する場合は、一時的に最大で4ギガバイトの領域がさらに必要になります。
+   ディスクの空き容量を確認するためには<command>df</command>コマンドを使います。
+  </para>
+ </sect1>
+
+ <sect1 id="install-getsource">
+  <!--
+  <title>Getting The Source</title>
+  -->
+  <title>ソースの入手</title>
+
+  <para>
+   <!--
+   The <productname>Pgpool-II</> &version; sources can be obtained
+   from the download section of our
+   website: <ulink url="http://www.pgpool.net"></ulink>.  You should
+   get a file
+   named <filename>pgpool-II-&version;.tar.gz</filename>. After you
+   have obtained the file, unpack it:
+   -->
+   <productname>Pgpool-II</>のソースは、Webサイト<ulink url="http://www.pgpool.net"></ulink>のダウンロードページから入手することができます。
+   <filename>pgpool-II-&version;.tar.gz</filename>という名前のファイルを入手してください。
+   ファイルを入手したら、展開します。
+   <screen>
+    <userinput>tar xf pgpool-II-&version;.tar.gz</userinput>
+   </screen>
+   <!--
+   This will create a directory
+   <filename>pgpool-II-&version;</filename> under the current directory
+   with the <productname>Pgpool-II</> sources.
+   Change into that directory for the rest
+   of the installation procedure.
+   -->
+   これにより、カレントディレクトリ以下に<filename>pgpool-II-&version;</filename>というディレクトリが作成され、<productname>Pgpool-II</productname>のソースが展開されます。
+   この後のインストール手順を行うために、このディレクトリに移動してください。
+  </para>
+
+ </sect1>
+
+ <sect1 id="install-pgpool">
+  <!--
+  <title>Installing Pgpool-II</title>
+  -->
+  <title>Pgpool-IIのインストール</title>
+  <para>
+   <!--
+   After extracting the source tarball, execute the <filename>configure</> script.
+   -->
+   ソースのtarballを展開したら、<filename>configure</>スクリプトを実行します。
+   <programlisting>
+    ./configure
+   </programlisting>
+  </para>
+
+  <para>
+   <!--
+   You can customize the build and installation process by supplying one
+   or more of the following command line options to
+   <filename>configure</filename>:
+   -->
+   <filename>configure</filename>に以下のコマンドラインオプションを1つ以上指定することで、構築処理やインストール処理を変更することができます。
+  </para>
+
+  <variablelist>
+
+   <varlistentry>
+    <term><option>--prefix=path</option></term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the top directory where <productname>Pgpool-II</> binaries and related
+      files like docs will be installed in. Default value is <filename>/usr/local</filename>.
+      -->
+      <productname>Pgpool-II</>バイナリやドキュメントなどの関連ファイルがインストールされるトップディレクトリを指定します。
+      デフォルトは<filename>/usr/local</filename>です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-pgsql=path</option></term>
+    <listitem>
+     <para>
+      <!--
+      Specifies the top directory where <productname>PostgreSQL</>'s client libraries are
+      installed. Default value is the path provided by <command>pg_config</command> command.
+      -->
+      <productname>PostgreSQL</>のクライアントライブラリなどがインストールされているトップディレクトリを指定します。
+      デフォルト値は<command>pg_config</command>コマンドで取得できるパスです。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-openssl</option></term>
+    <listitem>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> binaries will be built
+      with <productname>OpenSSL</productname>
+      support.  <productname>OpenSSL</productname> support is
+      disabled by default.
+      -->
+      <productname>Pgpool-II</productname>バイナリが<productname>OpenSSL</productname>サポート付で構築されます。
+      デフォルトでは<productname>OpenSSL</productname>サポートは無効です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--enable-sequence-lock</option></term>
+    <listitem>
+     <para>
+      <!--
+      Use insert_lock compatible
+      with <productname>Pgpool-II</productname> 3.0 series
+      (until 3.0.4).  <productname>Pgpool-II</productname> locks
+      against a row in the sequence
+      table. <productname>PostgreSQL</productname> 8.2 or later
+      which was released after June 2011 cannot use this lock
+      method.
+      -->
+      <productname>Pgpool-II</productname> 3.0シリーズ (3.0.4まで) 互換の insert_lock を使用します。
+      <productname>Pgpool-II</productname>は、シーケンステーブルの行に対してロックを行います。
+      2011年06月より後にリリースされた<productname>PostgreSQL</productname> 8.2以降ではこのロック方式は使用できません。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--enable-table-lock</option></term>
+    <listitem>
+     <para>
+      <!--
+      Use insert_lock compatible
+      with <productname>Pgpool-II</productname> 2.2 and 2.3
+      series.  <productname>Pgpool-II</productname> locks
+      against the insert target table.  This lock method is
+      deprecated because it causes a lock conflict
+      with <command>VACUUM</command>.
+      -->
+      <productname>Pgpool-II</productname> 2.2と2.3シリーズ互換のinsert_lockを使用します。
+      <productname>Pgpool-II</productname>は、挿入対象のテーブルに対してロックを行ないます。
+      このロック方式は<command>VACUUM</command>とロック競合するため非推奨です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-memcached=path</option></term>
+    <listitem>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> binaries will use <productname>memcached</productname> for in
+      memory query cache.  You have to
+      install <ulink url="http://libmemcached.org/libMemcached.html">libmemcached</ulink>.
+      -->
+      <productname>Pgpool-II</productname>バイナリはインメモリクエリキャッシュのキャッシュストレージに<productname>memcached</productname>を利用します。
+      <ulink url="http://libmemcached.org/libMemcached.html">libMemcached</ulink>のインストールが必要です
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><option>--with-pam</option></term>
+    <listitem>
+     <para>
+      <!--
+      <productname>Pgpool-II</productname> binaries will be built with PAM authentication support.
+      PAM authentication support is disabled by default.
+      -->
+      <productname>Pgpool-II</productname>バイナリがPAM認証サポート付で構築されます。
+      デフォルトでは、PAM認証サポートは無効です。
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+
+  <para>
+   <programlisting>
+    make
+    make install
+   </programlisting>
+   <!--
+   This will install <productname>Pgpool-II</>. (If you use <productname>Solaris</> or <productname>FreeBSD</>, replace make with gmake)
+   -->
+   これにより<productname>Pgpool-II</>がインストールされます。
+   （<productname>Solaris</>または<productname>FreeBSD</>を使用している場合は<command>make</>を<command>gmake</>で置き換えて下さい。）
+  </para>
+
+ </sect1>
+
+ <sect1 id="install-pgpool-recovery">
+  <!--
+  <title>Installing pgpool_recovery</title>
+  -->
+  <title>pgpool_recoveryのインストール</title>
+  <para>
+   <!--
+   <productname>Pgpool-II</productname> need function of <function>pgpool_recovery</function>,
+   <function>pgpool_remote_start</function> and <function>pgpool_switch_xlog</function>,
+   when you use the online recovery that describes latter.
+   Also pgpoolAdmin of management tool, stop, restart or reload a
+   <productname>PostgreSQL </productname> on the screen by use <function>pgpool_pgctl<function>.
+   It is enough, if these function installed in template1 first. These
+   function do not needed that install in all databases.
+   -->
+   後述の オンラインリカバリ の機能を使う場合には、 pgpool_recovery, pgpool_remote_start, pgpool_switch_xlog という関数が必要です。
+   また管理ツールである pgpoolAdmin の画面上から、バックエンドノードの PostgreSQL を停止・再起動・設定再読み込みを行なうことができますが、これには pgpool_pgctl という関数が使われます。
+   これらの関数は、すべてのデータベースにインストールされている必要はなく、template1 にだけで 構いません。
+  </para>
+
+  <para>
+   <!--
+   This is required in all <productname>Pgpool-II</productname>
+   installation.
+   -->
+   これは全ての<productname>Pgpool-II</productname>のインストールで必要です。
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql/pgpool-recovery
+    $ make
+    $ make install
+   </programlisting>
+   <!--
+   After this:
+   -->
+   この後に以下か、
+   <programlisting>
+    $ psql template1
+    =# CREATE EXTENSION pgpool_recovery;
+   </programlisting>
+
+   <!--
+   or
+   -->
+   または
+   <programlisting>
+    $ psql -f pgpool-recovery.sql template1
+   </programlisting>
+   を実行します。
+
+  </para>
+
+  <para>
+   <!--
+   With <productname>Pgpool-II</productname> 3.3 or later, you need
+   to tweak <filename>postgresql.conf</filename>.  Suppose the path
+   to <command>pg_ctl</command>
+   is <filename>/usr/local/pgsql/bin/pg_ctl</filename>. Then you
+   add following to <filename>postgresql.conf</filename>.
+   -->
+   <productname>Pgpool-II</productname> 3.3 以降では、<filename>postgresql.conf</filename>を変更する必要があります。
+   <command>pg_ctl</command>へのパスが<filename>/usr/local/pgsql/bin/pg_ctl</filename>であるとします。
+   その場合、<filename>postgresql.conf</filename>に以下を追加してください。
+
+   <programlisting>
+    pgpool.pg_ctl = '/usr/local/pgsql/bin/pg_ctl'
+   </programlisting>
+
+   <!--
+   Probably you want to execute following after this:
+   -->
+   もしかするとその後に以下を実行する必要があるかもしれません。
+   <programlisting>
+    $ pg_ctl reload -D /usr/local/pgsql/data
+   </programlisting>
+
+  </para>
+ </sect1>
+
+ <sect1 id="install-pgpool-regclass">
+  <!--
+  <title>Installing pgpool-regclass</title>
+  -->
+  <title>pgpool-regclassのインストール</title>
+  <para>
+   <!--
+   If you are using <productname>PostgreSQL</productname> 9.4 or
+   later, you can skip this section.
+   -->
+   <productname>PostgreSQL</productname> 9.4以降を使用している場合には、本節は飛ばすことができます。
+  </para>
+
+  <para>
+   <!--
+   If you are using <productname>PostgreSQL</productname> 8.0
+   to <productname>PostgreSQL</productname> 9.3, installing
+   <function>pgpool_regclass</function> function on
+   all <productname>PostgreSQL</productname> to be accessed by
+   <productname>Pgpool-II</productname> is strongly recommended, as
+   it is used internally by <productname>Pgpool-II</productname>.
+   Without this, handling of duplicate table names in different
+   schema might cause trouble (temporary tables aren't a problem).
+   If you are using <productname>PostgreSQL</productname> 9.4 or
+   later, installing <function>pgpool_regclass</function> is not
+   necessary since an equivalent (<function>to_regclass</function>)
+   is included in the <productname>PostgreSQL</productname> core.
+   -->
+   <productname>PostgreSQL</productname> 8.0から<productname>PostgreSQL</productname> 9.3までを使用している場合は、<productname>Pgpool-II</productname> がアクセスする全ての<productname>PostgreSQL</productname>において<function>pgpool_regclass</function> 関数をインストールすることを強く推奨します。
+   <productname>Pgpool-II</productname>から内部的に使用されるからです。
+   これがないと、異なるスキーマの間で重複するテーブル名を扱う際の不具合の原因となります。
+   （一時テーブルの場合は問題となりません。）
+   <productname>PostgreSQL</productname> 9.4以降を使用している場合は、同等の関数(<function>to_regclass</function>)が<productname>PostgreSQL</productname>に含まれているため、<function>pgpool_regclass</function>のインストールは必要ありません。
+  </para>
+
+  <para>
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql/pgpool-regclass
+    $ make
+    $ make install
+   </programlisting>
+   <!--
+   After this:
+   -->
+   この後に以下か、
+
+   <programlisting>
+    $ psql template1
+    =# CREATE EXTENSION pgpool_regclass;
+   </programlisting>
+
+   <!--
+   or
+   -->
+   または
+
+   <programlisting>
+    $ psql -f pgpool-regclass.sql template1
+   </programlisting>
+
+   を実行します。
+
+   <!--
+   Executing <command>CREATE EXTENSION</command>
+   or <filename>pgpool-regclass.sql</filename> should be performed
+   on every databases accessed
+   via <productname>Pgpool-II</productname>.  However, you do not need to
+   do this for a database created after the execution of
+   <command>CREATE EXTENSION</command> or
+   <command>psql -f pgpool-regclass.sql template1</command>,
+   as this template database will be cloned to create new databases.
+   -->
+   <command>CREATE EXTENSION</command>または<filename>pgpool-regclass.sql</filename>の実行は、<productname>Pgpool-II</productname>経由でアクセスされる全てのデータベースで実行しなければなりません。
+   ただし、<command>CREATE EXTENSION</command>または"psql -f pgpool-regclass.sql template1"の実行後に作成されたデータベースでは、新しいデータベース作成のためにテンプレートデータベースが複製されるため、これを実行する必要はありません。
+  </para>
+
+ </sect1>
+
+ <sect1 id="create-installlock-table">
+  <!--
+  <title>Creating insert_lock table</title>
+  -->
+  <title>insert_lockテーブルの作成</title>
+
+  <para>
+   <!--
+   If you are not going to use the native replication mode, you can skip this section.
+   -->
+   ネイティブレプリケーションモードを使う予定のない場合は、本節は飛ばすことができます。
+  </para>
+
+  <para>
+   <!--
+   If you plan to use native replication mode and insert_lock,
+   creating <structname>pgpool_catalog.insert_lock</structname>
+   table for mutual exclusion is strongly recommended.  Without
+   this, insert_lock works so far. However in that
+   case <productname>Pgpool-II</productname> locks against the
+   insert target table. This behavior is same
+   as <productname>Pgpool-II</productname> 2.2 and 2.3 series. The
+   table lock conflicts with <command>VACUUM</command>, so <command>INSERT</command>
+   processing may be thereby kept waiting for a long time.
+   -->
+   ネイティブレプリケーションモードでinsert_lockを利用したい場合は、排他制御用のテーブル<structname>pgpool_catalog.insert_lock</structname>を作成することを強く推奨します。
+   これがなくてもある程度はinsert_lock は動作します。
+   しかしその場合は、<productname>Pgpool-II</productname>は挿入対象のテーブルに対してロックを行います。
+   これは<productname>Pgpool-II</productname> 2.2と2.3 シリーズの動作と同じです。
+   このテーブルに対するロックは、<command>VACUUM</command>と競合するため、<command>INSERT</command>処理が長時間待たされ続ける可能性があります。
+
+   <programlisting>
+    $ cd pgpool-II-&version/src/sql
+    $ psql -f insert_lock.sql template1
+   </programlisting>
+
+  </para>
+
+  <para>
+   <!--
+   Executing <filename>insert_lock.sql</filename> should be
+   performed on every databases accessed
+   via <productname>Pgpool-II</productname>.  You do not need to
+   do this for a database created after the execution of
+   <command>psql -f insert_lock.sql template1</command>, as this
+   template database will be cloned to create new databases.
+   -->
+   <filename>insert_lock.sql</filename>は、pgpool-II経由で利用するデータベース毎に必要になります。
+   ただし、"psql -f insert_lock.sql template1"の実行後に作成されたデータベースでは、新しいデータベース作成のためにテンプレートデータベースが複製されるため、これを実行する必要はありません。
+  </para>
+ </sect1>
+
+ <sect1 id="install-docs">
+  <!--
+  <title>Compiling and installing documents</title>
+  -->
+  <title>ドキュメントのコンパイルとインストール</title>
+
+  <sect2 id="install-docs-tool-sets">
+   <!--
+   <title>Tool Sets</title>
+   -->
+   <title>ツールセット</title>
+
+   <para>
+    <!--
+    <productname>Pgpool-II</productname> documents are written in
+    SGML (more precisely, DocBook, which is a language implemented
+    using SGML). To generate readable HTML documents, you need to
+    compile them using docbook tools. To install Docbook tools on
+    RHEL or similar systems, use:
+    -->
+    <productname>Pgpool-II</productname>のドキュメントはSGML(より正確には、SGMLを使って実装された言語であるDocBook)で書かれています。
+    ユーザが読めるHTMLドキュメントを生成するには、docbookツールを使ってコンパイルする必要があります。
+    RHEL類似のシステムでツールをインストールするには、以下を実行します。
+    <programlisting>
+     yum install docbook-dtds docbook-style-dsssl docbook-style-xsl libxslt openjade
+    </programlisting>
+   </para>
+  </sect2>
+
+  <sect2 id="install-docs-make">
+   <!--
+   <title>Compiling docs</title>
+   -->
+   <title>ドキュメントのコンパイル</title>
+   <para>
+    <!--
+    Once the tool sets are installed on the system, you can compile the docs:
+    -->
+    ツールセットがインストールされたら、以下のようにコンパイルします。
+    <programlisting>
+     $ cd doc
+     $ make
+     $ cd ..
+     $ cd doc.ja
+     $ make
+    </programlisting>
+    <!--
+    You will see English HTML docs under doc/src/sgml/html, and online docs under sgml/man[1-8].
+    Japanese docs can be found under doc.ja/src/sgml/html, and online docs under sgml/man[1-8].
+    -->
+    HTMLドキュメントはdoc/src/sgml/htmlに、オンラインマニュアルはsgml/man[1-8]にあります。
+    日本語のドキュメントはdoc.ja/src/sgml/htmlに、オンラインマニュアルはsgml/man[1-8]にあります。
+   </para>
+  </sect2>
+ </sect1>
+
+ &installation-rpm;
+
+ &installation-tips;
+
+</chapter>

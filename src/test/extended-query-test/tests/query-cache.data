@@ -1,0 +1,53 @@
+# query cache test
+#
+
+##memory_cache_enabled = on
+
+# Create test table
+'Q'	"DROP TABLE IF EXISTS pgproto_test1"
+'Y'
+'Q'	"CREATE TABLE pgproto_test1(i INT)"
+'Y'
+'Q'	"INSERT INTO pgproto_test1 VALUES(1)"
+'Y'
+
+'Q'	"SELECT * FROM pgproto_test1"
+'Y'
+'Q'	"SELECT * FROM pgproto_test1"
+'Y'
+
+# Start a transaction
+'P'	"S1"	"BEGIN"	0
+'B'	""	"S1"	0	0	0
+'E'	""	0
+'C'	'S'	"S1"
+
+# Issue SELECT
+'P'	"S2"	"SELECT 1 FROM pgproto_test1"	0
+'B'	""	"S2"	0	0	0
+'E'	""	0
+'C'	'S'	"S2"
+
+# Issue COMMIT
+'P'	"S4"	"COMMIT"	0
+'B'	""	"S4"	0	0	0
+'E'	""	0
+'C'	'S'	"S4"
+
+'S'
+'Y'
+
+# Issue SELECT
+'P'	"S3"	"SELECT 1 FROM pgproto_test1"	0
+'B'	""	"S3"	0	0	0
+'E'	""	0
+'C'	'S'	"S3"
+
+'S'
+'Y'
+
+# DROP test table
+'Q'	"DROP TABLE pgproto_test1"
+'Y'
+
+'X'

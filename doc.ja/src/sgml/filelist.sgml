@@ -1,0 +1,92 @@
+<!-- doc/src/sgml/filelist.sgml -->
+
+<!ENTITY history    SYSTEM "history.sgml">
+<!ENTITY info       SYSTEM "info.sgml">
+<!ENTITY intro      SYSTEM "intro.sgml">
+<!ENTITY legal      SYSTEM "legal.sgml">
+<!ENTITY notation   SYSTEM "notation.sgml">
+<!ENTITY problems   SYSTEM "problems.sgml">
+<!ENTITY restrictions SYSTEM "restrictions.sgml">
+
+<!-- tutorial -->
+<!ENTITY advanced   SYSTEM "advanced.sgml">
+<!ENTITY query      SYSTEM "query.sgml">
+<!ENTITY start      SYSTEM "start.sgml">
+
+<!-- administrator's guide -->
+<!ENTITY client-auth   SYSTEM "client-auth.sgml">
+<!ENTITY installation  SYSTEM "installation.sgml">
+<!ENTITY installation-rpm  SYSTEM "installation-rpm.sgml">
+<!ENTITY installation-tips  SYSTEM "installation-tips.sgml">
+<!ENTITY maintenance   SYSTEM "maintenance.sgml">
+<!ENTITY manage-ag     SYSTEM "manage-ag.sgml">
+<!ENTITY monitoring    SYSTEM "monitoring.sgml">
+<!ENTITY regress       SYSTEM "regress.sgml">
+<!ENTITY recovery-config SYSTEM "recovery-config.sgml">
+<!ENTITY runtime       SYSTEM "runtime.sgml">
+<!ENTITY config        SYSTEM "config.sgml">
+<!ENTITY connection-settings SYSTEM "connection-settings.sgml">
+<!ENTITY connection-pooling SYSTEM "connection-pooling.sgml">
+<!ENTITY loadbalance   SYSTEM "loadbalance.sgml">
+<!ENTITY healthcheck   SYSTEM "healthcheck.sgml">
+<!ENTITY failover      SYSTEM "failover.sgml">
+<!ENTITY online-recovery SYSTEM "online-recovery.sgml">
+<!ENTITY stream-check  SYSTEM "stream-check.sgml">
+<!ENTITY memcache      SYSTEM "memcache.sgml">
+<!ENTITY ssl           SYSTEM "ssl.sgml">
+<!ENTITY watchdog      SYSTEM "watchdog.sgml">
+<!ENTITY performance   SYSTEM "performance.sgml">
+<!ENTITY misc-config   SYSTEM "misc-config.sgml">
+<!ENTITY config-last   SYSTEM "config-last.sgml">
+
+<!ENTITY examples      SYSTEM "examples.sgml">
+<!ENTITY example-basic      SYSTEM "example-basic.sgml">
+<!ENTITY example-watchdog   SYSTEM "example-watchdog.sgml">
+<!ENTITY example-cluster    SYSTEM "example-cluster.sgml">
+<!ENTITY example-replication-si-mode    SYSTEM "example-replication-si-mode.sgml">
+<!ENTITY example-AWS        SYSTEM "example-AWS.sgml">
+<!ENTITY example-Aurora     SYSTEM "example-Aurora.sgml">
+
+<!-- reference pages -->
+<!ENTITY % allfiles   SYSTEM "ref/allfiles.sgml">
+%allfiles;
+
+<!-- appendixes -->
+<!ENTITY release    SYSTEM "release.sgml">
+<!ENTITY release-4.4    SYSTEM "release-4.4.sgml">
+<!ENTITY release-4.3    SYSTEM "release-4.3.sgml">
+<!ENTITY release-4.2    SYSTEM "release-4.2.sgml">
+<!ENTITY release-4.1    SYSTEM "release-4.1.sgml">
+<!ENTITY release-4.0    SYSTEM "release-4.0.sgml">
+<!ENTITY release-3.7    SYSTEM "release-3.7.sgml">
+<!ENTITY release-3.6    SYSTEM "release-3.6.sgml">
+<!ENTITY release-3.5    SYSTEM "release-3.5.sgml">
+<!ENTITY release-3.4    SYSTEM "release-3.4.sgml">
+<!ENTITY release-3.3    SYSTEM "release-3.3.sgml">
+<!ENTITY release-3.2    SYSTEM "release-3.2.sgml">
+<!ENTITY release-3.1    SYSTEM "release-3.1.sgml">
+<!ENTITY release-old    SYSTEM "release-old.sgml">
+
+<!-- back matter -->
+<!ENTITY biblio     SYSTEM "biblio.sgml">
+<!ENTITY bookindex  SYSTEM "bookindex.sgml">
+
+<!--
+ Some parts of the documentation are also source for some plain-text
+ files used during installation.  To selectively ignore or include
+ some parts (e.g., external xref's) when generating these files we use
+ these parameter entities.  See also standalone-install.sgml.
+ -->
+<!ENTITY % standalone-ignore  "INCLUDE">
+<!ENTITY % standalone-include "IGNORE">
+
+<!--
+ By default, no index is included.  Use -i include-index on the command line
+ to include it.
+ -->
+<!ENTITY % include-index "IGNORE">
+
+<!--
+ Create empty index element for processing by XSLT stylesheet.
+ -->
+<!ENTITY % include-xslt-index "IGNORE">

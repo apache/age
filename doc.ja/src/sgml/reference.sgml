@@ -1,0 +1,362 @@
+<!-- doc/src/sgml/reference.sgml -->
+
+<part id="reference">
+ <!--
+ <title>Reference</title>
+ -->
+ <title>リファレンス</title>
+
+ <partintro>
+  <para>
+   <!--
+   This part contains reference information for the pgpool-II.
+   -->
+   ここには <productname>Pgpool-II</productname> のリファレンス情報があります。
+  </para>
+
+  <para>
+   <!--
+   The reference entries are also available as traditional
+   <quote>man</quote> pages.
+   -->
+   このリファレンスは伝統的な <quote>man</quote> ページとしても入手できます。
+  </para>
+ </partintro>
+
+ <reference id="server-commands">
+  <!--
+  <title>Server commands</title>
+  -->
+  <title>サーバコマンド</title>
+
+  <partintro>
+   <para>
+    <!--
+    This part contains reference information for server
+    commands. Currently only <command>pgpool</command> falls into
+    this category.
+    -->
+    ここには、サーバコマンドの情報があります。
+    いまのところ、<command>pgpool</command>だけがここに所属しています。
+   </para>
+  </partintro>
+  &pgpool;
+ </reference>
+
+ <reference id="pcp-commands">
+  <!--
+  <title>PCP commands</title>
+  -->
+  <title>PCP コマンド</title>
+
+  <partintro>
+   <para>
+    <!--
+    This part contains reference information for PCP commands.
+    PCP commands are UNIX commands which manipulate pgpool-II via the network.
+    Please note that the parameter format for all PCP commands has been changed since pgpool-II 3.5.
+    -->
+    ここには <productname>Pgpool-II</productname> の PCP コマンドのリファレンス情報があります。
+    PCP コマンドはネットワーク経由で複数の <productname>Pgpool-II</productname> を操作する UNIX コマンドです。
+    注意：<productname>Pgpool-II</productname> 3.5 より、全ての PCP コマンドのパラメータ書式が変更されています。
+   </para>
+
+   <sect1 id="pcp-connection-authentication">
+    <!--
+    <title>PCP connection authentication</title>
+    -->
+    <title>PCP 接続認証</title>
+    <para>
+     <!--
+     PCP user names and passwords must be declared in
+     <filename>pcp.conf</filename> in <filename>$prefix/etc</filename>
+     directory. <option>-F</option> option can be used when starting
+     pgpool-II if <filename>pcp.conf</filename> is placed somewhere
+     else.
+     -->
+     PCP ユーザ名とパスワードが <filename>$prefix/etc</filename> ディレクトリ内の <filename>pcp.conf</filename>
+     で宣言されている必要があります(このファイルを作る方法については<xref linkend="configuring-pcp-conf">を参照してください)。
+      <filename>pcp.conf</filename> が他の場所にある場合には、
+      <productname>Pgpool-II</productname> の起動時に <option>-F</option> オプションで指定することができます。
+    </para>
+   </sect1>
+
+   <sect1 id="pcp-password-file">
+    <!--
+    <title>PCP password file</title>
+    -->
+    <title>PCP パスワードファイル</title>
+    <para>
+     <!--
+     The file <filename>.pcppass</filename> in a user's home
+     directory or the file referenced by environment variable
+     PCPPASSFILE can contain passwords to be used if no password has
+     been specified for the pcp connection.
+     -->
+     PCP 接続時にパスワードが指定されなかった場合、ユーザのホームディレクトリに配置された <filename>.pcppass</filename> ファイルか、
+     環境変数 PCPPASSFILE で参照されるファイルに格納されたパスワードが使用可能です。
+    </para>
+    <para>
+     <!--
+     This file should contain lines of the following format:
+     -->
+     このファイルの各行の書式は以下のとおりです：
+
+     <programlisting>
+      hostname:port:username:password
+     </programlisting>
+    </para>
+
+    <para>
+     <!--
+     (You can add a reminder comment to the file by copying the line
+     above and preceding it with #.)  Each of the first three fields
+     can be a literal value, or *, which matches anything. The password
+     field from the first line that matches the current connection
+     parameters will be used. (Therefore, put more-specific entries
+     first when you are using wildcards.) If an entry needs to contain
+     : or \, escape this character with \. The hostname field is matched
+     to the host connection parameter if that is specified, if the host
+     parameter is not given then the host name <literal>localhost</literal>
+     is searched for. The host name <literal>localhost</literal> is also
+     searched for when the connection is a Unix domain socket connection
+     and the host parameter matches the default pcp socket directory path.
+     -->
+     （この文字列の行頭に # を付けてからファイルにコピーしておけば備忘録のコメントになります。）
+     最初の３つのフィールドはそれぞれリテラル値か、任意のものにマッチする * を指定します。
+     現在の接続パラメータにマッチした最初の行の password フィールドが使用されます。
+     （したがって、ワイルドーカードを使用する場合には、具体的なエントリーの方を先に書きます。）
+     エントリーの中に 「:」 か 「\」 を含む必要がある場合には、その文字を 「\」 をつかってエスケープしてください。
+     hostname フィールドは、host 接続パラメータとマッチします。host パラメータが指定されていなければ、ホスト名<literal>localhost</literal>がマッチします。
+     接続が Unix ドメインソケット接続で、host パラメータがデフォルトの PCP ソケットディレクトリパスに一致した場合も、ホスト名<literal>localhost</literal>がマッチします。
+    </para>
+
+    <para>
+     <!--
+     The permissions on .pcppass must disallow any access to world or
+     group; achieve this by the command chmod 0600 ~/.pcppass. If the
+     permissions are less strict than this, the file will be
+     ignored.
+     -->
+     <filename>.pcppass</filename> のパーミッションはグループおよび全ユーザからのアクセスを許してはいけません。
+     chmod 0600 ~/.pcppass を実行してください。これよりパーミッションの制限が弱い場合には、 このファイルは無視されます。
+    </para>
+
+   </sect1>
+
+  </partintro>
+
+  &pcpCommonOptions;
+  &pcpNodeCount;
+  &pcpNodeInfo;
+  &pcpHealthCheckStats;
+  &pcpWatchdogInfo;
+  &pcpProcCount;
+  &pcpProcInfo;
+  &pcpPoolStatus;
+  &pcpDetachNode;
+  &pcpAttachNode;
+  &pcpPromoteNode;
+  &pcpStopPgpool;
+  &pcpReloadConfig;
+  &pcpRecoveryNode;
+
+ </reference>
+
+ <reference id="other-commands">
+  <!--
+  <title>Other commands</title>
+  -->
+  <title>他のコマンド</title>
+
+  <partintro>
+   <para>
+    <!--
+    This part contains reference information for various Pgpool-II commands.
+    -->
+    ここには、他の <productname>Pgpool-II</productname> コマンドのリファレンス情報があります。
+   </para>
+
+  </partintro>
+
+  &pgMd5;
+  &pgEnc;
+  &pgproto;
+  &pgpoolSetup;
+  &watchdogSetup;
+  &wdCli;
+
+ </reference>
+
+ <reference id="sql-commands">
+  <!--
+  <title>SQL type commands</title>
+  -->
+  <title>SQL 型コマンド</title>
+
+  <partintro>
+   <para>
+    <!--
+    This part contains reference information for various SQL type
+    <productname>Pgpool-II</productname> commands.  These commands
+    can be issued inside the SQL session using the
+    standard <productname>PostgreSQL</productname> client
+    like <literal>psql</literal>. They are not forwarded to the
+    backend DB: instead they are processed
+    by <productname>Pgpool-II</productname> server.  Please note
+    that SQL type commands cannot be used in extended query
+    mode. You will get parse errors
+    from <productname>PostgreSQL</productname>.
+    -->
+    ここには、SQL 型の <productname>Pgpool-II</productname> コマンドのリファレンス情報があります。
+    これらのコマンドは、<literal>psql</literal> のような標準 <productname>PostgreSQL</productname>
+    のクライアントのSQLセッションで発行できますが、バックエンド DB に転送されず、
+    <productname>Pgpool-II</productname> サーバで処理されます。
+    また、拡張クエリモードでは利用することができません。
+   </para>
+
+  </partintro>
+
+  &pgpoolShow
+  &pgpoolSet
+  &pgpoolReset
+  &showPoolStatus
+  &showPoolNodes
+  &showPoolProcesses
+  &showPoolPools
+  &showPoolVersion
+  &showPoolCache
+  &showPoolHealthCheckStats
+  &showPoolBackendStats
+ </reference>
+ <reference id="pgpool-adm">
+  <!--
+  <title>pgpool_adm extension</title>
+  -->
+  <title>pgpool_admエクステンション</title>
+  <partintro>
+   <para>
+    <!--
+    <command>pgpool_adm</command> is a set of extensions to allow
+    SQL access to <xref linkend="pcp-commands"> (actually, pcp
+    libraries). It uses foreign data wrapper as shown in the
+    diagram below.
+    -->
+    <command>pgpool_adm</command>は、<xref linkend="pcp-commands"> (実際には, pcp
+     ライブラリ)にアクセスできるようにするための一連のエクステンションです。
+   </para>
+   <para>
+    <figure>
+     <!--
+     <title>How <command>pgpool_adm</command> works</title>
+     -->
+     <title><command>pgpool_adm</command>が動く仕組み</title>
+     <mediaobject>
+      <imageobject>
+       <imagedata fileref="pgpool_adm.gif">
+      </imageobject>
+     </mediaobject>
+    </figure>
+   </para>
+
+   <para>
+    <!--
+    It is possible to call the functions from either via pgpool-II
+    (1) or via <productname>PostgreSQL</productname> (2).  In case
+    (1), <productname>Pgpool-II</productname> accepts query from
+    user (1), then forward
+    to <productname>PostgreSQL</productname> (3).
+    <productname>PostgreSQL</productname> connects
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> reply back
+    to <productname>PostgreSQL</productname> with the result
+    (3). <productname>PostgreSQL</productname> returns the result
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> forwards the data to
+    the user (6).
+    -->
+    <productname>Pgpool-II</productname>経由でも(1)、あるいは直接<productname>PostgreSQL</productname>に対しても(2)、関数を呼び出すことができます。
+    (1)の場合には、<productname>Pgpool-II</productname>はユーザからクエリを受け付け(1)、<productname>PostgreSQL</productname>に転送します(3)。
+    <productname>PostgreSQL</productname>は、<productname>Pgpool-II</productname>に接続し(5)、<productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>に(3)の結果を返します。
+    <productname>PostgreSQL</productname>は<productname>Pgpool-II</productname>に結果を返し(5)、<productname>Pgpool-II</productname>はそのデータをユーザに転送します(6)。
+   </para>
+   <para>
+    <!--
+    In case (2), <productname>PostgreSQL</productname> accepts query from user (2).
+    <productname>PostgreSQL</productname> connects
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> reply back
+    to <productname>PostgreSQL</productname> with the result (3).
+    <productname>PostgreSQL</productname> replies back the data to
+    the user (4).
+    -->
+    (2)の場合には、<productname>PostgreSQL</productname>がクエリをユーザから受け付けます(2)。
+    <productname>PostgreSQL</productname>は<productname>Pgpool-II</productname>に接続し(5)、<productname>Pgpool-II</productname>は<productname>PostgreSQL</productname>に(3)の結果を返します。
+    <productname>PostgreSQL</productname>はそのデータをユーザに返します(4)。
+   </para>
+   <para>
+    <!--
+    There are two forms to call pgpool_adm functions: first form
+    accepts <productname>Pgpool-II</productname> host name (or IP
+    address), pcp port number, pcp user name, its password and
+    another parameters.
+    -->
+    pgpool_adm関数の呼び出し形式は2種類あります。
+    最初の形式は<productname>Pgpool-II</productname>のホスト名(またはIPアドレス)、pcpポート番号、pcpユーザ名、パスワード、それ以外のパラメータです。
+   </para>
+   <para>
+    <!--
+    In the second form, <productname>Pgpool-II</productname>
+    server name is required.  The server name must be already
+    defined using "CREATE FOREIGN SERVER" command
+    of <productname>PostgreSQL</productname>.  The pcp port number
+    is hard coded as 9898, the pcp user name is assumes to be same
+    as caller's <productname>PostgreSQL</productname> user name.
+    password is extracted from $HOME/.pcppass.
+    -->
+    2番目の形式では、<productname>Pgpool-II</productname>サーバ名が必要になります。
+    サーバ名は<productname>PostgreSQL</productname>の"CREATE FOREIGN SERVER"コマンドで定義済みでなければなりません。
+    pcpポート番号は9898に固定されています。
+    pcpユーザ名は、呼び出し元の<productname>PostgreSQL</productname>ユーザ名と同じであると見なされます。
+    パスワードは$HOME/.pcppassから取得します。
+   </para>
+
+   <sect1 id="installing-pgpool-adm">
+    <!--
+    <title>Installing pgpool_adm</title>
+    -->
+    <title>pgpool_admのインストール</title>
+    <para>
+     <!--
+     pgpool_adm is an extension and should be installed on all
+     PostgreSQL servers.
+     -->
+     pgpool_admはエクステンションであり、すべてのPostgreSQLサーバにインストールする必要があります。
+     <programlisting>
+      $ cd src/sql/pgpool_adm
+      $ make
+      $ make install
+     </programlisting>
+     <!--
+     Then issue following SQL command for every database you want to access.
+     -->
+     次のSQLコマンドをアクセスしたいすべてのデータベースに発行します。
+     <programlisting>
+$ psql ...
+=# CREATE EXTENSION pgpool_adm
+     </programlisting>
+    </para>
+   </sect1>
+   
+  </partintro>
+
+  &pgpoolAdmPcpNodeInfo
+  &pgpoolAdmPcpHealthCheckStats
+  &pgpoolAdmPcpPoolStatus
+  &pgpoolAdmPcpNodeCount
+  &pgpoolAdmPcpAttachNode
+  &pgpoolAdmPcpDetachNode
+
+ </reference>
+
+</part>

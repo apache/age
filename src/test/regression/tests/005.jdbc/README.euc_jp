@@ -1,0 +1,73 @@
+$Header$
+
+1. JDBC ドライバテストスイート
+JDBC ドライバテストスイートでは、JDBC ドライバを使って pgpool へ接続し、
+クエリを実行します。
+
+1.1 準備
+あらかじめ CLASSPATH に JDBC ドライバの jar ファイルを通しておいてくだ
+さい。例を示します。
+
+export CLASSPATH=.:/home/t-ishii/lib/postgresql-8.3-604.jdbc4.jar 
+
+接続先等のテスト環境の設定は pgpool.properties で定義します。
+
+  pgpooltest.host=localhost
+  pgpool が動作しているホスト名を指定します。
+
+  pgpooltest.port=9999
+  pgpool が LISTEN しているポート番号を指定します。
+
+  pgpooltest.user=pgpool
+  接続ユーザを指定します。
+
+  pgpooltest.password=
+  接続パスワードを指定します。
+
+  pgpooltest.dbname=pgpooltest
+  接続データベース名を指定します。
+
+  pgpooltest.options=
+  JDBCドライバのオプションを指定します。
+
+  pgpooltest.tests=autocommit batch column lock select update insert
+  テストケースを指定します。
+
+1.2 実行方法
+run.sh スクリプトを実行してください。.java をコンパイルし、テストを開
+始します。
+
+  autocommit: ok
+
+と出力されれば、指定したテストケースが正しく完了しています。失敗した場
+合には、diff コマンドで差分を確認してください。
+
+  % diff -u {expected,result}/autocommit
+
+
+2. テストケースを追加する方法
+主に開発者向けの情報です。テストケースを追加する方法を説明します。
+テストは 1 クラス 1 テスト構成になっています。テストを作る場合には、
+PgpoolTest クラスを継承します。以下の 2 つのメソッドを実装してください。
+
+* do_test()
+テストケースを記述します。
+
+* getTestName()
+テストケース名を指定します。pgpool.properties に指定するテスト名です。
+
+テストケースクラスを追加したら、テストをできるように RunTest.java の
+testFactory() に追加します。
+
+    public PgpoolTest testFactory(String testcase)
+    {
+        if (testcase == null)
+            return null;
+
+        if (testcase.equals("autocommit"))
+            return new AutoCommitTest();
+        ....
+    }
+
+最後に、期待される結果を expected/ 以下に用意し、pgpool.properties に
+登録すれば完了です。

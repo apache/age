@@ -1,0 +1,25 @@
+ SELECT "func"(a := 7,b := 12)
+ SELECT "array_agg"("a" ORDER BY "b","c")
+ SELECT "mleast"(VARIADIC ARRAY [10,-1,5,4.4])
+ SELECT "avg"("c1") OVER ( ROWS 1 PRECEDING) FROM "r1"
+ SELECT "avg"("c1") OVER "w1" FROM "r1" WINDOW "w1" AS ( ROWS BETWEEN 1 FOLLOWING AND 2 FOLLOWING)
+ SELECT * FROM "t1" OFFSET 1 LIMIT 2
+ SELECT * FROM "t1" LIMIT 2
+
+pset 90000
+EXPLAIN (analyze , verbose ) SELECT 1
+EXPLAIN (analyze 'true', verbose 'true', costs 'true', buffers 'true', format 'xml') SELECT 1
+EXPLAIN (analyze 'false', verbose 'false', costs 'false', buffers 'false', format 'json') SELECT 1
+COPY "t" FROM STDIN 
+COPY "t" FROM 'xxx' (format 'binary')
+COPY "t" FROM 'xxx' (format 'csv', header 1, quote '#', escape '$', force_not_null ("foo", "bar"))
+COPY "t" FROM 'xxx' (oids 1)
+COPY "t" FROM 'xxx' (delimiter ',')
+COPY "t" FROM 'xxx' (null 'x')
+COPY "t" FROM STDIN (format 'text')
+COPY "t" FROM STDIN (format 'csv')
+COPY "t" FROM STDIN (format 'binary')
+COPY "t" FROM 'f' (oids 'false')
+COPY "t" FROM 'f' (oids 'true', delimiter '|', null '<N>', header 'false')
+COPY "t" FROM 'f' (header 'true', quote '"', escape '@')
+COPY "t" FROM 'f' (force_quote *, force_not_null ("one", "two", "three"))

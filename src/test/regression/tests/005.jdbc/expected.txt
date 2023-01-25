@@ -1,0 +1,9 @@
+autocommit: ok
+batch: ok
+column: ok
+lock: ok
+select: ok
+update: ok
+insert: ok
+CreateTempTable: ok
+PrepareThreshold: ok

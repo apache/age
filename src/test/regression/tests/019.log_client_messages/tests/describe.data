@@ -1,0 +1,12 @@
+# Test for Describe Flush command protocol
+
+# SELECT 1 FROM pgbench_accounts
+'P'	"S4"	"SELECT 1 FROM pgbench_accounts"	0
+'B'	""	"S4"	0	0	0
+'D'	'S'	"S4"
+'E'	""	0
+'H'
+'y'
+'S'
+'Y'
+'X'

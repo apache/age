@@ -1,0 +1,6 @@
+The sample server.key and server.crt was created by using following commands:
+
+openssl req -new -text -out server.req
+openssl rsa -in privkey.pem -out server.key
+rm privkey.pem
+openssl req -x509 -days 3650 -in server.req -text -key server.key -out server.crt

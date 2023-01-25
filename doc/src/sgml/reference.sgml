@@ -1,0 +1,256 @@
+<!-- doc/src/sgml/reference.sgml -->
+
+<part id="reference">
+ <title>Reference</title>
+
+ <partintro>
+  <para>
+   This part contains reference information for the <productname>Pgpool-II</productname>.
+  </para>
+
+  <para>
+   The reference entries are also available as traditional
+   <quote>man</quote> pages.
+  </para>
+ </partintro>
+
+ <reference id="server-commands">
+  <title>Server commands</title>
+
+  <partintro>
+   <para>
+    This part contains reference information for server
+    commands. Currently only <command>pgpool</command> falls into
+    this category.
+   </para>
+  </partintro>
+  &pgpool;
+ </reference>
+
+ <reference id="pcp-commands">
+  <title>PCP commands</title>
+
+  <partintro>
+   <para>
+    This part contains reference information for PCP commands.
+    PCP commands are UNIX commands which manipulate pgpool-II via
+    the network.  Please note that the parameter format for all
+    PCP commands has been changed since <productname>Pgpool-II
+     3.5</productname>.
+   </para>
+
+   <sect1 id="pcp-connection-authentication">
+    <title>PCP connection authentication</title>
+    <para>
+     PCP user names and passwords must be declared in
+     <filename>pcp.conf</filename>
+     in <filename>$prefix/etc</filename> directory
+     (see <xref linkend="configuring-pcp-conf"> to know to create
+      the file). <option>-F</option> option can be used when
+      starting
+      <productname>Pgpool-II</productname>
+      if <filename>pcp.conf</filename> is placed somewhere else.
+    </para>
+   </sect1>
+
+   <sect1 id="pcp-password-file">
+    <title>PCP password file</title>
+    <para>
+     The file <filename>.pcppass</filename> in a user's home
+     directory or the file referenced by environment variable
+     PCPPASSFILE can contain passwords to be used if no password has
+     been specified for the pcp connection.
+    </para>
+    <para>
+     This file should contain lines of the following format:
+
+     <programlisting>
+      hostname:port:username:password
+     </programlisting>
+    </para>
+
+    <para>
+     (You can add a reminder comment to the file by copying the line
+     above and preceding it with #.)  Each of the first three fields
+     can be a literal value, or *, which matches anything. The password
+     field from the first line that matches the current connection
+     parameters will be used. (Therefore, put more-specific entries
+     first when you are using wildcards.) If an entry needs to contain
+     : or \, escape this character with \. The hostname field is matched
+     to the host connection parameter if that is specified, if the host
+     parameter is not given then the host name <literal>localhost</literal>
+     is searched for. The host name <literal>localhost</literal> is also
+     searched for when the connection is a Unix domain socket connection
+     and the host parameter matches the default pcp socket directory path.
+    </para>
+
+    <para>
+     The permissions on .pcppass must disallow any access to world or
+     group; achieve this by the command chmod 0600 ~/.pcppass. If the
+     permissions are less strict than this, the file will be
+     ignored.
+    </para>
+
+   </sect1>
+
+  </partintro>
+
+  &pcpCommonOptions;
+  &pcpNodeCount;
+  &pcpNodeInfo;
+  &pcpHealthCheckStats;
+  &pcpWatchdogInfo;
+  &pcpProcCount;
+  &pcpProcInfo;
+  &pcpPoolStatus;
+  &pcpDetachNode;
+  &pcpAttachNode;
+  &pcpPromoteNode;
+  &pcpStopPgpool;
+  &pcpReloadConfig;
+  &pcpRecoveryNode;
+
+ </reference>
+
+ <reference id="other-commands">
+  <title>Other commands</title>
+
+  <partintro>
+   <para>
+    This part contains reference information for various Pgpool-II commands.
+   </para>
+
+  </partintro>
+
+  &pgMd5;
+  &pgEnc;
+  &pgproto;
+  &pgpoolSetup;
+  &watchdogSetup;
+  &wdCli;
+
+ </reference>
+ 
+ <reference id="sql-commands">
+  <title>SQL type commands</title>
+
+  <partintro>
+   <para>
+    This part contains reference information for various SQL type
+    <productname>Pgpool-II</productname> commands.  These commands
+    can be issued inside the SQL session using the
+    standard <productname>PostgreSQL</productname> client
+    like <literal>psql</literal>. They are not forwarded to the
+    backend DB: instead they are processed
+    by <productname>Pgpool-II</productname> server.  Please note
+    that SQL type commands cannot be used in extended query
+    mode. You will get parse errors
+    from <productname>PostgreSQL</productname>.
+   </para>
+
+  </partintro>
+
+  &pgpoolShow
+  &pgpoolSet
+  &pgpoolReset
+  &showPoolStatus
+  &showPoolNodes
+  &showPoolProcesses
+  &showPoolPools
+  &showPoolVersion
+  &showPoolCache
+  &showPoolHealthCheckStats
+  &showPoolBackendStats
+ </reference>
+
+ <reference id="pgpool-adm">
+  <title>pgpool_adm extension</title>
+
+  <partintro>
+   <para>
+    <command>pgpool_adm</command> is a set of extensions to allow
+    SQL access to <xref linkend="pcp-commands"> (actually, pcp
+     libraries). It uses foreign data wrapper as shown in the
+     diagram below.
+   </para>
+   <para>
+    <figure>
+     <title>How <command>pgpool_adm</command> works</title>
+     <mediaobject>
+      <imageobject>
+       <imagedata fileref="pgpool_adm.gif">
+      </imageobject>
+     </mediaobject>
+    </figure>
+   </para>
+
+   <para>
+    It is possible to call the functions from either via pgpool-II
+    (1) or via <productname>PostgreSQL</productname> (2).  In case
+    (1), <productname>Pgpool-II</productname> accepts query from
+    user (1), then forward
+    to <productname>PostgreSQL</productname> (3).
+    <productname>PostgreSQL</productname> connects
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> reply back
+    to <productname>PostgreSQL</productname> with the result
+    (3). <productname>PostgreSQL</productname> returns the result
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> forwards the data to
+    the user (6).
+   </para>
+   <para>
+    In case (2), <productname>PostgreSQL</productname> accepts query from user (2).
+    <productname>PostgreSQL</productname> connects
+    to <productname>Pgpool-II</productname> (5)
+    and <productname>Pgpool-II</productname> reply back
+    to <productname>PostgreSQL</productname> with the result (3).
+    <productname>PostgreSQL</productname> replies back the data to
+    the user (4).
+   </para>
+   <para>
+    There are two forms to call pgpool_adm functions: first form
+    accepts <productname>Pgpool-II</productname> host name (or IP
+    address), pcp port number, pcp user name, its password and
+    another parameters.
+   </para>
+   <para>
+    In the second form, <productname>Pgpool-II</productname>
+    server name is required.  The server name must be already
+    defined using "CREATE FOREIGN SERVER" command
+    of <productname>PostgreSQL</productname>.  The pcp port number
+    is hard coded as 9898, the pcp user name is assumes to be same
+    as caller's <productname>PostgreSQL</productname> user name.
+    password is extracted from $HOME/.pcppass.
+   </para>
+
+   <sect1 id="installing-pgpool-adm">
+    <title>Installing pgpool_adm</title>
+    <para>
+     pgpool_adm is an extension and should be installed on all
+     PostgreSQL servers.
+     <programlisting>
+      $ cd src/sql/pgpool_adm
+      $ make
+      $ make install
+     </programlisting>
+     Then issue following SQL command for every database you want to access.
+     <programlisting>
+      $ psql ...
+      $ CREATE EXTENSION pgpool_adm
+     </programlisting>
+    </para>
+   </sect1>
+   
+  </partintro>
+
+  &pgpoolAdmPcpNodeInfo
+  &pgpoolAdmPcpHealthCheckStats
+  &pgpoolAdmPcpPoolStatus
+  &pgpoolAdmPcpNodeCount
+  &pgpoolAdmPcpAttachNode
+  &pgpoolAdmPcpDetachNode
+
+ </reference>
+
+</part>

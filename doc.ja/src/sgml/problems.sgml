@@ -1,0 +1,15 @@
+<!-- doc/src/sgml/problems.sgml -->
+
+<sect1 id="bug-reporting">
+ <!--
+ <title>Bug Reporting Guidelines</title>
+ -->
+ <title>バグ報告の指針</title>
+
+ <para>
+  <!--
+  When you find a bug in <productname>Pgpool-II</productname>, please register to our <ulink url="http://pgpool.net/mediawiki/index.php/Bug_tracking_system">bug tracking system</ulink>.
+  -->
+  <productname>Pgpool-II</productname>のバグを見つけたら、<ulink url="http://pgpool.net/mediawiki/index.php/Bug_tracking_system">バグ管理システム</ulink>に登録してください。
+ </para>
+</sect1>

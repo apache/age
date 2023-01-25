@@ -1,0 +1,89 @@
+ SELECT 1
+ SELECT * FROM "t"
+ SELECT "x" FROM "a"
+ SELECT "x"."y" FROM "a"
+ SELECT "x" FROM "a"."b"
+ SELECT "foo"()
+ SELECT "y" FROM "foo"()
+syntax error: SELECT * FROM (SELECT * FROM foo);
+ SELECT "a" AS "t"  FROM "x"
+ SELECT "x" FROM "a" AS "b"
+ SELECT "a" AS "tttttttttttttttttttttttttttttttttttttttttttttttttttttttt" ,"b" AS "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"  FROM "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+syntax error: SELECT ;
+ SELECT * FROM "t" FOR UPDATE
+ SELECT * FROM "t" FOR SHARED
+ SELECT DISTINCT * FROM "t"
+ SELECT DISTINCT ON ("x" ) "x" FROM "t"
+ SELECT DISTINCT ON ("foo"("x") ) "x" FROM "t"
+ SELECT * FROM "t"
+ SELECT "x" FROM "t" WHERE  ("x">3 )
+ SELECT "count"(*) FROM "t" GROUP BY "x" HAVING  ("x">111 )
+ SELECT "count"(*) FROM "t" GROUP BY "x" HAVING  ("x">111 ) ORDER BY "y"
+ SELECT "count"(*) FROM "t" GROUP BY "x" HAVING  ("x">111 ) ORDER BY "y" DESC 
+ SELECT "count"(*) FROM "t" GROUP BY "x" HAVING  ("x">111 ) ORDER BY "y"
+ SELECT "x" FROM "t" LIMIT ALL 
+ SELECT "x" FROM "t" LIMIT 1
+ SELECT * FROM "t" OFFSET 1
+ SELECT * FROM "t" OFFSET 1 LIMIT 2
+ SELECT * FROM "t" OFFSET 1 LIMIT 2
+ SELECT * FROM "t" LEFT OUTER JOIN "t1" ON  ("x"="y" )
+ SELECT * FROM "t" RIGHT OUTER JOIN "t1" ON  ("x"="y" )
+ SELECT * FROM "t" FULL OUTER JOIN "t1" ON  ("x"="y" )
+ SELECT * FROM "t" LEFT OUTER JOIN "t1" USING("x")
+ SELECT * FROM "t" RIGHT OUTER JOIN "t1" USING("x")
+ SELECT * FROM "t" FULL OUTER JOIN "t1" USING("x")
+ SELECT * FROM "t" JOIN "t1" ON "x"
+ SELECT * FROM "t" NATURAL LEFT OUTER JOIN "t1"
+ SELECT * FROM "t" NATURAL RIGHT OUTER JOIN "t1"
+ SELECT * FROM "t" NATURAL FULL OUTER JOIN "t1"
+ SELECT * FROM "t" WHERE "a" IS NULL
+ SELECT * FROM "t" WHERE "a" IS NOT NULL
+ SELECT * FROM "t" WHERE  ("a"~~'abc' )
+ SELECT * FROM "t" WHERE  ("a"!~~'abc' )
+ SELECT * FROM "t" WHERE  ( ("a">=1 ) AND  ("a"<=4 ))
+ SELECT * FROM "t" WHERE "a" IN (1,2,3,4)
+ SELECT * FROM "t" WHERE "a" NOT IN (1,2,3,4)
+ SELECT * FROM "t" WHERE  EXISTS ( SELECT * FROM "tt")
+ SELECT * FROM "t" WHERE  (NOT  EXISTS ( SELECT * FROM "tt"))
+( SELECT * FROM "t1")  UNION ( SELECT * FROM "t2") 
+( SELECT * FROM "t1")  UNION ALL ( SELECT * FROM "t2") 
+( SELECT * FROM "t1")  INTERSECT ( SELECT * FROM "t2") 
+( SELECT * FROM "t1")  INTERSECT ALL ( SELECT * FROM "t2") 
+( SELECT * FROM "t1")  EXCEPT ( SELECT * FROM "t2") 
+( SELECT * FROM "t1")  EXCEPT ALL ( SELECT * FROM "t2") 
+CREATE TABLE "x" AS SELECT * FROM "t"
+ SELECT * FROM "t1" WHERE "i"<> ALL ( SELECT "i" FROM "t2")
+( SELECT * FROM "t1")  UNION ALL ( SELECT * FROM "t2")  ORDER BY "a"
+( SELECT * FROM "t1")  UNION ALL ( SELECT * FROM "t2" ORDER BY "a") 
+ SELECT "max"("i")::int4 FROM "test"
+ SELECT "max"("i")::int4 FROM "test" WHERE  ("a"='aaa''bbb\\ccc' )
+ SELECT "max"("i")::int4 FROM "test" WHERE  ("a"='aaa''bbb\\ccc' )
+ SELECT * FROM "t" WHERE 1=ANY("arr")
+ SELECT * FROM "t" WHERE 1=ALL("arr")
+ SELECT * FROM "t" WHERE 1 IS OF (int4)
+ SELECT * FROM "t" WHERE 1 IS OF (int4)
+ SELECT * FROM "t" WHERE "a" IN ('a','b',1)
+ SELECT * FROM "t" WHERE "a" NOT IN ('a','b',1)
+ SELECT * FROM "t" WHERE "a" IS DOCUMENT
+ SELECT * FROM "t" WHERE  (NOT "a" IS DOCUMENT)
+ SELECT XMLCONCAT ("a","b")
+ SELECT XMLELEMENT (NAME "a")
+ SELECT XMLELEMENT (NAME "a","b","c")
+ SELECT XMLFOREST ("a")
+ SELECT XMLPARSE (DOCUMENT 1)
+ SELECT XMLPARSE (DOCUMENT 1 PRESERVE WHITESPACE)
+ SELECT '1900-1-1'::"day"
+ SELECT '1 year'::interval
+ SELECT '1 year'::interval YEAR
+ SELECT '1 year'::interval MONTH
+ SELECT '1 year'::interval DAY
+ SELECT '1 year'::interval HOUR
+ SELECT '1 year'::interval MINUTE
+ SELECT '1 year'::interval SECOND
+ SELECT '1 year'::interval YEAR TO MONTH
+ SELECT '1 year'::interval DAY TO HOUR
+ SELECT '1 year'::interval DAY TO MINUTE
+ SELECT '1 year'::interval DAY TO SECOND
+ SELECT '1 year'::interval HOUR TO MINUTE
+ SELECT '1 year'::interval HOUR TO SECOND
+ VALUES (1,2), (3,4), (5,6)

@@ -1,0 +1,300 @@
+<!-- doc/src/sgml/config.sgml -->
+
+<chapter id="runtime-config">
+ <!--
+ <title>Server Configuration</title>
+ -->
+ <title>サーバの設定</title>
+
+ <indexterm>
+  <!--
+  <primary>configuration</primary>
+  <secondary>of the server</secondary>
+  -->
+  <primary>設定</primary>
+  <secondary>サーバの</secondary>
+ </indexterm>
+
+ <para>
+  <!--
+  There are many configuration parameters that affect the behavior of
+  <productname>Pgpool-II</productname>. In the first section of this chapter we
+  describe how to interact with configuration parameters. The subsequent sections
+  discuss each parameter in detail.
+  -->
+  <productname>Pgpool-II</productname>の動作に影響を与える数多くのパラメータがあります。
+  この章の最初の節で、どのように設定パラメータを操作するのかについて説明します。
+  引き続く節で、それぞれのパラメータの詳細を説明します。
+ </para>
+
+ <sect1 id="config-setting">
+  <!--
+  <title>Setting Parameters</title>
+  -->
+  <title>パラメータの設定</title>
+
+  <sect2 id="config-setting-names-values">
+   <!--
+   <title>Parameter Names and Values</title>
+   -->
+   <title>パラメータ名とその値</title>
+
+   <para>
+    <!--
+    All parameter names are case-insensitive. Every parameter takes a
+    value of one of five types: boolean, string, integer, floating point,
+    or enumerated (enum).  The type determines the syntax for setting the
+    parameter:
+    -->
+    全てのパラメータの名前は大文字と小文字を区別しません。
+    それぞれのパラメータは、論理値、整数、浮動小数点、文字列、またはenum（列挙型）の5つの型のいずれかの値を取ります。
+    型はパラメータをセットするための記法を定義します。
+   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      <emphasis>Boolean:</emphasis>
+      -->
+      <emphasis>論理型:</emphasis>
+      <!--
+      Values can be written as
+      -->
+      値は以下のいずれかを取ることができます。
+      <literal>on</literal>,
+      <literal>off</literal>,
+      <literal>true</literal>,
+      <literal>false</literal>,
+      <literal>yes</literal>,
+      <literal>no</literal>,
+      <literal>1</literal>,
+      <literal>0</literal>
+      <!--
+      (all case-insensitive) or any unambiguous prefix of one of these.
+      -->
+      (すべて大文字小文字の区別なし) あるいは、曖昧でなければこれらの先頭から数文字を省略して使うこともできます。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <emphasis>String:</emphasis>
+      -->
+      <emphasis>文字列型:</emphasis>
+      <!--
+      In general, enclose the value in single quotes, doubling any single
+      quotes within the value.  Quotes can usually be omitted if the value
+      is a simple number or identifier, however.
+      -->
+      一般に、単一引用符の中に値を入れます。
+      単一引用符を値として使う場合は単一引用符を重ねます。
+      なお、値が単純な数字や識別子である場合は、通常引用符は省略できます。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <emphasis>Numeric (integer and floating point):</emphasis>
+      -->
+      <emphasis>数値型(整数型と浮動小数点型):</emphasis>
+      <!--
+      A decimal point is permitted only for floating-point parameters.
+      Do not use thousands separators.  Quotes are not required.
+      -->
+      小数点は浮動小数点型のパラメータでのみ使用できます。
+      1000の位取りは使わないでください。
+      引用符は必要ありません。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <emphasis>単位付きの数値:</emphasis>
+      メモリの量や時間について記述する数値型のパラメータは暗黙的な単位を持ちます。
+      単位はキロバイト、メガバイト、ミリ秒、秒、分です。
+      例を示します。
+      <programlisting>
+       search_primary_node_timeout = 6min
+       memqcache_total_size = 64MB
+      </programlisting>
+      修飾無しの数値によるこれらの設定においては、 パラメータごとのデフォルト値が採用されます。
+     </para>
+     <para>
+      単位名は大文字小文字を区別し、数値と単位の間に空白があっても構いません。
+      有効なメモリの単位は<literal>kB</literal> (キロバイト)、<literal>MB</literal> (メガバイト)、 <literal>GB</literal> (ギガバイト), <literal>TB</literal> (テラバイト)です。
+     </para>
+     <para>
+      有効な時間の単位は<literal>ms</literal> (ミリ秒)、<literal>s</literal> (秒)、<literal>min</literal> (分)、<literal>h</literal> (時間)、<literal>d</literal> (日数) です。
+      </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      <emphasis>Enumerated:</emphasis>
+      -->
+      <emphasis>列挙型:</emphasis>
+      <!--
+      Enumerated-type parameters are written in the same way as string
+      parameters, but are restricted to have one of a limited set of
+      values. Enum parameter values are case-insensitive.
+      -->
+      列挙型のパラメータは文字列パラメータと同じように記述します。
+      ただ、使用できる文字列の種類が決まっているだけです。
+      列挙型の値は大文字小文字を区別しません。
+     </para>
+    </listitem>
+   </itemizedlist>
+  </sect2>
+
+  <sect2 id="config-setting-configuration-file">
+   <!--
+   <title>Parameter Interaction via the Configuration File</title>
+   -->
+   <title>設定ファイルによるパラメータ操作</title>
+
+   <para>
+    <!--
+    The most fundamental way to set these parameters is to edit the file
+    <filename>pgpool.conf</><indexterm><primary>pgpool.conf</></>,
+    which is located in <literal>$prefix/etc/pgpool.conf</literal>, if it
+    installed from source code. An example of what this file might look like is:
+    -->
+    これらのパラメータを設定する最も基本的な方法は、<filename>pgpool.conf</><indexterm><primary>pgpool.conf</></>ファイルを編集することです。
+    ソースコードからインストールした場合、<literal>$prefix/etc/pgpool.conf</literal>に配置されています。
+    このファイルがどういったものかの例を示します。
+    <programlisting>
+     # This is a comment
+     listen_addresses = 'localhost'
+     port = 9999
+     serialize_accept = off
+     reset_query_list = 'ABORT; DISCARD ALL'
+    </programlisting>
+
+    <!--
+    One parameter is specified per line. The equal sign between name and
+    value is optional. Whitespace is insignificant (except within a quoted
+    parameter value) and blank lines are
+    ignored. Hash marks (<literal>#</literal>) designate the remainder
+    of the line as a comment.  Parameter values that are not simple
+    identifiers or numbers must be single-quoted.  To embed a single
+    quote in a parameter value, write either two quotes (preferred)
+    or backslash-quote.
+    -->
+    1つの行毎に1つのパラメータが指定されます。
+    名前と値の間の等号はオプションです。
+    引用符の中の空白（white space）を除き、空白は特に意味を持たず、何もない行は無視されます。
+    ハッシュ記号（<literal>#</literal>）はその行の後の表記がコメントであることを意味します。
+    単純でない識別子、または数値でないパラメータ値は単一引用符で括られなければなりません。
+    パラメータ値の中に単一引用符を埋め込む場合、単一引用符を二つ（推奨）もしくはバックスラッシュ-引用符で括ります。
+
+   </para>
+
+   <para>
+    <!--
+    Parameters set in this way provide default values for the cluster.
+    The settings seen by active sessions will be these values unless they
+    are overridden.  The following sections describe ways in which the
+    administrator or user can override these defaults.
+    -->
+    この方法によりクラスタに対してデフォルト値が設定されます。
+    上書きされない限り、アクティブなセッションが見るのはこの値です。
+    次の節では、管理者やユーザがこれらのデフォルト値を上書きする方法を説明します。
+   </para>
+
+   <para>
+    <indexterm>
+     <primary>SIGHUP</primary>
+    </indexterm>
+    <!--
+    The configuration file is reread whenever the main server process
+    receives a <systemitem>SIGHUP</> signal; this signal is most easily
+    sent by running <literal>pgpool reload</> from the command line. The main
+    pgpool process also propagates this signal to all its child
+    processes, so that next sessions also adopt the new values.
+    Some parameters can only be set at server start; any changes to their
+    entries in the configuration file will be ignored until the server is restarted.
+    Invalid parameter settings in the configuration file are likewise
+    ignored (but logged) during <systemitem>SIGHUP</> processing.
+    -->
+    設定ファイルはメインサーバプロセスが<systemitem>SIGHUP</>信号を受け取ると何時でも 再読み込みされます。
+    手っ取り早く行なうには、コマンドラインから<literal>pgpool reload</>を実行します。
+    メインpgpoolプロセスは同時にこの信号を、次のセッションが同様に新しい値を入手できるように、全ての子プロセスに伝播します。
+    いくつかのパラメータはサーバの起動時のみ設定されます;
+    設定ファイル中のそれらのエントリのいかなる変更も、サーバが再起動されるまで無視されます。
+    設定ファイル内で無効なパラメータが設定された場合は同様に（ログには残りますが）<systemitem>SIGHUP</>処理中に無視されます。
+   </para>
+  </sect2>
+
+  <sect2 id="config-setting-includes">
+   <!--
+   <title>Managing Configuration File Contents</title>
+   -->
+   <title>設定ファイルの内容の管理</title>
+
+   <para>
+    <!--
+    <productname>Pgpool-II</productname> provides a feature for breaking down
+    <filename>pgpool.conf</filename> files into sub-files. This feature is
+    especially useful when managing multiple servers or dividing by features.
+    <literal>include</literal> directive can be used like this:
+    -->
+    <productname>Pgpool-II</productname>は<filename>pgpool.conf</filename>ファイルを複数のファイルに分割して記述する方法を提供しています。
+    機能やサーバ固有のパラメータの設定を分割したい場合に有用です。
+    次のように<literal>include</literal>ディレクティブを追加します。
+    <programlisting>
+     include = 'filename'
+    </programlisting>
+    <!--
+    If the file name is not an absolute path, it is taken as relative
+    to the directory containing the referencing configuration file.
+    Inclusions can be nested.
+    -->
+    ファイル名が絶対パスでない場合、参照する設定ファイルを含むディレクトリからの相対パスであると受け取られます。includeコマンドは入れ子にすることができます。
+   </para>
+  </sect2>
+
+  <sect2 id="config-setting-sql-command-interaction">
+   <!--
+   <title>Parameter Interaction via SQL Clients</title>
+   -->
+   <title>SQLを通じたパラメータ操作</title>
+
+   <para>
+    <!--
+    <productname>Pgpool-II</productname> also provides two SQL style
+    commands to interact with session-local configuration settings.
+    -->
+    <productname>Pgpool-II</productname>はまた2つのSQL形式のコマンドを使ってセッションローカルの設定の参照や変更を行うことができます。
+   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      <!--
+      The <xref linkend="SQL-PGPOOL-SHOW"> command allows inspection of the
+      current value of all parameters.
+      -->
+      <xref linkend="SQL-PGPOOL-SHOW">コマンドを使ってすべてのパラメータの現在の値を調べることができます。
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <!--
+      The <xref linkend="SQL-PGPOOL-SET"> command allows modification of the
+      current value of those parameters that can be set locally to a
+      session; it has no effect on other sessions.
+      -->
+      <xref linkend="SQL-PGPOOL-SET">コマンドを使ってセッション内でローカルに変更できるパラメータの値を変更することができます。
+       他のセッションには影響を与えません。
+     </para>
+    </listitem>
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+

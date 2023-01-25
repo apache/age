@@ -1,0 +1,16 @@
+FE=> Parse(stmt="S1", query="BEGIN")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Parse(stmt="S1", query="aaa")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Sync
+<= BE ParseComplete
+<= BE BindComplete
+<= BE CommandComplete(BEGIN)
+<= BE CloseComplete
+<= BE ErrorResponse(S ERROR V ERROR C 42601 M syntax error at or near "aaa" P 1 F scan.l L 1087 R scanner_yyerror )
+<= BE ReadyForQuery(E)
+FE=> Terminate

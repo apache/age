@@ -1,0 +1,16 @@
+FE=> Query (query="SET statement_timeout = '4s'")
+<= BE CommandComplete(SET)
+<= BE ReadyForQuery(I)
+FE=> Parse(stmt="S1", query="SELECT 1/0")
+FE=> Bind(stmt="S1", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S1")
+FE=> Parse(stmt="S2", query="SELECT * from pg_tables")
+FE=> Bind(stmt="S2", portal="")
+FE=> Execute(portal="")
+FE=> Close(stmt="S2")
+FE=> Sync
+<= BE ParseComplete
+<= BE ErrorResponse(S ERROR V ERROR C 22012 M division by zero F int.c L 704 R int4div )
+<= BE ReadyForQuery(I)
+FE=> Terminate
