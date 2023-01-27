@@ -1,0 +1,851 @@
+--
+-- Cypher Query Language - Expression
+--
+-- Set up
+CREATE GRAPH test_cypher_expr;
+SET graph_path = test_cypher_expr;
+-- String (jsonb)
+RETURN '"', '\"', '\\', '\/', '\b', '\f', '\n', '\r', '\t';
+ ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? 
+----------+----------+----------+----------+----------+----------+----------+----------+----------
+ "\""     | "\""     | "\\"     | "/"      | "\b"     | "\f"     | "\n"     | "\r"     | "\t"
+(1 row)
+
+-- Decimal (int4, int8, numeric)
+RETURN -2147483648, 2147483647;
+  ?column?   |  ?column?  
+-------------+------------
+ -2147483648 | 2147483647
+(1 row)
+
+RETURN -9223372036854775808, 9223372036854775807;
+       ?column?       |      ?column?       
+----------------------+---------------------
+ -9223372036854775808 | 9223372036854775807
+(1 row)
+
+RETURN -9223372036854775809, 9223372036854775808;
+       ?column?       |      ?column?       
+----------------------+---------------------
+ -9223372036854775809 | 9223372036854775808
+(1 row)
+
+-- Hexadecimal (int4)
+RETURN -0x7fffffff, 0x7fffffff;
+  ?column?   |  ?column?  
+-------------+------------
+ -2147483647 | 2147483647
+(1 row)
+
+-- Octal (int4)
+RETURN -017777777777, 017777777777;
+  ?column?   |  ?column?  
+-------------+------------
+ -2147483647 | 2147483647
+(1 row)
+
+-- Float (numeric)
+RETURN 3.14, -3.14, 6.02E23;
+ ?column? | ?column? |         ?column?         
+----------+----------+--------------------------
+ 3.14     | -3.14    | 602000000000000000000000
+(1 row)
+
+-- true, false, null
+RETURN true, false, null;
+ bool | bool | ?column? 
+------+------+----------
+ t    | f    | 
+(1 row)
+
+-- String (text)
+RETURN '"'::text, '\"'::text, '\\'::text, '\/'::text,
+       '\b'::text, '\f'::text, '\n'::text, '\r'::text, '\t'::text;
+ text | text | text | text | text | text | text | text | text 
+------+------+------+------+------+------+------+------+------
+ "\"" | "\"" | "\\" | "/"  | "\b" | "\f" | "\n" | "\r" | "\t"
+(1 row)
+
+-- Parameter - UNKNOWNOID::jsonb (string)
+PREPARE tmp AS RETURN $1;
+EXECUTE tmp ('"\""');
+ ?column? 
+----------
+ "\""
+(1 row)
+
+DEALLOCATE tmp;
+-- Parameter - UNKNOWNOID::text
+PREPARE tmp AS RETURN $1::text;
+EXECUTE tmp ('\"');
+  text  
+--------
+ "\\\""
+(1 row)
+
+DEALLOCATE tmp;
+-- ::bool
+RETURN ''::jsonb::bool, 0::jsonb::bool, false::jsonb::bool,
+       []::bool, {}::bool;
+ bool | bool | bool | bool | bool 
+------+------+------+------+------
+ f    | f    | f    | f    | f
+(1 row)
+
+RETURN 's'::jsonb::bool, 1::jsonb::bool, true::jsonb::bool,
+       [0]::bool, {p: 0}::bool;
+ bool | bool | bool | bool | bool 
+------+------+------+------+------
+ t    | t    | t    | t    | t
+(1 row)
+
+-- List and map literal
+RETURN [7, 7.0, '"list\nliteral\"', true, false, NULL, [0, 1, 2], {p: 'p'}];
+                                ?column?                                 
+-------------------------------------------------------------------------
+ [7, 7.0, "\"list\nliteral\"", true, false, null, [0, 1, 2], {"p": "p"}]
+(1 row)
+
+RETURN {i: 7, r: 7.0, s: '"map\nliteral\"', t: true, f: false, 'z': NULL,
+        '\n': '\n', l: [0, 1, 2], o: {p: 'p'}};
+                                                     ?column?                                                     
+------------------------------------------------------------------------------------------------------------------
+ {"f": false, "i": 7, "l": [0, 1, 2], "o": {"p": "p"}, "r": 7.0, "s": "\"map\nliteral\"", "t": true, "\\n": "\n"}
+(1 row)
+
+-- String concatenation
+RETURN '1' + '1', '1' + 1, 1 + '1';
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ "11"     | "11"     | "11"
+(1 row)
+
+-- Arithmetic operation
+RETURN 1 + 1, 1 - 1, 2 * 2, 2 / 2, 2 % 2, 2 ^ 2, +1, -1;
+ ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? 
+----------+----------+----------+----------+----------+----------+----------+----------
+ 2        | 0        | 4        | 1        | 0        | 4        | 1        | -1
+(1 row)
+
+-- List concatenation
+RETURN 's' + [], 0 + [], true + [],
+       [] + 's', [] + 0, [] + true,
+       [0] + [1], [] + {}, {} + [];
+ ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? | ?column? 
+----------+----------+----------+----------+----------+----------+----------+----------+----------
+ ["s"]    | [0]      | [true]   | ["s"]    | [0]      | [true]   | [0, 1]   | [{}]     | [{}]
+(1 row)
+
+-- Invalid expression
+RETURN '' + false;
+ERROR:  invalid expression: "" + false
+RETURN '' + {};
+ERROR:  invalid expression: "" + {}
+RETURN 0 + false;
+ERROR:  invalid expression: 0 + false
+RETURN 0 + {};
+ERROR:  invalid expression: 0 + {}
+RETURN false + '';
+ERROR:  invalid expression: false + ""
+RETURN false + 0;
+ERROR:  invalid expression: false + 0
+RETURN false + false;
+ERROR:  invalid expression: false + false
+RETURN false + {};
+ERROR:  invalid expression: false + {}
+RETURN {} + '';
+ERROR:  invalid expression: {} + ""
+RETURN {} + 0;
+ERROR:  invalid expression: {} + 0
+RETURN {} + false;
+ERROR:  invalid expression: {} + false
+RETURN {} + {};
+ERROR:  invalid expression: {} + {}
+RETURN '' - '';
+ERROR:  invalid expression: "" - ""
+RETURN '' - 0;
+ERROR:  invalid expression: "" - 0
+RETURN '' - false;
+ERROR:  invalid expression: "" - false
+RETURN '' - [];
+ERROR:  invalid expression: "" - []
+RETURN '' - {};
+ERROR:  invalid expression: "" - {}
+RETURN 0 - '';
+ERROR:  invalid expression: 0 - ""
+RETURN 0 - false;
+ERROR:  invalid expression: 0 - false
+RETURN 0 - [];
+ERROR:  invalid expression: 0 - []
+RETURN 0 - {};
+ERROR:  invalid expression: 0 - {}
+RETURN false - '';
+ERROR:  invalid expression: false - ""
+RETURN false - 0;
+ERROR:  invalid expression: false - 0
+RETURN false - false;
+ERROR:  invalid expression: false - false
+RETURN false - [];
+ERROR:  invalid expression: false - []
+RETURN false - {};
+ERROR:  invalid expression: false - {}
+RETURN [] - '';
+ERROR:  invalid expression: [] - ""
+RETURN [] - 0;
+ERROR:  invalid expression: [] - 0
+RETURN [] - false;
+ERROR:  invalid expression: [] - false
+RETURN [] - [];
+ERROR:  invalid expression: [] - []
+RETURN [] - {};
+ERROR:  invalid expression: [] - {}
+RETURN {} - '';
+ERROR:  invalid expression: {} - ""
+RETURN {} - 0;
+ERROR:  invalid expression: {} - 0
+RETURN {} - false;
+ERROR:  invalid expression: {} - false
+RETURN {} - [];
+ERROR:  invalid expression: {} - []
+RETURN {} - {};
+ERROR:  invalid expression: {} - {}
+RETURN '' * '';
+ERROR:  invalid expression: "" * ""
+RETURN '' * 0;
+ERROR:  invalid expression: "" * 0
+RETURN '' * false;
+ERROR:  invalid expression: "" * false
+RETURN '' * [];
+ERROR:  invalid expression: "" * []
+RETURN '' * {};
+ERROR:  invalid expression: "" * {}
+RETURN 0 * '';
+ERROR:  invalid expression: 0 * ""
+RETURN 0 * false;
+ERROR:  invalid expression: 0 * false
+RETURN 0 * [];
+ERROR:  invalid expression: 0 * []
+RETURN 0 * {};
+ERROR:  invalid expression: 0 * {}
+RETURN false * '';
+ERROR:  invalid expression: false * ""
+RETURN false * 0;
+ERROR:  invalid expression: false * 0
+RETURN false * false;
+ERROR:  invalid expression: false * false
+RETURN false * [];
+ERROR:  invalid expression: false * []
+RETURN false * {};
+ERROR:  invalid expression: false * {}
+RETURN [] * '';
+ERROR:  invalid expression: [] * ""
+RETURN [] * 0;
+ERROR:  invalid expression: [] * 0
+RETURN [] * false;
+ERROR:  invalid expression: [] * false
+RETURN [] * [];
+ERROR:  invalid expression: [] * []
+RETURN [] * {};
+ERROR:  invalid expression: [] * {}
+RETURN {} * '';
+ERROR:  invalid expression: {} * ""
+RETURN {} * 0;
+ERROR:  invalid expression: {} * 0
+RETURN {} * false;
+ERROR:  invalid expression: {} * false
+RETURN {} * [];
+ERROR:  invalid expression: {} * []
+RETURN {} * {};
+ERROR:  invalid expression: {} * {}
+RETURN '' / '';
+ERROR:  invalid expression: "" / ""
+RETURN '' / 0;
+ERROR:  invalid expression: "" / 0
+RETURN '' / false;
+ERROR:  invalid expression: "" / false
+RETURN '' / [];
+ERROR:  invalid expression: "" / []
+RETURN '' / {};
+ERROR:  invalid expression: "" / {}
+RETURN 0 / '';
+ERROR:  invalid expression: 0 / ""
+RETURN 0 / false;
+ERROR:  invalid expression: 0 / false
+RETURN 0 / [];
+ERROR:  invalid expression: 0 / []
+RETURN 0 / {};
+ERROR:  invalid expression: 0 / {}
+RETURN false / '';
+ERROR:  invalid expression: false / ""
+RETURN false / 0;
+ERROR:  invalid expression: false / 0
+RETURN false / false;
+ERROR:  invalid expression: false / false
+RETURN false / [];
+ERROR:  invalid expression: false / []
+RETURN false / {};
+ERROR:  invalid expression: false / {}
+RETURN [] / '';
+ERROR:  invalid expression: [] / ""
+RETURN [] / 0;
+ERROR:  invalid expression: [] / 0
+RETURN [] / false;
+ERROR:  invalid expression: [] / false
+RETURN [] / [];
+ERROR:  invalid expression: [] / []
+RETURN [] / {};
+ERROR:  invalid expression: [] / {}
+RETURN {} / '';
+ERROR:  invalid expression: {} / ""
+RETURN {} / 0;
+ERROR:  invalid expression: {} / 0
+RETURN {} / false;
+ERROR:  invalid expression: {} / false
+RETURN {} / [];
+ERROR:  invalid expression: {} / []
+RETURN {} / {};
+ERROR:  invalid expression: {} / {}
+RETURN '' % '';
+ERROR:  invalid expression: "" % ""
+RETURN '' % 0;
+ERROR:  invalid expression: "" % 0
+RETURN '' % false;
+ERROR:  invalid expression: "" % false
+RETURN '' % [];
+ERROR:  invalid expression: "" % []
+RETURN '' % {};
+ERROR:  invalid expression: "" % {}
+RETURN 0 % '';
+ERROR:  invalid expression: 0 % ""
+RETURN 0 % false;
+ERROR:  invalid expression: 0 % false
+RETURN 0 % [];
+ERROR:  invalid expression: 0 % []
+RETURN 0 % {};
+ERROR:  invalid expression: 0 % {}
+RETURN false % '';
+ERROR:  invalid expression: false % ""
+RETURN false % 0;
+ERROR:  invalid expression: false % 0
+RETURN false % false;
+ERROR:  invalid expression: false % false
+RETURN false % [];
+ERROR:  invalid expression: false % []
+RETURN false % {};
+ERROR:  invalid expression: false % {}
+RETURN [] % '';
+ERROR:  invalid expression: [] % ""
+RETURN [] % 0;
+ERROR:  invalid expression: [] % 0
+RETURN [] % false;
+ERROR:  invalid expression: [] % false
+RETURN [] % [];
+ERROR:  invalid expression: [] % []
+RETURN [] % {};
+ERROR:  invalid expression: [] % {}
+RETURN {} % '';
+ERROR:  invalid expression: {} % ""
+RETURN {} % 0;
+ERROR:  invalid expression: {} % 0
+RETURN {} % false;
+ERROR:  invalid expression: {} % false
+RETURN {} % [];
+ERROR:  invalid expression: {} % []
+RETURN {} % {};
+ERROR:  invalid expression: {} % {}
+RETURN '' ^ '';
+ERROR:  invalid expression: "" ^ ""
+RETURN '' ^ 0;
+ERROR:  invalid expression: "" ^ 0
+RETURN '' ^ false;
+ERROR:  invalid expression: "" ^ false
+RETURN '' ^ [];
+ERROR:  invalid expression: "" ^ []
+RETURN '' ^ {};
+ERROR:  invalid expression: "" ^ {}
+RETURN 0 ^ '';
+ERROR:  invalid expression: 0 ^ ""
+RETURN 0 ^ false;
+ERROR:  invalid expression: 0 ^ false
+RETURN 0 ^ [];
+ERROR:  invalid expression: 0 ^ []
+RETURN 0 ^ {};
+ERROR:  invalid expression: 0 ^ {}
+RETURN false ^ '';
+ERROR:  invalid expression: false ^ ""
+RETURN false ^ 0;
+ERROR:  invalid expression: false ^ 0
+RETURN false ^ false;
+ERROR:  invalid expression: false ^ false
+RETURN false ^ [];
+ERROR:  invalid expression: false ^ []
+RETURN false ^ {};
+ERROR:  invalid expression: false ^ {}
+RETURN [] ^ '';
+ERROR:  invalid expression: [] ^ ""
+RETURN [] ^ 0;
+ERROR:  invalid expression: [] ^ 0
+RETURN [] ^ false;
+ERROR:  invalid expression: [] ^ false
+RETURN [] ^ [];
+ERROR:  invalid expression: [] ^ []
+RETURN [] ^ {};
+ERROR:  invalid expression: [] ^ {}
+RETURN {} ^ '';
+ERROR:  invalid expression: {} ^ ""
+RETURN {} ^ 0;
+ERROR:  invalid expression: {} ^ 0
+RETURN {} ^ false;
+ERROR:  invalid expression: {} ^ false
+RETURN {} ^ [];
+ERROR:  invalid expression: {} ^ []
+RETURN {} ^ {};
+ERROR:  invalid expression: {} ^ {}
+RETURN +'';
+ERROR:  operator does not exist: `+` jsonb
+LINE 1: RETURN +'';
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN +false;
+ERROR:  operator does not exist: `+` jsonb
+LINE 1: RETURN +false;
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN +[];
+ERROR:  operator does not exist: `+` jsonb
+LINE 1: RETURN +[];
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN +{};
+ERROR:  operator does not exist: `+` jsonb
+LINE 1: RETURN +{};
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN -'';
+ERROR:  operator does not exist: `-` jsonb
+LINE 1: RETURN -'';
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN -false;
+ERROR:  operator does not exist: `-` jsonb
+LINE 1: RETURN -false;
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN -[];
+ERROR:  operator does not exist: `-` jsonb
+LINE 1: RETURN -[];
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+RETURN -{};
+ERROR:  operator does not exist: `-` jsonb
+LINE 1: RETURN -{};
+               ^
+HINT:  No operator matches the given name and argument type. You might need to add an explicit type cast.
+CREATE (:v0 {
+  o: {i: 7, r: 7.0, s: '"map\nliteral\"', t: true, f: false, 'z': NULL,
+      '\n': '\n'},
+  l: [7, 7.0, '"list\nliteral\"', true, false, NULL, [0, 1, 2, 3, 4], {p: 'p'}],
+  t: {i: 1, s: 's', b: true, l: [0], o: {p: 'p'}},
+  f: {i: 0, s: '', b: false, l: [], o: {}}
+});
+-- Property access
+MATCH (n:v0) RETURN n.o.i, n.o.'i', n.o['i'];
+ i | i | o 
+---+---+---
+ 7 | 7 | 7
+(1 row)
+
+MATCH (n:v0) RETURN n.l[0], n.l[6][0],
+                    n.l[6][1..], n.l[6][..3], n.l[6][1..3],
+                    n.l[6][-4..], n.l[6][..-2], n.l[6][-4..-2],
+                    n.l[6][1..6], n.l[6][-7..-2], n.l[6][1..3][0],
+                    n.l[7].p,n.l[7].'p', n.l[7]['p'];
+ l | l |      l       |     l     |   l    |      l       |     l     |   l    |      l       |     l     | l |  p  |  p  |  l  
+---+---+--------------+-----------+--------+--------------+-----------+--------+--------------+-----------+---+-----+-----+-----
+ 7 | 0 | [1, 2, 3, 4] | [0, 1, 2] | [1, 2] | [1, 2, 3, 4] | [0, 1, 2] | [1, 2] | [1, 2, 3, 4] | [0, 1, 2] | 1 | "p" | "p" | "p"
+(1 row)
+
+-- Null test
+RETURN '' IS NULL, '' IS NOT NULL, NULL IS NULL, NULL IS NOT NULL;
+ ?column? | ?column? | ?column? | ?column? 
+----------+----------+----------+----------
+ f        | t        | t        | f
+(1 row)
+
+MATCH (n:v0) RETURN n.o.z IS NULL, n.l[5] IS NOT NULL;
+ ?column? | ?column? 
+----------+----------
+ t        | f
+(1 row)
+
+-- Boolean
+MATCH (n:v0) WHERE n.t.i RETURN COUNT(*);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (n:v0) WHERE n.t.s RETURN COUNT(*);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (n:v0) WHERE n.t.b RETURN COUNT(*);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (n:v0) WHERE n.t.l RETURN COUNT(*);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (n:v0) WHERE n.t.o RETURN COUNT(*);
+ count 
+-------
+ 1
+(1 row)
+
+MATCH (n:v0) WHERE n.f.i RETURN COUNT(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH (n:v0) WHERE n.f.s RETURN COUNT(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH (n:v0) WHERE n.f.b RETURN COUNT(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH (n:v0) WHERE n.f.l RETURN COUNT(*);
+ count 
+-------
+ 0
+(1 row)
+
+MATCH (n:v0) WHERE n.f.o RETURN COUNT(*);
+ count 
+-------
+ 0
+(1 row)
+
+-- Case expression
+CREATE (:v1 {i: -1}), (:v1 {i: 0}), (:v1 {i: 1});
+MATCH (n:v1)
+RETURN CASE n.i WHEN 0 THEN true ELSE false END,
+       CASE WHEN n.i = 0 THEN true ELSE false END;
+ case | case 
+------+------
+ f    | f
+ t    | t
+ f    | f
+(3 rows)
+
+-- IN expression
+MATCH (n:v0) RETURN true IN n.l;
+ ?column? 
+----------
+ t
+(1 row)
+
+MATCH (n:v0) RETURN 0 IN n.l;
+ ?column? 
+----------
+ f
+(1 row)
+
+MATCH (n:v0) RETURN NULL IN n.l;
+ ?column? 
+----------
+ 
+(1 row)
+
+MATCH (n:v0) WITH n.l[0] AS i RETURN [(i IN [0, 1, 2, 3, 4]), true];
+   ?column?    
+---------------
+ [false, true]
+(1 row)
+
+CREATE (:v2 {i: 0}), (:v2 {i: 1}), (:v2 {i: 2}), (:v2 {i: 3}),
+       (:v2 {i: 4}), (:v2 {i: 5}), (:v2 {i: 6}), (:v2 {i: 7}),
+       (:v2 {i: 8}), (:v2 {i: 9}), (:v2 {i: 10}), (:v2 {i: 11}),
+       (:v2 {i: 12}), (:v2 {i: 13}), (:v2 {i: 14}), (:v2 {i: 15});
+CREATE (:v2 {i: 7, name: 'seven'}), (:v2 {i: 9, name: 'nine'});
+CREATE PROPERTY INDEX ON v2 (i);
+-- check grammar
+RETURN 1 IN 1;
+ERROR:  CypherList is expected but integer
+LINE 1: RETURN 1 IN 1;
+                    ^
+RETURN 1 IN [1];
+ ?column? 
+----------
+ t
+(1 row)
+
+-- SubLink
+CREATE TABLE t1 (i int);
+INSERT INTO t1 VALUES (1), (2), (3);
+MATCH (n:v2) WHERE n.i IN (SELECT to_jsonb(i) FROM t1)
+RETURN count(n);
+ count 
+-------
+ 3
+(1 row)
+
+-- plan : index scan
+SET enable_seqscan = off;
+EXPLAIN (costs off)
+  MATCH (n:v2) WHERE n.i IN [1, 2, 3]
+  RETURN n;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Index Scan using v2_i_idx on v2 n
+   Index Cond: (properties.'i'::text = ANY ('{1,2,3}'::jsonb[]))
+(2 rows)
+
+EXPLAIN (costs off)
+  MATCH (n1:v2 {name: 'seven'}), (n2:v2 {name: 'nine'})
+  MATCH (n:v2) WHERE n.i IN [n1.i, 8, n2.i]
+  RETURN n;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Nested Loop
+         ->  Seq Scan on v2 n1
+               Filter: (properties.'name'::text = '"seven"'::jsonb)
+         ->  Seq Scan on v2 n2
+               Filter: (properties.'name'::text = '"nine"'::jsonb)
+   ->  Bitmap Heap Scan on v2 n
+         Recheck Cond: ((properties.'i'::text = n1.properties.'i'::text) OR (properties.'i'::text = '8'::jsonb) OR (properties.'i'::text = n2.properties.'i'::text))
+         ->  BitmapOr
+               ->  Bitmap Index Scan on v2_i_idx
+                     Index Cond: (properties.'i'::text = n1.properties.'i'::text)
+               ->  Bitmap Index Scan on v2_i_idx
+                     Index Cond: (properties.'i'::text = '8'::jsonb)
+               ->  Bitmap Index Scan on v2_i_idx
+                     Index Cond: (properties.'i'::text = n2.properties.'i'::text)
+(15 rows)
+
+SET enable_seqscan = on;
+-- plan : seq scan
+CREATE (:v3 {a: [1, 2, 3, 4, 5, 6, 7, 8, 9]});
+EXPLAIN (costs off)
+  MATCH (n1:v2), (n2:v3) WHERE n1.i IN n2.a
+  RETURN n1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Nested Loop
+   Join Filter: (n2.properties.'a'::text @> n1.properties.'i'::text)
+   ->  Seq Scan on v3 n2
+   ->  Materialize
+         ->  Seq Scan on v2 n1
+(5 rows)
+
+EXPLAIN (costs off)
+  MATCH (n2:v3) WITH n2.a AS a
+  MATCH (n1:v2) WHERE n1.i IN a
+  RETURN n1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Nested Loop
+   Join Filter: (n2.properties.'a'::text @> n1.properties.'i'::text)
+   ->  Seq Scan on v3 n2
+   ->  Materialize
+         ->  Seq Scan on v2 n1
+(5 rows)
+
+-- List comprehension
+RETURN [x IN [0, 1, 2, 3, 4]];
+    ?column?     
+-----------------
+ [0, 1, 2, 3, 4]
+(1 row)
+
+RETURN [x IN [0, 1, 2, 3, 4] WHERE x % 2 = 0];
+ ?column?  
+-----------
+ [0, 2, 4]
+(1 row)
+
+RETURN [x IN [0, 1, 2, 3, 4] | x + 1];
+    ?column?     
+-----------------
+ [1, 2, 3, 4, 5]
+(1 row)
+
+RETURN [x IN [0, 1, 2, 3, 4] WHERE x % 2 = 0 | x + 1];
+ ?column?  
+-----------
+ [1, 3, 5]
+(1 row)
+
+-- nested use of variables
+RETURN [x IN [[0], [1]] WHERE length([y IN x]) = 1 | [y IN x]];
+  ?column?  
+------------
+ [[0], [1]]
+(1 row)
+
+-- List predicate functions
+RETURN ALL(x in [] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ALL(x in [0] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ALL(x in [0, 1, 2, 3, 4] WHERE x = 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN ALL(x in [0, 1, 2, 3, 4] WHERE x >= 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ALL(x in [0, 1, 2, 3, 4] WHERE x = 5);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN ANY(x in [] WHERE x = 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN ANY(x in [0] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ANY(x in [0, 1, 2, 3, 4] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ANY(x in [0, 1, 2, 3, 4] WHERE x >= 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN ANY(x in [0, 1, 2, 3, 4] WHERE x = 5);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN NONE(x in [] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN NONE(x in [0] WHERE x = 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN NONE(x in [0, 1, 2, 3, 4] WHERE x = 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN NONE(x in [0, 1, 2, 3, 4] WHERE x >= 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN NONE(x in [0, 1, 2, 3, 4] WHERE x = 5);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN SINGLE(x in [] WHERE x = 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN SINGLE(x in [0] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN SINGLE(x in [0, 1, 2, 3, 4] WHERE x = 0);
+ ?column? 
+----------
+ t
+(1 row)
+
+RETURN SINGLE(x in [0, 1, 2, 3, 4] WHERE x >= 0);
+ ?column? 
+----------
+ f
+(1 row)
+
+RETURN SINGLE(x in [0, 1, 2, 3, 4] WHERE x = 5);
+ ?column? 
+----------
+ f
+(1 row)
+
+-- Functions
+CREATE (:coll {name: 'GraphDatabase'});
+MATCH (n:coll) SET n.l = tolower(n.name);
+MATCH (n:coll) SET n.u = toupper(n.name);
+MATCH (n:coll) RETURN n;
+                                       n                                        
+--------------------------------------------------------------------------------
+ coll[7.1]{"l": "graphdatabase", "u": "GRAPHDATABASE", "name": "GraphDatabase"}
+(1 row)
+
+-- Text matching
+CREATE (:ts {v: 'a fat cat sat on a mat and ate a fat rat'::tsvector});
+MATCH (n:ts) WHERE n.v::tsvector @@ 'cat & rat'::tsquery RETURN n;
+                                 n                                  
+--------------------------------------------------------------------
+ ts[8.1]{"v": "'a' 'and' 'ate' 'cat' 'fat' 'mat' 'on' 'rat' 'sat'"}
+(1 row)
+
+-- Tear down
+DROP TABLE t1;
+DROP GRAPH test_cypher_expr CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to sequence test_cypher_expr.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v0
+drop cascades to vlabel v1
+drop cascades to vlabel v2
+drop cascades to vlabel v3
+drop cascades to vlabel coll
+drop cascades to vlabel ts

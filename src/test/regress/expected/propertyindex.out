@@ -1,0 +1,324 @@
+--
+-- Cypher Query Language - Property Index
+--
+DROP ROLE IF EXISTS regressrole;
+NOTICE:  role "regressrole" does not exist, skipping
+CREATE ROLE regressrole SUPERUSER;
+SET ROLE regressrole;
+--
+-- CREATE GRAPH
+--
+SHOW graph_path;
+ graph_path 
+------------
+ 
+(1 row)
+
+CREATE GRAPH propidx;
+SHOW graph_path;
+ graph_path 
+------------
+ propidx
+(1 row)
+
+CREATE VLABEL piv1;
+CREATE PROPERTY INDEX ON piv1 (name);
+CREATE PROPERTY INDEX ON piv1 (name.first, name.last);
+CREATE PROPERTY INDEX ON piv1 ((name.first + name.last));
+CREATE PROPERTY INDEX ON piv1 (age);
+CREATE PROPERTY INDEX ON piv1 ((body.weight / body.height));
+\d propidx.piv1
+                                                         Table "propidx.piv1"
+   Column   |  Type   | Collation | Nullable |                                         Default                                         
+------------+---------+-----------+----------+-----------------------------------------------------------------------------------------
+ id         | graphid |           | not null | graphid(graph_labid('propidx.piv1'::cstring), nextval('propidx.piv1_id_seq'::regclass))
+ properties | jsonb   |           | not null | jsonb_build_object()
+Indexes:
+    "piv1_pkey" PRIMARY KEY, btree (id)
+    "piv1_age_idx" btree ((properties.'age'::text))
+    "piv1_first_idx" btree (((properties.'name'::text.'first'::text) `+` (properties.'name'::text.'last'::text)))
+    "piv1_first_last_idx" btree ((properties.'name'::text.'first'::text), (properties.'name'::text.'last'::text))
+    "piv1_name_idx" btree ((properties.'name'::text))
+    "piv1_weight_idx" btree (((properties.'body'::text.'weight'::text) `/` (properties.'body'::text.'height'::text)))
+Inherits: propidx.ag_vertex
+
+\dGi piv1*
+                                                                    List of property indexes
+  Graph  | LabelName |      IndexName      | Unique |    Owner    |                                          Indexdef                                           
+---------+-----------+---------------------+--------+-------------+---------------------------------------------------------------------------------------------
+ propidx | piv1      | piv1_age_idx        | f      | regressrole | CREATE PROPERTY INDEX piv1_age_idx ON piv1 USING btree (age)
+ propidx | piv1      | piv1_first_idx      | f      | regressrole | CREATE PROPERTY INDEX piv1_first_idx ON piv1 USING btree (((name.first) + (name.last)))
+ propidx | piv1      | piv1_first_last_idx | f      | regressrole | CREATE PROPERTY INDEX piv1_first_last_idx ON piv1 USING btree (name.first, name.last)
+ propidx | piv1      | piv1_name_idx       | f      | regressrole | CREATE PROPERTY INDEX piv1_name_idx ON piv1 USING btree (name)
+ propidx | piv1      | piv1_weight_idx     | f      | regressrole | CREATE PROPERTY INDEX piv1_weight_idx ON piv1 USING btree (((body.weight) / (body.height)))
+(5 rows)
+
+-- Check property name & access method type
+CREATE VLABEL piv2;
+CREATE PROPERTY INDEX ON piv2 (name);
+CREATE PROPERTY INDEX ON piv2 USING btree (name.first);
+CREATE PROPERTY INDEX ON piv2 USING hash (name.first);
+CREATE PROPERTY INDEX ON piv2 USING brin (name.first);
+ERROR:  data type jsonb has no default operator class for access method "brin"
+HINT:  You must specify an operator class for the index or define a default operator class for the data type.
+CREATE PROPERTY INDEX ON piv2 USING gin (name);
+CREATE PROPERTY INDEX ON piv2 USING gist (name);
+ERROR:  data type jsonb has no default operator class for access method "gist"
+HINT:  You must specify an operator class for the index or define a default operator class for the data type.
+--CREATE PROPERTY INDEX ON piv2 USING gin ((self_intro::tsvector));
+--CREATE PROPERTY INDEX ON piv2 USING gist ((hobby::tsvector));
+\d propidx.piv2
+                                                         Table "propidx.piv2"
+   Column   |  Type   | Collation | Nullable |                                         Default                                         
+------------+---------+-----------+----------+-----------------------------------------------------------------------------------------
+ id         | graphid |           | not null | graphid(graph_labid('propidx.piv2'::cstring), nextval('propidx.piv2_id_seq'::regclass))
+ properties | jsonb   |           | not null | jsonb_build_object()
+Indexes:
+    "piv2_pkey" PRIMARY KEY, btree (id)
+    "piv2_first_idx" btree ((properties.'name'::text.'first'::text))
+    "piv2_first_idx1" hash ((properties.'name'::text.'first'::text))
+    "piv2_name_idx" btree ((properties.'name'::text))
+    "piv2_name_idx1" gin ((properties.'name'::text))
+Inherits: propidx.ag_vertex
+
+\dGv+ piv2
+                          List of labels
+  Graph  | Name |  Type  |    Owner    |    Size    | Description 
+---------+------+--------+-------------+------------+-------------
+ propidx | piv2 | vertex | regressrole | 8192 bytes | 
+(1 row)
+
+Vertex label "propidx.piv2"
+--
+Property Indexes:
+    "piv2_first_idx" btree (name.first)
+    "piv2_first_idx1" hash (name.first)
+    "piv2_name_idx" btree (name)
+    "piv2_name_idx1" gin (name)
+Inherits: propidx.ag_vertex
+
+\dGi piv2*
+                                                       List of property indexes
+  Graph  | LabelName |    IndexName    | Unique |    Owner    |                               Indexdef                                
+---------+-----------+-----------------+--------+-------------+-----------------------------------------------------------------------
+ propidx | piv2      | piv2_first_idx  | f      | regressrole | CREATE PROPERTY INDEX piv2_first_idx ON piv2 USING btree (name.first)
+ propidx | piv2      | piv2_first_idx1 | f      | regressrole | CREATE PROPERTY INDEX piv2_first_idx1 ON piv2 USING hash (name.first)
+ propidx | piv2      | piv2_name_idx   | f      | regressrole | CREATE PROPERTY INDEX piv2_name_idx ON piv2 USING btree (name)
+ propidx | piv2      | piv2_name_idx1  | f      | regressrole | CREATE PROPERTY INDEX piv2_name_idx1 ON piv2 USING gin (name)
+(4 rows)
+
+-- Concurrently build & if not exist
+CREATE VLABEL piv3;
+CREATE PROPERTY INDEX CONCURRENTLY ON piv3 (name.first);
+CREATE PROPERTY INDEX IF NOT EXISTS piv3_first_idx ON piv3 (name.first);
+NOTICE:  relation "piv3_first_idx" already exists, skipping
+-- Collation & Sort & NULL order
+--CREATE PROPERTY INDEX ON piv3 (name.first COLLATE "C" ASC NULLS FIRST);
+-- Tablespace
+CREATE PROPERTY INDEX ON piv3 (name) TABLESPACE pg_default;
+-- Storage parameter & partial index
+CREATE PROPERTY INDEX ON piv3 (name.first) WITH (fillfactor = 80);
+CREATE PROPERTY INDEX ON piv3 (name.first) WHERE (name IS NOT NULL);
+\d propidx.piv3
+                                                         Table "propidx.piv3"
+   Column   |  Type   | Collation | Nullable |                                         Default                                         
+------------+---------+-----------+----------+-----------------------------------------------------------------------------------------
+ id         | graphid |           | not null | graphid(graph_labid('propidx.piv3'::cstring), nextval('propidx.piv3_id_seq'::regclass))
+ properties | jsonb   |           | not null | jsonb_build_object()
+Indexes:
+    "piv3_pkey" PRIMARY KEY, btree (id)
+    "piv3_first_idx" btree ((properties.'name'::text.'first'::text))
+    "piv3_first_idx1" btree ((properties.'name'::text.'first'::text)) WITH (fillfactor='80')
+    "piv3_first_idx2" btree ((properties.'name'::text.'first'::text)) WHERE (properties.'name'::text) IS NOT NULL
+    "piv3_name_idx" btree ((properties.'name'::text))
+Inherits: propidx.ag_vertex
+
+\dGv+ piv3
+                          List of labels
+  Graph  | Name |  Type  |    Owner    |    Size    | Description 
+---------+------+--------+-------------+------------+-------------
+ propidx | piv3 | vertex | regressrole | 8192 bytes | 
+(1 row)
+
+Vertex label "propidx.piv3"
+--
+Property Indexes:
+    "piv3_first_idx" btree (name.first)
+    "piv3_first_idx1" btree (name.first) WITH (fillfactor='80')
+    "piv3_first_idx2" btree (name.first) WHERE (name) IS NOT NULL
+    "piv3_name_idx" btree (name)
+Inherits: propidx.ag_vertex
+
+\dGi piv3*
+                                                                    List of property indexes
+  Graph  | LabelName |    IndexName    | Unique |    Owner    |                                            Indexdef                                             
+---------+-----------+-----------------+--------+-------------+-------------------------------------------------------------------------------------------------
+ propidx | piv3      | piv3_first_idx  | f      | regressrole | CREATE PROPERTY INDEX piv3_first_idx ON piv3 USING btree (name.first)
+ propidx | piv3      | piv3_first_idx1 | f      | regressrole | CREATE PROPERTY INDEX piv3_first_idx1 ON piv3 USING btree (name.first) WITH (fillfactor='80')
+ propidx | piv3      | piv3_first_idx2 | f      | regressrole | CREATE PROPERTY INDEX piv3_first_idx2 ON piv3 USING btree (name.first) WHERE (name) IS NOT NULL
+ propidx | piv3      | piv3_name_idx   | f      | regressrole | CREATE PROPERTY INDEX piv3_name_idx ON piv3 USING btree (name)
+(4 rows)
+
+-- Unique property index
+CREATE VLABEL piv4;
+CREATE UNIQUE PROPERTY INDEX ON piv4 (id);
+CREATE (:piv4 {id: 100});
+CREATE (:piv4 {id: 100});
+ERROR:  duplicate key value violates unique constraint "piv4_id_idx"
+DETAIL:  Key ((properties.'id'::text))=(100) already exists.
+\d propidx.piv4
+                                                         Table "propidx.piv4"
+   Column   |  Type   | Collation | Nullable |                                         Default                                         
+------------+---------+-----------+----------+-----------------------------------------------------------------------------------------
+ id         | graphid |           | not null | graphid(graph_labid('propidx.piv4'::cstring), nextval('propidx.piv4_id_seq'::regclass))
+ properties | jsonb   |           | not null | jsonb_build_object()
+Indexes:
+    "piv4_pkey" PRIMARY KEY, btree (id)
+    "piv4_id_idx" UNIQUE, btree ((properties.'id'::text))
+Inherits: propidx.ag_vertex
+
+\dGv+ piv4
+                       List of labels
+  Graph  | Name |  Type  |    Owner    | Size  | Description 
+---------+------+--------+-------------+-------+-------------
+ propidx | piv4 | vertex | regressrole | 16 kB | 
+(1 row)
+
+Vertex label "propidx.piv4"
+--
+Property Indexes:
+    "piv4_id_idx" UNIQUE btree (id)
+Inherits: propidx.ag_vertex
+
+\dGi piv4*
+                                                   List of property indexes
+  Graph  | LabelName |  IndexName  | Unique |    Owner    |                             Indexdef                              
+---------+-----------+-------------+--------+-------------+-------------------------------------------------------------------
+ propidx | piv4      | piv4_id_idx | t      | regressrole | CREATE UNIQUE PROPERTY INDEX piv4_id_idx ON piv4 USING btree (id)
+(1 row)
+
+-- Multi-column unique property index
+CREATE VLABEL piv5;
+CREATE UNIQUE PROPERTY INDEX ON piv5 (name.first, name.last);
+CREATE (:piv5 {name: {first: 'graph'}});
+CREATE (:piv5 {name: {first: 'graph'}});
+CREATE (:piv5 {name: {first: 'graph', last: 'database'}});
+CREATE (:piv5 {name: {first: 'graph', last: 'database'}});
+ERROR:  duplicate key value violates unique constraint "piv5_first_last_idx"
+DETAIL:  Key ((properties.'name'::text.'first'::text), (properties.'name'::text.'last'::text))=("graph", "database") already exists.
+\d propidx.piv5
+                                                         Table "propidx.piv5"
+   Column   |  Type   | Collation | Nullable |                                         Default                                         
+------------+---------+-----------+----------+-----------------------------------------------------------------------------------------
+ id         | graphid |           | not null | graphid(graph_labid('propidx.piv5'::cstring), nextval('propidx.piv5_id_seq'::regclass))
+ properties | jsonb   |           | not null | jsonb_build_object()
+Indexes:
+    "piv5_pkey" PRIMARY KEY, btree (id)
+    "piv5_first_last_idx" UNIQUE, btree ((properties.'name'::text.'first'::text), (properties.'name'::text.'last'::text))
+Inherits: propidx.ag_vertex
+
+\dGv+ piv5
+                       List of labels
+  Graph  | Name |  Type  |    Owner    | Size  | Description 
+---------+------+--------+-------------+-------+-------------
+ propidx | piv5 | vertex | regressrole | 16 kB | 
+(1 row)
+
+Vertex label "propidx.piv5"
+--
+Property Indexes:
+    "piv5_first_last_idx" UNIQUE btree (name.first, name.last)
+Inherits: propidx.ag_vertex
+
+\dGi piv5*
+                                                                    List of property indexes
+  Graph  | LabelName |      IndexName      | Unique |    Owner    |                                           Indexdef                                           
+---------+-----------+---------------------+--------+-------------+----------------------------------------------------------------------------------------------
+ propidx | piv5      | piv5_first_last_idx | t      | regressrole | CREATE UNIQUE PROPERTY INDEX piv5_first_last_idx ON piv5 USING btree (name.first, name.last)
+(1 row)
+
+-- DROP PROPERTY INDEX
+CREATE VLABEL piv6;
+CREATE PROPERTY INDEX piv6_idx ON piv6 (name);
+DROP PROPERTY INDEX piv6_idx;
+DROP PROPERTY INDEX IF EXISTS piv6_idx;
+NOTICE:  index "piv6_idx" does not exist, skipping
+DROP PROPERTY INDEX piv6_pkey;
+ERROR:  "piv6_pkey" is not property index
+DROP VLABEL piv6;
+CREATE ELABEL pie1;
+CREATE PROPERTY INDEX pie1_idx ON pie1 (reltype);
+DROP PROPERTY INDEX pie1_idx;
+DROP PROPERTY INDEX IF EXISTS pie1_idx;
+NOTICE:  index "pie1_idx" does not exist, skipping
+DROP PROPERTY INDEX pie1_id_idx;
+ERROR:  "pie1_id_idx" is not property index
+DROP PROPERTY INDEX pie1_start_idx;
+ERROR:  "pie1_start_idx" is not property index
+DROP PROPERTY INDEX pie1_end_idx;
+ERROR:  "pie1_end_idx" is not property index
+DROP ELABEL pie1;
+CREATE VLABEL piv7;
+CREATE PROPERTY INDEX piv7_multi_col ON piv7 (name.first, name.middle, name.last);
+\dGv+ piv7
+                          List of labels
+  Graph  | Name |  Type  |    Owner    |    Size    | Description 
+---------+------+--------+-------------+------------+-------------
+ propidx | piv7 | vertex | regressrole | 8192 bytes | 
+(1 row)
+
+Vertex label "propidx.piv7"
+--
+Property Indexes:
+    "piv7_multi_col" btree (name.first, name.middle, name.last)
+Inherits: propidx.ag_vertex
+
+\dGi piv7*
+                                                                  List of property indexes
+  Graph  | LabelName |   IndexName    | Unique |    Owner    |                                           Indexdef                                            
+---------+-----------+----------------+--------+-------------+-----------------------------------------------------------------------------------------------
+ propidx | piv7      | piv7_multi_col | f      | regressrole | CREATE PROPERTY INDEX piv7_multi_col ON piv7 USING btree (name.first, name.middle, name.last)
+(1 row)
+
+DROP PROPERTY INDEX piv7_multi_col;
+CREATE PROPERTY INDEX piv7_multi_expr ON piv7 ((name.first + name.last), age);
+\dGv+ piv7
+                          List of labels
+  Graph  | Name |  Type  |    Owner    |    Size    | Description 
+---------+------+--------+-------------+------------+-------------
+ propidx | piv7 | vertex | regressrole | 8192 bytes | 
+(1 row)
+
+Vertex label "propidx.piv7"
+--
+Property Indexes:
+    "piv7_multi_expr" btree (((name.first) + (name.last)), age)
+Inherits: propidx.ag_vertex
+
+\dGi piv7*
+                                                                   List of property indexes
+  Graph  | LabelName |    IndexName    | Unique |    Owner    |                                           Indexdef                                            
+---------+-----------+-----------------+--------+-------------+-----------------------------------------------------------------------------------------------
+ propidx | piv7      | piv7_multi_expr | f      | regressrole | CREATE PROPERTY INDEX piv7_multi_expr ON piv7 USING btree (((name.first) + (name.last)), age)
+(1 row)
+
+DROP PROPERTY INDEX piv7_multi_expr;
+DROP VLABEL piv7;
+-- wrong case
+CREATE VLABEL piv8;
+CREATE PROPERTY INDEX piv8_index_key1 ON piv8 (key1);
+CREATE PROPERTY INDEX piv8_index_key1 ON piv8 (key1);
+ERROR:  relation "piv8_index_key1" already exists
+CREATE PROPERTY INDEX ON nonexsist_name (key1);
+ERROR:  label "nonexsist_name" does not exist
+DROP VLABEL piv8;
+CREATE VLABEL piv9;
+CREATE PROPERTY INDEX piv9_property_index_key1 ON piv9 (key1);
+DROP INDEX propidx.piv9_property_index_key1;
+ERROR:  "piv9_property_index_key1" is property index
+CREATE INDEX piv9_index_key1 ON propidx.piv9 (properties);
+DROP PROPERTY INDEX piv9_index_key1;
+ERROR:  "piv9_index_key1" is not property index
+DROP VLABEL piv9;
+-- teardown
+RESET ROLE;

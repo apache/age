@@ -1,0 +1,81 @@
+--
+-- SQL Restriction with Graph objects
+--
+-- prepare
+CREATE GRAPH g;
+CREATE ROLE tmp;
+--
+-- ALTER SCHEMA
+--
+ALTER SCHEMA g RENAME TO s;
+ERROR:  cannot rename schema "g"
+HINT:  Use RENAME GRAPH instead
+ALTER SCHEMA g OWNER TO tmp;
+ERROR:  cannot alter schema "g"
+HINT:  Use ALTER GRAPH instead
+--
+-- CREATE TABLE
+--
+CREATE TABLE g.t (i int);
+ERROR:  cannot create table in graph schema
+CREATE TABLE t (i int) INHERITS (g.ag_vertex);
+ERROR:  invalid parent, table cannot inherit label
+--
+-- ALTER TABLE
+--
+GRANT ALL ON DATABASE regression TO tmp;
+SET ROLE tmp;
+CREATE GRAPH t;
+SET graph_path = t;
+CREATE VLABEL v;
+ALTER TABLE t.v ADD COLUMN tmp int;
+ERROR:  only superuser can ALTER TABLE on graph label
+RESET ROLE;
+SET graph_path = g;
+CREATE VLABEL v;
+ALTER TABLE g.v RENAME TO e;
+ERROR:  cannot rename table "v"
+HINT:  Use rename label instead
+--
+-- TRUNCATE TABLE
+--
+TRUNCATE TABLE g.v;
+ERROR:  cannot truncate label in graph schema
+--
+-- TRIGGER
+--
+CREATE TRIGGER tt AFTER INSERT ON g.v
+FOR EACH STATEMENT EXECUTE PROCEDURE ff();
+ERROR:  function ff() does not exist
+--
+-- RULE
+--
+CREATE VLABEL v2;
+CREATE RULE rr AS ON INSERT TO g.v DO INSTEAD
+	INSERT INTO g.v2 VALUES (new.id, new.properties);
+ERROR:  cannot create rule on graph label
+--
+-- DML
+--
+INSERT INTO g.v VALUES ('1234.56', NULL);
+ERROR:  DML query to graph objects is not allowed
+UPDATE g.v SET properties='{"update":"impossible"}' WHERE id = '1234.56';
+ERROR:  DML query to graph objects is not allowed
+DELETE FROM g.v;
+ERROR:  DML query to graph objects is not allowed
+-- cleanup
+REVOKE ALL ON DATABASE regression FROM tmp;
+DROP GRAPH t CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence t.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+DROP ROLE tmp;
+DROP GRAPH g CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to sequence g.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+drop cascades to vlabel v2

@@ -1,0 +1,227 @@
+--
+-- Cypher Query Language - User Defined Function
+--
+-- setup
+DROP FUNCTION IF EXISTS udf_var(jsonb);
+NOTICE:  function udf_var(jsonb) does not exist, skipping
+DROP FUNCTION IF EXISTS udf_param(jsonb);
+NOTICE:  function udf_param(jsonb) does not exist, skipping
+DROP FUNCTION IF EXISTS udf_if();
+NOTICE:  function udf_if() does not exist, skipping
+DROP FUNCTION IF EXISTS udf_if_exists();
+NOTICE:  function udf_if_exists() does not exist, skipping
+DROP FUNCTION IF EXISTS udf_if_not_exists();
+NOTICE:  function udf_if_not_exists() does not exist, skipping
+DROP GRAPH IF EXISTS udf CASCADE;
+NOTICE:  graph "udf" does not exist, skipping
+DROP GRAPH IF EXISTS udf2 CASCADE;
+NOTICE:  graph "udf2" does not exist, skipping
+CREATE GRAPH udf;
+SET graph_path = udf;
+CREATE (:v {id: 1, refs: [2, 3, 4]}), (:v {id: 2});
+-- test param and scope of the iterator variable used in a list comprehension
+CREATE FUNCTION udf_param(id jsonb) RETURNS jsonb AS $$
+DECLARE
+  r jsonb;
+BEGIN
+  MATCH (n:v) WHERE n.id = id RETURN [id IN n.refs WHERE id < 3] INTO r;
+  RETURN r;
+END;
+$$ LANGUAGE plpgsql;
+RETURN udf_param(1);
+ udf_param 
+-----------
+ [2]
+(1 row)
+
+-- test var
+CREATE FUNCTION udf_var(id jsonb) RETURNS jsonb AS $$
+DECLARE
+  i jsonb;
+  p jsonb;
+BEGIN
+  i := id;
+  MATCH (n:v) WHERE n.id = i RETURN properties(n) INTO p;
+  RETURN p;
+END;
+$$ LANGUAGE plpgsql;
+RETURN udf_var(2);
+  udf_var  
+-----------
+ {"id": 2}
+(1 row)
+
+-- test if
+CREATE GRAPH udf2;
+SET GRAPH_PATH = udf2;
+CREATE (:people{name:'Anders'}) , (:people{name:'Bossman'});
+MATCH (a) , (b)
+WHERE (a.name = 'Anders' AND b.name = 'Bossman')
+CREATE (a)-[e:knows{type:'knows'}]->(b);
+CREATE OR REPLACE FUNCTION udf_if() RETURNS boolean AS $$
+BEGIN
+IF ( MATCH (a)-[b]->(c) WHERE a.name = 'Anders' AND c.name = 'Bossman' RETURN b.type ) THEN
+RETURN true;
+ELSE
+RETURN false;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+-- This test originally worked due to a side effect of having a cast from jsonb
+-- to boolean. That cast has been removed, so now this will fail as expected.
+SELECT udf_if();
+ERROR:  invalid input syntax for type boolean: ""knows""
+CONTEXT:  PL/pgSQL function udf_if() line 3 at IF
+CREATE OR REPLACE FUNCTION udf_if_exists() RETURNS boolean AS $$
+BEGIN
+IF EXISTS ( MATCH (a)-[b]->(c) WHERE a.name = 'Anders' AND c.name = 'Bossman' RETURN b ) THEN
+RETURN true;
+ELSE
+RETURN false;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+SELECT udf_if_exists();
+ udf_if_exists 
+---------------
+ t
+(1 row)
+
+CREATE OR REPLACE FUNCTION udf_if_not_exists() RETURNS boolean AS $$
+BEGIN
+IF NOT EXISTS ( MATCH (a)-[b]->(c) WHERE a.name = 'Anders' AND c.name = 'Bossman' RETURN b ) THEN
+RETURN true;
+ELSE
+RETURN false;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+SELECT udf_if_not_exists();
+ udf_if_not_exists 
+-------------------
+ f
+(1 row)
+
+CREATE OR REPLACE FUNCTION udf_graphwrite() RETURNS text AS $$
+DECLARE
+    var1 text;
+BEGIN
+    CREATE (a:person{name : 'Anders'})-[:knows {name:'friend1'}]->(b:person{name : 'Dilshad'}),
+    (a)-[:knows {name:'friend2'}]->(c:person{name : 'Cesar'}),
+    (a)-[:knows {name:'friend3'}]->(d:person{name : 'Becky'}),
+    (b)-[:knows {name:'friend4'}]->(:person{name : 'Filipa'}),
+    (c)-[:knows {name:'friend5'}]->(e:person{name : 'Emil'});
+
+    MATCH (a:person{name : 'Becky'}) , (b:person{name : 'Emil'})
+    MERGE (a)-[r:knows {name:'friend6'}]-(b)
+    ON CREATE SET r.created = true, r.matched = null
+    ON MATCH SET r.matched = true, r.created = null
+    RETURN r.name INTO var1;
+
+    RETURN var1;
+END;
+$$ LANGUAGE plpgsql;
+SELECT udf_graphwrite();
+ udf_graphwrite 
+----------------
+ "friend6"
+(1 row)
+
+MATCH (n) RETURN n.name;
+   name    
+-----------
+ "Anders"
+ "Bossman"
+ "Anders"
+ "Dilshad"
+ "Cesar"
+ "Becky"
+ "Filipa"
+ "Emil"
+(8 rows)
+
+CREATE GRAPH udf_temp;
+SET GRAPH_PATH to udf_temp;
+SELECT udf_graphwrite();
+ udf_graphwrite 
+----------------
+ "friend6"
+(1 row)
+
+MATCH (n) RETURN n.name;
+   name    
+-----------
+ "Anders"
+ "Dilshad"
+ "Cesar"
+ "Becky"
+ "Filipa"
+ "Emil"
+(6 rows)
+
+SET GRAPH_PATH to udf2;
+DROP GRAPH udf_temp CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to sequence udf_temp.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel person
+drop cascades to elabel knows
+MATCH (n) DETACH DELETE n;
+-- github issue #507
+CREATE (x:v1 {id: 'v1'})<-[r:rel]-();
+MATCH (x:v1)
+CREATE (x)-[r2:rel]->(x2);
+CREATE FUNCTION udf_cypher_results() RETURNS RECORD AS $$
+DECLARE
+    ret RECORD;
+BEGIN
+    MATCH (x:v1 {id: 'v1'})<-[r:rel]-()
+    OPTIONAL MATCH (x)-[r2:rel]->(x2)
+    return x, r, x2, r2 INTO ret;
+    RETURN ret;
+END;
+$$ LANGUAGE plpgsql;
+SELECT udf_cypher_results();
+                                    udf_cypher_results                                    
+------------------------------------------------------------------------------------------
+ ("v1[6.1]{""id"": ""v1""}","rel[7.1][1.1,6.1]{}",ag_vertex[1.2]{},"rel[7.2][6.1,1.2]{}")
+(1 row)
+
+CREATE GRAPH udf_temp;
+SET GRAPH_PATH to udf_temp;
+SELECT udf_cypher_results();
+ERROR:  vertex label "v1" does not exist
+CONTEXT:  SQL statement "MATCH (x:v1 {id: 'v1'})<-[r:rel]-()
+    OPTIONAL MATCH (x)-[r2:rel]->(x2)
+    return x, r, x2, r2"
+PL/pgSQL function udf_cypher_results() line 5 at SQL statement
+DROP GRAPH udf_temp CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to sequence udf_temp.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+-- teardown
+DROP FUNCTION udf_var(jsonb);
+DROP FUNCTION udf_param(jsonb);
+DROP FUNCTION udf_if();
+DROP FUNCTION udf_if_exists();
+DROP FUNCTION udf_if_not_exists();
+DROP FUNCTION udf_graphwrite();
+DROP FUNCTION udf_cypher_results();
+DROP GRAPH udf CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to sequence udf.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel v
+DROP GRAPH udf2 CASCADE;
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to sequence udf2.ag_label_seq
+drop cascades to vlabel ag_vertex
+drop cascades to elabel ag_edge
+drop cascades to vlabel people
+drop cascades to elabel knows
+drop cascades to vlabel person
+drop cascades to vlabel v1
+drop cascades to elabel rel
