@@ -260,8 +260,10 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
     char *relname;
     label_cache_data *label_cache;
 
+    //search for that particular label in the cache
     label_cache = search_label_name_graph_cache(label_name, graph_oid);
 
+    //get the relation name of the label that was found from cache or memory if cache miss
     relname = get_rel_name(label_cache->relation);
 
     return makeRangeVar(graph_name, relname, 2);

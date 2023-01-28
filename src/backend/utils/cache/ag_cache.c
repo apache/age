@@ -976,17 +976,21 @@ label_cache_data *search_label_name_graph_cache(const char *name, Oid graph)
     NameData name_key;
     label_name_graph_cache_entry *entry;
 
+    //checking valididty of label name and graph id
     AssertArg(name);
     AssertArg(OidIsValid(graph));
 
     initialize_caches();
 
     namestrcpy(&name_key, name);
+    //serach the cache for that label ( Hashing algorithms in use for caching)
     entry = label_name_graph_cache_hash_search(&name_key, graph, HASH_FIND,
                                                NULL);
+    //cache hit
     if (entry)
         return &entry->data;
 
+    //cache miss
     return search_label_name_graph_cache_miss(&name_key, graph);
 }
 

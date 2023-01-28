@@ -274,12 +274,14 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     Oid relation_id;
     Oid label_oid;
 
+    //checking validity of the label based on the name and the lable type provided in the function
     if (!is_valid_label(label_name, label_type))
     {
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("label name is invalid")));
     }
 
+    //searching in cache for the graph data based on the graph id
     cache_data = search_graph_name_cache(graph_name);
     if (!cache_data)
     {
@@ -314,6 +316,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
 
+    //inserting all the label information into ag_label table 
     label_oid = insert_label(label_name, graph_oid, label_id, label_type,
                              relation_id,seq_name);
 
