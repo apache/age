@@ -12031,6 +12031,9 @@
 { oid => '7302', descr => 'a array except the first element',
   proname => 'tail', prorettype => 'anyarray', proargtypes => 'anyarray',
   prosrc => 'array_tail' },
+{ oid => '7303', descr => 'returns the total number of elements in an array',
+  proname => 'array_size', prorettype => 'int4', proargtypes => 'anyarray',
+  prosrc => 'array_size' },
 
 # supports for graphdatabase binary upgrade
 { oid => '8001', descr => 'for use by pg_upgrade',

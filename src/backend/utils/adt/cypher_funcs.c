@@ -1407,3 +1407,31 @@ array_tail(PG_FUNCTION_ARGS)
 
 	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
 }
+
+
+/*
+ * array_size:
+ *		returns the total number of elements in an array
+ *		example: array_size(['hello', 'GraphDB']) = 2
+ */
+Datum
+array_size(PG_FUNCTION_ARGS)
+{
+
+	AnyArrayType *arr= PG_GETARG_ANY_ARRAY_P(0);
+	int			ndims = AARR_NDIM(arr);
+	int		   *dims = AARR_DIMS(arr);
+	int			nitems;
+
+	/* Sanity check: does it look like an array at all? */
+	if (ndims <= 0 || ndims > MAXDIM){
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("Number of array dimensions = %d is not within the limits: 1 to (%d)",
+				ndims, MAXDIM)));
+	}
+
+	nitems = ArrayGetNItems(ndims, dims);
+	PG_RETURN_INT32(nitems);
+
+}
