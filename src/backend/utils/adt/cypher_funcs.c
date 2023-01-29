@@ -1189,6 +1189,47 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
+
+/*
+ * text_size:
+ *		returns the length of string/ text
+ *		example: text_size("Hello") = 5
+ */
+Datum
+text_size(PG_FUNCTION_ARGS)
+{
+
+	Oid				typeid;
+	int 			result;
+
+
+	typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+	switch (typeid){
+		case CSTRINGOID:
+			result = (int32) strlen(PG_GETARG_CSTRING(0));
+			break;
+
+		case VARCHAROID:
+		case BPCHAROID:
+			result = (int32) bpcharlen(fcinfo);
+			break;
+
+		case TEXTOID:
+			result = (int32) textlen(fcinfo);
+			break;
+
+		default:
+			ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("Invalid input for function 'test_size()': Expected a String")));
+	}
+
+	PG_RETURN_INT32(result);
+
+}
+
+
 /*
  * Function to return a row containing the columns for the respective values
  * of insertVertex, insertEdge, deleteVertex, deleteEdge, and updateProperty.

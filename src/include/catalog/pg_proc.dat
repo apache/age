@@ -9518,6 +9518,10 @@
   proname => 'regdictionarysend', prorettype => 'bytea',
   proargtypes => 'regdictionary', prosrc => 'regdictionarysend' },
 
+{ oid => '3775', descr => 'returns the length of the string/text',
+  proname => 'text_size', prorettype => 'int4', proargtypes => 'any',
+  prosrc => 'text_size' },
+
 # jsonb
 { oid => '3806', descr => 'I/O',
   proname => 'jsonb_in', prorettype => 'jsonb', proargtypes => 'cstring',
