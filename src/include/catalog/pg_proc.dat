@@ -8034,12 +8034,6 @@
 { oid => '3499', descr => 'aggregate final function',
   proname => 'bool_anytrue', prorettype => 'bool', proargtypes => 'internal',
   prosrc => 'bool_anytrue' },
-{ oid => '3500', descr => 'returns the boolean equivalent of the integer or string',
-  proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
-  prosrc => 'toboolean' },
-{ oid => '3501', descr => 'returns the boolean or null equivalent of the integer or string',
-  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'any',
-  prosrc => 'tobooleanornull' },
 { oid => '2517', descr => 'boolean-and aggregate',
   proname => 'bool_and', prokind => 'a', proisstrict => 'f',
   prorettype => 'bool', proargtypes => 'bool', prosrc => 'aggregate_dummy' },
@@ -8965,9 +8959,6 @@
   proargtypes => 'anyenum', prosrc => 'enum_send' },
 
 # text search stuff
-{ oid => '3609', descr => 'returns the length of the string/text',
-  proname => 'text_size', prorettype => 'int4', proargtypes => 'any',
-  prosrc => 'text_size' },
 { oid => '3610', descr => 'I/O',
   proname => 'tsvectorin', prorettype => 'tsvector', proargtypes => 'cstring',
   prosrc => 'tsvectorin' },
@@ -12040,9 +12031,20 @@
 { oid => '7302', descr => 'a array except the first element',
   proname => 'tail', prorettype => 'anyarray', proargtypes => 'anyarray',
   prosrc => 'array_tail' },
+
+# cypher functions
 { oid => '7303', descr => 'returns the total number of elements in an array',
   proname => 'array_size', prorettype => 'int4', proargtypes => 'anyarray',
   prosrc => 'array_size' },
+{ oid => '7304', descr => 'returns the length of the string/text',
+  proname => 'text_size', prorettype => 'int4', proargtypes => 'any',
+  prosrc => 'text_size' },
+{ oid => '7305', descr => 'returns the boolean equivalent of the integer or string',
+  proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'toboolean' },
+{ oid => '7306', descr => 'returns the boolean or null equivalent of the integer or string',
+  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'tobooleanornull' },
 
 # supports for graphdatabase binary upgrade
 { oid => '8001', descr => 'for use by pg_upgrade',
