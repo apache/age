@@ -8034,6 +8034,12 @@
 { oid => '3499', descr => 'aggregate final function',
   proname => 'bool_anytrue', prorettype => 'bool', proargtypes => 'internal',
   prosrc => 'bool_anytrue' },
+{ oid => '3500', descr => 'returns the boolean equivalent of the integer or string',
+  proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'toboolean' },
+{ oid => '3501', descr => 'returns the boolean or null equivalent of the integer or string',
+  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'tobooleanornull' },
 { oid => '2517', descr => 'boolean-and aggregate',
   proname => 'bool_and', prokind => 'a', proisstrict => 'f',
   prorettype => 'bool', proargtypes => 'bool', prosrc => 'aggregate_dummy' },
@@ -8959,6 +8965,9 @@
   proargtypes => 'anyenum', prosrc => 'enum_send' },
 
 # text search stuff
+{ oid => '3609', descr => 'returns the length of the string/text',
+  proname => 'text_size', prorettype => 'int4', proargtypes => 'any',
+  prosrc => 'text_size' },
 { oid => '3610', descr => 'I/O',
   proname => 'tsvectorin', prorettype => 'tsvector', proargtypes => 'cstring',
   prosrc => 'tsvectorin' },
@@ -9517,10 +9526,6 @@
 { oid => '3774', descr => 'I/O',
   proname => 'regdictionarysend', prorettype => 'bytea',
   proargtypes => 'regdictionary', prosrc => 'regdictionarysend' },
-
-{ oid => '3775', descr => 'returns the length of the string/text',
-  proname => 'text_size', prorettype => 'int4', proargtypes => 'any',
-  prosrc => 'text_size' },
 
 # jsonb
 { oid => '3806', descr => 'I/O',

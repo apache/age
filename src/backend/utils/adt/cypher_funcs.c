@@ -1476,3 +1476,222 @@ array_size(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(nitems);
 
 }
+
+
+/*
+ * toboolean:
+ *		returns the boolean equivalent of strings and integers
+ *		example: toboolean("true") = true, toboolean('f') = false, toboolean(0) = false, 
+ * 				 toboolean('') = null, toboolean(1.0) = ERROR
+ */
+Datum
+toboolean(PG_FUNCTION_ARGS)
+{	
+	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	bool    	result;
+	bool 		isString;
+	char* 		in_str ;
+
+
+	isString = false;
+	switch (typeid){
+		case VARCHAROID:
+		case BPCHAROID:
+		case TEXTOID:
+			const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
+			in_str = text_to_cstring(in_text);
+			isString = true;
+			break;
+		
+		case CHAROID:
+		case CSTRINGOID:
+			in_str = PG_GETARG_CSTRING(0);
+			isString = true;
+			break;
+
+		case BOOLOID:
+
+			// result = PG_GETARG_BOOL(0);
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+			break;
+
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+
+			if(PG_GETARG_INT32(0) == 1)
+				PG_RETURN_BOOL(true);
+			else if(PG_GETARG_INT32(0) == 0)
+				PG_RETURN_BOOL(false);
+			else
+				PG_RETURN_NULL();
+
+			break;
+
+		default:
+			ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("Invalid input type for toboolean(). Expected string or intger")));
+			break;
+	}
+
+	if(isString)
+	{
+		char  		*str;
+		size_t		 len;
+		
+		/*
+		* Skip leading and trailing whitespace
+		*/
+		str = in_str;
+		while (isspace((unsigned char) *str))
+			str++;
+
+		len = strlen(str);
+		while (len > 0 && isspace((unsigned char) str[len - 1]))
+			len--;
+
+		/* handle special case: toboolean('') = null */
+		if(len==0)
+			PG_RETURN_NULL();
+
+		switch (*str)
+		{
+			/*
+			* boolin(yes) = true and boolin(no) = false, but the requirements state that toboolean(yes) = null and toboolean(no) = null.
+			* So, we explicitely map these conditions.
+			*/
+			case 'y':
+			case 'Y':
+				if (pg_strncasecmp(str, "yes", len) == 0)
+				{
+					PG_RETURN_NULL();
+				}
+				break;
+			case 'n':
+			case 'N':
+				if (pg_strncasecmp(str, "no", len) == 0)
+				{
+					PG_RETURN_NULL();
+				}
+				break;
+			default:
+				if (parse_bool_with_len(str, len, &result))
+					PG_RETURN_BOOL(result);
+				break;				
+		}
+		ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("Invalid input string for toboolean(): \"%s\"",
+					in_str)));
+	}
+
+	PG_RETURN_NULL();
+
+}
+
+
+/*
+ * tobooleanornull:
+ *		returns the boolean equivalent of strings and integers
+ *		example: tobooleanornull("true") = true, tobooleanornull('f') = false, tobooleanornull(0) = false, 
+ * 				 tobooleanornull(null) = null, tobooleanornull(1.0) = null
+ */
+Datum
+tobooleanornull(PG_FUNCTION_ARGS)
+{	
+	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	bool    	result;
+	bool 		isString;
+	char* 		in_str ;
+
+
+	isString = false;
+	switch (typeid){
+		case VARCHAROID:
+		case BPCHAROID:
+		case TEXTOID:
+			const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
+			in_str = text_to_cstring(in_text);
+			isString = true;
+			break;
+		
+		case CHAROID:
+		case CSTRINGOID:
+			in_str = PG_GETARG_CSTRING(0);
+			isString = true;
+			break;
+
+		case BOOLOID:
+
+			// result = PG_GETARG_BOOL(0);
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+			break;
+
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+
+			if(PG_GETARG_INT32(0) == 1)
+				PG_RETURN_BOOL(true);
+			else if(PG_GETARG_INT32(0) == 0)
+				PG_RETURN_BOOL(false);
+			else
+				PG_RETURN_NULL();
+
+			break;
+
+		default:
+			break;
+	}
+
+	if(isString)
+	{
+		char  		*str;
+		size_t		 len;
+		
+		/*
+		* Skip leading and trailing whitespace
+		*/
+		str = in_str;
+		while (isspace((unsigned char) *str))
+			str++;
+
+		len = strlen(str);
+		while (len > 0 && isspace((unsigned char) str[len - 1]))
+			len--;
+
+		/* handle special case: toboolean('') = null */
+		if(len==0)
+			PG_RETURN_NULL();
+
+		switch (*str)
+		{
+			/*
+			* boolin(yes) = true and boolin(no) = false, but the requirements state that toboolean(yes) = null and toboolean(no) = null.
+			* So, we explicitely map these conditions.
+			*/
+			case 'y':
+			case 'Y':
+				if (pg_strncasecmp(str, "yes", len) == 0)
+				{
+					PG_RETURN_NULL();
+				}
+				break;
+			case 'n':
+			case 'N':
+				if (pg_strncasecmp(str, "no", len) == 0)
+				{
+					PG_RETURN_NULL();
+				}
+				break;
+			default:
+				if (parse_bool_with_len(str, len, &result))
+					PG_RETURN_BOOL(result);
+				break;				
+		}
+	}
+
+	PG_RETURN_NULL();
+
+}
