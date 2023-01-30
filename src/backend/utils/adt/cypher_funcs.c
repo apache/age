@@ -68,6 +68,7 @@ static void ereport_invalid_jsonb_param(FunctionCallJsonbInfo *fcjinfo);
 static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
 static int32 convert_string_to_int64(char *str, int* flag);
+static float8 convert_string_to_float8(char *str, int* flag);
 
 Datum
 jsonb_head(PG_FUNCTION_ARGS)
@@ -1431,6 +1432,28 @@ convert_string_to_int64(char* s, int *flag)
 		return 0;
 }
 
+static float8
+convert_string_to_float8(char *s, int *flag)
+{
+	float8 res = 0;
+	*flag = 0;
+	for(int iter = 0; iter < strlen(s); ++iter)
+	{
+		if(isalpha(s[iter]))
+		{
+			*flag = 1;
+			break;
+		}
+	}
+	if(*flag == 0)
+	{
+		res = atof(s);
+		return res;
+	}
+	else
+		return 0;
+}
+
 Datum
 tointeger(PG_FUNCTION_ARGS)
 {
@@ -1494,4 +1517,104 @@ tointeger(PG_FUNCTION_ARGS)
 	}
 	else
 		PG_RETURN_INT64(0);
+}
+
+Datum
+tofloat(PG_FUNCTION_ARGS)
+{
+	Oid elem_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	if(elem_type == INT2OID || elem_type == INT4OID || elem_type == INT8OID || elem_type == BOOLOID)
+		PG_RETURN_FLOAT8((float4) PG_GETARG_INT32(0));
+	else if(elem_type == FLOAT4OID)
+		PG_RETURN_FLOAT8(PG_GETARG_FLOAT4(0));
+	else if(elem_type == FLOAT8OID)
+		PG_RETURN_FLOAT8(PG_GETARG_FLOAT8(0));
+	else if(elem_type == NUMERICOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == TEXTOID)
+	{
+		text *t = PG_GETARG_TEXT_P(0);
+		char *s = text_to_cstring(t);
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		pfree(t);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == CSTRINGOID)
+	{
+		char *s = PG_GETARG_CSTRING(0);
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else
+		PG_RETURN_NULL();
+}
+
+Datum
+tofloatornull(PG_FUNCTION_ARGS)
+{
+	Oid elem_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	if(elem_type == INT2OID || elem_type == INT4OID || elem_type == INT8OID)
+		PG_RETURN_FLOAT8((float4) PG_GETARG_INT32(0));
+	else if(elem_type == FLOAT4OID)
+		PG_RETURN_FLOAT8(PG_GETARG_FLOAT4(0));
+	else if(elem_type == FLOAT8OID)
+		PG_RETURN_FLOAT8(PG_GETARG_FLOAT8(0));
+	else if(elem_type == BOOLOID)
+		PG_RETURN_NULL();
+	else if(elem_type == NUMERICOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == TEXTOID)
+	{
+		text *t = PG_GETARG_TEXT_P(0);
+		char *s = text_to_cstring(t);
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		pfree(t);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == CSTRINGOID)
+	{
+		char *s = PG_GETARG_CSTRING(0);
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else
+		PG_RETURN_NULL();
 }

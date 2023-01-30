@@ -12044,4 +12044,10 @@
 { oid => '8003', descr => 'return integer equivalents',
   proname => 'tointeger', prorettype => 'int8', proisstrict => 't',
   proargtypes => 'anyelement', prosrc => 'tointeger' },
+{ oid => '8004', descr => 'return float equivalents',
+  proname => 'tofloat', prorettype => 'float8', proisstrict => 't',
+  proargtypes => 'anyelement', prosrc => 'tofloat' },
+{ oid => '8005', descr => 'return float equivalents or null',
+  proname => 'tofloatornull', prorettype => 'float8', proisstrict => 't',
+  proargtypes => 'anyelement', prosrc => 'tofloatornull' },
 ]
