@@ -67,6 +67,7 @@ static bool is_numeric_integer(Numeric n);
 static void ereport_invalid_jsonb_param(FunctionCallJsonbInfo *fcjinfo);
 static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
+static int32 convert_string_to_int64(char *str, int* flag);
 
 Datum
 jsonb_head(PG_FUNCTION_ARGS)
