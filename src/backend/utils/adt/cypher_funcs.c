@@ -1191,12 +1191,12 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 
 
 /*
- * text_size:
+ * str_size:
  *		returns the length of string/ text
- *		example: text_size("Hello") = 5
+ *		example: str_size("Hello") = 5
  */
 Datum
-text_size(PG_FUNCTION_ARGS)
+str_size(PG_FUNCTION_ARGS)
 {
 
 	Oid				typeid;
@@ -1222,7 +1222,7 @@ text_size(PG_FUNCTION_ARGS)
 		default:
 			ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("Invalid input for function 'test_size()': Expected a String")));
+				 errmsg("Invalid input for function 'str_size()': Expected a String")));
 	}
 
 	PG_RETURN_INT32(result);

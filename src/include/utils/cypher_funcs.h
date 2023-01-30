@@ -80,7 +80,7 @@ extern Datum jsonb_string_starts_with(PG_FUNCTION_ARGS);
 extern Datum jsonb_string_ends_with(PG_FUNCTION_ARGS);
 extern Datum jsonb_string_contains(PG_FUNCTION_ARGS);
 extern Datum jsonb_string_regex(PG_FUNCTION_ARGS);
-extern Datum text_size(PG_FUNCTION_ARGS);
+extern Datum str_size(PG_FUNCTION_ARGS);
 
 /* for array supports */
 extern Datum array_head(PG_FUNCTION_ARGS);
