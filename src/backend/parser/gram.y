@@ -680,7 +680,7 @@ static Node *wrapCypherWithSelect(Node *stmt);
 %type <sortby>	cypher_sort_item
 
 %type <node>	cypher_match
-%type <boolean>	cypher_optional_opt
+%type <ival>	cypher_mandatory_optional_opt
 
 %type <node>	cypher_create
 
@@ -769,7 +769,7 @@ static Node *wrapCypherWithSelect(Node *stmt);
 	LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
 	LOCALTIME LOCALTIMESTAMP LOCATION LOCK_P LOCKED LOGGED
 
-	MAPPING MATCH MATERIALIZED MAXVALUE MERGE METHOD MINUTE_P MINVALUE MODE MONTH_P MOVE
+	MANDATORY_P MAPPING MATCH MATERIALIZED MAXVALUE MERGE METHOD MINUTE_P MINVALUE MODE MONTH_P MOVE
 
 	NAME_P NAMES NATIONAL NATURAL NCHAR NEW NEXT NFC NFD NFKC NFKD NO NONE
 	NORMALIZE NORMALIZED
@@ -885,7 +885,7 @@ static Node *wrapCypherWithSelect(Node *stmt);
  */
 %nonassoc	UNBOUNDED		/* ideally would have same precedence as IDENT */
 %nonassoc	IDENT PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
-			ALLSHORTESTPATHS DELETE_P DETACH DIJKSTRA LOAD OPTIONAL_P REMOVE
+			ALLSHORTESTPATHS DELETE_P DETACH DIJKSTRA LOAD MANDATORY_P OPTIONAL_P REMOVE
 			SHORTESTPATH SINGLE SIZE_P SKIP
 %left		Op OPERATOR		/* multi-character ops and user-defined operators */
 %left		'+' '-'
@@ -15861,6 +15861,7 @@ unreserved_keyword:
 			| LOCK_P
 			| LOCKED
 			| LOGGED
+			| MANDATORY_P
 			| MAPPING
 			| MATERIALIZED
 			| MAXVALUE
@@ -18986,21 +18987,47 @@ cypher_where_opt:
 		;
 
 cypher_match:
-			cypher_optional_opt MATCH cypher_pattern cypher_where_opt
+			cypher_mandatory_optional_opt MATCH cypher_pattern cypher_where_opt
 				{
 					CypherMatchClause *n;
 
 					n = makeNode(CypherMatchClause);
 					n->pattern = $3;
 					n->where = $4;
-					n->optional = $1;
+
+					/* MATCH */
+					if( $1 == 0 ){
+						n->optional = false;
+						n->mandatory = false;
+					}
+					/* MANDATORY MATCH */
+					else if( $1 == 1 ){
+						n->mandatory = true;
+						n->optional= false;
+					}
+					/* OPTIONAL MATCH */
+					else if( $1 == 2 ){
+						n->mandatory = false;
+						n->optional = true; 
+					}
+					/* SYNTAX ERROR: using mandatory and optional together
+					*/
+					else
+						ereport(ERROR,
+							(errcode(ERRCODE_SYNTAX_ERROR),
+							 errmsg("MANDATORY and OPTIONAL cannot be used in the same MATCH clause."),
+							 parser_errposition(@1)));
+
 					$$ = (Node *) n;
 				}
 		;
 
-cypher_optional_opt:
-			OPTIONAL_P			{ $$ = true; }
-			| /* EMPTY */		{ $$ = false; }
+cypher_mandatory_optional_opt:
+			MANDATORY_P			{ $$ = 1; }
+			| OPTIONAL_P			{ $$ = 2; }
+			| MANDATORY_P OPTIONAL_P { $$ = -1; }
+			| OPTIONAL_P MANDATORY_P {$$ = -1; }
+			| /* EMPTY */		{ $$ = 0; }
 		;
 
 cypher_create:

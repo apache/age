@@ -4157,6 +4157,8 @@ _outCypherMatchClause(StringInfo str, const CypherMatchClause *node)
 	WRITE_NODE_FIELD(pattern);
 	WRITE_NODE_FIELD(where);
 	WRITE_BOOL_FIELD(optional);
+	WRITE_BOOL_FIELD(mandatory);
+
 }
 
 static void

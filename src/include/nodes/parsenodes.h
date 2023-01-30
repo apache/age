@@ -3876,6 +3876,7 @@ typedef struct CypherMatchClause
 	List	   *pattern;
 	Node	   *where;			/* WHERE qualification */
 	bool		optional;		/* OPTIONAL MATCH */
+	bool		mandatory;  /* MANDATORY MATCH*/
 } CypherMatchClause;
 
 /* which clause is parsed as a CypherProjection */
