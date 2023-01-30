@@ -17,6 +17,8 @@
  * under the License.
  */
 
+//Importing Required Modules
+
 import { Client } from 'pg'
 import pgTypes from 'pg-types'
 import { CharStreams, CommonTokenStream } from 'antlr4ts'
@@ -25,6 +27,7 @@ import { AgtypeParser } from './antlr4/AgtypeParser'
 import CustomAgTypeListener from './antlr4/CustomAgTypeListener'
 import { ParseTreeWalker } from 'antlr4ts/tree'
 
+//Function to Parse Strings to AGE Type
 function AGTypeParse (input: string) {
   const chars = CharStreams.fromString(input)
   const lexer = new AgtypeLexer(chars)
@@ -36,20 +39,26 @@ function AGTypeParse (input: string) {
   return printer.getResult()
 }
 
+//Function to set AGE Types for Client
 async function setAGETypes (client: Client, types: typeof pgTypes) {
+  
+  //Creating AGE Extension in case it doesn't already exist for Client
   await client.query(`
         CREATE EXTENSION IF NOT EXISTS age;
         LOAD 'age';
         SET search_path = ag_catalog, "$user", public;
     `)
 
+  //Selecting specific Result set
   const oidResults = await client.query(`
         select typelem
         from pg_type
         where typname = '_agtype';`)
 
+  //Check for Null or Empty Result set
   if (oidResults.rows.length < 1) { throw new Error() }
 
+  //Setting Parser
   types.setTypeParser(oidResults.rows[0].typelem, AGTypeParse)
 }
 
