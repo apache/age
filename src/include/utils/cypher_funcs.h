@@ -88,9 +88,11 @@ extern Datum array_last(PG_FUNCTION_ARGS);
 extern Datum array_tail(PG_FUNCTION_ARGS);
 extern Datum array_size(PG_FUNCTION_ARGS);
 
-/* for boolean supports */
-extern Datum toboolean(PG_FUNCTION_ARGS);
-extern Datum tobooleanornull(PG_FUNCTION_ARGS);
+/* for boolean support */
+extern Datum string_toboolean(PG_FUNCTION_ARGS);
+extern Datum datum_toboolean(PG_FUNCTION_ARGS);
+extern Datum string_tobooleanornull(PG_FUNCTION_ARGS);
+extern Datum datum_tobooleanornull(PG_FUNCTION_ARGS);
 
 /* utility */
 extern Datum get_last_graph_write_stats(PG_FUNCTION_ARGS);

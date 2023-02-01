@@ -11890,7 +11890,7 @@
   proname => 'length', prorettype => 'jsonb', proargtypes => 'jsonb',
   prosrc => 'jsonb_length' },
 { oid => '7200', descr => 'convert the argument to a boolean',
-  proname => 'toboolean', prorettype => 'bool', proargtypes => 'jsonb',
+  proname => 'jsonb_toboolean', prorettype => 'bool', proargtypes => 'jsonb',
   prosrc => 'jsonb_toboolean' },
 { oid => '7203', descr => 'a list of keys of a map',
   proname => 'keys', prorettype => 'jsonb', proargtypes => 'jsonb',
@@ -12031,20 +12031,9 @@
 { oid => '7302', descr => 'a array except the first element',
   proname => 'tail', prorettype => 'anyarray', proargtypes => 'anyarray',
   prosrc => 'array_tail' },
-
-# cypher functions
 { oid => '7303', descr => 'returns the total number of elements in an array',
   proname => 'array_size', prorettype => 'int4', proargtypes => 'anyarray',
   prosrc => 'array_size' },
-{ oid => '7304', descr => 'returns the length of the string',
-  proname => 'str_size', prorettype => 'int4', proargtypes => 'any',
-  prosrc => 'str_size' },
-{ oid => '7305', descr => 'returns the boolean equivalent of the integer or string',
-  proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
-  prosrc => 'toboolean' },
-{ oid => '7306', descr => 'returns the boolean or null equivalent of the integer or string',
-  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'any',
-  prosrc => 'tobooleanornull' },
 
 # supports for graphdatabase binary upgrade
 { oid => '8001', descr => 'for use by pg_upgrade',
@@ -12056,3 +12045,22 @@
   proparallel => 'r', prorettype => 'void', proargtypes => 'oid',
   prosrc => 'binary_upgrade_set_next_ag_label_oid' },
 ]
+
+# cypher text functions
+{ oid => '8003', descr => 'returns the length of the string/text',
+  proname => 'str_size', prorettype => 'int4', proargtypes => 'text',
+  prosrc => 'str_size' },
+
+# cypher boolean functions
+{ oid => '8004', descr => 'returns the boolean equivalent of a string',
+  proname => 'toboolean', prorettype => 'bool', proargtypes => 'text',
+  prosrc => 'string_toboolean' },
+{ oid => '8005', descr => 'returns the boolean equivalent of a datum',
+  proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'datum_toboolean' },
+{ oid => '8006', descr => 'returns the boolean or null equivalent of a string',
+  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'text',
+  prosrc => 'string_tobooleanornull' },
+{ oid => '8007', descr => 'returns the boolean or null equivalent of a datum',
+  proname => 'tobooleanornull', prorettype => 'bool', proargtypes => 'any',
+  prosrc => 'datum_tobooleanornull' },

@@ -67,6 +67,9 @@ static bool is_numeric_integer(Numeric n);
 static void ereport_invalid_jsonb_param(FunctionCallJsonbInfo *fcjinfo);
 static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
+static bool int_to_bool(int32 num, bool *result);
+static bool string_to_bool(const char *str, bool *result);
+
 
 Datum
 jsonb_head(PG_FUNCTION_ARGS)
@@ -1189,47 +1192,6 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-
-/*
- * str_size:
- *		returns the length of string/ text
- *		example: str_size("Hello") = 5
- */
-Datum
-str_size(PG_FUNCTION_ARGS)
-{
-
-	Oid				typeid;
-	int 			result;
-
-
-	typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
-
-	switch (typeid){
-		case CSTRINGOID:
-			result = (int32) strlen(PG_GETARG_CSTRING(0));
-			break;
-
-		case VARCHAROID:
-		case BPCHAROID:
-			result = (int32) bpcharlen(fcinfo);
-			break;
-
-		case TEXTOID:
-			result = (int32) textlen(fcinfo);
-			break;
-
-		default:
-			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("Invalid input for function 'str_size()': Expected a String")));
-	}
-
-	PG_RETURN_INT32(result);
-
-}
-
-
 /*
  * Function to return a row containing the columns for the respective values
  * of insertVertex, insertEdge, deleteVertex, deleteEdge, and updateProperty.
@@ -1451,6 +1413,20 @@ array_tail(PG_FUNCTION_ARGS)
 
 
 /*
+ * str_size:
+ *		returns the length of string/ text
+ *		example: str_size("Hello") = 5
+ */
+Datum
+str_size(PG_FUNCTION_ARGS)
+{
+
+	PG_RETURN_INT32(textlen(fcinfo));
+
+}
+
+
+/*
  * array_size:
  *		returns the total number of elements in an array
  *		example: array_size(['hello', 'GraphDB']) = 2
@@ -1473,225 +1449,243 @@ array_size(PG_FUNCTION_ARGS)
 	}
 
 	nitems = ArrayGetNItems(ndims, dims);
+
+	// /* free pointers */
+	pfree(arr);
+	pfree(dims);
+
 	PG_RETURN_INT32(nitems);
 
 }
 
-
 /*
- * toboolean:
- *		returns the boolean equivalent of strings and integers
- *		example: toboolean("true") = true, toboolean('f') = false, toboolean(0) = false, 
- * 				 toboolean('') = null, toboolean(1.0) = ERROR
+ * int_to_bool and string_to_bool are two helper functions that are used by toBoolean() and toBooleanOrNull() functions
+ *	The helper functions return either true or false which is mapped to differennt conditions in the two cypher functions. 
+ *	The mapping logic is specified aas comments in the respective cypher functions
  */
-Datum
-toboolean(PG_FUNCTION_ARGS)
-{	
-	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	bool    	result;
-	bool 		isString;
-	char* 		in_str ;
 
-
-	isString = false;
-	switch (typeid){
-		case VARCHAROID:
-		case BPCHAROID:
-		case TEXTOID:
-			const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
-			in_str = text_to_cstring(in_text);
-			isString = true;
-			break;
-		
-		case CHAROID:
-		case CSTRINGOID:
-			in_str = PG_GETARG_CSTRING(0);
-			isString = true;
-			break;
-
-		case BOOLOID:
-
-			// result = PG_GETARG_BOOL(0);
-			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-			break;
-
-		case INT2OID:
-		case INT4OID:
-		case INT8OID:
-
-			if(PG_GETARG_INT32(0) == 1)
-				PG_RETURN_BOOL(true);
-			else if(PG_GETARG_INT32(0) == 0)
-				PG_RETURN_BOOL(false);
-			else
-				PG_RETURN_NULL();
-
-			break;
-
-		default:
-			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				errmsg("Invalid input type for toboolean(). Expected string or intger")));
-			break;
-	}
-
-	if(isString)
+static 
+bool int_to_bool(int32 num, bool *result)
+{
+	if (num == 0)
 	{
-		char  		*str;
-		size_t		 len;
-		
-		/*
-		* Skip leading and trailing whitespace
-		*/
-		str = in_str;
-		while (isspace((unsigned char) *str))
-			str++;
-
-		len = strlen(str);
-		while (len > 0 && isspace((unsigned char) str[len - 1]))
-			len--;
-
-		/* handle special case: toboolean('') = null */
-		if(len==0)
-			PG_RETURN_NULL();
-
-		switch (*str)
-		{
-			/*
-			* boolin(yes) = true and boolin(no) = false, but the requirements state that toboolean(yes) = null and toboolean(no) = null.
-			* So, we explicitely map these conditions.
-			*/
-			case 'y':
-			case 'Y':
-				if (pg_strncasecmp(str, "yes", len) == 0)
-				{
-					PG_RETURN_NULL();
-				}
-				break;
-			case 'n':
-			case 'N':
-				if (pg_strncasecmp(str, "no", len) == 0)
-				{
-					PG_RETURN_NULL();
-				}
-				break;
-			default:
-				if (parse_bool_with_len(str, len, &result))
-					PG_RETURN_BOOL(result);
-				break;				
-		}
-		ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("Invalid input string for toboolean(): \"%s\"",
-					in_str)));
+		if (result)			
+			*result = false;	/* suppress compiler warning */
+		return true;
+	}
+	else if (num == 1)
+	{
+		if (result)
+			*result = true;		/* suppress compiler warning */
+		return true;
 	}
 
-	PG_RETURN_NULL();
+	return false;
+		
+		
+}
+
+static 
+bool string_to_bool(const char *str, bool *result)
+{
+	size_t		len;
+
+	/*
+	* Skip leading and trailing whitespace
+	*/
+	while (isspace((unsigned char) *str))
+		str++;
+
+	len = strlen(str);
+	while (len > 0 && isspace((unsigned char) str[len - 1]))
+		len--;
+	
+	/* handle special case: boolean equivalent of an empty string is null */
+	if(len==0)
+	{
+		*result = true; /* result = true translates to returning null in the calling function */
+		return false;
+	}
+
+
+	switch (*str)
+	{
+		/*
+		* boolin(yes) = true and boolin(no) = false, but the requirements state that toBoolean(yes) = null and toBoolean(no) = null.
+		* So, we explicitely map these conditions.
+		*/
+		case 'y':
+		case 'Y':
+			if (pg_strncasecmp(str, "yes", len) == 0)
+			{
+				*result = true;
+				return false;
+			}
+			break;
+		case 'n':
+		case 'N':
+			if (pg_strncasecmp(str, "no", len) == 0)
+			{
+				*result = true;
+				return false;
+			}
+			break;
+		default:
+			bool parseResult;
+			if(parse_bool_with_len(str, len, &parseResult))
+			{
+				*result = parseResult;
+				return true;	
+			}
+						
+	}
+
+	if (result)
+		*result = false;		/* suppress compiler warning */
+	return false;
 
 }
 
 
 /*
- * tobooleanornull:
- *		returns the boolean equivalent of strings and integers
- *		example: tobooleanornull("true") = true, tobooleanornull('f') = false, tobooleanornull(0) = false, 
- * 				 tobooleanornull(null) = null, tobooleanornull(1.0) = null
+ * string_toboolean:
+ *		returns the boolean equivalent of strings 
+ *		example: toboolean('true') = true, toboolean('f') = false
+ * 				 toboolean('') = null, toboolean('hello') = ERROR
  */
-Datum
-tobooleanornull(PG_FUNCTION_ARGS)
-{	
+Datum 
+string_toboolean(PG_FUNCTION_ARGS)
+{
+	const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
+	char* in_str = text_to_cstring(in_text);
+	bool result;
+
+	if(string_to_bool(in_str, &result))
+		PG_RETURN_BOOL(result);
+	
+	else
+	{
+		if(result)
+			PG_RETURN_NULL();
+		
+		else
+			ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("Invalid input string for toBoolean(): \"%s\"",
+					in_str)));
+	}
+	
+	
+}
+
+
+/*
+ * datum_toboolean:
+ *		returns the boolean equivalent of integers, jsonb and booleans 
+ *		example: toboolean(1) = true, toboolean(false) = false
+ * 				 tolboolean(12.5) = ERROR
+ */
+Datum 
+datum_toboolean(PG_FUNCTION_ARGS)
+{
+	
 	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	bool    	result;
-	bool 		isString;
-	char* 		in_str ;
 
-
-	isString = false;
-	switch (typeid){
-		case VARCHAROID:
-		case BPCHAROID:
-		case TEXTOID:
-			const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
-			in_str = text_to_cstring(in_text);
-			isString = true;
-			break;
-		
-		case CHAROID:
-		case CSTRINGOID:
-			in_str = PG_GETARG_CSTRING(0);
-			isString = true;
-			break;
-
-		case BOOLOID:
-
-			// result = PG_GETARG_BOOL(0);
-			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-			break;
-
+	switch(typeid)
+	{
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+			int32 num = PG_GETARG_INT32(0);
 
-			if(PG_GETARG_INT32(0) == 1)
-				PG_RETURN_BOOL(true);
-			else if(PG_GETARG_INT32(0) == 0)
-				PG_RETURN_BOOL(false);
-			else
-				PG_RETURN_NULL();
-
+			if(int_to_bool(num, &result))
+				PG_RETURN_BOOL(result);
+			
+			else 
+				ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("Invalid input value for toBoolean(): %d", num)));	
+			
+			break;
+		
+		case BOOLOID:
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
 			break;
 
 		default:
 			break;
 	}
 
-	if(isString)
-	{
-		char  		*str;
-		size_t		 len;
-		
-		/*
-		* Skip leading and trailing whitespace
-		*/
-		str = in_str;
-		while (isspace((unsigned char) *str))
-			str++;
+	ereport(ERROR,
+		(errcode(ERRCODE_UNDEFINED_PARAMETER),
+		errmsg("Invalid input type for toBoolean()")));	
+}
 
-		len = strlen(str);
-		while (len > 0 && isspace((unsigned char) str[len - 1]))
-			len--;
 
-		/* handle special case: toboolean('') = null */
-		if(len==0)
-			PG_RETURN_NULL();
+/*
+ * string_tobooleanornull:
+ *		returns the boolean or nullequivalent of strings 
+ *		example: tobooleanornull('true') = true, tobooleanornull('f') = false
+ * 				 tobooleanornull('') = null, tobooleanornull('hello') = null
+ */
+Datum 
+string_tobooleanornull(PG_FUNCTION_ARGS)
+{
+	const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
+	const char* in_str = text_to_cstring(in_text);
+	bool result;
 
-		switch (*str)
-		{
-			/*
-			* boolin(yes) = true and boolin(no) = false, but the requirements state that toboolean(yes) = null and toboolean(no) = null.
-			* So, we explicitely map these conditions.
-			*/
-			case 'y':
-			case 'Y':
-				if (pg_strncasecmp(str, "yes", len) == 0)
-				{
-					PG_RETURN_NULL();
-				}
-				break;
-			case 'n':
-			case 'N':
-				if (pg_strncasecmp(str, "no", len) == 0)
-				{
-					PG_RETURN_NULL();
-				}
-				break;
-			default:
-				if (parse_bool_with_len(str, len, &result))
-					PG_RETURN_BOOL(result);
-				break;				
-		}
+	if(string_to_bool(in_str, &result))
+		PG_RETURN_BOOL(result);
+	
+	else
+		PG_RETURN_NULL();	
+	
+}
+
+
+/*
+ * datum_tobooleanornull:
+ *		returns the boolean equivalent of integers, jsonb and booleans 
+ *		example: tobooleanornull(1) = true, tobooleanornull(false) = false
+ * 				 tobooleanornull(12.5) = null
+ */
+Datum
+datum_tobooleanornull(PG_FUNCTION_ARGS)
+{
+	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	switch (typeid){
+		case VARCHAROID:
+		case BPCHAROID:
+		case TEXTOID:	
+			PG_RETURN_BOOL(string_tobooleanornull(fcinfo));
+			break;
+
+		case BOOLOID:
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+			break;
+
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			bool	result;
+			int32 	num = PG_GETARG_INT32(0);
+
+			if(int_to_bool(num, &result))
+				PG_RETURN_BOOL(result);
+			
+			else 
+				PG_RETURN_NULL();			
+			break;
+
+		case JSONBOID:
+			PG_RETURN_BOOL(jsonb_toboolean(fcinfo));
+			break;
+
+		default:
+			break;
 	}
 
 	PG_RETURN_NULL();
-
 }
