@@ -50,8 +50,3 @@ const results: QueryResultRow = await client?.query<QueryResultRow>(`
 * Apache Age : https://age.apache.org/
 * Github : https://github.com/apache/age
 * Document : https://age.apache.org/age-manual/master/index.html
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 2c7f00a5 (Updated Drivers folder and Nodejs driver READMe)
