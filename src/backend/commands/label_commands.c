@@ -122,6 +122,11 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
 
+    Name parent_name;
+    char *parent_name_str;
+
+    int num_args = fcinfo->nargs;
+
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
     {
@@ -153,7 +158,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph_oid = get_graph_oid(graph_name_str);
 
     // Check if label with the input name already exists
-    if (label_exists(label_name_str, graph_oid))
+    if (PG_ARGISNULL(2) && label_exists(label_name_str, graph_oid))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -164,7 +169,24 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    // checking if user has not provided the parent's name and set to "_ag_label_vertex"
+    if (PG_ARGISNULL(2)) {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    }
+
+    else {
+        parent_name = PG_GETARG_NAME(2);
+        parent_name_str = NameStr(*parent_name);
+
+        // Check if parent label does not exist
+        if (!label_exists(parent_name_str, graph_oid)) {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                            errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+        }
+
+        rv = get_label_range_var(graph, graph_oid, parent_name->data);
+    }
 
     parent = list_make1(rv);
 
