@@ -115,7 +115,36 @@ You can learn about how to install Apache AGE, its features and built-in functio
 - [Apache AGE Python Driver](https://github.com/rhizome-ai/apache-age-python)
 - [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
 
-## Contribution
+
+
+
+<h2><img height="20" src="/img/contributing.svg">&nbsp;&nbsp;Community</h2>
+
+Join the AGE community for help, questions, discussions, and contributions. 
+
+- Check our [website](https://age.apache.org/)
+- Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
+- Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
+- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
+
+
+<h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
+
+
+Apache AGE Viewer is a user interface for Apache AGE that provides visualization and exploration of data.
+This web visualization tool allows users to enter complex graph queries and explore the results in graph and table forms.
+Apache AGE Viewer is enhanced to proceed with extensive graph data and discover insights through various graph algorithms.
+Apache AGE Viewer will become a graph data administration and development platform for Apache AGE to support multiple relational databases: <https://github.com/apache/age-viewer>.
+
+**This is a visualization tool.**
+After installing AGE Extension, you may use this tool to get access to the visualization features.
+
+
+![Viewer gdb, and graph](/img/agce.gif)
+
+
+
+<h2><img height="20" src="/img/community.svg">&nbsp;&nbsp;Contributing</h2>
 
 You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/age).
 Also, you can learn from the code review process, how to merge pull requests, and from code style compliance to documentation, by visiting the [Apache AGE official site - Developer Guidelines](https://age.apache.org/#codereview).
