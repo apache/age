@@ -97,7 +97,7 @@ RETURNS void
 LANGUAGE c
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.create_vlabel(graph_name name, label_name name, parent_label_name name = NULL)
+CREATE FUNCTION ag_catalog.create_vlabel(graph_name name, label_name name)
     RETURNS void
     LANGUAGE c
 AS 'MODULE_PATHNAME';
