@@ -125,8 +125,6 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     Name parent_name;
     char *parent_name_str;
 
-    int num_args = fcinfo->nargs;
-
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
     {
@@ -170,7 +168,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     label = label_name->data;
 
     // checking if user has not provided the parent's name and set to "_ag_label_vertex"
-    if (PG_ARGISNULL(2)) {
+    if (PG_ARGISNULL(2) || strcmp(NameStr(*PG_GETARG_NAME(2)), "") == 0) {
         rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
     }
 
