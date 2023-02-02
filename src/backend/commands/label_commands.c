@@ -100,10 +100,11 @@ PG_FUNCTION_INFO_V1(create_vlabel);
 
 /*
  * This is a callback function
- * This function will be called when the user will call SELECT create_vlabel.
- * The function takes two parameters
+ * This function will be called when the user calls SELECT create_vlabel.
+ * The function takes two or three parameters
  * 1. Graph name
  * 2. Label Name
+ * 3. Parent Label Name (OPTIONAL)
  * Function will create a vertex label
  * Function returns an error if graph or label names or not provided
 */
@@ -121,6 +122,9 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     char *label;
     Name label_name;
     char *label_name_str;
+    
+    Name parent_name;
+    char *parent_name_str;
 
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
@@ -153,7 +157,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph_oid = get_graph_oid(graph_name_str);
 
     // Check if label with the input name already exists
-    if (label_exists(label_name_str, graph_oid))
+    if (label_exists(label_name_str, graph_oid) && PG_ARGISNULL(2))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -164,7 +168,24 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    // checking if user has not provided the parent's name and set to "_ag_label_vertex"
+    if (PG_ARGISNULL(2) || strcmp(NameStr(*PG_GETARG_NAME(2)), "") == 0) {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    }
+
+    else {
+        parent_name = PG_GETARG_NAME(2);
+        parent_name_str = NameStr(*parent_name);
+
+        // Check if parent label does not exist
+        if (!label_exists(parent_name_str, graph_oid)) {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                            errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+        }
+
+        rv = get_label_range_var(graph, graph_oid, parent_name->data);
+    }
 
     parent = list_make1(rv);
 
