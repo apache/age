@@ -1489,6 +1489,7 @@ static
 bool string_to_bool(const char *str, bool *result)
 {
 	size_t		len;
+	bool 		parseResult;
 
 	/*
 	* Skip leading and trailing whitespace
@@ -1516,27 +1517,33 @@ bool string_to_bool(const char *str, bool *result)
 		*/
 		case 'y':
 		case 'Y':
-			if (pg_strncasecmp(str, "yes", len) == 0)
 			{
-				*result = true;
-				return false;
-			}
-			break;
+				if (pg_strncasecmp(str, "yes", len) == 0)
+				{
+					*result = true;
+					return false;
+				}
+				break;
+			}			
 		case 'n':
 		case 'N':
-			if (pg_strncasecmp(str, "no", len) == 0)
 			{
-				*result = true;
-				return false;
-			}
-			break;
+				if (pg_strncasecmp(str, "no", len) == 0)
+				{
+					*result = true;
+					return false;
+				}
+				break;
+			}			
 		default:
-			bool parseResult;
-			if(parse_bool_with_len(str, len, &parseResult))
 			{
-				*result = parseResult;
-				return true;	
+				if(parse_bool_with_len(str, len, &parseResult))
+				{
+					*result = parseResult;
+					return true;	
+				}
 			}
+			
 						
 	}
 
@@ -1557,8 +1564,8 @@ Datum
 string_toboolean(PG_FUNCTION_ARGS)
 {
 	const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
-	char* in_str = text_to_cstring(in_text);
-	bool result;
+	char* 		in_str = text_to_cstring(in_text);
+	bool 		result;
 
 	if(string_to_bool(in_str, &result))
 		PG_RETURN_BOOL(result);
@@ -1591,27 +1598,32 @@ datum_toboolean(PG_FUNCTION_ARGS)
 	
 	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	bool    	result;
+	int32 		num;
 
 	switch(typeid)
 	{
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			int32 num = PG_GETARG_INT32(0);
+			{
+				num = PG_GETARG_INT32(0);
 
-			if(int_to_bool(num, &result))
-				PG_RETURN_BOOL(result);
-			
-			else 
-				ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				errmsg("Invalid input value for toBoolean(): %d", num)));	
-			
-			break;
+				if(int_to_bool(num, &result))
+					PG_RETURN_BOOL(result);
+				
+				else 
+					ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("Invalid input value for toBoolean(): %d", num)));	
+				
+				break;
+			}			
 		
 		case BOOLOID:
-			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-			break;
+			{
+				PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+				break;
+			}			
 
 		default:
 			break;
@@ -1655,33 +1667,44 @@ Datum
 datum_tobooleanornull(PG_FUNCTION_ARGS)
 {
 	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	bool		result;
+	int32 		num;
+
 	switch (typeid){
 		case VARCHAROID:
 		case BPCHAROID:
-		case TEXTOID:	
-			PG_RETURN_BOOL(string_tobooleanornull(fcinfo));
-			break;
+		case TEXTOID:
+			{
+				PG_RETURN_BOOL(string_tobooleanornull(fcinfo));
+				break;
+			}				
 
 		case BOOLOID:
-			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-			break;
+			{
+				PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+				break;
+			}			
 
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			bool	result;
-			int32 	num = PG_GETARG_INT32(0);
+			{
+				num = PG_GETARG_INT32(0);
 
-			if(int_to_bool(num, &result))
-				PG_RETURN_BOOL(result);
-			
-			else 
-				PG_RETURN_NULL();			
-			break;
+				if(int_to_bool(num, &result))
+					PG_RETURN_BOOL(result);
+				
+				else 
+					PG_RETURN_NULL();			
+				break;
+			}			
 
 		case JSONBOID:
-			PG_RETURN_BOOL(jsonb_toboolean(fcinfo));
-			break;
+			{
+				PG_RETURN_BOOL(jsonb_toboolean(fcinfo));
+				break;
+			}
+			
 
 		default:
 			break;
