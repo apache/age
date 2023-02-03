@@ -1434,27 +1434,22 @@ str_size(PG_FUNCTION_ARGS)
 Datum
 array_size(PG_FUNCTION_ARGS)
 {
-
-	AnyArrayType *arr= PG_GETARG_ANY_ARRAY_P(0);
-	int			ndims = AARR_NDIM(arr);
-	int		   *dims = AARR_DIMS(arr);
-	int			nitems;
+	AnyArrayType 	*v = PG_GETARG_ANY_ARRAY_P(0);
+	int		   		*dimv;
+	int				result;
 
 	/* Sanity check: does it look like an array at all? */
-	if (ndims <= 0 || ndims > MAXDIM){
-		ereport(ERROR,
-				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-				 errmsg("Number of array dimensions = %d is not within the limits: 1 to (%d)",
-				ndims, MAXDIM)));
-	}
+	if (AARR_NDIM(v) <= 0 || AARR_NDIM(v) > MAXDIM)
+		PG_RETURN_NULL();
 
-	nitems = ArrayGetNItems(ndims, dims);
+	dimv = AARR_DIMS(v);
+	result = dimv[0];
 
 	// /* free pointers */
-	pfree(arr);
-	pfree(dims);
+	pfree(v);
+	pfree(dimv);
 
-	PG_RETURN_INT32(nitems);
+	PG_RETURN_INT32(result);
 
 }
 
@@ -1517,32 +1512,34 @@ bool string_to_bool(const char *str, bool *result)
 		*/
 		case 'y':
 		case 'Y':
+		{
+			if (pg_strcasecmp(str, "yes") == 0)
 			{
-				if (pg_strncasecmp(str, "yes", len) == 0)
-				{
-					*result = true;
-					return false;
-				}
-				break;
-			}			
+				*result = true;
+				return false;
+			}
+			break;
+		}			
 		case 'n':
 		case 'N':
+		{
+			if ((pg_strcasecmp(str, "no") == 0) || 
+				(pg_strcasecmp(str, "not a bool") == 0) || 
+				(pg_strcasecmp(str, "not a boolean") == 0))
 			{
-				if (pg_strncasecmp(str, "no", len) == 0)
-				{
-					*result = true;
-					return false;
-				}
-				break;
-			}			
-		default:
-			{
-				if(parse_bool_with_len(str, len, &parseResult))
-				{
-					*result = parseResult;
-					return true;	
-				}
+				*result = true;
+				return false;
 			}
+			break;
+		}			
+		default:
+		{
+			if(parse_bool_with_len(str, len, &parseResult))
+			{
+				*result = parseResult;
+				return true;	
+			}
+		}
 			
 						
 	}
@@ -1564,8 +1561,8 @@ Datum
 string_toboolean(PG_FUNCTION_ARGS)
 {
 	const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
-	char* 		in_str = text_to_cstring(in_text);
-	bool 		result;
+	char* in_str = text_to_cstring(in_text);
+	bool result;
 
 	if(string_to_bool(in_str, &result))
 		PG_RETURN_BOOL(result);
@@ -1605,25 +1602,25 @@ datum_toboolean(PG_FUNCTION_ARGS)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			{
-				num = PG_GETARG_INT32(0);
+		{
+			num = PG_GETARG_INT32(0);
 
-				if(int_to_bool(num, &result))
-					PG_RETURN_BOOL(result);
-				
-				else 
-					ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						errmsg("Invalid input value for toBoolean(): %d", num)));	
-				
-				break;
-			}			
+			if(int_to_bool(num, &result))
+				PG_RETURN_BOOL(result);
+			
+			else 
+				ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("Invalid input integer for toBoolean(): %d", num)));	
+			
+			break;
+		}			
 		
 		case BOOLOID:
-			{
-				PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-				break;
-			}			
+		{
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+			break;
+		}			
 
 		default:
 			break;
@@ -1651,8 +1648,8 @@ string_tobooleanornull(PG_FUNCTION_ARGS)
 	if(string_to_bool(in_str, &result))
 		PG_RETURN_BOOL(result);
 	
-	else
-		PG_RETURN_NULL();	
+	else		
+		PG_RETURN_NULL();
 	
 }
 
@@ -1674,41 +1671,40 @@ datum_tobooleanornull(PG_FUNCTION_ARGS)
 		case VARCHAROID:
 		case BPCHAROID:
 		case TEXTOID:
-			{
-				PG_RETURN_BOOL(string_tobooleanornull(fcinfo));
-				break;
-			}				
+		{
+			PG_RETURN_BOOL(string_tobooleanornull(fcinfo));
+			break;
+		}				
 
 		case BOOLOID:
-			{
-				PG_RETURN_BOOL(PG_GETARG_BOOL(0));
-				break;
-			}			
+		{
+			PG_RETURN_BOOL(PG_GETARG_BOOL(0));
+			break;
+		}			
 
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			{
-				num = PG_GETARG_INT32(0);
+		{
+			num = PG_GETARG_INT32(0);
 
-				if(int_to_bool(num, &result))
-					PG_RETURN_BOOL(result);
-				
-				else 
-					PG_RETURN_NULL();			
-				break;
-			}			
+			if(int_to_bool(num, &result))
+				PG_RETURN_BOOL(result);
+			
+			else 
+				PG_RETURN_NULL();			
+			break;
+		}			
 
 		case JSONBOID:
-			{
-				PG_RETURN_BOOL(jsonb_toboolean(fcinfo));
-				break;
-			}
+		{
+			PG_RETURN_BOOL(jsonb_toboolean(fcinfo));
+			break;
+		}
 			
 
 		default:
 			break;
-	}
-
-	PG_RETURN_NULL();
+	}	
+	PG_RETURN_NULL();	
 }
