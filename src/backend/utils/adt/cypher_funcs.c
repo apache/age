@@ -1480,6 +1480,17 @@ tointeger(PG_FUNCTION_ARGS)
 		else
 			PG_RETURN_NULL();
 	}
+	else if(elem_type == UNKNOWNOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
 	else if(elem_type == NUMERICOID)
 	{
 		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
@@ -1540,6 +1551,17 @@ tofloat(PG_FUNCTION_ARGS)
 		else
 			PG_RETURN_NULL();
 	}
+	else if(elem_type == UNKNOWNOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
 	else if(elem_type == TEXTOID)
 	{
 		text *t = PG_GETARG_TEXT_P(0);
@@ -1583,6 +1605,17 @@ tofloatornull(PG_FUNCTION_ARGS)
 	else if(elem_type == NUMERICOID)
 	{
 		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		float8 f = convert_string_to_float8(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_FLOAT8(f);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == UNKNOWNOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
 		int flag = 0;
 		float8 f = convert_string_to_float8(s, &flag);
 		pfree(s);
