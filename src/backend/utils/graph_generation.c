@@ -226,8 +226,8 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
  * 
  * https://en.wikipedia.org/wiki/Barbell_graph
  */
-Datum age_create_barbell_graph(PG_FUNCTION_ARGS) {
-    
+Datum age_create_barbell_graph(PG_FUNCTION_ARGS) 
+{
     FunctionCallInfo arguments;
     Oid graph_oid;
     Name graph_name;
