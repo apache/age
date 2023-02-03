@@ -12060,7 +12060,7 @@
 # cypher boolean functions
 { oid => '8004', descr => 'returns the boolean equivalent of a string',
   proname => 'toboolean', prorettype => 'bool', proargtypes => 'text',
-  prosrc => 'string_toboolean' },
+  prosrc => 'string_tobooleanornull' },
 { oid => '8005', descr => 'returns the boolean equivalent of a datum',
   proname => 'toboolean', prorettype => 'bool', proargtypes => 'any',
   prosrc => 'datum_toboolean' },

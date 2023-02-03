@@ -1523,9 +1523,7 @@ bool string_to_bool(const char *str, bool *result)
 		case 'n':
 		case 'N':
 		{
-			if ((pg_strcasecmp(str, "no") == 0) || 
-				(pg_strcasecmp(str, "not a bool") == 0) || 
-				(pg_strcasecmp(str, "not a boolean") == 0))
+			if ((pg_strcasecmp(str, "no") == 0))
 			{
 				*result = true;
 				return false;
@@ -1549,39 +1547,6 @@ bool string_to_bool(const char *str, bool *result)
 	return false;
 
 }
-
-
-/*
- * string_toboolean:
- *		returns the boolean equivalent of strings 
- *		example: toboolean('true') = true, toboolean('f') = false
- * 				 toboolean('') = null, toboolean('hello') = ERROR
- */
-Datum 
-string_toboolean(PG_FUNCTION_ARGS)
-{
-	const text 	*in_text = DatumGetTextPP(PG_GETARG_DATUM(0));
-	char* in_str = text_to_cstring(in_text);
-	bool result;
-
-	if(string_to_bool(in_str, &result))
-		PG_RETURN_BOOL(result);
-	
-	else
-	{
-		if(result)
-			PG_RETURN_NULL();
-		
-		else
-			ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("Invalid input string for toBoolean(): \"%s\"",
-					in_str)));
-	}
-	
-	
-}
-
 
 /*
  * datum_toboolean:
