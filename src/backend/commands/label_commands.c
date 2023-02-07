@@ -150,6 +150,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
+    //get corresponding graph id from graph name
     graph_oid = get_graph_oid(graph_name_str);
 
     // Check if label with the input name already exists
@@ -230,6 +231,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
                  errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
+    //get corresponding graph id from graph name
     graph_oid = get_graph_oid(graph_name_str);
 
     // Check if label with the input name already exists

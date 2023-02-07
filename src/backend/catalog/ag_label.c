@@ -68,6 +68,8 @@ Oid insert_label(const char *label_name, Oid label_graph, int32 label_id,
     AssertArg(OidIsValid(label_relation));
     AssertArg(seq_name);
 
+
+    //inserting corresponding values in the desired columns
     namestrcpy(&label_name_data, label_name);
     values[Anum_ag_label_name - 1] = NameGetDatum(&label_name_data);
     nulls[Anum_ag_label_name - 1] = false;
@@ -111,6 +113,8 @@ void delete_label(Oid relation)
     SysScanDesc scan_desc;
     HeapTuple tuple;
 
+
+    //search the ag_label for the particular label id
     ScanKeyInit(&scan_keys[0], Anum_ag_label_relation, BTEqualStrategyNumber,
                 F_OIDEQ, ObjectIdGetDatum(relation));
 
@@ -119,6 +123,9 @@ void delete_label(Oid relation)
                                    true, NULL, 1, scan_keys);
 
     tuple = systable_getnext(scan_desc);
+
+
+
     if (!HeapTupleIsValid(tuple))
     {
         ereport(ERROR,
@@ -126,6 +133,7 @@ void delete_label(Oid relation)
                  errmsg("label (relation=%u) does not exist", relation)));
     }
 
+    //delete that label 
     CatalogTupleDelete(ag_label, &tuple->t_self);
 
     systable_endscan(scan_desc);
