@@ -102,14 +102,19 @@ PG_FUNCTION_INFO_V1(create_vlabel);
  * This is a callback function
  * This function will be called when the user calls SELECT create_vlabel.
  * 
- * The function takes two parameters:
+ * The function takes two or three parameters:
+ * 
  * 1. Graph name
  * 2. Label Name
+ * 3. Parent Label List
  * 
  * Function will create a vertex label.
+ * 
  * Function returns an error if graph or label names or not provided.
- * Note that passing "label_name:parent_name" will create a label that inherits
- * from the passed parent label name. 
+ * 
+ * Note that passing a list of strings as the third parameter will create 
+ * a label that inherits from the passed parent label name. The third 
+ * argument has to be passed as: ARRAY['parent1','parent2','parent3']
 */
 Datum create_vlabel(PG_FUNCTION_ARGS)
 {
@@ -125,8 +130,12 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
     
-    char *child_name_str;
+    ArrayType *list_parents;
+    Name *elements_parent_names;
+    Name parent_name;
     char *parent_name_str;
+    int num_parents;
+    
 
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
@@ -170,36 +179,44 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    // checking if user has not provided the parent's name and set to "_ag_label_vertex"
-    if (strstr(label_name_str, ":") == NULL) {
+    // checking if user has not provided the parent's name list and set to "_ag_label_vertex"
+    if (PG_ARGISNULL(2)) {
         rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+        parent = list_make1(rv);
     }
+    
     else {
-        // Divide the parent name and child name from label_name_str.
-        child_name_str = strtok(label_name_str, ":");
-        parent_name_str = strtok(NULL, ":"); 
 
-        // Check if parent label does not exist
-        if (!label_exists(parent_name_str, graph_oid)) {
-            ereport(ERROR,
-                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                            errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+        // Get the content from the third argument - which is an array.
+        list_parents = PG_GETARG_ARRAYTYPE_P(2);
+        num_parents = ArrayGetNItems(ARR_NDIM(list_parents), ARR_DIMS(list_parents));
+        elements_parent_names = (Datum *) ARR_DATA_PTR(list_parents);
+        
+        // Check for each parent in the list.
+        for (int i = 0; i < num_parents; i++) {
+            
+            parent_name = DatumGetName(elements_parent_names[i]);
+            parent_name_str = NameStr(*parent_name);
+
+            // Check if parent label does not exist
+            if (!label_exists(parent_name_str, graph_oid)) {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                                errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+            }
+
+            rv = get_label_range_var(graph, graph_oid, parent_name->data);
+
+            if (i == 0) 
+                parent = list_make1(rv);
+            
+            else {
+                lappend(parent, rv);
+            }
+            
+        
         }
-
-        // Check if child label with already exists
-        if (label_exists(child_name_str, graph_oid))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                            errmsg("child label \"%s\" already exists", child_name_str)));
-        }
-
-        label = child_name_str;
-
-        rv = get_label_range_var(graph, graph_oid, parent_name_str);
     }
-
-    parent = list_make1(rv);
 
     create_label(graph, label, LABEL_TYPE_VERTEX, parent);
 
