@@ -35,6 +35,7 @@
 #include "utils/builtins.h"
 #include "utils/cypher_funcs.h"
 #include "utils/jsonb.h"
+#include "math.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 #include <string.h>
@@ -69,6 +70,7 @@ static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
 static bool int_to_bool(int32 num, bool *result);
 static bool string_to_bool(const char *str, bool *result);
+static Datum range(int start, int end, int step);
 
 
 Datum
@@ -1672,4 +1674,96 @@ datum_tobooleanornull(PG_FUNCTION_ARGS)
 			break;
 	}	
 	PG_RETURN_NULL();	
+}
+
+
+/*
+ * range:
+ *		returns an array with the series from start to end with an optional step value 
+ *		example: range(1,10) = [0,1,2,3,4,5,6,7,8,9,10], range(1,11,3) = [1,4,7,10]
+ * 				 range(1,10, -3) = []
+ */
+Datum
+range(int32 start, int32 end, int32 step)
+{
+	int32 		len = (int32) floor((end - start + step) / step),
+				counter = 0;
+	ArrayType 	*arr;
+
+	/* sanity checks */
+	if(len<=0)
+	{
+		arr = construct_array(NULL, 0, INT4OID, sizeof(int32), true, 'i');
+	}
+
+	else if(((start<=end) && step<0 ) || ((start>=end) && step>0))
+	{
+		arr = construct_array(NULL, 0, INT4OID, sizeof(int32), true, 'i');
+	}
+
+	else /* all sanity checks have passed, the series has to be generated and an array has to be created */
+	{
+		Datum 	*elements = (Datum *) palloc(sizeof(Datum) * len);
+		if(step<0)
+		{
+			while(start>=end)
+			{
+				elements[counter++] = start;
+				start+=step;
+			}
+		}
+		else
+		{
+			while(start<=end)
+			{
+				elements[counter++] = start;
+				start+=step;
+			}
+		}		
+
+		arr = construct_array(elements, len, INT4OID, sizeof(int32), true, 'i');
+
+		/* free pointers */
+		pfree(elements);
+	}
+	
+
+	PG_RETURN_POINTER(arr);
+}
+
+/* wrapper function which is used to map two integer inputs (start and end) with the range function. Default step value is created */
+Datum
+range_2_args(PG_FUNCTION_ARGS)
+{
+	int32 start = PG_GETARG_INT32(0);
+	int32 end = PG_GETARG_INT32(1);
+	int32 step;
+	
+	/* Setting the value of step */
+	if(start<=end) /* if the progression is positive, step = 1 */
+		step = 1;
+	else /* if the progression is negative, step = -1 */
+		step = -1;
+
+	PG_RETURN_POINTER(range(start, end, step));
+}
+
+/* wrapper function which is used to map three integer inputs (start, end, step) with the range function.*/
+Datum
+range_3_args(PG_FUNCTION_ARGS)
+{
+	int32 start = PG_GETARG_INT32(0);
+	int32 end = PG_GETARG_INT32(1);
+	int32 step = PG_GETARG_INT32(2);
+
+	/* Sanity checks */
+	if(step==0)
+	{
+		ereport(ERROR,
+		(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+		errmsg("Step value cannot be 0")));	
+	}	
+
+	PG_RETURN_POINTER(range(start, end, step));
+
 }

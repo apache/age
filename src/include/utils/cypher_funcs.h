@@ -87,6 +87,8 @@ extern Datum array_head(PG_FUNCTION_ARGS);
 extern Datum array_last(PG_FUNCTION_ARGS);
 extern Datum array_tail(PG_FUNCTION_ARGS);
 extern Datum array_size(PG_FUNCTION_ARGS);
+extern Datum range_2_args(PG_FUNCTION_ARGS);
+extern Datum range_3_args(PG_FUNCTION_ARGS);
 
 /* for boolean support */
 extern Datum datum_toboolean(PG_FUNCTION_ARGS);
