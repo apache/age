@@ -11,6 +11,18 @@
 <br>
 
 # Apache AGE-Viewer in Golang
+This is the project in which we are developing Age-Viewer from scratch in GoLang whereas existing system is bulit in Javascript and React. Here you found existing Age-Viewer : https://github.com/apache/age-viewer . After reviewing neo4j(tool used for graph visulaization) found important functions that should be implemented in our Age-Viewer.
+
+#Features:
+
+1.Start window (where it checks system requirements,runtime envirnmont,distributions and many more) that is in processing in our current Age-Viewer in command prompt while it's running.
+2.Home screen should be prompt after successful checks of start window.
+3.Home screen should have list of projects, example project(for demo purpose), DBMS, Graph Apps,Developer tools etc.
+4.Design and Colour Scheme
+5.Alignment and Scaling
+6.Responsive for all Screen Resolution
+7.Language(supported?)
+8.Query Translation
 
 <h3 align="center">
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
