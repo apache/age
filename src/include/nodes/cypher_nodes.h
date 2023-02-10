@@ -195,6 +195,7 @@ typedef struct cypher_map
     ExtensibleNode extensible;
     List *keyvals;
     int location;
+    bool keep_null; // if false, keyvals with null value are removed
 } cypher_map;
 
 typedef struct cypher_list
@@ -310,7 +311,7 @@ typedef struct cypher_target_node
     /*
      * Attribute number this entity needs to be stored in
      * for parent execution nodes to reference it. If the
-     * entity is a varaible (CYPHER_TARGET_NODE_IS_VAR).
+     * entity is a variable (CYPHER_TARGET_NODE_IS_VAR).
      */
     AttrNumber tuple_position;
 } cypher_target_node;
@@ -323,7 +324,7 @@ typedef struct cypher_target_node
  * a variable that was already created AND created in the
  * same clause.
  */
-#define EXISTING_VARAIBLE_DECLARED_SAME_CLAUSE 0x0002
+#define EXISTING_VARIABLE_DECLARED_SAME_CLAUSE 0x0002
 
 //node is the first instance of a declared variable
 #define CYPHER_TARGET_NODE_IS_VAR 0x0004
@@ -346,7 +347,7 @@ typedef struct cypher_target_node
  * later. We don't need to check to see if the vertex still exists.
  */
 #define SAFE_TO_SKIP_EXISTENCE_CHECK(flags) \
-    (flags & EXISTING_VARAIBLE_DECLARED_SAME_CLAUSE)
+    (flags & EXISTING_VARIABLE_DECLARED_SAME_CLAUSE)
 
 #define CYPHER_TARGET_NODE_INSERT_ENTITY(flags) \
     (flags & CYPHER_TARGET_NODE_FLAG_INSERT)
@@ -374,6 +375,7 @@ typedef struct cypher_update_item
     char *prop_name;
     List *qualified_name;
     bool remove_item;
+    bool is_add;
 } cypher_update_item;
 
 typedef struct cypher_delete_information

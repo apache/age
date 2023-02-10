@@ -30,7 +30,7 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.2.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -145,7 +145,7 @@ sudo apt install postgresql
 &nbsp;Install From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">offical Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">official Postgres Website.</a>
 
 
 
@@ -218,7 +218,7 @@ SET search_path = ag_catalog, "$user", public;
 To create a graph, use the create_graph function located in the ag_catalog namespace.
 
 ```bash
-create_graph(graph_name);
+SELECT create_graph('graph_name');
 ```
 
 To create a single vertex, use the CREATE clause. 
@@ -254,7 +254,7 @@ You can use the following to create an edge, for example, between two nodes.
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    MATCH (a:lable), (b:lable)
+    MATCH (a:label), (b:label)
     WHERE a.property = 'Node A' AND b.property = 'Node B'
     CREATE (a)-[e:RELTYPE]->(b)
     RETURN e
@@ -320,7 +320,9 @@ Join the AGE community for help, questions, discussions, and contributions.
 - Check our [website](https://age.apache.org/)
 - Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
-- Join our [Dev community](https://lists.apache.org/list.html?dev@age.apache.org)
+- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
+- Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
+- Subscribe to our committer mailing list (To become a committer) by sending an email to commits-subscribe@age.apache.org
 
 
 <h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
@@ -336,6 +338,14 @@ After installing AGE Extension, you may use this tool to get access to the visua
 
 
 ![Viewer gdb, and graph](/img/agce.gif)
+
+
+<h2><img height="20" src="/img/videos.png">&nbsp;&nbsp;Video Links</h2>
+
+You can also get help from these videos. 
+
+- Install on [Windows](https://www.youtube.com/watch?v=ddk8VX8Hm-I&list=PLGp3huJbWNDjgwP7s99Q-9_w1vxpjNHXG)
+- Install on [MacOS](https://www.youtube.com/watch?v=0-qMwpDh0CA)
 
 
 

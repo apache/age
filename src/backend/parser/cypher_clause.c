@@ -1522,6 +1522,7 @@ cypher_update_information *transform_cypher_remove_item_list(
                      errmsg("REMOVE clause does not support adding propereties from maps"),
                      parser_errposition(pstate, set_item->location)));
         }
+        set_item->is_add = false;
 
         item->remove_item = true;
 
@@ -1610,17 +1611,52 @@ cypher_update_information *transform_cypher_set_item_list(
         A_Indirection *ind;
         char *variable_name, *property_name;
         Value *property_node, *variable_node;
+        int is_entire_prop_update = 0; // true if a map is assigned to variable
 
-        // ColumnRef may come according to the Parser rule.
-        if (!IsA(set_item->prop, A_Indirection))
+        // LHS of set_item must be a variable or an indirection.
+        if (IsA(set_item->prop, ColumnRef))
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+            /*
+             * A variable can only be assigned a map, a function call that
+             * evaluates to a map, or a variable.
+             *
+             * In case of a function call, whether it actually evaluates to
+             * map is checked in the execution stage.
+             */
+            if (!is_ag_node(set_item->expr, cypher_map) &&
+                !IsA(set_item->expr, FuncCall) &&
+                !IsA(set_item->expr, ColumnRef))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("SET clause expects a map"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            is_entire_prop_update = 1;
+
+            /*
+             * In case of a variable, it is wrapped as an argument to
+             * the 'properties' function.
+             */
+            if (IsA(set_item->expr, ColumnRef))
+            {
+                List *qualified_name, *args;
+
+                qualified_name = list_make2(makeString("ag_catalog"),
+                                            makeString("age_properties"));
+                args = list_make1(set_item->expr);
+                set_item->expr = (Node *)makeFuncCall(qualified_name, args,
+                                                      -1);
+            }
+        }
+        else if (!IsA(set_item->prop, A_Indirection))
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
                             errmsg("SET clause expects a variable name"),
                             parser_errposition(pstate, set_item->location)));
         }
 
-        ind = (A_Indirection *)set_item->prop;
         item = make_ag_node(cypher_update_item);
 
         if (!is_ag_node(lfirst(li), cypher_set_item))
@@ -1630,19 +1666,56 @@ cypher_update_information *transform_cypher_set_item_list(
                      errmsg("unexpected node in cypher update list")));
         }
 
-        if (set_item->is_add)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("SET clause does not yet support adding propereties from maps"),
-                     parser_errposition(pstate, set_item->location)));
-        }
-
         item->remove_item = false;
 
-        // extract variable name
-        ref = (ColumnRef *)ind->arg;
+        // set variable, is_add and extract property name
+        if (is_entire_prop_update)
+        {
+            ref = (ColumnRef *)set_item->prop;
+            item->is_add = set_item->is_add;
+            item->prop_name = NULL;
+        }
+        else
+        {
+            ind = (A_Indirection *)set_item->prop;
+            ref = (ColumnRef *)ind->arg;
 
+            if (set_item->is_add)
+            {
+                ereport(
+                    ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg(
+                         "SET clause does not yet support incrementing a specific property"),
+                     parser_errposition(pstate, set_item->location)));
+            }
+            set_item->is_add = false;
+
+            // extract property name
+            if (list_length(ind->indirection) != 1)
+            {
+                ereport(
+                    ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg(
+                         "SET clause doesnt not support updating maps or lists in a property"),
+                     parser_errposition(pstate, set_item->location)));
+            }
+
+            property_node = linitial(ind->indirection);
+            if (!IsA(property_node, String))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("SET clause expects a property name"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            property_name = property_node->val.str;
+            item->prop_name = property_name;
+        }
+
+        // extract variable name
         variable_node = linitial(ref->fields);
         if (!IsA(variable_node, String))
         {
@@ -1666,26 +1739,11 @@ cypher_update_information *transform_cypher_set_item_list(
                             parser_errposition(pstate, set_item->location)));
         }
 
-        // extract property name
-        if (list_length(ind->indirection) != 1)
+        // set keep_null property
+        if (is_ag_node(set_item->expr, cypher_map))
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("SET clause doesnt not support updating maps or lists in a property"),
-                     parser_errposition(pstate, set_item->location)));
+            ((cypher_map*)set_item->expr)->keep_null = set_item->is_add;
         }
-
-        property_node = linitial(ind->indirection);
-        if (!IsA(property_node, String))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                     errmsg("SET clause expects a property name"),
-                     parser_errposition(pstate, set_item->location)));
-        }
-
-        property_name = property_node->val.str;
-        item->prop_name = property_name;
 
         // create target entry for the new property value
         item->prop_position = (AttrNumber)pstate->p_next_resno;
@@ -3236,7 +3294,7 @@ static Node *make_type_cast_to_agtype(Node *arg)
 
 /*
  * Makes an agtype bool node that Postgres' transform expression logic
- * can handle. Used when contructed the join quals for building the paths
+ * can handle. Used when constructed the join quals for building the paths
  */
 static Node *make_bool_a_const(bool state)
 {
@@ -3343,7 +3401,7 @@ static List *join_to_entity(cypher_parsestate *cpstate,
     return quals;
 }
 
-// makes the quals neccessary when an edge is joining to another edge.
+// makes the quals necessary when an edge is joining to another edge.
 static List *make_edge_quals(cypher_parsestate *cpstate,
                              transform_entity *edge,
                              enum transform_entity_join_side side)
@@ -3434,7 +3492,7 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
 
 /*
  * Creates the Contains operator to process property contraints for a vertex/
- * edge in a MATCH clause. creates the agtype @> with the enitity's properties
+ * edge in a MATCH clause. creates the agtype @> with the entity's properties
  * on the right and the contraints in the MATCH clause on the left.
  */
 static Node *create_property_constraints(cypher_parsestate *cpstate,
@@ -3755,6 +3813,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             {
                 Node *n = NULL;
 
+                ((cypher_map*)node->props)->keep_null = true;
                 n = create_property_constraints(cpstate, entity, node->props);
 
                 cpstate->property_constraint_quals =
@@ -3814,7 +3873,10 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 
                 if (rel->props)
                 {
-                    Node *n = create_property_constraints(cpstate, entity,
+                    Node *n;
+
+                    ((cypher_map*)rel->props)->keep_null = true;
+                    n = create_property_constraints(cpstate, entity,
                                                           rel->props);
                     cpstate->property_constraint_quals =
                         lappend(cpstate->property_constraint_quals, n);
@@ -3869,7 +3931,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 /*
  * Iterate through the list of entities setup the join conditions. Joins
  * are driven through edges. To correctly setup the joins, we must
- * aquire information about the previous edge and vertex, and the next
+ * acquire information about the previous edge and vertex, and the next
  * edge and vertex.
  */
 static List *make_path_join_quals(cypher_parsestate *cpstate, List *entities)
@@ -4146,7 +4208,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 
             if (entity != NULL)
             {
-                return entity->expr;
+                return get_relative_expr(entity, 2);
             }
             else
             {
@@ -4294,10 +4356,9 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
              */
             transform_entity *entity = find_variable(parent_cpstate, node->name);
 
-
             if (entity != NULL)
             {
-                return entity->expr;
+                return get_relative_expr(entity, 2);
             }
             else
             {
@@ -4611,7 +4672,7 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
         else
         {
             ereport(ERROR,
-                    (errmsg_internal("unreconized node in create pattern")));
+                    (errmsg_internal("unrecognized node in create pattern")));
         }
     }
 
@@ -4896,7 +4957,7 @@ static cypher_target_node *transform_create_cypher_existing_node(
      */
     if (declared_in_current_clause)
     {
-        rel->flags |= EXISTING_VARAIBLE_DECLARED_SAME_CLAUSE;
+        rel->flags |= EXISTING_VARIABLE_DECLARED_SAME_CLAUSE;
     }
 
     /*
@@ -5051,6 +5112,7 @@ static Expr *cypher_create_properties(cypher_parsestate *cpstate,
 
     if (props)
     {
+        ((cypher_map*)props)->keep_null = false;
         properties = (Expr *)transform_cypher_expr(cpstate, props,
                                                    EXPR_KIND_INSERT_TARGET);
     }
@@ -5066,7 +5128,7 @@ static Expr *cypher_create_properties(cypher_parsestate *cpstate,
     }
     else
     {
-        ereport(ERROR, (errmsg_internal("unreconized entity type")));
+        ereport(ERROR, (errmsg_internal("unrecognized entity type")));
     }
 
     // add a volatile wrapper call to prevent the optimizer from removing it
@@ -5237,7 +5299,7 @@ static TargetEntry *findTarget(List *targetList, char *resname)
 }
 
 /*
- * Wrap the expression with a volatile function, to prevent the optimer from
+ * Wrap the expression with a volatile function, to prevent the optimizer from
  * elimating the expression.
  */
 static Expr *add_volatile_wrapper(Expr *node)
@@ -5308,7 +5370,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * take:
  *
  * 1. If there is no previous clause, the query will have a subquery that
- * represents the path as a select staement, similar to match with a targetList
+ * represents the path as a select statement, similar to match with a targetList
  * that is all declared variables and the FuncExpr that represents the MERGE
  * clause with its needed metadata information, that will be caught in the
  * planner phase and converted into a path.
@@ -5445,7 +5507,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
  * This function does the heavy lifting of transforming a MERGE clause that has
  * a clause before it in the query of turning that into a lateral left join.
  * The previous clause will still be able to emit tuples if the path defined in
- * MERGE clause is not found. In that case variable assinged in the MERGE
+ * MERGE clause is not found. In that case variable assigned in the MERGE
  * clause will be emitted as NULL (same as OPTIONAL MATCH).
  */
 static cypher_create_path *
@@ -5658,7 +5720,7 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
         else
         {
             ereport(ERROR,
-                    (errmsg_internal("unreconized node in create pattern")));
+                    (errmsg_internal("unrecognized node in create pattern")));
         }
     }
 
@@ -5902,7 +5964,7 @@ static cypher_clause *convert_merge_to_match(cypher_merge *merge)
 }
 
 /*
- * Creates a namespace item for the given rte. boolean arguements will
+ * Creates a namespace item for the given rte. boolean arguments will
  * let the rest of the ParseState know if the relation and/or columns are
  * visible, whether the rte is only usable in lateral joins, and if the rte
  * is accessible in lateral joins.
