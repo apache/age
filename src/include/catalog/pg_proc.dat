@@ -12034,6 +12034,9 @@
 { oid => '7302', descr => 'a array except the first element',
   proname => 'tail', prorettype => 'anyarray', proargtypes => 'anyarray',
   prosrc => 'array_tail' },
+{ oid => '8007', descr => 'returns the integer equivalent or null',
+  proname => 'tointegerornull', prorettype => 'int8', proisstrict => 't',
+  proargtypes => 'any', prosrc => 'tointegerornull' },
 
 # supports for graphdatabase binary upgrade
 { oid => '8001', descr => 'for use by pg_upgrade',

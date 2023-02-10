@@ -89,5 +89,6 @@ extern Datum array_tail(PG_FUNCTION_ARGS);
 /* utility */
 extern Datum get_last_graph_write_stats(PG_FUNCTION_ARGS);
 extern Datum timestamp(PG_FUNCTION_ARGS);
+extern Datum tointegerornull(PG_FUNCTION_ARGS);
 
 #endif							/* CYPHER_FUNCS_H */

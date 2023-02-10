@@ -1408,9 +1408,118 @@ array_tail(PG_FUNCTION_ARGS)
 	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
 }
 
+static int32
+convert_string_to_int64(char* s, int *flag)
+{
+	int64 res = 0;
+	*flag = 0;
+	for(int iter = 0; iter < strlen(s); ++iter)
+	{
+		if(isalpha(s[iter]))
+		{
+			*flag = 1;
+			break;
+		}
+	}
+	if(*flag == 0)
+	{
+		res = atoll(s);
+		return res;
+	}
+	else
+		return 0;
+}
+
 Datum
 timestamp(PG_FUNCTION_ARGS)
 {
 	Timestamp timestamp = now(fcinfo);
     PG_RETURN_INT64(timestamp);
+}
+
+Datum
+tointegerornull(PG_FUNCTION_ARGS)
+{
+	Oid elem_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	if(elem_type == INT2OID || elem_type == INT4OID || elem_type == INT8OID || elem_type == BOOLOID)
+		PG_RETURN_INT64(PG_GETARG_INT64(0));
+	else if(elem_type == FLOAT4OID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, DirectFunctionCall1(float4_numeric, PG_GETARG_DATUM(0))));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == FLOAT8OID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, DirectFunctionCall1(float8_numeric, PG_GETARG_DATUM(0))));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == UNKNOWNOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == VARCHAROID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(varcharout, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == NUMERICOID)
+	{
+		char* s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == TEXTOID)
+	{
+		text *t = PG_GETARG_TEXT_P(0);
+		char *s = text_to_cstring(t);
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(t);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else if(elem_type == CSTRINGOID)
+	{
+		char *s = PG_GETARG_CSTRING(0);
+		int flag = 0;
+		int64 res = convert_string_to_int64(s, &flag);
+		pfree(s);
+		if(flag == 0)
+			PG_RETURN_INT64(res);
+		else
+			PG_RETURN_NULL();
+	}
+	else
+		PG_RETURN_NULL();
 }
