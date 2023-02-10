@@ -320,7 +320,9 @@ Join the AGE community for help, questions, discussions, and contributions.
 - Check our [website](https://age.apache.org/)
 - Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
-- Join our [Dev community](https://lists.apache.org/list.html?dev@age.apache.org)
+- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
+- Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
+- Subscribe to our committer mailing list (To become a committer) by sending an email to commits-subscribe@age.apache.org
 
 
 <h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
@@ -336,6 +338,14 @@ After installing AGE Extension, you may use this tool to get access to the visua
 
 
 ![Viewer gdb, and graph](/img/agce.gif)
+
+
+<h2><img height="20" src="/img/videos.png">&nbsp;&nbsp;Video Links</h2>
+
+You can also get help from these videos. 
+
+- Install on [Windows](https://www.youtube.com/watch?v=ddk8VX8Hm-I&list=PLGp3huJbWNDjgwP7s99Q-9_w1vxpjNHXG)
+- Install on [MacOS](https://www.youtube.com/watch?v=0-qMwpDh0CA)
 
 
 

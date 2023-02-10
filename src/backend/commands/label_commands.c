@@ -54,6 +54,10 @@
 #include "utils/graphid.h"
 #include "utils/name_validation.h"
 
+#include "utils/numeric.h"
+#include "fmgr.h"
+#include "catalog/pg_type_d.h"
+
 /*
  * Relation name doesn't have to be label name but the same name is used so
  * that users can find the backed relation for a label only by its name.
@@ -121,6 +125,13 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     char *label;
     Name label_name;
     char *label_name_str;
+    
+    ArrayType *array;
+    Datum *elements;
+    char *parent_name_str;
+    bool *parent_nulls;
+    int nelements = 0;
+    
 
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
@@ -165,8 +176,34 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     label = label_name->data;
 
     rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
-
     parent = list_make1(rv);
+
+    // checking if user has provided the parent's name list.
+    if (!PG_ARGISNULL(2)) {
+
+        // Get the content from the third argument
+        array = PG_GETARG_ARRAYTYPE_P(2);
+
+        // Deconstruct the ArrayType to NAMEOID.
+        deconstruct_array(array, NAMEOID, -1, false, 'i', &elements, &parent_nulls, &nelements);
+        
+        // Check for each parent in the list.
+        for (int i = 0; i < nelements; i++) {
+            
+            parent_name_str = DatumGetCString(elements[i]);
+
+            // Check if parent label does not exist
+            if (!label_exists(parent_name_str, graph_oid)) {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                                errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+            }
+
+            rv = get_label_range_var(graph, graph_oid, parent_name_str);
+            lappend(parent, rv);
+            elog(NOTICE, "VLabel %s will inherit from %s", label_name_str, parent_name_str);
+        }
+    }
 
     create_label(graph, label, LABEL_TYPE_VERTEX, parent);
 
@@ -175,6 +212,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
     PG_RETURN_VOID();
 }
+
 
 PG_FUNCTION_INFO_V1(create_elabel);
 
