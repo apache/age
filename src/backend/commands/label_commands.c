@@ -25,6 +25,7 @@
 #include "catalog/namespace.h"
 #include "catalog/objectaddress.h"
 #include "catalog/pg_class_d.h"
+#include "catalog/pg_type.h"
 #include "commands/defrem.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
@@ -130,11 +131,11 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
     
-    ArrayType *list_parents;
-    Name *elements_parent_names;
-    Name parent_name;
+    ArrayType *array;
+    Datum *elements;
     char *parent_name_str;
-    int num_parents;
+    bool *parent_nulls;
+    int nelements = 0;
     
 
     // checking if user has not provided the graph name
@@ -179,24 +180,22 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    // checking if user has not provided the parent's name list and set to "_ag_label_vertex"
-    if (PG_ARGISNULL(2)) {
-        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
-        parent = list_make1(rv);
-    }
-    
-    else {
+    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    parent = list_make1(rv);
 
-        // Get the content from the third argument - which is an array.
-        list_parents = PG_GETARG_ARRAYTYPE_P(2);
-        num_parents = ArrayGetNItems(ARR_NDIM(list_parents), ARR_DIMS(list_parents));
-        elements_parent_names = (Datum *) ARR_DATA_PTR(list_parents);
+    // checking if user has provided the parent's name list.
+    if (!PG_ARGISNULL(2)) {
+
+        // Get the content from the third argument
+        array = PG_GETARG_ARRAYTYPE_P(2);
+
+        // Deconstruct the ArrayType to NAMEOID.
+        deconstruct_array(array, NAMEOID, -1, false, 'i', &elements, &parent_nulls, &nelements);
         
         // Check for each parent in the list.
-        for (int i = 0; i < num_parents; i++) {
+        for (int i = 0; i < nelements; i++) {
             
-            parent_name = DatumGetName(elements_parent_names[i]);
-            parent_name_str = NameStr(*parent_name);
+            parent_name_str = DatumGetCString(elements[i]);
 
             // Check if parent label does not exist
             if (!label_exists(parent_name_str, graph_oid)) {
@@ -205,16 +204,9 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                                 errmsg("parent label \"%s\" does not exist.", parent_name_str)));
             }
 
-            rv = get_label_range_var(graph, graph_oid, parent_name->data);
-
-            if (i == 0) 
-                parent = list_make1(rv);
-            
-            else {
-                lappend(parent, rv);
-            }
-            
-        
+            rv = get_label_range_var(graph, graph_oid, parent_name_str);
+            lappend(parent, rv);
+            elog(NOTICE, "VLabel %s will inherit from %s", label_name_str, parent_name_str);
         }
     }
 
