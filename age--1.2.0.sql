@@ -97,10 +97,11 @@ RETURNS void
 LANGUAGE c
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.create_vlabel(graph_name name, label_name name)
+CREATE FUNCTION ag_catalog.create_vlabel(graph_name name, label_name name, parent_list name[]=NULL)
     RETURNS void
     LANGUAGE c
 AS 'MODULE_PATHNAME';
+
 
 CREATE FUNCTION ag_catalog.create_elabel(graph_name name, label_name name)
     RETURNS void
@@ -3144,14 +3145,6 @@ STABLE
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME', 'agtype_build_map_noargs';
-
-CREATE FUNCTION ag_catalog.agtype_build_map_nonull(VARIADIC "any")
-RETURNS agtype
-LANGUAGE c
-STABLE
-CALLED ON NULL INPUT
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
 
 --
 -- There are times when the optimizer might eliminate
