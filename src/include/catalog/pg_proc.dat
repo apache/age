@@ -12041,4 +12041,13 @@
   proname => 'binary_upgrade_set_next_ag_label_oid', provolatile => 'v',
   proparallel => 'r', prorettype => 'void', proargtypes => 'oid',
   prosrc => 'binary_upgrade_set_next_ag_label_oid' },
+{ oid => '8003', descr => 'return integer equivalents',
+  proname => 'tointeger', prorettype => 'int8', proisstrict => 't', pronargs => '1',
+  proargtypes => 'any', prosrc => 'tointeger' },
+{ oid => '8004', descr => 'return float equivalents',
+  proname => 'tofloat', prorettype => 'float8', proisstrict => 't', pronargs => '1',
+  proargtypes => 'any', prosrc => 'tofloat' },
+{ oid => '8005', descr => 'return float equivalents or null',
+  proname => 'tofloatornull', prorettype => 'float8', proisstrict => 't', pronargs => '1',
+  proargtypes => 'any', prosrc => 'tofloatornull' },
 ]
