@@ -1407,3 +1407,10 @@ array_tail(PG_FUNCTION_ARGS)
 
 	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
 }
+
+Datum
+timestamp(PG_FUNCTION_ARGS)
+{
+	Timestamp timestamp = now(fcinfo);
+    PG_RETURN_INT64(timestamp);
+}

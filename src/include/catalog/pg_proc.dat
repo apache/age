@@ -2296,6 +2296,9 @@
 { oid => '1159', descr => 'adjust timestamp to new time zone',
   proname => 'timezone', prorettype => 'timestamp',
   proargtypes => 'text timestamptz', prosrc => 'timestamptz_zone' },
+{ oid => '8006', descr => 'returns the timestamp of current date and time',
+  proname => 'timestamp_int64', prorettype => 'int8', proisstrict => 't',
+  proargtypes => '', prosrc => 'timestamp' },
 
 { oid => '1160', descr => 'I/O',
   proname => 'interval_in', provolatile => 's', prorettype => 'interval',
