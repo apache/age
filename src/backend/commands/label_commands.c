@@ -180,9 +180,6 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
-    parent = list_make1(rv);
-
     // checking if user has provided the parent's name list.
     if (!PG_ARGISNULL(2)) {
 
@@ -193,8 +190,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
         deconstruct_array(array, NAMEOID, -1, false, 'i', &elements, &parent_nulls, &nelements);
         
         // Check for each parent in the list.
-        for (int i = 0; i < nelements; i++) 
-        {
+        for (int i = 0; i < nelements; i++) {
             
             parent_name_str = DatumGetCString(elements[i]);
 
@@ -207,9 +203,20 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
             }
 
             rv = get_label_range_var(graph, graph_oid, parent_name_str);
-            lappend(parent, rv);
+
+            if (i == 0)
+                parent = list_make1(rv);
+            else
+                lappend(parent, rv);
+
             elog(NOTICE, "VLabel %s will inherit from %s", label_name_str, parent_name_str);
         }
+    }
+
+    else 
+    {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+        parent = list_make1(rv);
     }
 
     create_label(graph, label, LABEL_TYPE_VERTEX, parent);
@@ -384,8 +391,15 @@ static void create_table_for_label(char *graph_name, char *label_name,
 
     // relpersistence is set to RELPERSISTENCE_PERMANENT by makeRangeVar()
     create_stmt->relation = makeRangeVar(schema_name, rel_name, -1);
-
-    if (label_type == LABEL_TYPE_EDGE)
+    
+    /*
+     * When a new table has parents, do not create a column definition list.
+     * Use the parents' column definition list instead, via Postgres'
+     * inheritance system.
+     */
+    if (list_length(parents) != 0)
+        create_stmt->tableElts = NIL;
+    else if (label_type == LABEL_TYPE_EDGE)
         create_stmt->tableElts = create_edge_table_elements(
             graph_name, label_name, schema_name, rel_name, seq_name);
     else if (label_type == LABEL_TYPE_VERTEX)
