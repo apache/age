@@ -193,12 +193,14 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
         deconstruct_array(array, NAMEOID, -1, false, 'i', &elements, &parent_nulls, &nelements);
         
         // Check for each parent in the list.
-        for (int i = 0; i < nelements; i++) {
+        for (int i = 0; i < nelements; i++) 
+        {
             
             parent_name_str = DatumGetCString(elements[i]);
 
             // Check if parent label does not exist
-            if (!label_exists(parent_name_str, graph_oid)) {
+            if (!label_exists(parent_name_str, graph_oid)) 
+            {
                 ereport(ERROR,
                         (errcode(ERRCODE_UNDEFINED_SCHEMA),
                                 errmsg("parent label \"%s\" does not exist.", parent_name_str)));
@@ -383,14 +385,7 @@ static void create_table_for_label(char *graph_name, char *label_name,
     // relpersistence is set to RELPERSISTENCE_PERMANENT by makeRangeVar()
     create_stmt->relation = makeRangeVar(schema_name, rel_name, -1);
 
-    /*
-     * When a new table has parents, do not create a column definition list.
-     * Use the parents' column definition list instead, via Postgres'
-     * inheritance system.
-     */
-    if (list_length(parents) != 0)
-        create_stmt->tableElts = NIL;
-    else if (label_type == LABEL_TYPE_EDGE)
+    if (label_type == LABEL_TYPE_EDGE)
         create_stmt->tableElts = create_edge_table_elements(
             graph_name, label_name, schema_name, rel_name, seq_name);
     else if (label_type == LABEL_TYPE_VERTEX)
