@@ -12020,6 +12020,10 @@
 { oid => '7248', descr => 'is jsonb empty?',
   proname => 'isempty', prorettype => 'bool',
   proargtypes => 'jsonb', prosrc => 'cypher_isempty_jsonb' },
+{ oid => '7249', descr => 'generate random UUID',
+  proname => 'randomuuid', proleakproof => 't', provolatile => 'v',
+  prorettype => 'uuid', proargtypes => '', 
+  prosrc => 'gen_random_uuid' }, 
 
 # graphdatabase array functions
 { oid => '7300', descr => 'the first element in a array',
