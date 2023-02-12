@@ -258,6 +258,13 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     Name label_name;
     char *label_name_str;
 
+    ArrayType *array;
+    Datum *elements;
+    char *parent_name_str;
+    bool *parent_nulls;
+    int nelements = 0;
+    int is_inheriting = NO_INHERITANCE;
+
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
     {
@@ -300,10 +307,48 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+    // checking if user has provided the parent's name list.
+    if (!PG_ARGISNULL(2)) {
 
-    parent = list_make1(rv);
-    create_label(graph, label, LABEL_TYPE_EDGE, parent, NO_INHERITANCE);
+        // Get the content from the third argument
+        array = PG_GETARG_ARRAYTYPE_P(2);
+        is_inheriting = YES_INHERITANCE;
+
+        // Deconstruct the ArrayType to NAMEOID.
+        deconstruct_array(array, NAMEOID, 63, false, 'i', &elements, &parent_nulls, &nelements);
+        
+        // Check for each parent in the list.
+        for (int i = 0; i < nelements; i++) 
+        {
+            
+            parent_name_str = DatumGetCString(elements[i]);
+
+            // Check if parent label does not exist
+            if (!label_exists(parent_name_str, graph_oid)) 
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                                errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+            }
+
+            rv = get_label_range_var(graph, graph_oid, parent_name_str);
+
+            if (i == 0)
+                parent = list_make1(rv);
+            else
+                lappend(parent, rv);
+
+            elog(NOTICE, "ELabel %s will inherit from %s", label_name_str, parent_name_str);
+        }
+    }
+
+    else 
+    {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+        parent = list_make1(rv);
+    }
+
+    create_label(graph, label, LABEL_TYPE_EDGE, parent, is_inheriting);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", NameStr(*label_name))));
