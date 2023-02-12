@@ -169,6 +169,48 @@ process_pg_terminate_backend_func(POOL_QUERY_CONTEXT * query_context)
 }
 
 /*
+ * Takes the first node of a raw parse tree as input
+ */
+static bool 
+isCypherQuery (Node* node){
+
+	if (IsA(node, SelectStmt))
+	{
+		SelectStmt *stmt = (SelectStmt *) node;
+		List* fromClause = stmt->fromClause;
+
+		ListCell   *fl;
+
+		//Match the first cypher function call in the FROM clause. Could be multiple tables
+		// e.g. FROM table1, table2, cypher(),table3....
+		foreach(fl, fromClause)
+		{
+			Node	   *n = lfirst(fl);
+			if (IsA(n, RangeFunction))
+			{
+				RangeFunction *rf = (RangeFunction*) n;
+				List* functions = rf->functions; 
+
+				if (functions->length == 1)
+				{
+					List *sublist = (List *) lfirst(list_head(functions)); 
+					FuncCall *fntree = (FuncCall *) lfirst(list_head(sublist));
+					StringInfoData str;
+					initStringInfo(&str);
+					_outNode(&str,fntree->funcname);
+					
+					if (!strcmp("\"cypher\"",str.data)){
+						return true;
+					}
+				}
+			}
+		}
+	}
+
+	return false; 
+}
+
+/*
  * Process Query('Q') message
  * Query messages include an SQL string.
  */
