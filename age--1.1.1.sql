@@ -33,6 +33,9 @@ CREATE TABLE ag_graph (
 
 CREATE UNIQUE INDEX ag_graph_graphid_index ON ag_graph USING btree (graphid);
 
+-- include content of the ag_graph table into the pg_dump output
+SELECT pg_catalog.pg_extension_config_dump('ag_graph', '');
+
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
 
 CREATE UNIQUE INDEX ag_graph_namespace_index
@@ -56,6 +59,9 @@ CREATE TABLE ag_label (
     FOREIGN KEY(graph)
     REFERENCES ag_graph(graphid)
 );
+
+-- include content of the ag_label table into the pg_dump output
+SELECT pg_catalog.pg_extension_config_dump('ag_label', '');
 
 CREATE UNIQUE INDEX ag_label_name_graph_index
 ON ag_label
