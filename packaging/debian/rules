@@ -1,10 +1,10 @@
 #!/usr/bin/make -f
 
-%:
-	dh $@ --with pgxs
+# %:
+# 	dh $@ --with pgxs
 
-override_dh_installdocs:
-	dh_installdocs --all README.*
+# override_dh_installdocs:
+# 	dh_installdocs --all README.*
 
 # if the package does not support building from subdirectories, use
 # `--with pgxs_loop` above.
@@ -32,5 +32,5 @@ override_dh_installdocs:
 #override_dh_auto_clean:
 #	+pg_buildext clean build-%v
 #
-#%:
-#	dh $@
+%:
+	dh $@
