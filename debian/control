@@ -1,0 +1,28 @@
+Source: age
+Section: database
+Priority: optional
+Maintainer: Debian PostgreSQL Maintainers <team+postgresql@tracker.debian.org>
+Uploaders:
+  <sarthak@localhost>,
+Build-Depends:
+ debhelper-compat (= 13),
+ postgresql-11 | postgresql-12,
+ build-essential,
+ libreadline-dev,
+ zlib1g-dev,
+ flex,
+ bison,
+Standards-Version: 4.5.1
+Rules-Requires-Root: no
+Homepage: https://FIXME/age
+Vcs-Browser: https://salsa.debian.org/postgresql/age
+Vcs-Git: https://salsa.debian.org/postgresql/age.git
+
+Package: postgresql-12-age
+Architecture: all
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: Apache AGE is an extension for PostgreSQL that enables users to leverage a graph database 
+  on top of the existing relational databases.

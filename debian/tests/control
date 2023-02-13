@@ -1,0 +1,5 @@
+Depends:
+ make,
+ @,
+Tests: installcheck
+Restrictions: allow-stderr
