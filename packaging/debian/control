@@ -1,0 +1,68 @@
+Source: age
+Section: database
+Priority: optional
+Maintainer: Debian PostgreSQL Maintainers <team+postgresql@tracker.debian.org>
+Uploaders:
+ Raze <ahmar@localhost>,
+Build-Depends:
+ debhelper-compat (= 13),
+ postgresql-all (>= 217~),
+Standards-Version: 4.6.0
+Rules-Requires-Root: no
+Homepage: https://FIXME/age
+Vcs-Browser: https://salsa.debian.org/postgresql/age
+Vcs-Git: https://salsa.debian.org/postgresql/age.git
+
+Package: postgresql-10-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
+
+Package: postgresql-11-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
+
+Package: postgresql-12-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
+
+Package: postgresql-13-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
+
+Package: postgresql-14-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
+
+Package: postgresql-15-age
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${postgresql:Depends},
+ ${shlibs:Depends},
+Description: FIXME PostgreSQL extension age
+ FIXME long description here
