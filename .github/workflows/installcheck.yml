@@ -2,13 +2,12 @@ name: PG12 Regression
 
 on:
   push:
-    branches: [ '*' ]
+    branches: [ 'PG12' ]
   pull_request:
-    branches: [ '*' ]
+    branches: [ 'PG12' ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -17,7 +16,7 @@ jobs:
           echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_12_STABLE | awk '{print $1}')" >> $GITHUB_ENV
 
       - name: Cache PostgreSQL 12
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: pg12cache
         with:
           path: ~/pg12
@@ -31,20 +30,23 @@ jobs:
           ./configure --prefix=$HOME/pg12 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
 
-      - uses: actions/checkout@v2
-      - name: Regression
+      - uses: actions/checkout@v3
+
+      - name: Build
+        id: build
+        run: |
+          make PG_CONFIG=$HOME/pg12/bin/pg_config install -j$(nproc)
+
+      - name: Regression tests
         id: regression_tests
         run: |
-          export PG_CONFIG=$HOME/pg12/bin/pg_config 
-          make -j$(nproc)
-          make install
-          make installcheck
+          make PG_CONFIG=$HOME/pg12/bin/pg_config installcheck
         continue-on-error: true
           
       - name: Dump regression test errors
         if: steps.regression_tests.outcome != 'success'
         run: |
           echo "Dump section begin."
-          cat /home/runner/work/age/age/regress/regression.diffs
+          cat $HOME/work/age/age/regress/regression.diffs
           echo "Dump section end."
           exit 1
