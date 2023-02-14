@@ -77,7 +77,7 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
     ListCell *lc;
     Plan *subplan;
 
-    Assert(list_length(css->cs->custom_plans) == 1)
+    Assert(list_length(css->cs->custom_plans) == 1);
 
     subplan = linitial(css->cs->custom_plans);
     node->ss.ps.lefttree = ExecInitNode(subplan, estate, eflags);

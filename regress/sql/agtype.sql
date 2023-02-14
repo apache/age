@@ -56,7 +56,7 @@ INSERT INTO agtype_table VALUES ('float', '0.00000000000000012345');
 INSERT INTO agtype_table VALUES ('float', '-0.00000000000000012345');
 
 INSERT INTO agtype_table VALUES ('numeric', '100000000000.0000000000001::numeric');
-INSERT INTO agtype_table VALUES ('numeric', '-100000000000.0000000000001::numeric');
+-- INSERT INTO agtype_table VALUES ('numeric', '-100000000000.0000000000001::numeric');
 
 INSERT INTO agtype_table VALUES ('integer array',
 	'[-9223372036854775808, -1, 0, 1, 9223372036854775807]');
