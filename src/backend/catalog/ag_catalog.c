@@ -49,7 +49,7 @@ static void drop_age_extension(DropStmt *stmt);
 
 void object_access_hook_init(void)
 {
-    prev_object_access_hook = object_access_hook
+    prev_object_access_hook = object_access_hook;
     object_access_hook = object_access;
     prev_object_hook_is_set = true;
 }
