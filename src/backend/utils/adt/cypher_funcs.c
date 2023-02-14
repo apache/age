@@ -35,6 +35,7 @@
 #include "utils/builtins.h"
 #include "utils/cypher_funcs.h"
 #include "utils/jsonb.h"
+#include "math.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 #include <string.h>
@@ -69,6 +70,7 @@ static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
 static bool int_to_bool(int32 num, bool *result);
 static bool string_to_bool(const char *str, bool *result);
+static Datum range(int start, int end, int step);
 
 
 Datum
@@ -1672,4 +1674,383 @@ datum_tobooleanornull(PG_FUNCTION_ARGS)
 			break;
 	}	
 	PG_RETURN_NULL();	
+}
+
+
+/*
+ * range:
+ *		returns an array with the series from start to end with an optional step value 
+ *		example: range(1,10) = [0,1,2,3,4,5,6,7,8,9,10], range(1,11,3) = [1,4,7,10]
+ * 				 range(1,10, -3) = []
+ */
+Datum
+range(int32 start, int32 end, int32 step)
+{
+	int32 		len = (int32) floor((end - start + step) / step),
+				counter = 0;
+	ArrayType 	*arr;
+
+	/* sanity checks */
+	if(len<=0)
+	{
+		arr = construct_array(NULL, 0, INT4OID, sizeof(int32), true, 'i');
+	}
+
+	else if(((start<=end) && step<0 ) || ((start>=end) && step>0))
+	{
+		arr = construct_array(NULL, 0, INT4OID, sizeof(int32), true, 'i');
+	}
+
+	else /* all sanity checks have passed, the series has to be generated and an array has to be created */
+	{
+		Datum 	*elements = (Datum *) palloc(sizeof(Datum) * len);
+		if(step<0)
+		{
+			while(start>=end)
+			{
+				elements[counter++] = start;
+				start+=step;
+			}
+		}
+		else
+		{
+			while(start<=end)
+			{
+				elements[counter++] = start;
+				start+=step;
+			}
+		}		
+
+		arr = construct_array(elements, len, INT4OID, sizeof(int32), true, 'i');
+
+		/* free pointers */
+		pfree(elements);
+	}
+	
+
+	PG_RETURN_POINTER(arr);
+}
+
+/* wrapper function which is used to map two integer inputs (start and end) with the range function. Default step value is created */
+Datum
+range_2_args(PG_FUNCTION_ARGS)
+{
+	int32 start = PG_GETARG_INT32(0);
+	int32 end = PG_GETARG_INT32(1);
+	int32 step;
+	
+	/* Setting the value of step */
+	if(start<=end) /* if the progression is positive, step = 1 */
+		step = 1;
+	else /* if the progression is negative, step = -1 */
+		step = -1;
+
+	PG_RETURN_POINTER(range(start, end, step));
+}
+
+/* wrapper function which is used to map three integer inputs (start, end, step) with the range function.*/
+Datum
+range_3_args(PG_FUNCTION_ARGS)
+{
+	int32 start = PG_GETARG_INT32(0);
+	int32 end = PG_GETARG_INT32(1);
+	int32 step = PG_GETARG_INT32(2);
+
+	/* Sanity checks */
+	if(step==0)
+	{
+		ereport(ERROR,
+		(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+		errmsg("Step value cannot be 0")));	
+	}	
+
+	PG_RETURN_POINTER(range(start, end, step));
+
+}
+
+/*
+ * tostringornull:
+ *		returns the string or null eqquivalent of a datum
+ *		example: tostringornull(123) = '123', tostringornull(null) = null
+ * 				 tostringornull(true) = 't'
+ */
+Datum
+tostringornull(PG_FUNCTION_ARGS)
+{
+	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+	switch (typeid){
+
+		/* string types */
+		case VARCHAROID:
+		case BPCHAROID:
+		case TEXTOID:
+		{
+			PG_RETURN_TEXT_P(PG_GETARG_TEXT_P(0));
+		}				
+		
+		case CSTRINGOID:
+		{
+			char 	*s = PG_GETARG_CSTRING(0);
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}
+
+		case BOOLOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(boolout, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}			
+
+		/* integer and numeric types */
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(int4out, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}			
+
+		case NUMERICOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}
+
+		/* date and time types */
+		case DATEOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(date_out, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}
+
+		case TIMEOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(time_out, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}
+
+		case TIMESTAMPOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(timestamp_out, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+		}
+
+		/* unknown type */
+		case UNKNOWNOID:
+		{
+			char* 	s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
+			PG_RETURN_TEXT_P(cstring_to_text(s));
+			break;
+
+		}			
+		
+
+		default:
+			break;
+	}	
+
+	PG_RETURN_NULL();	
+}
+
+
+/*
+ * tostringlist:
+ *		returns an array with the string equivalent of all the elements
+ *		example: tostringlist([1,2,true]) = ['1','2','true']
+ * 				 tostringlist([null,'1289',34.6]) = [null,'1289','34.6']
+ */
+Datum
+tostringlist(PG_FUNCTION_ARGS)
+{
+
+	Jsonb	   *j = PG_GETARG_JSONB_P(0);
+	JsonbParseState *jpstate = NULL;
+	JsonbValue *ajv;
+
+	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reverse(): list is expected but %s",
+						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
+
+	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
+
+	if (JB_ROOT_COUNT(j) > 1)
+	{
+		JsonbIterator *it;
+		JsonbValue	jv;
+		JsonbValue *jv_new;
+		JsonbValue	sjv;
+		JsonbIteratorToken tok;
+		int32 	counter = 0;
+
+		it = JsonbIteratorInit(&j->root);
+		tok = JsonbIteratorNext(&it, &jv, false);
+		while (tok != WJB_DONE)
+		{
+			if (tok == WJB_ELEM)
+			{
+				jv_new = getIthJsonbValueFromContainer(&j->root, counter++);
+				if (jv_new->type == jbvString)
+				{
+					jv = *jv_new;
+				}
+				else if (jv_new->type == jbvNumeric)
+				{
+					Datum		s;
+
+					s = DirectFunctionCall1(numeric_out,
+											NumericGetDatum(jv_new->val.numeric));
+					
+					sjv.type = jbvString;
+					sjv.val.string.val = DatumGetCString(s);
+					sjv.val.string.len = strlen(sjv.val.string.val);
+					jv = sjv;
+				}
+				else if (jv_new->type == jbvBool)
+				{
+					sjv.type = jbvString;
+
+					if (jv_new->val.boolean)
+					{
+						sjv.val.string.len = 4;
+						sjv.val.string.val = "true";
+					}
+					else
+					{
+						sjv.val.string.len = 5;
+						sjv.val.string.val = "false";
+					}
+
+					jv = sjv;
+				}
+				pushJsonbValue(&jpstate, WJB_ELEM, &jv);
+			}
+
+			tok = JsonbIteratorNext(&it, &jv, true);
+		}
+	}
+
+	ajv = pushJsonbValue(&jpstate, WJB_END_ARRAY, NULL);
+
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(ajv));
+}
+
+
+/*
+ * reverse:
+ *		the two functions below returns the reverse of the input array
+ *		example: reverse([1,2,true]) = [true,2,1]
+ * 				 reverse([null,'1289',34.6]) = [34.6,'1289',null]
+ */
+
+/*  jsonb reverse function */
+Datum
+jsonb_array_reverse(PG_FUNCTION_ARGS)
+{
+	Jsonb	   *j = PG_GETARG_JSONB_P(0);
+	JsonbParseState *jpstate = NULL;
+	JsonbValue *ajv;
+	int32 	counter = -1;
+
+	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reverse(): list is expected but %s",
+						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
+
+	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
+
+	if (JB_ROOT_COUNT(j) > 1)
+	{
+		JsonbIterator *it;
+		JsonbValue	jv;
+		JsonbValue *jv_new;
+		JsonbIteratorToken tok;
+		counter = (int32) JB_ROOT_COUNT(j) -1;
+
+		it = JsonbIteratorInit(&j->root);
+		tok = JsonbIteratorNext(&it, &jv, false);
+		while (tok != WJB_DONE)
+		{
+			if (tok == WJB_ELEM)
+			{
+				jv_new = getIthJsonbValueFromContainer(&j->root, counter--);
+				jv = *jv_new;
+				pushJsonbValue(&jpstate, WJB_ELEM, &jv);
+			}
+
+			tok = JsonbIteratorNext(&it, &jv, true);
+		}
+	}
+
+	ajv = pushJsonbValue(&jpstate, WJB_END_ARRAY, NULL);
+
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(ajv));
+}
+
+/*  array reverse function */
+Datum
+array_reverse(PG_FUNCTION_ARGS)
+{
+
+	AnyArrayType *arr = PG_GETARG_ANY_ARRAY_P(0);
+	int			ndims = AARR_NDIM(arr);
+	int		   *dims = AARR_DIMS(arr);
+	int			nitems = ArrayGetNItems(ndims, dims);
+	Oid			element_type = AARR_ELEMTYPE(arr);
+	TypeCacheEntry *typentry;
+	int			typlen;
+	bool		typbyval;
+	char		typalign;
+	int			i;
+	Datum		rtnelt;
+
+	ArrayBuildState *astate = NULL;
+
+	typentry = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
+
+	if (typentry == NULL ||
+		typentry->type_id != element_type)
+	{
+		typentry = lookup_type_cache(element_type,
+									 TYPECACHE_CMP_PROC_FINFO);
+		if (!OidIsValid(typentry->cmp_proc_finfo.fn_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 errmsg("could not identify a comparison function for type %s",
+							format_type_be(element_type))));
+		fcinfo->flinfo->fn_extra = (void *) typentry;
+	}
+
+	typlen = typentry->typlen;
+	typbyval = typentry->typbyval;
+	typalign = typentry->typalign;
+
+	astate = initArrayResult(element_type, CurrentMemoryContext, false);
+
+	for (i = nitems; i >0; i--)
+	{
+		rtnelt = array_get_element(PointerGetDatum(arr),
+								   1,
+								   &i,
+								   -1,
+								   typlen,
+								   typbyval,
+								   typalign,
+								   &typbyval);
+		astate =
+			accumArrayResult(astate, rtnelt, false,
+							 element_type, CurrentMemoryContext);
+
+	}
+
+	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
 }
