@@ -22,7 +22,7 @@ DSN = "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=agens"
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 5432
 TEST_DB = "postgres"
-TEST_USER = "dehowefeng"
+TEST_USER = "postgres"
 TEST_PASSWORD = "agens"
 TEST_GRAPH_NAME = "test_graph"
 

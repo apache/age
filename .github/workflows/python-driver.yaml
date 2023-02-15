@@ -2,12 +2,12 @@ name: Python Driver Tests
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "PG12" ]
     paths: 
       - 'drivers/python/**'
       
   pull_request:
-    branches: [ "master" ]
+    branches: [ "PG12" ]
     paths: 
       - 'drivers/python/**'
 
