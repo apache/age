@@ -49,12 +49,28 @@
 #include "utils/load/ag_load_labels.h"
 
 
-PG_FUNCTION_INFO_V1(create_complete_graph);
-PG_FUNCTION_INFO_V1(age_create_barbell_graph);
-
 int64 get_nextval_internal(graph_cache_data* graph_cache, 
                            label_cache_data* label_cache);
+/*
+ * Auxiliary function to get the next internal value in the graph,
+ * so a new object (node or edge) graph id can be composed.
+ */
 
+int64 get_nextval_internal(graph_cache_data* graph_cache, 
+                           label_cache_data* label_cache) 
+{
+    Oid obj_seq_id;
+    char* label_seq_name_str;
+
+    label_seq_name_str = NameStr(label_cache->seq_name);
+    obj_seq_id = get_relname_relid(label_seq_name_str, 
+                                   graph_cache->namespace);
+    
+    return nextval_internal(obj_seq_id, true);
+}
+
+
+PG_FUNCTION_INFO_V1(create_complete_graph);
 
 /*
 * SELECT * FROM ag_catalog.create_complete_graph('graph_name',no_of_nodes, 'edge_label', 'node_label'=NULL);
@@ -204,6 +220,8 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 }
 
 
+PG_FUNCTION_INFO_V1(age_create_barbell_graph);
+
 /* 
  * The barbell graph is two complete graphs connected by a bridge path
  * Syntax:
@@ -226,6 +244,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
  * 
  * https://en.wikipedia.org/wiki/Barbell_graph
  */
+
 Datum age_create_barbell_graph(PG_FUNCTION_ARGS) 
 {
     FunctionCallInfo arguments;
@@ -278,14 +297,20 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
      * to do: implement bridge with variable number of nodes.
     */ 
     if (PG_ARGISNULL(2) || PG_GETARG_INT32(2) < 0 )
+    {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("Bridge size must not be NULL or lower than 0")));
+    }
 
     // node label: if null, gets default label, which is "_ag_label_vertex"
     if (PG_ARGISNULL(3)) 
+    {
         namestrcpy(node_label_name, AG_DEFAULT_LABEL_VERTEX);
+    }
     else 
+    {
         node_label_name = PG_GETARG_NAME(3);
+    }
     node_label_str = NameStr(*node_label_name);
     node_label_id = get_label_id(node_label_str, graph_oid);
 
@@ -319,26 +344,8 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
 
     // connect two nodes
     insert_edge_simple(graph_oid, edge_label_str,
-                        object_graph_id, start_node_graph_id,
-                        end_node_graph_id, properties);
+                       object_graph_id, start_node_graph_id,
+                       end_node_graph_id, properties);
     
     PG_RETURN_VOID();
-}
-
-
-/*
- * Auxiliary function to get the next internal value in the graph,
- * so a new object (node or edge) graph id can be composed.
- */
-int64 get_nextval_internal(graph_cache_data* graph_cache, 
-                           label_cache_data* label_cache) 
-{
-    Oid obj_seq_id;
-    char* label_seq_name_str;
-
-    label_seq_name_str = NameStr(label_cache->seq_name);
-    obj_seq_id = get_relname_relid(label_seq_name_str, 
-                                   graph_cache->namespace);
-    
-    return nextval_internal(obj_seq_id, true);
 }
