@@ -184,7 +184,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     label = label_name->data;
 
     // checking if user has provided the parent's name list.
-    if (!PG_ARGISNULL(2)) {
+    if (!PG_ARGISNULL(2)) 
+    {
 
         // Get the content from the third argument
         array = PG_GETARG_ARRAYTYPE_P(2);
@@ -308,7 +309,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     label = label_name->data;
 
     // checking if user has provided the parent's name list.
-    if (!PG_ARGISNULL(2)) {
+    if (!PG_ARGISNULL(2)) 
+    {
 
         // Get the content from the third argument
         array = PG_GETARG_ARRAYTYPE_P(2);
