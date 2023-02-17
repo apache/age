@@ -17,7 +17,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "age_viewer_go",
+		Title:  "Apache AGE Viewer",
 		Width:  800,
 		Height: 600,
 		AssetServer: &assetserver.Options{
