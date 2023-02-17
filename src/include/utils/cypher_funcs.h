@@ -91,5 +91,6 @@ extern Datum get_last_graph_write_stats(PG_FUNCTION_ARGS);
 extern Datum tointeger(PG_FUNCTION_ARGS);
 extern Datum tofloat(PG_FUNCTION_ARGS);
 extern Datum tofloatornull(PG_FUNCTION_ARGS);
+extern Datum e(PG_FUNCTION_ARGS);
 
 #endif							/* CYPHER_FUNCS_H */

@@ -12050,4 +12050,10 @@
 { oid => '8005', descr => 'return float equivalents or null',
   proname => 'tofloatornull', prorettype => 'float8', proisstrict => 't', pronargs => '1',
   proargtypes => 'any', prosrc => 'tofloatornull' },
+
+# functions for returning constant values
+{ oid => '8007', descr => 'return the constant value of logarithmic base',
+  proname => 'e', prorettype => 'float8', pronargs => '0',
+  proargtypes => '', prosrc => 'e' },
+
 ]
