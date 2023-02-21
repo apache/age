@@ -30,7 +30,11 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.1.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.1.1-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+  </a>
+  &nbsp;
+  <a href="https://www.postgresql.org/docs/12/index.html">
+    <img src="https://img.shields.io/badge/Version-PostgreSQL 12-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/12/index.html"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -65,16 +69,16 @@ Intelligent -- AGE allows you to perform graph queries that are the basis for ma
 
 **This README file is for the Apache AGE PostgreSQL 12 release**
 
-- **Apache AGE is currently being developed for the PostgreSQL 11, and 12 releases** and will support all the future releases of PostgreSQL.
+- **Apache AGE is currently being developed for the PostgreSQL 11 and 12 releases** and will support all the future releases of PostgreSQL.
 - Apache AGE supports the openCypher graph query language.
 - Apache AGE enables querying multiple graphs at the same time.
 - Apache AGE will be enhanced with an aim to support all of the key features of AgensGraph (PostgreSQL fork extended with graph DB functionality).
 
 ## Latest happenings
 
-- Latest Apache AGE for PG 12 release, [Apache AGE 1.1.0 (https://github.com/apache/age/releases/tag/PG12/v1.1.0-rc0).
+- Latest Apache AGE for PG 12 release, [Apache AGE 1.1.1 (https://github.com/apache/age/releases/tag/PG12/v1.1.1-rc0).
 - The latest Apache AGE documentation is now available at [here](https://age.apache.org/docs/master/index.html).
-- The roadmap has been updated, please check out the [Apache AGE website](http://age.apache.org/).
+- The roadmap - [Apache AGE website](http://age.apache.org/).
 - Send all your comments and inquiries to the user mailing list, users@age.apache.org.
 
 ## Installation
@@ -84,7 +88,7 @@ Intelligent -- AGE allows you to perform graph queries that are the basis for ma
 
 ## Graph visualization tool for AGE
 
-Apache AGE Viewer is a subproject of the Apache AGE project:  https://github.com/apache/age-viewer
+Apache AGE Viewer is a subproject of the Apache AGE project:  <https://github.com/apache/age-viewer>
 
 - This is a visualization tool.
 After AGE Extension Installation
@@ -98,9 +102,59 @@ Here is the link to the latest [Apache AGE documentation](https://age.apache.org
 You can learn about how to install Apache AGE, its features and built-in functions and how to use various Cypher queries.
 
 ## Language Specific Drivers
-[Apache AGE Python Driver](https://github.com/rhizome-ai/apache-age-python)
 
-## Contribution
+### Built-in
+
+- [Go driver](./drivers/golang)
+- [Java driver](./drivers/jdbc)
+- [NodeJs driver](./drivers/nodejs)
+- [Python driver](./drivers/python)
+
+### Community
+
+- [Apache AGE Python Driver](https://github.com/rhizome-ai/apache-age-python)
+- [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
+
+
+
+
+<h2><img height="20" src="/img/contributing.svg">&nbsp;&nbsp;Community</h2>
+
+Join the AGE community for help, questions, discussions, and contributions. 
+
+- Check our [website](https://age.apache.org/)
+- Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
+- Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
+- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
+- Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
+- Subscribe to our committer mailing list (To become a committer) by sending an email to commits-subscribe@age.apache.org
+
+
+<h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
+
+
+Apache AGE Viewer is a user interface for Apache AGE that provides visualization and exploration of data.
+This web visualization tool allows users to enter complex graph queries and explore the results in graph and table forms.
+Apache AGE Viewer is enhanced to proceed with extensive graph data and discover insights through various graph algorithms.
+Apache AGE Viewer will become a graph data administration and development platform for Apache AGE to support multiple relational databases: <https://github.com/apache/age-viewer>.
+
+**This is a visualization tool.**
+After installing AGE Extension, you may use this tool to get access to the visualization features.
+
+
+![Viewer gdb, and graph](/img/agce.gif)
+
+
+<h2><img height="20" src="/img/videos.png">&nbsp;&nbsp;Video Links</h2>
+
+You can also get help from these videos. 
+
+- Install on [Windows](https://www.youtube.com/watch?v=ddk8VX8Hm-I&list=PLGp3huJbWNDjgwP7s99Q-9_w1vxpjNHXG)
+- Install on [MacOS](https://www.youtube.com/watch?v=0-qMwpDh0CA)
+
+
+
+<h2><img height="20" src="/img/community.svg">&nbsp;&nbsp;Contributing</h2>
 
 You can improve ongoing efforts or initiate new ones by sending pull requests to [this repository](https://github.com/apache/age).
 Also, you can learn from the code review process, how to merge pull requests, and from code style compliance to documentation, by visiting the [Apache AGE official site - Developer Guidelines](https://age.apache.org/#codereview).

@@ -52,6 +52,7 @@
 #include "utils/ag_cache.h"
 #include "utils/agtype.h"
 #include "utils/graphid.h"
+#include "utils/name_validation.h"
 
 /*
  * Relation name doesn't have to be label name but the same name is used so
@@ -226,7 +227,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("graph \"%s\" does not exist.", graph_name_str)));
+                 errmsg("graph \"%s\" does not exist.", graph_name_str)));
     }
 
     graph_oid = get_graph_oid(graph_name_str);
@@ -272,6 +273,12 @@ void create_label(char *graph_name, char *label_name, char label_type,
     int32 label_id;
     Oid relation_id;
 
+    if (!is_valid_label(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
+
     cache_data = search_graph_name_cache(graph_name);
     if (!cache_data)
     {
@@ -306,7 +313,8 @@ void create_label(char *graph_name, char *label_name, char label_type,
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
 
-    insert_label(label_name, graph_oid, label_id, label_type, relation_id);
+    insert_label(label_name, graph_oid, label_id, label_type,
+                 relation_id, seq_name);
 
     CommandCounterIncrement();
 }
@@ -605,6 +613,7 @@ static void change_label_id_default(char *graph_name, char *label_name,
     AlterTableCmd *tbl_cmd;
     RangeVar *rv;
     FuncCall *func_call;
+    AlterTableUtilityContext atuc;
 
     func_call = build_id_default_func_expr(graph_name, label_name, schema_name,
                                            seq_name);
@@ -625,7 +634,11 @@ static void change_label_id_default(char *graph_name, char *label_name,
 
     tbl_stmt->cmds = list_make1(tbl_cmd);
 
-    AlterTable(relid, AccessExclusiveLock, tbl_stmt);
+    atuc.relid = relid;
+    atuc.queryEnv = pstate->p_queryEnv;
+    atuc.queryString = pstate->p_sourcetext;
+
+    AlterTable(tbl_stmt, AccessExclusiveLock, &atuc);
 
     CommandCounterIncrement();
 }

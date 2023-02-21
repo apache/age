@@ -38,13 +38,24 @@
 #include "nodes/ag_nodes.h"
 #include "parser/cypher_analyze.h"
 #include "parser/cypher_clause.h"
+#include "parser/cypher_item.h"
 #include "parser/cypher_parse_node.h"
 #include "parser/cypher_parser.h"
 #include "utils/ag_func.h"
 #include "utils/age_session_info.h"
 #include "utils/agtype.h"
 
+/*
+ * extra_node is a global variable to this source to store, at the moment, the
+ * explain stmt node passed up by the parser. The return value from the parser
+ * contains an 'extra' value, hence the name.
+ */
 static Node *extra_node = NULL;
+/*
+ * Takes a query node and builds an explain stmt query node. It then replaces
+ * the passed query node with the new explain stmt query node.
+ */
+static void build_explain_query(Query *query, Node *explain_node);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
@@ -79,9 +90,34 @@ void post_parse_analyze_fini(void)
 static void post_parse_analyze(ParseState *pstate, Query *query)
 {
     if (prev_post_parse_analyze_hook)
+    {
         prev_post_parse_analyze_hook(pstate, query);
+    }
+
+    /*
+     * extra_node is set in the parsing stage to keep track of EXPLAIN.
+     * So it needs to be set to NULL prior to any cypher parsing.
+     */
+    extra_node = NULL;
 
     convert_cypher_walker((Node *)query, pstate);
+
+    /*
+     * If there is an extra_node returned, we need to check to see if
+     * it is an EXPLAIN.
+     */
+    if (extra_node != NULL)
+    {
+        /* process the EXPLAIN node */
+        if (nodeTag(extra_node) == T_ExplainStmt)
+        {
+            build_explain_query(query, extra_node);
+        }
+
+        /* reset extra_node */
+        pfree(extra_node);
+        extra_node = NULL;
+    }
 }
 
 // find cypher() calls in FROM clauses and convert them to SELECT subqueries
@@ -178,57 +214,55 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
         flags = QTW_EXAMINE_RTES_BEFORE | QTW_IGNORE_RT_SUBQUERIES |
                 QTW_IGNORE_JOINALIASES;
 
-        /* clear the global variable extra_node */
-        extra_node = NULL;
-
         /* recurse on query */
         result = query_tree_walker(query, convert_cypher_walker, pstate, flags);
-
-        /* check for EXPLAIN */
-        if (extra_node != NULL && nodeTag(extra_node) == T_ExplainStmt)
-        {
-            ExplainStmt *estmt = NULL;
-            Query *query_copy = NULL;
-            Query *query_node = NULL;
-
-            /*
-             * Create a copy of the query node. This is purposely a shallow copy
-             * because we are only moving the contents to another pointer.
-             */
-            query_copy = (Query *) palloc(sizeof(Query));
-            memcpy(query_copy, query, sizeof(Query));
-
-            /* build our Explain node and store the query node copy in it */
-            estmt = makeNode(ExplainStmt);
-            estmt->query = (Node *)query_copy;
-            estmt->options = ((ExplainStmt *)extra_node)->options;
-
-            /* build our replacement query node */
-            query_node = makeNode(Query);
-            query_node->commandType = CMD_UTILITY;
-            query_node->utilityStmt = (Node *)estmt;
-            query_node->canSetTag = true;
-
-            /* now replace the top query node with our replacement query node */
-            memcpy(query, query_node, sizeof(Query));
-
-            /*
-             * We need to free and clear the global variable when done. But, not
-             * the ExplainStmt options. Those will get freed by PG when the
-             * query is deleted.
-             */
-            ((ExplainStmt *)extra_node)->options = NULL;
-            pfree(extra_node);
-            extra_node = NULL;
-
-            /* we need to free query_node as it is no longer needed */
-            pfree(query_node);
-        }
 
         return result;
     }
 
     return expression_tree_walker(node, convert_cypher_walker, pstate);
+}
+
+/*
+ * Takes a query node and builds an explain stmt query node. It then replaces
+ * the passed query node with the new explain stmt query node.
+ */
+static void build_explain_query(Query *query, Node *explain_node)
+{
+    ExplainStmt *estmt = NULL;
+    Query *query_copy = NULL;
+    Query *query_node = NULL;
+
+    /*
+     * Create a copy of the query node. This is purposely a shallow copy
+     * because we are only moving the contents to another pointer.
+     */
+    query_copy = (Query *) palloc(sizeof(Query));
+    memcpy(query_copy, query, sizeof(Query));
+
+    /* build our Explain node and store the query node copy in it */
+    estmt = makeNode(ExplainStmt);
+    estmt->query = (Node *)query_copy;
+    estmt->options = ((ExplainStmt *)explain_node)->options;
+
+    /* build our replacement query node */
+    query_node = makeNode(Query);
+    query_node->commandType = CMD_UTILITY;
+    query_node->utilityStmt = (Node *)estmt;
+    query_node->canSetTag = true;
+
+    /* now replace the top query node with our replacement query node */
+    memcpy(query, query_node, sizeof(Query));
+
+    /*
+     * We need to free and clear the global variable when done. But, not
+     * the ExplainStmt options. Those will get freed by PG when the
+     * query is deleted.
+     */
+    ((ExplainStmt *)explain_node)->options = NULL;
+
+    /* we need to free query_node as it is no longer needed */
+    pfree(query_node);
 }
 
 static bool is_rte_cypher(RangeTblEntry *rte)
@@ -475,6 +509,10 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     {
         Node *temp = llast(stmt);
 
+        ereport(WARNING,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("too many extra_nodes passed from parser")));
+
         list_delete_ptr(stmt, temp);
     }
 
@@ -660,7 +698,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     Query *query;
     const bool lateral = false;
     Query *subquery;
-    RangeTblEntry *rte;
+    ParseNamespaceItem *pnsi;
     int rtindex;
     ListCell *lt;
     ListCell *lc1;
@@ -707,13 +745,13 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                  parser_errposition(pstate, exprLocation(rtfunc->funcexpr))));
     }
 
-    rte = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
+    pnsi = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
                                         lateral, true);
     rtindex = list_length(pstate->p_rtable);
     Assert(rtindex == 1); // rte is the only RangeTblEntry in pstate
-    addRTEtoQuery(pstate, rte, true, true, true);
 
-    query->targetList = expandRelAttrs(pstate, rte, rtindex, 0, -1);
+    addNSItemToQuery(pstate, pnsi, true, true, true);
+    query->targetList = expandNSItemAttrs(pstate, pnsi, 0, -1);
 
     markTargetListOrigins(pstate, query->targetList);
 
@@ -739,7 +777,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
 
             /*
              * The coercion context of this coercion is COERCION_EXPLICIT
-             * because the target type is explicitly metioned in the column
+             * because the target type is explicitly mentioned in the column
              * definition list and we need to do this by looking up all
              * possible coercion.
              */
@@ -763,9 +801,9 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
             te->expr = (Expr *)new_expr;
         }
 
-        lc1 = lnext(lc1);
-        lc2 = lnext(lc2);
-        lc3 = lnext(lc3);
+        lc1 = lnext(rtfunc->funccolnames, lc1);
+        lc2 = lnext(rtfunc->funccoltypes, lc2);
+        lc3 = lnext(rtfunc->funccoltypmods, lc3);
     }
 
     query->rtable = pstate->p_rtable;

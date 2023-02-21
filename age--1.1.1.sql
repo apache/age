@@ -33,6 +33,9 @@ CREATE TABLE ag_graph (
 
 CREATE UNIQUE INDEX ag_graph_graphid_index ON ag_graph USING btree (graphid);
 
+-- include content of the ag_graph table into the pg_dump output
+SELECT pg_catalog.pg_extension_config_dump('ag_graph', '');
+
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
 
 CREATE UNIQUE INDEX ag_graph_namespace_index
@@ -51,10 +54,14 @@ CREATE TABLE ag_label (
   id label_id,
   kind label_kind,
   relation regclass NOT NULL,
+  seq_name name NOT NULL,
   CONSTRAINT fk_graph_oid
     FOREIGN KEY(graph)
     REFERENCES ag_graph(graphid)
 );
+
+-- include content of the ag_label table into the pg_dump output
+SELECT pg_catalog.pg_extension_config_dump('ag_label', '');
 
 CREATE UNIQUE INDEX ag_label_name_graph_index
 ON ag_label
@@ -66,6 +73,9 @@ USING btree (graph, id);
 
 CREATE UNIQUE INDEX ag_label_relation_index ON ag_label USING btree (relation);
 
+CREATE UNIQUE INDEX ag_label_seq_name_graph_index
+ON ag_label
+USING btree (seq_name, graph);
 --
 -- catalog lookup functions
 --
@@ -185,7 +195,7 @@ CREATE TYPE graphid (
 CREATE FUNCTION ag_catalog.graphid_eq(graphid, graphid)
 RETURNS boolean
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -205,7 +215,7 @@ CREATE OPERATOR = (
 CREATE FUNCTION ag_catalog.graphid_ne(graphid, graphid)
 RETURNS boolean
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -223,7 +233,7 @@ CREATE OPERATOR <> (
 CREATE FUNCTION ag_catalog.graphid_lt(graphid, graphid)
 RETURNS boolean
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3139,6 +3149,14 @@ CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME', 'agtype_build_map_noargs';
 
+CREATE FUNCTION ag_catalog.agtype_build_map_nonull(VARIADIC "any")
+RETURNS agtype
+LANGUAGE c
+STABLE
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 --
 -- There are times when the optimizer might eliminate
 -- functions we need. Wrap the function with this to
@@ -3413,7 +3431,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_id(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3421,7 +3439,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_start_id(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3429,7 +3447,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_end_id(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3437,7 +3455,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_head(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3445,7 +3463,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_last(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3453,7 +3471,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_properties(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3477,7 +3495,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_length(agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3485,7 +3503,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_toboolean(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3493,7 +3511,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_tofloat(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3501,7 +3519,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_tointeger(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3509,7 +3527,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_tostring(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3517,7 +3535,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_size(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3551,7 +3569,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_reverse(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3559,7 +3577,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_toupper(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3567,7 +3585,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_tolower(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3575,7 +3593,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_ltrim(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3583,7 +3601,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_rtrim(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3591,7 +3609,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_trim(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3599,35 +3617,35 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_right(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_left(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_substring(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_split(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_replace(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -3637,91 +3655,91 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_sin(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_cos(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_tan(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_cot(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_asin(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_acos(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_atan(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_atan2(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_degrees(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_radians(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_round(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_ceil(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_floor(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -3749,28 +3767,28 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_log10(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_e()
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_exp(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_sqrt(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -3987,42 +4005,42 @@ CREATE AGGREGATE ag_catalog.age_collect(variadic "any")
 CREATE FUNCTION ag_catalog.agtype_typecast_int(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_numeric(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_float(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_vertex(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_edge(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.agtype_typecast_path(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -4136,14 +4154,14 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.age_range(variadic "any")
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_unnest(agtype, block_types boolean = false)
     RETURNS SETOF agtype
     LANGUAGE c
-    STABLE
+    IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -4158,6 +4176,13 @@ CREATE FUNCTION ag_catalog.age_delete_global_graphs(agtype)
 RETURNS boolean
 LANGUAGE c
 STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name, nodes int, edge_label name, node_label name = NULL)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 

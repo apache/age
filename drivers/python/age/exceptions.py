@@ -1,4 +1,3 @@
-
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -66,5 +65,4 @@ class AGTypeError(Exception):
         self.msg = msg
         self.cause = cause
         super().__init__(msg, cause)
-
 

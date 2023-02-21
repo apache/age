@@ -42,6 +42,7 @@
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "utils/graphid.h"
+#include "utils/name_validation.h"
 
 /*
  * Schema name doesn't have to be graph name but the same name is used so
@@ -56,6 +57,7 @@ static void rename_graph(const Name graph_name, const Name new_name);
 
 PG_FUNCTION_INFO_V1(create_graph);
 
+/* function that is evoked for creating a graph */
 Datum create_graph(PG_FUNCTION_ARGS)
 {
     char *graph;
@@ -63,24 +65,37 @@ Datum create_graph(PG_FUNCTION_ARGS)
     char *graph_name_str;
     Oid nsp_id;
 
+    //if no argument is passed with the function, graph name cannot be null
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("graph name must not be NULL")));
+                        errmsg("graph name can not be NULL")));
     }
-    graph_name = PG_GETARG_NAME(0);
+
+    //gets graph name as function argument
+    graph_name = PG_GETARG_NAME(0);  
 
     graph_name_str = NameStr(*graph_name);
+
+    //checking if the name of the graph falls under the pre-decided graph naming conventions(regex)
+    if (!is_valid_graph_name(graph_name_str))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("graph name is invalid")));
+    }
+
+    //graph name must be unique, a graph with the same name should not exist
     if (graph_exists(graph_name_str))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("graph \"%s\" already exists", graph_name_str)));
+                 errmsg("graph \"%s\" already exists", graph_name_str)));
     }
 
     nsp_id = create_schema_for_graph(graph_name);
 
-    insert_graph(graph_name, nsp_id);
+    //inserts the graph info into the relation which has all the other existing graphs info
+    insert_graph(graph_name, nsp_id);  
 
     //Increment the Command counter before create the generic labels.
     CommandCounterIncrement();
@@ -93,7 +108,8 @@ Datum create_graph(PG_FUNCTION_ARGS)
     ereport(NOTICE,
             (errmsg("graph \"%s\" has been created", NameStr(*graph_name))));
 
-    PG_RETURN_VOID();
+    //according to postgres specification of c-language functions if function returns void this is the syntax
+    PG_RETURN_VOID(); 
 }
 
 static Oid create_schema_for_graph(const Name graph_name)
@@ -157,7 +173,7 @@ Datum drop_graph(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("graph name must not be NULL")));
+                        errmsg("graph name can not be NULL")));
     }
     graph_name = PG_GETARG_NAME(0);
     cascade = PG_GETARG_BOOL(1);
@@ -313,6 +329,12 @@ static void rename_graph(const Name graph_name, const Name new_name)
     char *oldname = NameStr(*graph_name);
     char *newname = NameStr(*new_name);
     char *schema_name;
+
+    if (!is_valid_graph_name(newname))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("new graph name is invalid")));
+    }
 
     /*
      * ProcessUtilityContext of this command is PROCESS_UTILITY_SUBCOMMAND

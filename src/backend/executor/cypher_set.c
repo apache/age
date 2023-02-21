@@ -114,7 +114,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     bool update_indexes;
     TM_Result   result;
 
-    ResultRelInfo *saved_resultRelInfo  = estate->es_result_relation_info;
+    ResultRelInfo *saved_resultRelInfo = estate->es_result_relation_info;
     estate->es_result_relation_info = resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
@@ -242,7 +242,7 @@ static bool check_path(agtype_value *path, graphid updated_id)
 
 /*
  * Construct a new agtype path with the entity with updated_id
- * replacing all of its intances in path with updated_entity
+ * replacing all of its instances in path with updated_entity
  */
 static agtype_value *replace_entity_in_path(agtype_value *path,
                                             graphid updated_id,
@@ -473,7 +473,7 @@ static void process_update_list(CustomScanState *node)
 
         /*
          * If we need to remove the property, set the value to NULL. Otherwise
-         * fetch the evaluated expression from the tuble slot.
+         * fetch the evaluated expression from the tuple slot.
          */
         if (remove_property)
         {
@@ -484,14 +484,31 @@ static void process_update_list(CustomScanState *node)
             new_property_value = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[update_item->prop_position - 1]);
         }
 
-        /*
-         * Alter the properties Agtype value to contain or remove the updated
-         * property.
-         */
-        altered_properties = alter_property_value(original_properties,
-                                                  update_item->prop_name,
-                                                  new_property_value,
-                                                  remove_property);
+        // Alter the properties Agtype value.
+        if (strcmp(update_item->prop_name, ""))
+        {
+            altered_properties = alter_property_value(original_properties,
+                                                      update_item->prop_name,
+                                                      new_property_value,
+                                                      remove_property);
+        }
+        else
+        {
+            altered_properties = alter_properties(
+                update_item->is_add ? original_properties : NULL,
+                new_property_value);
+
+            /*
+             * For SET clause with plus-equal operator, nulls are not removed
+             * from the map during transformation because they are required in
+             * the executor to alter (merge) properties correctly. Only after
+             * that step, they can be removed.
+             */
+            if (update_item->is_add)
+            {
+                remove_null_from_agtype_object(altered_properties);
+            }
+        }
 
         resultRelInfo = create_entity_result_rel_info(
             estate, css->set_list->graph_name, label_name);
