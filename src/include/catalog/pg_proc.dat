@@ -2195,6 +2195,9 @@
   proname => 'in_range', prorettype => 'bool',
   proargtypes => 'date date interval bool bool',
   prosrc => 'in_range_date_interval' },
+{ oid => '8008', descr => 'returns the current date in YYYY-MM-DD format',
+  proname => 'date', prorettype => 'text', pronargs => '0',
+  proargtypes => '', prosrc => 'date' },
 
 # OIDS 1100 - 1199
 
@@ -12055,5 +12058,4 @@
 { oid => '8007', descr => 'return the constant value of logarithmic base',
   proname => 'e', prorettype => 'float8', pronargs => '0',
   proargtypes => '', prosrc => 'e' },
-
 ]
