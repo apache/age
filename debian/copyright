@@ -8,12 +8,7 @@ Copyright: <years> <put author's name and email here>
            <years> <likewise for another author>
 
 
-Files: debian/*
-Copyright: 2023 Ahmar Zaidi <ahmarzaidi07@gmail>
-           2023 Sarthak Jaiswal <sarthak.8858@gmail.com>
-
 License: Apache License 2.0
-
 
  <!-- Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file

@@ -21,11 +21,11 @@ Section: database
 Priority: optional
 Maintainer: Debian PostgreSQL Maintainers <team+postgresql@tracker.debian.org>
 Uploaders:
-  Sarthak Jaiswal <sarthak@debian.org>,
-  Ahmar Zaidi <ahmar@debian.org>,
+  Sarthak Jaiswal <ahmar.z@agedb.io>,
+  Ahmar Zaidi <sarthak.j@agedb.io>,
 Build-Depends:
  debhelper-compat (= 13),
- postgresql-11 | postgresql-12,
+ postgresql-12,
  build-essential,
  libreadline-dev,
  zlib1g-dev,
@@ -33,9 +33,6 @@ Build-Depends:
  bison,
 Standards-Version: 4.5.1
 Rules-Requires-Root: no
-Homepage: https://age.apache.org
-Vcs-Browser: https://salsa.debian.org/postgresql/age
-Vcs-Git: https://salsa.debian.org/postgresql/age.git
 
 Package: age
 Architecture: all
