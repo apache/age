@@ -1,3 +1,4 @@
 /results/
 *.o
 *.so
+*.dirstamp
