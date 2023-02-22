@@ -3,9 +3,9 @@ package models
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 
 	"github.com/labstack/echo"
+	_ "github.com/lib/pq"
 )
 
 type Connection struct {
@@ -14,6 +14,7 @@ type Connection struct {
 	Password string
 	User     string
 	DbName   string
+	SSL      string `default:"require"`
 }
 
 func FromRequestBody(context echo.Context) (*Connection, error) {
@@ -22,10 +23,9 @@ func FromRequestBody(context echo.Context) (*Connection, error) {
 	return user, e
 }
 
-func (c *Connection) ToSQLString(secure ...bool) string {
-	ssl := "false"
+func (c *Connection) ToSQLString(secure ...string) string {
 	if len(secure) > 0 {
-		ssl = strconv.FormatBool(secure[0])
+		c.SSL = secure[0]
 	}
 
 	str := fmt.Sprintf(
@@ -34,17 +34,13 @@ func (c *Connection) ToSQLString(secure ...bool) string {
 		c.Port,
 		c.Host,
 		c.Password,
-		ssl,
+		c.SSL,
 		c.DbName,
 	)
 
 	return str
 }
 
-func (c Connection) GetConnection(secure ...bool) (*sql.DB, error) {
-	ssl := false
-	if len(secure) > 0 {
-		ssl = secure[0]
-	}
-	return sql.Open("postgres", c.ToSQLString(ssl))
+func (c Connection) GetConnection(secure ...string) (*sql.DB, error) {
+	return sql.Open("postgres", c.ToSQLString(secure...))
 }

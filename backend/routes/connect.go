@@ -1,7 +1,6 @@
 package routes
 
 import (
-	m "age-viewer-go/miscellaneous"
 	"age-viewer-go/models"
 	"fmt"
 
@@ -11,17 +10,24 @@ import (
 
 func ConnectToDb(c echo.Context) error {
 	udata, err := models.FromRequestBody(c)
-	m.HandleError(err, "unable to bind user data", c)
-	fmt.Print("here")
+	if err != nil {
+		return echo.NewHTTPError(400, "invalid data")
+	}
 	db, err := udata.GetConnection()
-	m.HandleError(err, "could not establish connection", c)
+	if err != nil {
+		return echo.NewHTTPError(400, fmt.Sprintf("could not establish connection due to %s", err.Error()))
+	}
 	err = db.Ping()
-	m.HandleError(err, "could not connect to db", c, 400)
+	if err != nil {
+		return echo.NewHTTPError(400, fmt.Sprintf("could not establish connection due to %s", err.Error()))
+	}
 	defer db.Close()
 	sess := c.Get("database").(*sessions.Session)
 	sess.Values["db"] = udata
 	err = sess.Save(c.Request(), c.Response().Writer)
-	m.HandleError(err, "could not save session", c, 400)
+	if err != nil {
+		return echo.NewHTTPError(400, "could not save session")
+	}
 
 	return c.JSON(200, map[string]string{"status": "connected"})
 }
