@@ -148,6 +148,7 @@ static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
             ereport(ERROR, (errmsg_internal("unrecognized A_Expr kind: %d",
                                             a->kind)));
         }
+        break;
     }
     case T_BoolExpr:
         return transform_BoolExpr(cpstate, (BoolExpr *)expr);

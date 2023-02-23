@@ -2916,15 +2916,19 @@ static agtype_value *execute_map_access_operator(agtype *map,
     case AGTV_INTEGER:
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("AGTV_INTEGER is not a valid key type")));
+        break;
     case AGTV_FLOAT:
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("AGTV_FLOAT is not a valid key type")));
+        break;
     case AGTV_NUMERIC:
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("AGTV_NUMERIC is not a valid key type")));
+        break;
     case AGTV_BOOL:
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("AGTV_BOOL is not a valid key type")));
+        break;
     case AGTV_STRING:
         key_str = key_value->val.string.val;
         key_len = key_value->val.string.len;
