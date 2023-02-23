@@ -22,4 +22,5 @@ func (g *Graph) GetMetaData(user Connection) error {
 	defer conn.Close()
 
 	conn.Query(db.INIT_EXTENSION)
+	return nil
 }

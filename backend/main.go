@@ -15,5 +15,6 @@ func main() {
 	app.Use(session.UserSessions())
 
 	app.POST("/connect", routes.ConnectToDb)
+	app.POST("/query", routes.GraphQuery)
 	app.Start(":8080")
 }

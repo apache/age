@@ -3,9 +3,8 @@ package db
 const INIT_EXTENSION = `
 CREATE EXTENSION IF NOT EXISTS age;
 LOAD 'age';
-SET search_path = ag_catalog, "$user", public;
 `
-
+const SET_SEARCH_PATH = `SET search_path = ag_catalog, "$user", public;`
 const META_DATA_11 = `SELECT * FROM (
 	SELECT c.relname AS label, n.oid as namespace_id, c.reltuples AS cnt
 	FROM pg_catalog.pg_class c
