@@ -1,0 +1,85 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+.navbar.fixed-left {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 11;
+    font-size: 1.5rem;
+    height: 100vh;
+}
+
+@media (min-width: 768px) {
+    .navbar.fixed-left {
+        bottom:0;
+        flex-flow: column nowrap;
+        align-items: flex-start
+    }
+
+    .navbar.fixed-left .navbar-collapse {
+        flex-grow: 0;
+        flex-direction: column;
+        width: 100%
+    }
+
+    .navbar.fixed-left .navbar-collapse .navbar-nav {
+        flex-direction: column;
+        width: 100%
+    }
+
+    .navbar.fixed-left .navbar-collapse .navbar-nav .nav-item {
+        width: 100%
+    }
+
+    .navbar.fixed-left .navbar-collapse .navbar-nav li.nav-item:nth-last-child(2) {
+        width: 100%;
+        position: absolute;
+        bottom: 72px;
+    }
+
+    .navbar.fixed-left .navbar-collapse .navbar-nav li.nav-item:nth-last-child(1) {
+        width: 100%;
+        position: absolute;
+        bottom: 10px;
+    }
+
+    .navbar.fixed-left .navbar-collapse .navbar-nav .nav-item .dropdown-menu {
+        top: 0
+    }
+}
+
+@media (min-width: 768px) {
+    .navbar.fixed-left {
+        right:auto
+    }
+
+    .navbar.fixed-left .navbar-nav .nav-item .dropdown-toggle:after {
+        border-top: .3em solid transparent;
+        border-left: .3em solid;
+        border-bottom: .3em solid transparent;
+        border-right: none;
+        vertical-align: baseline
+    }
+
+    .navbar.fixed-left .navbar-nav .nav-item .dropdown-menu {
+        left: 100%
+    }
+}

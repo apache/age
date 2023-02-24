@@ -1,0 +1,57 @@
+{
+  "name": "cytoscape-cxtmenu",
+  "version": "3.1.2",
+  "description": "A circular, swipeable context menu extension for Cytoscape.js",
+  "main": "cytoscape-cxtmenu.js",
+  "author": {
+    "name": "Max Franz",
+    "email": "maxkfranz@gmail.com"
+  },
+  "scripts": {
+    "postpublish": "run-s gh-pages",
+    "gh-pages": "gh-pages -d pages",
+    "copyright": "update license",
+    "lint": "eslint src",
+    "build": "cross-env NODE_ENV=production webpack",
+    "build:min": "cross-env NODE_ENV=production MIN=true webpack",
+    "build:release": "run-s build copyright",
+    "watch": "webpack --progress --watch",
+    "dev": "webpack-dev-server --open",
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cytoscape/cytoscape.js-cxtmenu.git"
+  },
+  "keywords": [
+    "cytoscape",
+    "cytoscape-extension"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cytoscape/cytoscape.js-cxtmenu/issues"
+  },
+  "homepage": "https://github.com/cytoscape/cytoscape.js-cxtmenu",
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-loader": "^8.2.2",
+    "babel-preset-env": "^1.7.0",
+    "camelcase": "^6.2.0",
+    "chai": "4.3.0",
+    "cpy-cli": "^3.1.1",
+    "cross-env": "^7.0.3",
+    "eslint": "^7.19.0",
+    "gh-pages": "^3.1.0",
+    "mocha": "8.2.1",
+    "npm-run-all": "^4.1.5",
+    "rimraf": "^3.0.2",
+    "update": "^0.7.4",
+    "updater-license": "^1.0.0",
+    "webpack": "^5.21.2",
+    "webpack-dev-server": "^3.11.0"
+  },
+  "peerDependencies": {
+    "cytoscape": "^3.18.0"
+  },
+  "dependencies": {}
+}
