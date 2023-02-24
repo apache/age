@@ -3,9 +3,13 @@ name: JDBC Driver Tests
 on:
   push:
     branches: [ "master", "PG11" ]
+    paths:
+      - 'drivers/jdbc/**'
       
   pull_request:
     branches: [ "master", "PG11" ]
+    paths:
+      - 'drivers/jdbc/**'
 
 jobs:
   build:
