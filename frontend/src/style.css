@@ -1,0 +1,73 @@
+html {
+    background-color: rgb(127, 129, 131);
+    text-align: center;
+    color: rgb(18, 14, 14);
+    
+}
+
+body {
+    margin: 0;
+    color: rgb(53, 51, 54);
+    font-family: Georgia, serif;
+    font-size: large;
+}
+
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    src: local(""),
+    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+}
+
+#app {
+    height: 100vh;
+    text-align: center;
+    background:rgb(54, 51, 51);
+}
+
+.content
+{
+    display: block;
+    width: 50%;
+    height: 50%;
+    margin: auto;
+    padding: 10% 0 0;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    background-origin: content-box;
+    animation: animate 3s linear infinite;
+
+   
+}
+@keyframes animate {
+    0%{
+        filter: hue-rotate(0deg);
+    }
+    
+    100%{
+        filter: hue-rotate(360deg);
+    }
+    
+}
+
+.popup-button {
+  text-align: center;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 1em;
+  text-transform: uppercase;
+  color: white;
+  
+  /*Button shape & animation*/
+  border-radius: border-rounded;
+  margin: 10px;
+  padding: 1em 3em;
+  background-size: 200% auto;
+  color: white;
+  box-shadow: 0 4px 6px rgba(50,50,93,.11), 0 1px 3px rgba(0,0,0,.08);
+  background-image: linear-gradient(to right, #540772 0%, #9c0c89 50%, #22129b 100%);
+  transition: 0.5s;
+  
+}  
