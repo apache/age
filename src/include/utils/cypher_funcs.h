@@ -93,5 +93,6 @@ extern Datum tofloat(PG_FUNCTION_ARGS);
 extern Datum tofloatornull(PG_FUNCTION_ARGS);
 extern Datum e(PG_FUNCTION_ARGS);
 extern Datum date(PG_FUNCTION_ARGS);
+extern Datum localtime_c(PG_FUNCTION_ARGS);
 
 #endif							/* CYPHER_FUNCS_H */

@@ -2249,6 +2249,9 @@
 { oid => '1145',
   proname => 'time_eq', proleakproof => 't', prorettype => 'bool',
   proargtypes => 'time time', prosrc => 'time_eq' },
+{ oid => '8009', descr => 'returns the local timezone',
+  proname => 'localtime_c', prorettype => 'text', pronargs => '0',
+  proargtypes => '', prosrc => 'localtime_c' },
 
 { oid => '1146',
   proname => 'circle_add_pt', prorettype => 'circle',

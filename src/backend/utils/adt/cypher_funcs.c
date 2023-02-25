@@ -38,7 +38,6 @@
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 #include "utils/datetime.h"
-#include <string.h>
 
 /* global variable - see postgres.c*/
 extern GraphWriteStats graphWriteStats;
@@ -1667,4 +1666,12 @@ date(PG_FUNCTION_ARGS)
 	char s[11];
 	sprintf(s, "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
 	PG_RETURN_TEXT_P(cstring_to_text(s));
+}
+
+Datum
+localtime_c(PG_FUNCTION_ARGS)
+{
+	time_t t = time(NULL);
+	struct tm *tm = localtime(&t);
+	PG_RETURN_TEXT_P(cstring_to_text(tm->tm_zone));
 }
