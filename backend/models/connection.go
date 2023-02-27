@@ -9,12 +9,14 @@ import (
 )
 
 type Connection struct {
-	Port     string
-	Host     string
-	Password string
-	User     string
-	DbName   string
-	SSL      string `default:"require"`
+	Port      string
+	Host      string
+	Password  string
+	User      string
+	DbName    string
+	SSL       string `default:"require"`
+	GraphInit bool
+	Version   int
 }
 
 func FromRequestBody(context echo.Context) (*Connection, error) {

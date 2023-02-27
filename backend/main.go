@@ -15,5 +15,8 @@ func main() {
 	app.Use(session.UserSessions())
 
 	app.POST("/connect", routes.ConnectToDb)
+	cypher := app.Group("/query", routes.Cypher)
+	cypher.POST("/metadata", routes.GraphMetaData)
+
 	app.Start(":8080")
 }
