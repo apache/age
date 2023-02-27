@@ -15,8 +15,8 @@ type Connection struct {
 	User      string
 	DbName    string
 	SSL       string `default:"require"`
-	GraphInit bool   `default:false`
-	Version   string `default:"0"`
+	GraphInit bool
+	Version   int
 }
 
 func FromRequestBody(context echo.Context) (*Connection, error) {
