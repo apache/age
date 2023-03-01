@@ -11,7 +11,7 @@ import (
 	"github.com/labstack/echo"
 )
 
-func Cypher(next echo.HandlerFunc) echo.HandlerFunc {
+func CypherMiddleWare(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userDb := c.Get("database")
 
@@ -57,7 +57,39 @@ func Cypher(next echo.HandlerFunc) echo.HandlerFunc {
 
 	}
 }
+func Cypher(ctx echo.Context) error {
+	q := map[string]string{}
+	results := []interface{}{}
+	var err error
 
+	err = ctx.Bind(&q)
+	if err != nil {
+		return echo.NewHTTPError(400, "Unable to parse query")
+	}
+	conn := ctx.Get("conn").(*sql.DB)
+	rows, err := conn.Query(q["query"])
+
+	if err != nil {
+		return echo.NewHTTPError(400, fmt.Sprintf("unable to process query. error: %s", err.Error()))
+	}
+
+	cols, _ := rows.ColumnTypes()
+	print("0 index val", cols[0].DatabaseTypeName())
+	if len(cols) == 1 && cols[0].DatabaseTypeName() == "VOID" {
+		return ctx.JSON(204, map[string]string{
+			"status": "success",
+		})
+	}
+	for rows.Next() {
+		data := []any{}
+		err := rows.Scan(&data)
+		if err != nil {
+			print(fmt.Sprintf("\n\nerror: %s", err.Error()))
+		}
+		results = append(results, data)
+	}
+	return ctx.JSON(200, results)
+}
 func GraphMetaData(c echo.Context) error {
 
 	user := c.Get("user").(models.Connection)
@@ -71,9 +103,6 @@ func GraphMetaData(c echo.Context) error {
 		return echo.NewHTTPError(400, err.Error())
 	}
 	results := models.MetaDataContainer{}
-	if err != nil {
-		return echo.NewHTTPError(400, err.Error())
-	}
 
 	for data.Next() {
 		row := models.MetaData{}
