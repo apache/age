@@ -82,6 +82,7 @@ extern Datum jsonb_string_contains(PG_FUNCTION_ARGS);
 extern Datum jsonb_string_regex(PG_FUNCTION_ARGS);
 extern Datum str_size(PG_FUNCTION_ARGS);
 extern Datum tostringornull(PG_FUNCTION_ARGS);
+extern Datum split(PG_FUNCTION_ARGS);
 
 /* for array supports */
 extern Datum array_head(PG_FUNCTION_ARGS);
@@ -90,9 +91,11 @@ extern Datum array_tail(PG_FUNCTION_ARGS);
 extern Datum array_size(PG_FUNCTION_ARGS);
 extern Datum range_2_args(PG_FUNCTION_ARGS);
 extern Datum range_3_args(PG_FUNCTION_ARGS);
-extern Datum tostringlist(PG_FUNCTION_ARGS);
+extern Datum jsonb_tostringlist(PG_FUNCTION_ARGS);
+extern Datum array_tostringlist(PG_FUNCTION_ARGS);
 extern Datum jsonb_array_reverse(PG_FUNCTION_ARGS);
 extern Datum array_reverse(PG_FUNCTION_ARGS);
+extern Datum split(PG_FUNCTION_ARGS);
 
 /* for boolean support */
 extern Datum datum_toboolean(PG_FUNCTION_ARGS);
@@ -101,5 +104,11 @@ extern Datum datum_tobooleanornull(PG_FUNCTION_ARGS);
 
 /* utility */
 extern Datum get_last_graph_write_stats(PG_FUNCTION_ARGS);
+
+/* for date and time supports */
+extern Datum datetime(PG_FUNCTION_ARGS);
+extern Datum localdatetime(PG_FUNCTION_ARGS);
+extern Datum get_time(PG_FUNCTION_ARGS);
+extern Datum get_time_for_timezone(PG_FUNCTION_ARGS);
 
 #endif							/* CYPHER_FUNCS_H */
