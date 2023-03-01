@@ -33,12 +33,17 @@
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "utils/builtins.h"
+#include "utils/timestamp.h"
 #include "utils/cypher_funcs.h"
 #include "utils/jsonb.h"
-#include "math.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
+#include "parser/scansup.h"
+#include "utils/date.h"
+#include "utils/datetime.h"
+#include "pgtime.h"
 #include <string.h>
+#include <math.h>
 
 /* global variable - see postgres.c*/
 extern GraphWriteStats graphWriteStats;
@@ -71,7 +76,9 @@ static Jsonb *datum_to_jsonb(Datum d, Oid type);
 static bool int_to_bool(int32 num, bool *result);
 static bool string_to_bool(const char *str, bool *result);
 static Datum range(int start, int end, int step);
-
+static Datum datum_to_text(Datum d, Oid typeid);
+static Timestamp dt2local(Timestamp dt, int timezone);
+static Timestamp get_timestamp_for_timezone(text* zone, TimestampTz timestamp);
 
 Datum
 jsonb_head(PG_FUNCTION_ARGS)
@@ -1768,6 +1775,95 @@ range_3_args(PG_FUNCTION_ARGS)
 
 }
 
+
+/* utility function for tostringornull */
+Datum
+datum_to_text(Datum d, Oid typeid)
+{
+
+	char* s;
+	switch (typeid){
+
+		/* string types */
+		case VARCHAROID:
+		case BPCHAROID:
+		case TEXTOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(textout, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}				
+		
+		case CSTRINGOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(cstring_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
+		case BOOLOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(boolout, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}			
+
+		/* integer and numeric types */
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(int4out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}			
+
+		case NUMERICOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(numeric_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
+		/* date and time types */
+		case DATEOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(date_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
+		case TIMEOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(time_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
+		case TIMESTAMPOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(timestamp_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
+		/* unknown type */
+		case UNKNOWNOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(unknownout, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+
+		}			
+		
+
+		default:
+			break;
+	}	
+
+	PG_RETURN_DATUM(0);	
+}
+
 /*
  * tostringornull:
  *		returns the string or null eqquivalent of a datum
@@ -1778,85 +1874,9 @@ Datum
 tostringornull(PG_FUNCTION_ARGS)
 {
 	Oid			typeid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	Datum 		d = PG_GETARG_DATUM(0);
 
-	switch (typeid){
-
-		/* string types */
-		case VARCHAROID:
-		case BPCHAROID:
-		case TEXTOID:
-		{
-			PG_RETURN_TEXT_P(PG_GETARG_TEXT_P(0));
-		}				
-		
-		case CSTRINGOID:
-		{
-			char 	*s = PG_GETARG_CSTRING(0);
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}
-
-		case BOOLOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(boolout, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}			
-
-		/* integer and numeric types */
-		case INT2OID:
-		case INT4OID:
-		case INT8OID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(int4out, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}			
-
-		case NUMERICOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(numeric_out, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}
-
-		/* date and time types */
-		case DATEOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(date_out, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}
-
-		case TIMEOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(time_out, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}
-
-		case TIMESTAMPOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(timestamp_out, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-		}
-
-		/* unknown type */
-		case UNKNOWNOID:
-		{
-			char* 	s = DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0)));
-			PG_RETURN_TEXT_P(cstring_to_text(s));
-			break;
-
-		}			
-		
-
-		default:
-			break;
-	}	
-
-	PG_RETURN_NULL();	
+	PG_RETURN_DATUM(datum_to_text(d, typeid));	
 }
 
 
@@ -1867,7 +1887,7 @@ tostringornull(PG_FUNCTION_ARGS)
  * 				 tostringlist([null,'1289',34.6]) = [null,'1289','34.6']
  */
 Datum
-tostringlist(PG_FUNCTION_ARGS)
+jsonb_tostringlist(PG_FUNCTION_ARGS)
 {
 
 	Jsonb	   *j = PG_GETARG_JSONB_P(0);
@@ -1941,6 +1961,66 @@ tostringlist(PG_FUNCTION_ARGS)
 	ajv = pushJsonbValue(&jpstate, WJB_END_ARRAY, NULL);
 
 	PG_RETURN_JSONB_P(JsonbValueToJsonb(ajv));
+}
+
+
+Datum
+array_tostringlist(PG_FUNCTION_ARGS)
+{
+
+	AnyArrayType 	*arr = PG_GETARG_ANY_ARRAY_P(0);
+	int				ndims = AARR_NDIM(arr);
+	int		   		*dims = AARR_DIMS(arr);
+	int				nitems = ArrayGetNItems(ndims, dims);
+	Oid				element_type = AARR_ELEMTYPE(arr);
+	TypeCacheEntry 	*typentry;
+	int				typlen;
+	bool			typbyval;
+	char			typalign;
+	int				i;
+	Datum			rtnelt;
+
+	ArrayBuildState *astate = NULL;
+
+	typentry = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
+
+	if (typentry == NULL ||
+		typentry->type_id != element_type)
+	{
+		typentry = lookup_type_cache(element_type,
+									 TYPECACHE_CMP_PROC_FINFO);
+		if (!OidIsValid(typentry->cmp_proc_finfo.fn_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 errmsg("could not identify a comparison function for type %s",
+							format_type_be(element_type))));
+		fcinfo->flinfo->fn_extra = (void *) typentry;
+	}
+
+	typlen = typentry->typlen;
+	typbyval = typentry->typbyval;
+	typalign = typentry->typalign;
+
+	astate = initArrayResult(TEXTOID, CurrentMemoryContext, false);
+
+	for (i = 1; i <= nitems; i++)
+	{
+
+		rtnelt = datum_to_text(array_get_element(PointerGetDatum(arr),
+								   1,
+								   &i,
+								   -1,
+								   typlen,
+								   typbyval,
+								   typalign,
+								   &typbyval), element_type);
+		astate =
+			accumArrayResult(astate, rtnelt, false,
+							 TEXTOID, CurrentMemoryContext);
+
+	}
+
+	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
 }
 
 
@@ -2053,4 +2133,283 @@ array_reverse(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
+}
+
+/*
+ * split:
+ *		splits the text into array based on the delimiter given
+ *		example: split('Hi/Hello/Welcome','/') =  ["Hi","Hello","Welcome"]
+ */
+Datum
+split(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_ARRAYTYPE_P(text_to_array(fcinfo));
+}
+
+/* Helper function to get local datetime */
+static Timestamp
+dt2local(Timestamp dt, int tz)
+{
+	dt -= (tz * USECS_PER_SEC);
+	return dt;
+}
+
+
+/* Helper function to get timestamp for a particular timezone */
+static Timestamp
+get_timestamp_for_timezone(text* zone, TimestampTz timestamp)
+{	
+	Timestamp	result;
+	int			tz;
+	char		tzname[TZ_STRLEN_MAX + 1];
+	char	   *lowzone;
+	int			type,
+				val;
+	pg_tz	   *tzp;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_TIMESTAMP(timestamp);
+
+	/*
+	 * Look up the requested timezone.  First we look in the timezone
+	 * abbreviation table (to handle cases like "EST"), and if that fails, we
+	 * look in the timezone database (to handle cases like
+	 * "America/New_York").  (This matches the order in which timestamp input
+	 * checks the cases; it's important because the timezone database unwisely
+	 * uses a few zone names that are identical to offset abbreviations.)
+	 */
+	text_to_cstring_buffer(zone, tzname, sizeof(tzname));
+
+	/* DecodeTimezoneAbbrev requires lowercase input */
+	lowzone = downcase_truncate_identifier(tzname,
+										   strlen(tzname),
+										   false);
+
+	type = DecodeTimezoneAbbrev(0, lowzone, &val, &tzp);
+
+	if (type == 5 || type == 6)
+	{
+		/* fixed-offset abbreviation */
+		tz = -val;
+		result = dt2local(timestamp, tz);
+	}
+	else if (type == 7)
+	{
+		/* dynamic-offset abbreviation, resolve using specified time */
+		int			isdst;
+
+		tz = DetermineTimeZoneAbbrevOffsetTS(timestamp, tzname, tzp, &isdst);
+		result = dt2local(timestamp, tz);
+	}
+	else
+	{
+		/* try it as a full zone name */
+		tzp = pg_tzset(tzname);
+		if (tzp)
+		{
+			/* Apply the timezone change */
+			struct pg_tm tm;
+			fsec_t		fsec;
+
+			if (timestamp2tm(timestamp, &tz, &tm, &fsec, NULL, tzp) != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+						 errmsg("timestamp out of range")));
+			if (tm2timestamp(&tm, fsec, NULL, &result) != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+						 errmsg("timestamp out of range")));
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("time zone \"%s\" not recognized", tzname)));
+			result = 0;			/* keep compiler quiet */
+		}
+	}
+
+	if (!IS_VALID_TIMESTAMP(result))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	PG_RETURN_TIMESTAMP(result);
+}
+
+/*
+ * datetime:
+ *		constructs a timestamp for the given timezone
+ *		example: datetime(2020,5,26,10,45,56,0,0,'GMT') = "2020-05-26T10:45:56"
+ */
+Datum
+datetime(PG_FUNCTION_ARGS)
+{
+	int32_t 	year,
+				month,
+				day,
+				hour,
+				min,
+				seconds,
+				millisec,
+				nanosec;
+	double		sec;
+	text*	   	zone;	
+	struct 		pg_tm tm;
+	TimeOffset	date;
+	TimeOffset	time;
+	int			dterr;
+	bool		bc = false;
+	Timestamp	result;
+
+	year = PG_GETARG_INT32(0);
+	month = PG_GETARG_INT32(1);
+	day = PG_GETARG_INT32(2);
+	hour = PG_GETARG_INT32(3);
+	min = PG_GETARG_INT32(4);
+	seconds = PG_GETARG_INT32(5);
+	millisec = PG_GETARG_INT32(6);
+	nanosec = PG_GETARG_INT32(7);
+	sec = (double) seconds + (double) (millisec*0.001) + (double) (nanosec*0.000001);
+
+	zone = cstring_to_text(DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(8))));	
+
+	tm.tm_year = year;
+	tm.tm_mon = month;
+	tm.tm_mday = day;
+
+	/* Handle negative years as BC */
+	if (tm.tm_year < 0)
+	{
+		bc = true;
+		tm.tm_year = -tm.tm_year;
+	}
+
+	dterr = ValidateDate(DTK_DATE_M, false, false, bc, &tm);
+
+	if (dterr != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_FIELD_OVERFLOW),
+				 errmsg("date field value out of range: %d-%02d-%02d",
+						year, month, day)));
+
+	if (!IS_VALID_JULIAN(tm.tm_year, tm.tm_mon, tm.tm_mday))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("date out of range: %d-%02d-%02d",
+						year, month, day)));
+
+	date = date2j(tm.tm_year, tm.tm_mon, tm.tm_mday) - POSTGRES_EPOCH_JDATE;
+
+	/* Check for time overflow */
+	if (float_time_overflows(hour, min, sec))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_FIELD_OVERFLOW),
+				 errmsg("time field value out of range: %d:%02d:%02g",
+						hour, min, sec)));
+
+	/* This should match tm2time */
+	time = (((hour * MINS_PER_HOUR + min) * SECS_PER_MINUTE)
+			* USECS_PER_SEC) + (int64) rint(sec * USECS_PER_SEC);
+
+	result = date * USECS_PER_DAY + time;
+	/* check for major overflow */
+	if ((result - time) / USECS_PER_DAY != date)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range: %d-%02d-%02d %d:%02d:%02g",
+						year, month, day,
+						hour, min, sec)));
+
+	/* check for just-barely overflow (okay except time-of-day wraps) */
+	/* caution: we want to allow 1999-12-31 24:00:00 */
+	if ((result < 0 && date > 0) ||
+		(result > 0 && date < -1))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range: %d-%02d-%02d %d:%02d:%02g",
+						year, month, day,
+						hour, min, sec)));
+
+	/* final range check catches just-out-of-range timestamps */
+	if (!IS_VALID_TIMESTAMP(result))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range: %d-%02d-%02d %d:%02d:%02g",
+						year, month, day,
+						hour, min, sec)));
+
+	PG_RETURN_TIMESTAMP(get_timestamp_for_timezone(zone, result));
+}
+
+
+/*
+ * localdatetime:
+ *		returns the current timestamp in a specified time zone
+ *		example: localdatetime('Asia/Kolkata') =  "2023-02-28T19:59:13.485879"
+ */
+Datum
+localdatetime(PG_FUNCTION_ARGS)
+{
+	text*	   	zone = cstring_to_text(DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0))));	
+	TimestampTz timestamp = now(fcinfo);
+	PG_RETURN_TIMESTAMP(get_timestamp_for_timezone(zone, timestamp));
+	
+}
+
+
+/*
+ * get_time:
+ *		returns the current local time with precision 6
+ *		example: get_time() =  "21:28:54.677068"
+ */
+Datum
+get_time(PG_FUNCTION_ARGS)
+{
+	TimeADT		result;
+	struct pg_tm tt,
+			   *tm = &tt;
+	fsec_t		fsec;
+	int			tz;
+
+	GetCurrentTimeUsec(tm, &fsec, &tz);
+
+	tm2time(tm, fsec, &result);
+	AdjustTimeForTypmod(&result, 6);
+	return result;
+	PG_RETURN_TIMEADT(result);
+}
+
+/*
+ * get_time_for_timezone:
+ *		returns the current local time with precision 4
+ *		example: get_time_for_timezone('GMT') =   "16:06:04.994725"
+ */
+Datum
+get_time_for_timezone(PG_FUNCTION_ARGS)
+{
+	text*	   	zone = cstring_to_text(DatumGetCString(DirectFunctionCall1(unknownout, PG_GETARG_DATUM(0))));
+	TimestampTz ts = now(fcinfo);
+	Timestamp timestamp = get_timestamp_for_timezone(zone, ts);
+	TimeADT		result;
+	struct pg_tm tt,
+			   *tm = &tt;
+	fsec_t		fsec;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_NULL();
+
+	if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	/*
+	 * Could also do this with time = (timestamp / USECS_PER_DAY *
+	 * USECS_PER_DAY) - timestamp;
+	 */
+	result = ((((tm->tm_hour * MINS_PER_HOUR + tm->tm_min) * SECS_PER_MINUTE) + tm->tm_sec) *
+			  USECS_PER_SEC) + fsec;
+
+	PG_RETURN_TIMEADT(result);
 }
