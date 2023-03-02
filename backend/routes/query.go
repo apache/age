@@ -2,6 +2,7 @@ package routes
 
 import (
 	"age-viewer-go/db"
+	m "age-viewer-go/miscellaneous"
 	"age-viewer-go/models"
 	"database/sql"
 	"fmt"
@@ -64,7 +65,11 @@ func Cypher(ctx echo.Context) error {
 
 	err = ctx.Bind(&q)
 	if err != nil {
-		return echo.NewHTTPError(400, "Unable to parse query")
+		e := m.ErrorHandle{
+			Msg: "unable to parse query",
+			Err: err,
+		}
+		return ctx.JSON(400, e.JSON())
 	}
 	conn := ctx.Get("conn").(*sql.DB)
 	rows, err := conn.Query(q["query"])
