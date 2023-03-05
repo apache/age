@@ -243,9 +243,10 @@ $$) as (v agtype);
 To query the graph, you can use the MATCH clause.  
 
 ```bash
-SELECT * FROM cypher('graph_name', $$
-MATCH (v)
-RETURN v
+SELECT * 
+FROM cypher('graph_name', $$
+    MATCH (v)
+    RETURN v
 $$) as (v agtype);
 ```
 
