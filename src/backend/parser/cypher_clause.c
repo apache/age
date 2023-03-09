@@ -4778,7 +4778,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
         parent = list_make1(rv);
 
         create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
-                     parent);
+                     parent, false);
     }
 
     // lock the relation of the label
@@ -5003,7 +5003,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
         parent = list_make1(rv);
 
         create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
-                     parent);
+                     parent, false);
     }
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
@@ -5792,7 +5792,7 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
         // create the label
         create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
-                     parent);
+                     parent, false);
     }
 
     // lock the relation of the label
@@ -5896,7 +5896,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
         // create the label
         create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
-                     parent);
+                     parent, false);
     }
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;

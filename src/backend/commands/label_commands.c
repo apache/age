@@ -25,6 +25,7 @@
 #include "catalog/namespace.h"
 #include "catalog/objectaddress.h"
 #include "catalog/pg_class_d.h"
+#include "catalog/pg_type.h"
 #include "commands/defrem.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
@@ -59,11 +60,13 @@
  * that users can find the backed relation for a label only by its name.
  */
 #define gen_label_relation_name(label_name) (label_name)
+#define NO_INHERITANCE 0
+#define YES_INHERITANCE 1
 
 static void create_table_for_label(char *graph_name, char *label_name,
                                    char *schema_name, char *rel_name,
                                    char *seq_name, char label_type,
-                                   List *parents);
+                                   List *parents, int is_inheriting);
 
 // common
 static List *create_edge_table_elements(char *graph_name, char *label_name,
@@ -100,14 +103,22 @@ PG_FUNCTION_INFO_V1(create_vlabel);
 
 /*
  * This is a callback function
- * This function will be called when the user will call SELECT create_vlabel.
- * The function takes two parameters
+ * This function will be called when the user calls SELECT create_vlabel.
+ * 
+ * The function takes two or three parameters:
+ * 
  * 1. Graph name
  * 2. Label Name
- * Function will create a vertex label
- * Function returns an error if graph or label names or not provided
+ * 3. Parent Label List
+ * 
+ * Function will create a vertex label.
+ * 
+ * Function returns an error if graph or label names or not provided.
+ * 
+ * Note that passing a list of strings as the third parameter will create 
+ * a label that inherits from the passed parent label name. The third 
+ * argument has to be passed as: ARRAY['parent1','parent2','parent3']
 */
-
 Datum create_vlabel(PG_FUNCTION_ARGS)
 {
     char *graph;
@@ -121,6 +132,14 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     char *label;
     Name label_name;
     char *label_name_str;
+    
+    ArrayType *array;
+    Datum *elements;
+    char *parent_name_str;
+    bool *parent_nulls;
+    int nelements = 0;
+    int is_inheriting = NO_INHERITANCE;
+    
 
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
@@ -164,11 +183,49 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    // checking if user has provided the parent's name list.
+    if (!PG_ARGISNULL(2)) 
+    {
 
-    parent = list_make1(rv);
+        // Get the content from the third argument
+        array = PG_GETARG_ARRAYTYPE_P(2);
+        is_inheriting = YES_INHERITANCE;
 
-    create_label(graph, label, LABEL_TYPE_VERTEX, parent);
+        // Deconstruct the ArrayType to NAMEOID.
+        deconstruct_array(array, NAMEOID, 63, false, 'i', &elements, &parent_nulls, &nelements);
+        
+        // Check for each parent in the list.
+        for (int i = 0; i < nelements; i++) 
+        {
+            
+            parent_name_str = DatumGetCString(elements[i]);
+
+            // Check if parent label does not exist
+            if (!label_exists(parent_name_str, graph_oid)) 
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                                errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+            }
+
+            rv = get_label_range_var(graph, graph_oid, parent_name_str);
+
+            if (i == 0)
+                parent = list_make1(rv);
+            else
+                lappend(parent, rv);
+
+            elog(NOTICE, "VLabel %s will inherit from %s", label_name_str, parent_name_str);
+        }
+    }
+
+    else 
+    {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+        parent = list_make1(rv);
+    }
+
+    create_label(graph, label, LABEL_TYPE_VERTEX, parent, is_inheriting);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", NameStr(*label_name))));
@@ -201,6 +258,13 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     char *label;
     Name label_name;
     char *label_name_str;
+
+    ArrayType *array;
+    Datum *elements;
+    char *parent_name_str;
+    bool *parent_nulls;
+    int nelements = 0;
+    int is_inheriting = NO_INHERITANCE;
 
     // checking if user has not provided the graph name
     if (PG_ARGISNULL(0))
@@ -244,10 +308,49 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     graph = graph_name->data;
     label = label_name->data;
 
-    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+    // checking if user has provided the parent's name list.
+    if (!PG_ARGISNULL(2)) 
+    {
 
-    parent = list_make1(rv);
-    create_label(graph, label, LABEL_TYPE_EDGE, parent);
+        // Get the content from the third argument
+        array = PG_GETARG_ARRAYTYPE_P(2);
+        is_inheriting = YES_INHERITANCE;
+
+        // Deconstruct the ArrayType to NAMEOID.
+        deconstruct_array(array, NAMEOID, 63, false, 'i', &elements, &parent_nulls, &nelements);
+        
+        // Check for each parent in the list.
+        for (int i = 0; i < nelements; i++) 
+        {
+            
+            parent_name_str = DatumGetCString(elements[i]);
+
+            // Check if parent label does not exist
+            if (!label_exists(parent_name_str, graph_oid)) 
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                                errmsg("parent label \"%s\" does not exist.", parent_name_str)));
+            }
+
+            rv = get_label_range_var(graph, graph_oid, parent_name_str);
+
+            if (i == 0)
+                parent = list_make1(rv);
+            else
+                lappend(parent, rv);
+
+            elog(NOTICE, "ELabel %s will inherit from %s", label_name_str, parent_name_str);
+        }
+    }
+
+    else 
+    {
+        rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+        parent = list_make1(rv);
+    }
+
+    create_label(graph, label, LABEL_TYPE_EDGE, parent, is_inheriting);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", NameStr(*label_name))));
@@ -261,7 +364,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * ag_catalog.ag_label.
  */
 Oid create_label(char *graph_name, char *label_name, char label_type,
-                 List *parents)
+                 List *parents, int is_inheriting)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -298,7 +401,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
 
     // create a table for the new label
     create_table_for_label(graph_name, label_name, schema_name, rel_name,
-                           seq_name, label_type, parents);
+                           seq_name, label_type, parents, is_inheriting);
 
     // record the new label in ag_label
     relation_id = get_relname_relid(rel_name, nsp_id);
@@ -331,7 +434,7 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
 static void create_table_for_label(char *graph_name, char *label_name,
                                    char *schema_name, char *rel_name,
                                    char *seq_name, char label_type,
-                                   List *parents)
+                                   List *parents, int is_inheriting)
 {
     CreateStmt *create_stmt;
     PlannedStmt *wrapper;
@@ -340,13 +443,13 @@ static void create_table_for_label(char *graph_name, char *label_name,
 
     // relpersistence is set to RELPERSISTENCE_PERMANENT by makeRangeVar()
     create_stmt->relation = makeRangeVar(schema_name, rel_name, -1);
-
+    
     /*
      * When a new table has parents, do not create a column definition list.
      * Use the parents' column definition list instead, via Postgres'
      * inheritance system.
      */
-    if (list_length(parents) != 0)
+    if (list_length(parents) != 0 && is_inheriting == NO_INHERITANCE)
         create_stmt->tableElts = NIL;
     else if (label_type == LABEL_TYPE_EDGE)
         create_stmt->tableElts = create_edge_table_elements(

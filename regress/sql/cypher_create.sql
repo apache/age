@@ -33,6 +33,40 @@ SELECT * FROM cypher('cypher_create', $$CREATE (:v {key: 'value'})$$) AS (a agty
 
 SELECT * FROM cypher('cypher_create', $$MATCH (n:v) RETURN n$$) AS (n agtype);
 
+-- Vertex label inheritance
+SELECT create_vlabel('cypher_create', 'parent_vlabel');
+
+SELECT create_vlabel('cypher_create', 'child_vlabel_one', ARRAY['parent_vlabel']);
+
+SELECT create_vlabel('cypher_create', 'child_vlabel_two', ARRAY['parent_vlabel', 'child_vlabel_one']);
+
+SELECT create_vlabel('cypher_create', 'child_vlabel_three', ARRAY['parent_vlabel', 'child_vlabel_one', 'child_vlabel_two']);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (n:parent_vlabel {}) RETURN n$$) AS (n agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (n:child_vlabel_one {}) RETURN n$$) AS (n agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (n:child_vlabel_two {}) RETURN n$$) AS (n agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (n:child_vlabel_three {}) RETURN n$$) AS (n agtype);
+
+-- Edge label inheritance
+SELECT create_elabel('cypher_create', 'parent_elabel');
+
+SELECT create_elabel('cypher_create', 'child_elabel_one', ARRAY['parent_elabel']);
+
+SELECT create_elabel('cypher_create', 'child_elabel_two', ARRAY['parent_elabel', 'child_elabel_one']);
+
+SELECT create_elabel('cypher_create', 'child_elabel_three', ARRAY['parent_elabel', 'child_elabel_one', 'child_elabel_two']);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[parent_e:parent_elabel]->(:v) RETURN parent_e$$) AS (parent_e agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[child_one_e:child_elabel_one]->(:v) RETURN child_one_e$$) AS (child_one_e agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[child_two_e:child_elabel_two]->(:v) RETURN child_two_e$$) AS (child_two_e agtype);
+
+SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[child_three_e:child_elabel_three]->(:v) RETURN child_three_e$$) AS (child_three_e agtype);
+
 -- Left relationship
 SELECT * FROM cypher('cypher_create', $$
     CREATE (:v {id:"right rel, initial node"})-[:e {id:"right rel"}]->(:v {id:"right rel, end node"})
