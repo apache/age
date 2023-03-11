@@ -34,4 +34,4 @@ cp -p age.control %{pginstdir}/share/extension/age.control
 
 %changelog
 * Fri Feb 17 2023 - Khurram Latif <Khurram.L@agedb.io>
-- Initial packaging for AEP
+- Initial packaging for postgres-age
