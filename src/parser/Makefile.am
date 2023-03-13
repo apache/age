@@ -19,6 +19,8 @@ libsql_parser_a_SOURCES  = \
 	$(top_srcdir)/src/utils/mmgr/mcxt.c \
 	$(top_srcdir)/src/utils/mmgr/aset.c \
 	$(top_srcdir)/src/utils/error/elog.c \
+	../age/age_pool.c ../age/ag_nodes.c ../age/ag_scanner.c \
+	../age/cypher_gram.c ../age/cypher_parser.c \
 	wchar.c scan.c
 
 if use_repl_snprintf
