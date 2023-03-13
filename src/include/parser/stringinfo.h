@@ -207,4 +207,7 @@ extern void appendBinaryStringInfoNT(StringInfo str,
  */
 extern void enlargeStringInfo(StringInfo str, int needed);
 
+extern int	strtoint(const char* str, char** endptr,
+					 int base);
+
 #endif							/* STRINGINFO_H */
