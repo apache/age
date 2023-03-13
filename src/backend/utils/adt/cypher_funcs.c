@@ -32,6 +32,7 @@
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
+#include "utils/arrayaccess.h"
 #include "utils/builtins.h"
 #include "utils/timestamp.h"
 #include "utils/cypher_funcs.h"
@@ -1376,8 +1377,10 @@ array_tail(PG_FUNCTION_ARGS)
 	char		typalign;
 	int			i;
 	Datum		rtnelt;
+	bool		isnull1;
 
 	ArrayBuildState *astate = NULL;
+	array_iter	it;
 
 	typentry = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 
@@ -1398,23 +1401,23 @@ array_tail(PG_FUNCTION_ARGS)
 	typbyval = typentry->typbyval;
 	typalign = typentry->typalign;
 
+	/* setup iterator for array and iterate once to ignore this element */
+	array_iter_setup(&it, arr);
+	array_iter_next(&it, &isnull1, 0,
+				typlen, typbyval, typalign);
+
 	astate = initArrayResult(element_type, CurrentMemoryContext, false);
 
-	for (i = 2; i <= nitems; i++)
+	/* iterate over the array */
+	for (i = 1; i <nitems; i++)
 	{
+		/* get datum at index i */
+		rtnelt = array_iter_next(&it, &isnull1, i,
+				typlen, typbyval, typalign);
 
-		rtnelt = array_get_element(PointerGetDatum(arr),
-								   1,
-								   &i,
-								   -1,
-								   typlen,
-								   typbyval,
-								   typalign,
-								   &typbyval);
 		astate =
 			accumArrayResult(astate, rtnelt, false,
 							 element_type, CurrentMemoryContext);
-
 	}
 
 	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
@@ -1897,7 +1900,7 @@ jsonb_tostringlist(PG_FUNCTION_ARGS)
 	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("reverse(): list is expected but %s",
+				 errmsg("toStringList(): list is expected but %s",
 						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
 
 	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
@@ -1977,10 +1980,11 @@ array_tostringlist(PG_FUNCTION_ARGS)
 	int				typlen;
 	bool			typbyval;
 	char			typalign;
-	int				i;
-	Datum			rtnelt;
-
 	ArrayBuildState *astate = NULL;
+	array_iter		it;
+	Datum			rtnelt;
+	bool			isnull1;
+	int				i;
 
 	typentry = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 
@@ -2001,19 +2005,18 @@ array_tostringlist(PG_FUNCTION_ARGS)
 	typbyval = typentry->typbyval;
 	typalign = typentry->typalign;
 
+	/* setup iterator for array */
+	array_iter_setup(&it, arr);
+
 	astate = initArrayResult(TEXTOID, CurrentMemoryContext, false);
 
-	for (i = 1; i <= nitems; i++)
+	/* iterate over the array */
+	for (i = 0; i <nitems; i++)
 	{
+		/* get datum at index i */
+		rtnelt = datum_to_text(array_iter_next(&it, &isnull1, i,
+					typlen, typbyval, typalign), element_type);
 
-		rtnelt = datum_to_text(array_get_element(PointerGetDatum(arr),
-								   1,
-								   &i,
-								   -1,
-								   typlen,
-								   typbyval,
-								   typalign,
-								   &typbyval), element_type);
 		astate =
 			accumArrayResult(astate, rtnelt, false,
 							 TEXTOID, CurrentMemoryContext);
@@ -2081,19 +2084,20 @@ Datum
 array_reverse(PG_FUNCTION_ARGS)
 {
 
-	AnyArrayType *arr = PG_GETARG_ANY_ARRAY_P(0);
-	int			ndims = AARR_NDIM(arr);
-	int		   *dims = AARR_DIMS(arr);
-	int			nitems = ArrayGetNItems(ndims, dims);
-	Oid			element_type = AARR_ELEMTYPE(arr);
-	TypeCacheEntry *typentry;
-	int			typlen;
-	bool		typbyval;
-	char		typalign;
-	int			i;
-	Datum		rtnelt;
-
-	ArrayBuildState *astate = NULL;
+	AnyArrayType 	*arr = PG_GETARG_ANY_ARRAY_P(0);
+	ArrayType*		newArray;
+	int				ndims = AARR_NDIM(arr);
+	int		   		*dims = AARR_DIMS(arr);
+	int				nitems = ArrayGetNItems(ndims, dims);
+	Oid				element_type = AARR_ELEMTYPE(arr);
+	TypeCacheEntry 	*typentry;
+	int				typlen;
+	bool			typbyval;
+	char			typalign;
+	array_iter		it;
+	Datum*			datumArr;
+	bool			isnull1;
+	int				i;
 
 	typentry = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 
@@ -2114,25 +2118,21 @@ array_reverse(PG_FUNCTION_ARGS)
 	typbyval = typentry->typbyval;
 	typalign = typentry->typalign;
 
-	astate = initArrayResult(element_type, CurrentMemoryContext, false);
+	datumArr = (Datum *) palloc(nitems * sizeof(Datum));
+	/* setup iterator for array */
+	array_iter_setup(&it, arr);
 
-	for (i = nitems; i >0; i--)
+	/* iterate over the array */
+	for (i = nitems-1; i >= 0; i--)
 	{
-		rtnelt = array_get_element(PointerGetDatum(arr),
-								   1,
-								   &i,
-								   -1,
-								   typlen,
-								   typbyval,
-								   typalign,
-								   &typbyval);
-		astate =
-			accumArrayResult(astate, rtnelt, false,
-							 element_type, CurrentMemoryContext);
+		/* get datum at index i */
+		datumArr[i] = array_iter_next(&it, &isnull1, i,
+				typlen, typbyval, typalign);
 
 	}
 
-	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
+	newArray = construct_array(datumArr, nitems, element_type, typlen, typbyval, typalign);
+	PG_RETURN_ARRAYTYPE_P(newArray);
 }
 
 /*
