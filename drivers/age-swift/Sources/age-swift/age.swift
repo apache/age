@@ -35,7 +35,6 @@ func setUpAge(connection:Connection, graphName: String){
             break;
         }
                 
-                
         if oid == nil{
             // Will raise exception over here
         }
