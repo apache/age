@@ -305,7 +305,7 @@ typedef struct A_Const
 	 * Value nodes are inline for performance.  You can treat 'val' as a node,
 	 * as in IsA(&val, Integer).  'val' is not valid if isnull is true.
 	 */
-	union ValUnion
+	union ValUnion_Pool
 	{
 		Node		node;
 		Integer		ival;
@@ -314,9 +314,14 @@ typedef struct A_Const
 		String		sval;
 		BitString	bsval;
 	}			val;
+
+	Value val_age; //used by AGE
+
 	bool		isnull;			/* SQL NULL constant */
 	int			location;		/* token location, or -1 if unknown */
 } A_Const;
+
+
 
 /*
  * TypeCast - a CAST expression
