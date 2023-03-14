@@ -22,15 +22,34 @@ Visualize graph data generated using Apache AGE with Apache AGE Viewer applicati
 
 **Ageviewer_go** Desktop application is a graphical user interface (**GUI**) for managing and developing **Apache-age databases**. It provides a unified and integrated experience for working with Apache-age databases, making it easier for developers and administrators to perform common tasks. Some of the key features and functionalities of Ageviewer_go Desktop will include:
 
--  1. Graph Data Visualization: Ageviewer_go Desktop will provide a visual graph data browser for exploring and querying the data stored in your apache-age databases.
+- <b>Starting Application:</b> Starting window, where it checks system requirements,runtime environment,distributions and other processing that is in happening in our current Age-Viewer in cmd while it's running.
+     
+- <b>Authorization:</b> Home screen should be prompt after successful checks of start window (having no conflicting error then can enter to home screen).Home screen should have features like:
+     <ol>
+       <li>List of projects</li>
+       <li> Example project(for demo purpose)</li>
+       <li>DBMS</li>
+       <li>Graph Apps</li>
+       <li>Developer tools etc.</li>
+     </ol>
   
--  2. Project Management: The application will allow you to manage multiple projects, each with its own set of databases and associated configuration settings.
+- <b>Graph Data Visualization:</b> Ageviewer_go Desktop will provide a visual graph data browser for exploring and querying the data stored in your apache-age databases.
+  
+- <b>Project Management:</b> The application will allow you to manage multiple projects, each with its own set of databases and associated configuration settings.
  
--  3. Database Management: Ageviewer_go will provide a simple and intuitive interface for managing apache-age databases, including starting and stopping the database, backing up and restoring the database, and managing users and permissions.
+- <b>Database Management:</b> Ageviewer_go will provide a simple and intuitive interface for managing apache-age databases, including starting and stopping the database, backing up and restoring the database, and managing users and permissions.
  
--  4. Query Editing: Ageviewer_go desktop application will include a query editor with syntax highlighting and autocompletion, making it easier to write and test Cypher queries.
- 
-- 5. Schema Management: It will also provide a visual schema editor for creating and managing indexes, constraints, and labels in your apache-age databases.
+- <b>Query Editing:</b> Ageviewer_go desktop application will include a query editor with syntax highlighting and autocompletion, making it easier to write and test Cypher queries.
+     
+- <b>Frontend: </b> Responsive for all the screen resolution,correct scaling and alignment of buttons and tables and should use appropriate colours.
+   
+- <b>Query Translation: </b> Entered query translated to give appropriate results.
+     
+- <b> Identification of SQL/Postgres: </b> Classification of SQL and Cypher must be present so we can clearly translate cyphers.
+    
+- <b>Schema Management:</b> It will also provide a visual schema editor for creating and managing indexes, constraints, and labels in your apache-age databases.
+     
+   <b><i>Overall cycle work as : Data gathered from Db,Query entered,Query Translation, Output in Graph format(In Frontened)</b></i>
 
 
 </p>
