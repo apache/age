@@ -60,7 +60,6 @@ func CypherMiddleWare(next echo.HandlerFunc) echo.HandlerFunc {
 }
 func Cypher(ctx echo.Context) error {
 	q := map[string]string{}
-	results := []interface{}{}
 	var err error
 
 	err = ctx.Bind(&q)
@@ -72,37 +71,35 @@ func Cypher(ctx echo.Context) error {
 		return ctx.JSON(400, e.JSON())
 	}
 	conn := ctx.Get("conn").(*sql.DB)
-	rows, err := conn.Query(q["query"])
-
+	c := make(chan m.ChannelResults, 1)
+	m.CypherCall(conn, q, c)
+	data := <-c
+	err = data.Err
+	res := data.Res
+	msg := data.Msg
 	if err != nil {
 		return echo.NewHTTPError(400, fmt.Sprintf("unable to process query. error: %s", err.Error()))
 	}
 
-	cols, _ := rows.ColumnTypes()
-	print("0 index val", cols[0].DatabaseTypeName())
-	if len(cols) == 1 && cols[0].DatabaseTypeName() == "VOID" {
-		return ctx.JSON(204, map[string]string{
-			"status": "success",
-		})
+	if _, ok := msg["status"]; ok {
+		return ctx.JSON(204, msg)
 	}
-	for rows.Next() {
-		data := []any{}
-		err := rows.Scan(&data)
-		if err != nil {
-			print(fmt.Sprintf("\n\nerror: %s", err.Error()))
-		}
-		results = append(results, data)
-	}
-	return ctx.JSON(200, results)
+
+	return ctx.JSON(200, res)
 }
+
 func GraphMetaData(c echo.Context) error {
+	dataChan := make(chan *sql.Rows, 1)
+	errChan := make(chan error, 1)
 
 	user := c.Get("user").(models.Connection)
 	conn := c.Get("conn").(*sql.DB)
 	graph := models.Graph{}
 	c.Bind(&graph)
 	conn.Exec(db.ANALYZE)
-	data, err := graph.GetMetaData(conn, user.Version)
+	go graph.GetMetaData(conn, user.Version, dataChan, errChan)
+	print("next line after getmeta")
+	data, err := <-dataChan, <-errChan
 
 	if err != nil {
 		return echo.NewHTTPError(400, err.Error())
