@@ -61,6 +61,88 @@ const char *node_names[] = {
 };
 
 
+
+/*
+ * Each node defined with this will have
+ * an out function defined, but copy, equal,
+ * and read will throw errors.
+ */
+// #define DEFINE_NODE_METHODS(type) \
+//     { \
+//         CppAsString(type), \
+//         sizeof(type), \
+//         copy_ag_node, \
+//         equal_ag_node, \
+//         CppConcat(out_, type), \
+//         read_ag_node \
+//     }
+
+// /*
+//  *  Each node defined with this will have a
+//  *  copy, read, and write function defined.
+//  *  Equal will still throw an error.
+//  */
+// #define DEFINE_NODE_METHODS_EXTENDED(type) \
+//     { \
+//         CppAsString(type), \
+//         sizeof(type), \
+//         CppConcat(copy_, type), \
+//         equal_ag_node, \
+//         CppConcat(out_, type), \
+//         CppConcat(read_, type) \
+//     }
+
+// // This list must match ag_node_tag.
+// const ExtensibleNodeMethods node_methods[] = {
+//     DEFINE_NODE_METHODS(cypher_return),
+//     DEFINE_NODE_METHODS(cypher_with),
+//     DEFINE_NODE_METHODS(cypher_match),
+//     DEFINE_NODE_METHODS(cypher_create),
+//     DEFINE_NODE_METHODS(cypher_set),
+//     DEFINE_NODE_METHODS(cypher_set_item),
+//     DEFINE_NODE_METHODS(cypher_delete),
+//     DEFINE_NODE_METHODS(cypher_unwind),
+//     DEFINE_NODE_METHODS(cypher_merge),
+//     DEFINE_NODE_METHODS(cypher_path),
+//     DEFINE_NODE_METHODS(cypher_node),
+//     DEFINE_NODE_METHODS(cypher_relationship),
+//     DEFINE_NODE_METHODS(cypher_bool_const),
+//     DEFINE_NODE_METHODS(cypher_param),
+//     DEFINE_NODE_METHODS(cypher_map),
+//     DEFINE_NODE_METHODS(cypher_list),
+//     DEFINE_NODE_METHODS(cypher_string_match),
+//     DEFINE_NODE_METHODS(cypher_typecast),
+//     DEFINE_NODE_METHODS(cypher_integer_const),
+//     DEFINE_NODE_METHODS(cypher_sub_pattern),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_create_target_nodes),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_create_path),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_target_node),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_update_information),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_update_item),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_information),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_item),
+//     DEFINE_NODE_METHODS_EXTENDED(cypher_merge_information)
+// };
+
+// static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b)
+// {
+//     ereport(ERROR, (errmsg("unexpected equal() over ag_node's")));
+// }
+
+// void register_ag_nodes(void)
+// {
+//     static bool initialized = false;
+//     int i;
+
+//     if (initialized)
+//         return;
+
+//     for (i = 0; i < lengthof(node_methods); i++)
+//         RegisterExtensibleNodeMethods(&node_methods[i]);
+
+//     initialized = true;
+// }
+
 ExtensibleNode *_new_ag_node(Size size, ag_node_tag tag)
 {
     ExtensibleNode *n;

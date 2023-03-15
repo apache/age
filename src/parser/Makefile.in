@@ -107,8 +107,8 @@ libsql_parser_a_LIBADD =
 am__libsql_parser_a_SOURCES_DIST = copyfuncs.c gram.y gram_minimal.y \
 	keywords.c kwlookup.c list.c makefuncs.c nodes.c outfuncs.c \
 	parser.c scansup.c stringinfo.c value.c \
-	../age/age_pool.c ../age/ag_nodes.c ../age/ag_scanner.c \
-	../age/cypher_gram.c ../age/cypher_parser.c \
+	$(top_srcdir)/age/age_pool.c $(top_srcdir)/age/ag_nodes.c $(top_srcdir)/age/ag_scanner.c \
+	$(top_srcdir)/age/cypher_gram.c $(top_srcdir)/age/cypher_parser.c \
 	$(top_srcdir)/src/utils/mmgr/mcxt.c \
 	$(top_srcdir)/src/utils/mmgr/aset.c \
 	$(top_srcdir)/src/utils/error/elog.c wchar.c scan.c snprintf.c
@@ -119,8 +119,8 @@ am_libsql_parser_a_OBJECTS = copyfuncs.$(OBJEXT) gram.$(OBJEXT) \
 	list.$(OBJEXT) makefuncs.$(OBJEXT) nodes.$(OBJEXT) \
 	outfuncs.$(OBJEXT) parser.$(OBJEXT) scansup.$(OBJEXT) \
 	stringinfo.$(OBJEXT) value.$(OBJEXT) \
-	../age/age_pool.$(OBJEXT) ../age/ag_nodes.$(OBJEXT) ../age/ag_scanner.$(OBJEXT) \
-	../age/cypher_gram.$(OBJEXT) ../age/cypher_parser.$(OBJEXT) \
+	$(top_srcdir)/age/age_pool.$(OBJEXT) $(top_srcdir)/age/ag_nodes.$(OBJEXT) $(top_srcdir)/age/ag_scanner.$(OBJEXT) \
+	$(top_srcdir)/age/cypher_gram.$(OBJEXT) $(top_srcdir)/age/cypher_parser.$(OBJEXT) \
 	$(top_srcdir)/src/utils/mmgr/mcxt.$(OBJEXT) \
 	$(top_srcdir)/src/utils/mmgr/aset.$(OBJEXT) \
 	$(top_srcdir)/src/utils/error/elog.$(OBJEXT) wchar.$(OBJEXT) \
@@ -346,8 +346,8 @@ noinst_LIBRARIES = libsql-parser.a
 libsql_parser_a_SOURCES = copyfuncs.c gram.y gram_minimal.y keywords.c \
 	kwlookup.c list.c makefuncs.c nodes.c outfuncs.c parser.c \
 	scansup.c stringinfo.c value.c \
-	../age/age_pool.c ../age/ag_nodes.c ag_scanner.c \
-	../age/cypher_gram.c ../age/cypher_parser.c \
+	$(top_srcdir)/age/age_pool.c $(top_srcdir)/age/ag_nodes.c ag_scanner.c \
+	$(top_srcdir)/age/cypher_gram.c $(top_srcdir)/age/cypher_parser.c \
 	$(top_srcdir)/src/utils/mmgr/mcxt.c \
 	$(top_srcdir)/src/utils/mmgr/aset.c \
 	$(top_srcdir)/src/utils/error/elog.c wchar.c scan.c \
@@ -420,7 +420,7 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f $(top_srcdir)/src/utils/error/*.$(OBJEXT)
 	-rm -f $(top_srcdir)/src/utils/mmgr/*.$(OBJEXT)
-	-rm -f ../age/*.$(OBJEXT)
+	-rm -f $(top_srcdir)/age/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
