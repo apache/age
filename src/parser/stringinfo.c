@@ -316,3 +316,17 @@ enlargeStringInfo(StringInfo str, int needed)
 
 	str->maxlen = newlen;
 }
+
+/*
+ * strtoint --- just like strtol, but returns int not long
+ */
+int
+strtoint(const char* str, char** endptr, int base)
+{
+	long		val;
+
+	val = strtol(str, endptr, base);
+	if (val != (int) val)
+		errno = ERANGE;
+	return (int) val;
+}

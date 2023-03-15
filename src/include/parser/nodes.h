@@ -301,6 +301,7 @@ typedef enum NodeTag
 	T_Boolean,
 	T_String,
 	T_BitString,
+	T_Null,
 
 	/*
 	 * TAGS FOR LIST NODES (pg_list.h)

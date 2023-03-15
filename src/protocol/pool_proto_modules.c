@@ -63,6 +63,9 @@
 #include "main/pool_internal_comms.h"
 #include "pool_config_variables.h"
 
+#include "age/cypher_parser.h"
+#include "age/age_pool.h"
+
 char	   *copy_table = NULL;	/* copy table name */
 char	   *copy_schema = NULL; /* copy table name */
 char		copy_delimiter;		/* copy delimiter char */
@@ -166,48 +169,6 @@ process_pg_terminate_backend_func(POOL_QUERY_CONTEXT * query_context)
 		return true;
 	}
 	return false;
-}
-
-/*
- * Takes the first node of a raw parse tree as input
- */
-static bool 
-isCypherQuery (Node* node){
-
-	if (IsA(node, SelectStmt))
-	{
-		SelectStmt *stmt = (SelectStmt *) node;
-		List* fromClause = stmt->fromClause;
-
-		ListCell   *fl;
-
-		//Match the first cypher function call in the FROM clause. Could be multiple tables
-		// e.g. FROM table1, table2, cypher(),table3....
-		foreach(fl, fromClause)
-		{
-			Node	   *n = lfirst(fl);
-			if (IsA(n, RangeFunction))
-			{
-				RangeFunction *rf = (RangeFunction*) n;
-				List* functions = rf->functions; 
-
-				if (functions->length == 1)
-				{
-					List *sublist = (List *) lfirst(list_head(functions)); 
-					FuncCall *fntree = (FuncCall *) lfirst(list_head(sublist));
-					StringInfoData str;
-					initStringInfo(&str);
-					_outNode(&str,fntree->funcname);
-					
-					if (!strcmp("\"cypher\"",str.data)){
-						return true;
-					}
-				}
-			}
-		}
-	}
-
-	return false; 
 }
 
 /*
@@ -343,6 +304,11 @@ SimpleQuery(POOL_CONNECTION * frontend,
 	if (parse_tree_list != NIL)
 	{
 		node = raw_parser2(parse_tree_list);
+
+		char* cypherstr;
+		if (isCypherQuery(node,&cypherstr)){
+			List* cyphertree = parse_cypher(cypherstr);
+		}
 
 		/*
 		 * Start query context
