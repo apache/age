@@ -92,4 +92,7 @@ extern Datum tointeger(PG_FUNCTION_ARGS);
 extern Datum tofloat(PG_FUNCTION_ARGS);
 extern Datum tofloatornull(PG_FUNCTION_ARGS);
 
+/* string manipulation function */
+extern Datum randomUUID(PG_FUNCTION_ARGS);
+
 #endif							/* CYPHER_FUNCS_H */

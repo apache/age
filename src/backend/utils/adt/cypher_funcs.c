@@ -37,7 +37,9 @@
 #include "utils/jsonb.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
+#include "utils/uuid.h"
 #include <string.h>
+
 
 /* global variable - see postgres.c*/
 extern GraphWriteStats graphWriteStats;
@@ -1650,4 +1652,22 @@ tofloatornull(PG_FUNCTION_ARGS)
 	}
 	else
 		PG_RETURN_NULL();
+}
+
+//randomUUID()
+Datum
+randomUUID(PG_FUNCTION_ARGS)
+{
+    pg_uuid_t uuid;
+    char uuid_str[UUID_LEN_STR + 1];
+
+    uuid_generate(uuid);
+    uuid_unparse(uuid, uuid_str);
+
+    /* Reformat the UUID string */
+    char formatted_uuid_str[37];
+    snprintf(formatted_uuid_str, sizeof(formatted_uuid_str), "%8s-%4s-%4s-%4s-%12s",
+             uuid_str, uuid_str + 8, uuid_str + 13, uuid_str + 18, uuid_str + 23);
+
+    PG_RETURN_TEXT_P(cstring_to_text(formatted_uuid_str));
 }
