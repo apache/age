@@ -28,7 +28,6 @@ func CypherCall(db *sql.DB, q map[string]string, c chan<- ChannelResults) {
 	for rows.Next() {
 
 		err := rows.Scan(rawData...)
-		print(len(cols))
 		if err != nil {
 			data.Err = err
 			break

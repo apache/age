@@ -98,7 +98,6 @@ func GraphMetaData(c echo.Context) error {
 	c.Bind(&graph)
 	conn.Exec(db.ANALYZE)
 	go graph.GetMetaData(conn, user.Version, dataChan, errChan)
-	print("next line after getmeta")
 	data, err := <-dataChan, <-errChan
 
 	if err != nil {
