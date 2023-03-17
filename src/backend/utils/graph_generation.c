@@ -82,7 +82,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     int64 no_vertices;
     int64 i,j,vid = 1, eid, start_vid, end_vid;
 
-    Name vtx_label_name = NULL;
+    Name vtx_label_name;
     Name edge_label_name;
     int32 vtx_label_id;
     int32 edge_label_id;
@@ -131,12 +131,11 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     }
 
     graph_name = PG_GETARG_NAME(0);
-    no_vertices = (int64) PG_GETARG_INT64(1);
-    edge_label_name = PG_GETARG_NAME(2);
-    namestrcpy(vtx_label_name, AG_DEFAULT_LABEL_VERTEX);
-
     graph_name_str = NameStr(*graph_name);
-    vtx_name_str = AG_DEFAULT_LABEL_VERTEX;
+
+    no_vertices = (int64) PG_GETARG_INT64(1);
+
+    edge_label_name = PG_GETARG_NAME(2);
     edge_name_str = NameStr(*edge_label_name);
 
     if (!PG_ARGISNULL(3))
@@ -151,6 +150,10 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                     errmsg("vertex and edge label can not be same")));
         }
     }
+    else
+    {
+        vtx_name_str = AG_DEFAULT_LABEL_VERTEX;
+    }
 
     if (!graph_exists(graph_name_str))
     {
@@ -159,18 +162,11 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     graph_id = get_graph_oid(graph_name_str);
 
-    if (!PG_ARGISNULL(3))
+    if (!label_exists(vtx_name_str, graph_id))
     {
-        vtx_label_name = PG_GETARG_NAME(3);
-        vtx_name_str = NameStr(*vtx_label_name);
-
-        // Check if label with the input name already exists
-        if (!label_exists(vtx_name_str, graph_id))
-        {
-            DirectFunctionCall2(create_vlabel,
-                                CStringGetDatum(graph_name),
-                                CStringGetDatum(vtx_label_name));
-        }
+        DirectFunctionCall2(create_vlabel,
+                            CStringGetDatum(graph_name),
+                            CStringGetDatum(vtx_label_name));
     }
 
     if (!label_exists(edge_name_str, graph_id))
@@ -314,15 +310,16 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     }
 
     // node label: if null, gets default label, which is "_ag_label_vertex"
-    if (PG_ARGISNULL(3))
+
+    if (!PG_ARGISNULL(3))
     {
-        namestrcpy(node_label_name, AG_DEFAULT_LABEL_VERTEX);
+        node_label_name = PG_GETARG_NAME(3);
+        node_label_str = NameStr(*node_label_name);
     }
     else
     {
-        node_label_name = PG_GETARG_NAME(3);
+        node_label_str = AG_DEFAULT_LABEL_VERTEX;
     }
-    node_label_str = NameStr(*node_label_name);
 
     /* Name edge_label */
     if (PG_ARGISNULL(5))
