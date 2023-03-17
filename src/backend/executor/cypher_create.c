@@ -324,7 +324,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     ResultRelInfo *resultRelInfo = node->resultRelInfo;
-    ResultRelInfo *old_estate_es_result_relation_info = NULL;
+    ResultRelInfo **old_estate_es_result_relations_info = NULL;
     TupleTableSlot *elemTupleSlot = node->elemTupleSlot;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     Datum id;
@@ -371,9 +371,9 @@ static void create_edge(cypher_create_custom_scan_state *css,
      */
 
     /* save the old result relation info */
-    old_estate_es_result_relation_info = estate->es_result_relation_info;
+    old_estate_es_result_relations_info = estate->es_result_relations;
 
-    estate->es_result_relation_info = resultRelInfo;
+    estate->es_result_relations = &resultRelInfo;
 
     ExecClearTuple(elemTupleSlot);
 
@@ -400,7 +400,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
     insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
 
     /* restore the old result relation info */
-    estate->es_result_relation_info = old_estate_es_result_relation_info;
+    estate->es_result_relations = old_estate_es_result_relations_info;
 
     /*
      * When the edge is used by clauses higher in the execution tree
@@ -456,7 +456,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
      */
     if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
     {
-        ResultRelInfo *old_estate_es_result_relation_info = NULL;
+        ResultRelInfo **old_estate_es_result_relations_info = NULL;
 
         /*
          * Set estate's result relation to the vertex's result
@@ -466,9 +466,9 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
          */
 
         /* save the old result relation info */
-        old_estate_es_result_relation_info = estate->es_result_relation_info;
+        old_estate_es_result_relations_info = estate->es_result_relations;
 
-        estate->es_result_relation_info = resultRelInfo;
+        estate->es_result_relations = &resultRelInfo;
 
         ExecClearTuple(elemTupleSlot);
 
@@ -487,7 +487,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
 
         /* restore the old result relation info */
-        estate->es_result_relation_info = old_estate_es_result_relation_info;
+        estate->es_result_relations = old_estate_es_result_relations_info;
 
         /*
          * When the vertex is used by clauses higher in the execution tree
