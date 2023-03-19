@@ -152,7 +152,7 @@ You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres 
 <h4><img width="20" src="/img/tux.svg"><img width="20" src="/img/apple.svg"> &nbsp;Install AGE on Linux and MacOS
 </h4>
 
-Clone the <a href="https://github.com/apache/age">github repository</a> or download the<a href="https://github.com/apache/age/releases">download an official release.
+Clone the <a href="https://github.com/apache/age">github repository</a> or download the <a href="https://github.com/apache/age/releases">download an official release.
 </a>
 Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11 & 12 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11 & 12.
 <br>
