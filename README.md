@@ -320,6 +320,7 @@ Join the AGE community for help, questions, discussions, and contributions.
 - Check our [website](https://age.apache.org/)
 - Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
+- Help expand our community by posting blogs and articles on dev.to
 - Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
 - Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
 - Subscribe to our committer mailing list (To become a committer) by sending an email to commits-subscribe@age.apache.org
