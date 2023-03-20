@@ -92,11 +92,39 @@ isCypherQuery (Node* node, char** retstr)
 				{
 					List *sublist = (List *) lfirst(list_head(functions)); 
 					FuncCall *fntree = (FuncCall *) lfirst(list_head(sublist));
-					StringInfoData str;
-					initStringInfo(&str);
-					_outNode(&str,fntree->funcname);
+					List* funcname = fntree->funcname;
+
+					bool isCypherCall = false;
+
+					StringInfoData buff;
+					initStringInfo(&buff);
+
+					if (funcname->length == 2)
+					{
+						StringInfoData schemaName;
+						initStringInfo(&schemaName);
+						_outNode(&schemaName,linitial(funcname));
+
+						if (!strcmp("\"ag_catalog\"",schemaName.data))
+						{
+							_outNode(&buff,lsecond(funcname));
+
+							if (!strcmp("\"cypher\"",buff.data))
+							{
+								isCypherCall = true;
+							}
+						}
+					}
+					else if (funcname->length == 1)
+					{
+						_outNode(&buff,linitial(funcname));
+						if (!strcmp("\"cypher\"",buff.data))
+							{
+								isCypherCall = true;
+							}
+					}
 					
-					if (!strcmp("\"cypher\"",str.data)){
+					if (isCypherCall){
 
 						StringInfoData cypher_str;
 						initStringInfo(&cypher_str);
