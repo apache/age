@@ -66,6 +66,7 @@
 #include "age/cypher_parser.h"
 #include "age/age_pool.h"
 
+
 char	   *copy_table = NULL;	/* copy table name */
 char	   *copy_schema = NULL; /* copy table name */
 char		copy_delimiter;		/* copy delimiter char */
@@ -306,8 +307,19 @@ SimpleQuery(POOL_CONNECTION * frontend,
 		node = raw_parser2(parse_tree_list);
 
 		char* cypherstr;
+
+		/*
+		 * if query is cypher query then extract cypher functions
+		 */
 		if (isCypherQuery(node,&cypherstr)){
+
 			List* cyphertree = parse_cypher(cypherstr);
+
+			// removing the last node of parsed cypher.
+			Node *temp = llast(cyphertree);
+	        list_delete_ptr(cyphertree, temp);
+			List* cypher_funcs_list = extractCypherFuncs(cyphertree);
+			
 		}
 
 		/*

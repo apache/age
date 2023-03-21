@@ -23,7 +23,8 @@
 #include "parser/nodes.h"
 #include "parser/parsenodes.h"
 #include "utils/elog.h"
-
+#include "parser/extensible.h"
+#include "age/cypher_nodes.h"
 
 
 void
@@ -115,4 +116,28 @@ isCypherQuery (Node* node, char** retstr)
 	}
 
 	return false; 
+}
+
+List* extractCypherFuncs(List *ParsedCyphertreeList)
+{
+
+	ListCell *resultfl;
+
+	List *cypher_funcs_list= NIL;
+
+	foreach (resultfl, ParsedCyphertreeList)
+	{
+		Node *newnode = (Node *)lfirst(resultfl);
+
+		ExtensibleNode *extnode;
+
+		if (IsA(newnode, ExtensibleNode)){
+
+			extnode = (ExtensibleNode *)newnode;
+			cypher_funcs_list = lappend(cypher_funcs_list, extnode->extnodename);
+
+		}
+	}
+	
+	return cypher_funcs_list;
 }
