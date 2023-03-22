@@ -1,6 +1,7 @@
 package main
 
 import (
+	m "age-viewer-go/miscellaneous"
 	"age-viewer-go/models"
 	"age-viewer-go/routes"
 	"age-viewer-go/session"
@@ -16,6 +17,7 @@ func main() {
 
 	app.POST("/connect", routes.ConnectToDb)
 	cypher := app.Group("/query", routes.CypherMiddleWare)
+	cypher.Use(m.ValidateContentTypeMiddleWare)
 	cypher.POST("/metadata", routes.GraphMetaData)
 	cypher.POST("", routes.Cypher)
 	app.Start(":8080")
