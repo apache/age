@@ -1194,39 +1194,6 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 }
 
 
-
-
-Datum
-jsonb_exists(PG_FUNCTION_ARGS)
-{
-    // Check that we have been passed a jsonb argument
-    if (PG_ARGISNULL(0))
-    {
-        PG_RETURN_NULL();
-    }
-
-    // Extract the jsonb value from the argument
-    jsonb jb = PG_GETARG_JSONB(0);
-
-    // Extract the key to check for existence
-    char *key = "surname";
-
-    // Check if the key exists in the jsonb object
-    bool exists = false;
-    JsonbIterator *it = JsonbIteratorInit(&jb->root);
-    JsonbValue val;
-    while ((val.type != jbvObject || !exists) && JsonbIteratorNext(&it, &val, false))
-    {
-        if (val.type == jbvString && strcmp(val.val.string.val, key) == 0)
-        {
-            exists = true;
-        }
-    }
-
-    // Clean up and return the result
-    PG_RETURN_BOOL(exists);
-}
-
 /*
  * Function to return a row containing the columns for the respective values
  * of insertVertex, insertEdge, deleteVertex, deleteEdge, and updateProperty.
