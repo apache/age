@@ -19,6 +19,6 @@ func ValidateContentTypeMiddleWare(next echo.HandlerFunc) echo.HandlerFunc {
 		} else {
 			return echo.NewHTTPError(http.StatusUnsupportedMediaType, errors.New(msg))
 		}
-		return nil
+		return next(ctx)
 	}
 }
