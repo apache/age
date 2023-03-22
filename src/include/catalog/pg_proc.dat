@@ -12050,7 +12050,8 @@
 { oid => '8005', descr => 'return float equivalents or null',
   proname => 'tofloatornull', prorettype => 'float8', proisstrict => 't', pronargs => '1',
   proargtypes => 'any', prosrc => 'tofloatornull' },
-{ oid => '8006', descr => 'return random and unique identifiers', prorettype => 'float8', proisstrict => 't', pronargs => '1',
+{ oid => '8006', descr => 'return random and unique identifiers', 
+  proname => 'randomUUID',  prorettype => 'float8', proisstrict => 't', pronargs => '1',
   proargtypes => 'any', prosrc => 'randomUUID' },
 
 ]
