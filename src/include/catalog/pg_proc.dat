@@ -12020,6 +12020,9 @@
 { oid => '7248', descr => 'is jsonb empty?',
   proname => 'isempty', prorettype => 'bool',
   proargtypes => 'jsonb', prosrc => 'cypher_isempty_jsonb' },
+{ oid => '7249', descr => 'does jsonb key exist?',
+  proname => 'exists', prorettype => 'bool',
+  proargtypes => 'jsonb', prosrc => 'jsonb_exists' },
 
 # graphdatabase array functions
 { oid => '7300', descr => 'the first element in a array',

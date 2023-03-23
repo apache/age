@@ -1193,6 +1193,32 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
+Datum 
+jsonb_exists(PG_FUNCTION_ARGS)
+{
+	Jsonb *jsonb_data = PG_GETARG_JSONB_P(0);
+	text *key = PG_GETARG_TEXT_P(1);
+	char *key_str = text_to_cstring(key);
+    JsonbValue *jsonb_value;
+    JsonbIterator *it;
+    JsonbValue v;
+    bool exists = false;
+
+	it = JsonbIteratorInit(&jsonb_data->root);
+
+	while((jsob_value == JsonbIteratorNext(&it, &v, false)) != NULL)
+	{
+        if (jsonb_value->type == jbvString &&
+            strcmp(jsonb_value->val.string.val, key_str) == 0)
+        {
+            exists = true;
+            break;
+        }		
+	}	
+
+	PG_RETURN_BOOL(exists);
+}
+
 
 /*
  * Function to return a row containing the columns for the respective values
