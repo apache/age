@@ -1,0 +1,58 @@
+
+.ModalContainer {
+    display: flex;
+}
+
+.Modal {
+    margin: auto;
+}
+.modalRow {
+    padding: 1%;
+    justify-content: space-around;
+    flex-wrap: nowrap;
+}
+
+.modalCol {
+    align-content: center;
+}
+
+#removeFile:hover {
+    cursor: pointer;
+    opacity: 30%;
+}
+#removeFile{
+    color: red;
+}
+
+#graphInputRow{
+    justify-content: space-around;
+    margin: 4px 0 4px 0;
+}
+#graphNameInput{
+    padding: 5px;
+    margin: 2px;
+}
+.graphInputCol{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+.readyFiles{
+    display: block;
+}
+
+.modal-header{
+    align-items: center;
+    margin: 8px;
+}
+.modal-footer{
+    justify-content: space-between;
+}
+
+#clearButton{
+    background-color: rgb(217, 142, 4);
+    border: none;
+}
+#clearButton:hover{
+    opacity: 10;
+}
