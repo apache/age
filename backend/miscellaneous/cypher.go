@@ -21,11 +21,12 @@ func CypherCall(db *sql.DB, q map[string]string, c chan<- ChannelResults) {
 		c <- data
 		return
 	}
-	rawData := make([]any, len(cols))
-	for i := 0; i < len(cols); i++ {
-		rawData[i] = new(string)
-	}
+
 	for rows.Next() {
+		rawData := make([]any, len(cols))
+		for i := 0; i < len(cols); i++ {
+			rawData[i] = new(string)
+		}
 
 		err := rows.Scan(rawData...)
 		if err != nil {
