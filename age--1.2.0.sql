@@ -4184,7 +4184,7 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name, nodes int, edge_label name, node_label name = NULL)
-RETURNS void
+RETURNS graphid
 LANGUAGE c
 CALLED ON NULL INPUT
 PARALLEL SAFE
@@ -4197,7 +4197,7 @@ CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name,
                                                 node_properties agtype = NULL,
                                                 edge_label name = NULL,
                                                 edge_properties agtype = NULL)
-RETURNS void
+RETURNS graphid
 LANGUAGE c
 CALLED ON NULL INPUT
 PARALLEL SAFE

@@ -49,25 +49,35 @@
 #include "utils/load/ag_load_labels.h"
 
 
-int64 get_nextval_internal(graph_cache_data* graph_cache, 
-                           label_cache_data* label_cache);
-/*
- * Auxiliary function to get the next internal value in the graph,
- * so a new object (node or edge) graph id can be composed.
- */
-
-int64 get_nextval_internal(graph_cache_data* graph_cache, 
-                           label_cache_data* label_cache) 
+typedef struct graph_components 
 {
-    Oid obj_seq_id;
-    char* label_seq_name_str;
+    Oid graph_oid;
+    char* graph_name;
+    int32 graph_size;
 
-    label_seq_name_str = NameStr(label_cache->seq_name);
-    obj_seq_id = get_relname_relid(label_seq_name_str, 
-                                   graph_cache->namespace);
+    char* vertex_label;
+    int32 vertex_label_id;
+    agtype* vertex_properties;
+    Oid vtx_seq_id;
     
-    return nextval_internal(obj_seq_id, true);
-}
+    char* edge_label;
+    int32 edge_label_id;
+    agtype* edge_properties;
+    Oid edge_seq_id;
+
+} graph_components;
+
+
+static void validate_barbell_function_args(PG_FUNCTION_ARGS);
+static void initialize_graph(PG_FUNCTION_ARGS, graph_components* graph);
+static void fetch_label_ids(graph_components* graph);
+static void fetch_seq_ids(graph_components* graph);
+static graphid create_vertex(graph_components* graph);
+static graphid connect_vertexes_by_graphid(graph_components* graph, 
+                                           graphid start, 
+                                           graphid end);
+static void insert_bridge(graph_components* graph, graphid start, 
+                          graphid end, int32 bridge_size);
 
 
 PG_FUNCTION_INFO_V1(create_complete_graph);
@@ -92,7 +102,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     agtype *props = NULL;
     graphid object_graph_id;
     graphid start_vertex_graph_id;
-    graphid end_vertex_graph_id;
+    graphid end_vertex_graph_id = 0;
 
     Oid vtx_seq_id;
     Oid edge_seq_id;
@@ -226,11 +236,9 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                             end_vertex_graph_id, props);
         }
     }
-    PG_RETURN_VOID();
+    PG_RETURN_DATUM(GRAPHID_GET_DATUM(end_vertex_graph_id));
 }
 
-
-PG_FUNCTION_INFO_V1(age_create_barbell_graph);
 
 /* 
  * The barbell graph is two complete graphs connected by a bridge path
@@ -255,122 +263,200 @@ PG_FUNCTION_INFO_V1(age_create_barbell_graph);
  * https://en.wikipedia.org/wiki/Barbell_graph
  */
 
+PG_FUNCTION_INFO_V1(age_create_barbell_graph);
+
 Datum age_create_barbell_graph(PG_FUNCTION_ARGS) 
 {
-    FunctionCallInfo arguments;
-    Oid graph_oid;
-    Name graph_name;
-    char* graph_name_str;
+    struct graph_components graph;
+    Datum root1, root2;
+    int32 bridge_size;
 
-    int64 start_node_index, end_node_index, nextval;
+    validate_barbell_function_args(fcinfo);
+    initialize_graph(fcinfo, &graph);
 
-    Name node_label_name = NULL;
-    int32 node_label_id;
-    char* node_label_str;
+    // create two separate complete graphs
+    root1 = DirectFunctionCall4(create_complete_graph, 
+                                CStringGetDatum(graph.graph_name), 
+                                Int32GetDatum(graph.graph_size),
+                                CStringGetDatum(graph.edge_label), 
+                                CStringGetDatum(graph.vertex_label));
+    root2 = DirectFunctionCall4(create_complete_graph, 
+                                CStringGetDatum(graph.graph_name), 
+                                Int32GetDatum(graph.graph_size),
+                                CStringGetDatum(graph.edge_label), 
+                                CStringGetDatum(graph.vertex_label));
 
-    Name edge_label_name;
-    int32 edge_label_id;
-    char* edge_label_str;
+    fetch_label_ids(&graph);
+    fetch_seq_ids(&graph);
+
+    // connect two vertexes with a path of n vertexes
+    bridge_size = fcinfo->arg[2];
+    insert_bridge(&graph, DATUM_GET_GRAPHID(root1), 
+                  DATUM_GET_GRAPHID(root2), bridge_size);
     
-    graphid object_graph_id;
-    graphid start_node_graph_id;
-    graphid end_node_graph_id;
+    PG_RETURN_DATUM(root1);
+}
 
-    graph_cache_data* graph_cache;
-    label_cache_data* edge_cache;
 
-    agtype* properties = NULL;
-
-    arguments = fcinfo;
-
-    // Checking for possible NULL arguments 
-    // Name graph_name
+static void validate_barbell_function_args(PG_FUNCTION_ARGS)
+{
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Graph name cannot be NULL")));
     }
-    graph_name = PG_GETARG_NAME(0);
-    graph_name_str = NameStr(*graph_name);
-
-    // int graph size (number of nodes in each complete graph)
-    if (PG_ARGISNULL(1) && PG_GETARG_INT32(1) < 3)
+    if (PG_ARGISNULL(1) || PG_GETARG_INT32(1) < 3)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("Graph size cannot be NULL or lower than 3")));
     }
-    
-    /*
-     * int64 bridge_size: currently only stays at zero.
-     * to do: implement bridge with variable number of nodes.
-    */ 
     if (PG_ARGISNULL(2) || PG_GETARG_INT32(2) < 0 )
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("Bridge size cannot be NULL or lower than 0")));
     }
-
-    // node label: if null, gets default label, which is "_ag_label_vertex"
-    if (PG_ARGISNULL(3)) 
-    {
-        namestrcpy(node_label_name, AG_DEFAULT_LABEL_VERTEX);
-    }
-    else 
-    {
-        node_label_name = PG_GETARG_NAME(3);
-    }
-    node_label_str = NameStr(*node_label_name);
-
-    /* 
-    * Name edge_label 
-    */
     if (PG_ARGISNULL(5))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                errmsg("edge label can not be NULL")));
+                errmsg("edge label cannot be NULL")));
     }
-    edge_label_name = PG_GETARG_NAME(5);
-    edge_label_str = NameStr(*edge_label_name);
-
-
-    // create two separate complete graphs
-    DirectFunctionCall4(create_complete_graph, arguments->arg[0], 
-                                               arguments->arg[1],
-                                               arguments->arg[5], 
-                                               arguments->arg[3]);
-    DirectFunctionCall4(create_complete_graph, arguments->arg[0], 
-                                               arguments->arg[1],
-                                               arguments->arg[5], 
-                                               arguments->arg[3]);
-
-    graph_oid = get_graph_oid(graph_name_str);
-    node_label_id = get_label_id(node_label_str, graph_oid);
-    edge_label_id = get_label_id(edge_label_str, graph_oid);
-
-    /*
-     * Fetching caches to get next values for graph id's, and access nodes
-     * to be connected with edges.
-     */ 
-    graph_cache = search_graph_name_cache(graph_name_str);
-    edge_cache = search_label_name_graph_cache(edge_label_str,graph_oid);
-
-    // connect a node from each graph
-    start_node_index = 1; // first created node, from the first complete graph
-    end_node_index = arguments->arg[1]*2; // last created node, second graph
-
-    // next index to be assigned to a node or edge
-    nextval = get_nextval_internal(graph_cache, edge_cache);
-
-    // build the graph id's of the edge to be created
-    object_graph_id = make_graphid(edge_label_id, nextval);
-    start_node_graph_id = make_graphid(node_label_id, start_node_index);
-    end_node_graph_id = make_graphid(node_label_id, end_node_index);
-    properties = create_empty_agtype();
-
-    // connect two nodes
-    insert_edge_simple(graph_oid, edge_label_str,
-                       object_graph_id, start_node_graph_id,
-                       end_node_graph_id, properties);
-    
-    PG_RETURN_VOID();
+    if (!PG_ARGISNULL(3) && !PG_ARGISNULL(5) &&
+        strcmp(NameStr(*(PG_GETARG_NAME(3))), 
+               NameStr(*(PG_GETARG_NAME(5)))) == 0)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("vertex and edge labels cannot be the same")));
+    }
 }
+
+
+static void initialize_graph(PG_FUNCTION_ARGS, graph_components* graph)
+{
+    graph->graph_name = NameStr(*(PG_GETARG_NAME(0)));
+    graph->graph_size = PG_GETARG_INT32(1);
+
+    if (PG_ARGISNULL(3))
+    {
+        graph->vertex_label = AG_DEFAULT_LABEL_VERTEX;
+    }
+    else
+    {
+        graph->vertex_label = NameStr(*(PG_GETARG_NAME(3)));
+    }
+
+    if (PG_ARGISNULL(4))
+    {
+        graph->vertex_properties = create_empty_agtype();
+    }
+    else
+    {
+        graph->vertex_properties = (agtype*)(PG_GETARG_DATUM(4));
+    }
+    
+    if (PG_ARGISNULL(5))
+    {
+        graph->edge_label = AG_DEFAULT_LABEL_EDGE;
+    }
+    else
+    {
+        graph->edge_label = NameStr(*(PG_GETARG_NAME(5)));
+    }
+
+    if (PG_ARGISNULL(6))
+    {
+        graph->edge_properties = create_empty_agtype();
+    }
+    else
+    {
+        graph->edge_properties = (agtype*)(PG_GETARG_DATUM(6));
+    }
+
+}
+
+
+static void fetch_label_ids(graph_components* graph) 
+{
+    graph->graph_oid = get_graph_oid(graph->graph_name);
+    graph->vertex_label_id = 
+        get_label_id(graph->vertex_label, 
+                     graph->graph_oid);
+    graph->edge_label_id = 
+        get_label_id(graph->edge_label, 
+                     graph->graph_oid);
+}
+
+
+static void fetch_seq_ids(graph_components* graph)
+{
+    graph_cache_data* graph_cache;
+    label_cache_data* vtx_cache;
+    label_cache_data* edge_cache;
+
+    graph_cache = search_graph_name_cache(graph->graph_name);
+    vtx_cache = search_label_name_graph_cache(graph->vertex_label,
+                                              graph->graph_oid);
+    edge_cache = search_label_name_graph_cache(graph->edge_label,
+                                               graph->graph_oid);
+
+    graph->vtx_seq_id = 
+        get_relname_relid(NameStr(vtx_cache->seq_name),
+                          graph_cache->namespace);
+    graph->edge_seq_id = 
+        get_relname_relid(NameStr(edge_cache->seq_name),
+                          graph_cache->namespace);
+}
+
+
+static graphid create_vertex(graph_components* graph)
+{
+    int next_index;
+    graphid new_graph_id; 
+    
+    next_index = nextval_internal(graph->vtx_seq_id, true);
+    new_graph_id = make_graphid(graph->vertex_label_id, 
+                                next_index);
+    insert_vertex_simple(graph->graph_oid,
+                         graph->vertex_label,
+                         new_graph_id,
+                         create_empty_agtype());
+    return new_graph_id;
+} 
+
+
+static graphid connect_vertexes_by_graphid(graph_components* graph, 
+                                           graphid out_vtx,
+                                           graphid in_vtx)
+{
+    int nextval;
+    graphid new_graphid; 
+
+    nextval = nextval_internal(graph->edge_seq_id, true);
+    new_graphid = make_graphid(graph->edge_label_id, nextval);
+    
+    insert_edge_simple(graph->graph_oid,
+                       graph->edge_label,
+                       new_graphid, out_vtx, in_vtx,
+                       create_empty_agtype());
+    return new_graphid;
+}
+
+
+static void insert_bridge(graph_components* graph, graphid beginning, 
+                          graphid end, int32 bridge_size) 
+{
+    graphid current_graphid;
+    graphid prior_graphid;
+
+    prior_graphid = end;
+    
+    for (int i = 0; i<bridge_size; i++)
+    {
+        current_graphid = create_vertex(graph);
+        connect_vertexes_by_graphid(graph, prior_graphid, current_graphid);
+        prior_graphid = current_graphid;
+    }
+    
+    // connect prior vertex to last index
+    connect_vertexes_by_graphid(graph, prior_graphid, beginning);
+}
+

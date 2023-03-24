@@ -18,13 +18,14 @@
  */
 LOAD 'age';
 SET search_path = ag_catalog;
+-- TESTS FOR COMPLETE GRAPH GENERATION
 SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
 NOTICE:  graph "gp1" has been created
 NOTICE:  VLabel "vertices" has been created
 NOTICE:  ELabel "edges" has been created
  create_complete_graph 
 -----------------------
- 
+ 844424930131973
 (1 row)
 
 SELECT COUNT(*) FROM gp1."edges";
@@ -57,7 +58,7 @@ SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
  create_complete_graph 
 -----------------------
- 
+ 844424930131978
 (1 row)
 
 SELECT COUNT(*) FROM gp1."edges";
@@ -77,7 +78,7 @@ NOTICE:  graph "gp2" has been created
 NOTICE:  ELabel "edges" has been created
  create_complete_graph 
 -----------------------
- 
+ 281474976710661
 (1 row)
 
 -- SHOULD FAIL
@@ -114,102 +115,247 @@ NOTICE:  graph "gp2" has been dropped
  
 (1 row)
 
--- Tests for barbell graph generation
-SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
+-- TESTS FOR BARBELL GRAPH GENERATION
+SELECT * FROM age_create_barbell_graph('gp1',6,0,'vertices1',NULL,'edges1',NULL);
 NOTICE:  graph "gp1" has been created
-NOTICE:  VLabel "vertices" has been created
-NOTICE:  ELabel "edges" has been created
+NOTICE:  VLabel "vertices1" has been created
+NOTICE:  ELabel "edges1" has been created
  age_create_barbell_graph 
 --------------------------
- 
+ 844424930131974
 (1 row)
 
-SELECT COUNT(*) FROM gp1."edges";
+SELECT COUNT(*) FROM gp1."vertices1";
  count 
 -------
-    21
+    12
 (1 row)
 
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1."edges1";
  count 
 -------
-    10
+    31
 (1 row)
 
+SELECT * FROM age_create_barbell_graph('gp1',5,3,'vertices2','{}','edges2','{}');
+NOTICE:  VLabel "vertices2" has been created
+NOTICE:  ELabel "edges2" has been created
+ age_create_barbell_graph 
+--------------------------
+ 1407374883553285
+(1 row)
+
+SELECT COUNT(*) FROM gp1."vertices2";
+ count 
+-------
+    13
+(1 row)
+
+SELECT COUNT(*) FROM gp1."edges2";
+ count 
+-------
+    24
+(1 row)
+
+SELECT * FROM age_create_barbell_graph('gp1',4,1,'vertices3',NULL,'edges3',NULL);
+NOTICE:  VLabel "vertices3" has been created
+NOTICE:  ELabel "edges3" has been created
+ age_create_barbell_graph 
+--------------------------
+ 1970324836974596
+(1 row)
+
+SELECT COUNT(*) FROM gp1."vertices3";
+ count 
+-------
+     9
+(1 row)
+
+SELECT COUNT(*) FROM gp1."edges3";
+ count 
+-------
+    14
+(1 row)
+
+SELECT * FROM age_create_barbell_graph('gp1',3,2,'vertices4',NULL,'edges4',NULL);
+NOTICE:  VLabel "vertices4" has been created
+NOTICE:  ELabel "edges4" has been created
+ age_create_barbell_graph 
+--------------------------
+ 2533274790395907
+(1 row)
+
+SELECT COUNT(*) FROM gp1."vertices4";
+ count 
+-------
+     8
+(1 row)
+
+SELECT COUNT(*) FROM gp1."edges4";
+ count 
+-------
+     9
+(1 row)
+
+-- Counting total vertexes and edges
+SELECT * FROM cypher('gp1', $$MATCH (v) RETURN COUNT(v)$$) as (n agtype);
+ n  
+----
+ 42
+(1 row)
+
+SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN COUNT(e)$$) as (n agtype);
+ n  
+----
+ 78
+(1 row)
+
+-- List all connections
 SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
-                                                             n                                                              
-----------------------------------------------------------------------------------------------------------------------------
- {"id": 1125899906842625, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842626, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842627, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
- {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842634, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
- {"id": 1125899906842628, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842631, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842633, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131971, "properties": {}}::edge
- {"id": 1125899906842635, "label": "edges", "end_id": 844424930131975, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842639, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131975, "properties": {}}::edge
- {"id": 1125899906842636, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842637, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842642, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131976, "properties": {}}::edge
- {"id": 1125899906842640, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131975, "properties": {}}::edge
- {"id": 1125899906842644, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131977, "properties": {}}::edge
- {"id": 1125899906842638, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842641, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131975, "properties": {}}::edge
- {"id": 1125899906842643, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131976, "properties": {}}::edge
- {"id": 1125899906842645, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131969, "properties": {}}::edge
-(21 rows)
+                                                               n                                                               
+-------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "edges1", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842630, "label": "edges1", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842626, "label": "edges1", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842634, "label": "edges1", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
+ {"id": 1125899906842627, "label": "edges1", "end_id": 844424930131972, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842631, "label": "edges1", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842635, "label": "edges1", "end_id": 844424930131973, "start_id": 844424930131971, "properties": {}}::edge
+ {"id": 1125899906842632, "label": "edges1", "end_id": 844424930131973, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842637, "label": "edges1", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
+ {"id": 1125899906842628, "label": "edges1", "end_id": 844424930131973, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842636, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131971, "properties": {}}::edge
+ {"id": 1125899906842629, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842633, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842638, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131972, "properties": {}}::edge
+ {"id": 1125899906842639, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131973, "properties": {}}::edge
+ {"id": 1125899906842655, "label": "edges1", "end_id": 844424930131974, "start_id": 844424930131980, "properties": {}}::edge
+ {"id": 1125899906842640, "label": "edges1", "end_id": 844424930131976, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842641, "label": "edges1", "end_id": 844424930131977, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842645, "label": "edges1", "end_id": 844424930131977, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842642, "label": "edges1", "end_id": 844424930131978, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842649, "label": "edges1", "end_id": 844424930131978, "start_id": 844424930131977, "properties": {}}::edge
+ {"id": 1125899906842646, "label": "edges1", "end_id": 844424930131978, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842643, "label": "edges1", "end_id": 844424930131979, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842647, "label": "edges1", "end_id": 844424930131979, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842650, "label": "edges1", "end_id": 844424930131979, "start_id": 844424930131977, "properties": {}}::edge
+ {"id": 1125899906842652, "label": "edges1", "end_id": 844424930131979, "start_id": 844424930131978, "properties": {}}::edge
+ {"id": 1125899906842651, "label": "edges1", "end_id": 844424930131980, "start_id": 844424930131977, "properties": {}}::edge
+ {"id": 1125899906842648, "label": "edges1", "end_id": 844424930131980, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842653, "label": "edges1", "end_id": 844424930131980, "start_id": 844424930131978, "properties": {}}::edge
+ {"id": 1125899906842654, "label": "edges1", "end_id": 844424930131980, "start_id": 844424930131979, "properties": {}}::edge
+ {"id": 1125899906842644, "label": "edges1", "end_id": 844424930131980, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1688849860263937, "label": "edges2", "end_id": 1407374883553282, "start_id": 1407374883553281, "properties": {}}::edge
+ {"id": 1688849860263938, "label": "edges2", "end_id": 1407374883553283, "start_id": 1407374883553281, "properties": {}}::edge
+ {"id": 1688849860263941, "label": "edges2", "end_id": 1407374883553283, "start_id": 1407374883553282, "properties": {}}::edge
+ {"id": 1688849860263939, "label": "edges2", "end_id": 1407374883553284, "start_id": 1407374883553281, "properties": {}}::edge
+ {"id": 1688849860263944, "label": "edges2", "end_id": 1407374883553284, "start_id": 1407374883553283, "properties": {}}::edge
+ {"id": 1688849860263942, "label": "edges2", "end_id": 1407374883553284, "start_id": 1407374883553282, "properties": {}}::edge
+ {"id": 1688849860263945, "label": "edges2", "end_id": 1407374883553285, "start_id": 1407374883553283, "properties": {}}::edge
+ {"id": 1688849860263940, "label": "edges2", "end_id": 1407374883553285, "start_id": 1407374883553281, "properties": {}}::edge
+ {"id": 1688849860263943, "label": "edges2", "end_id": 1407374883553285, "start_id": 1407374883553282, "properties": {}}::edge
+ {"id": 1688849860263946, "label": "edges2", "end_id": 1407374883553285, "start_id": 1407374883553284, "properties": {}}::edge
+ {"id": 1688849860263960, "label": "edges2", "end_id": 1407374883553285, "start_id": 1407374883553293, "properties": {}}::edge
+ {"id": 1688849860263947, "label": "edges2", "end_id": 1407374883553287, "start_id": 1407374883553286, "properties": {}}::edge
+ {"id": 1688849860263948, "label": "edges2", "end_id": 1407374883553288, "start_id": 1407374883553286, "properties": {}}::edge
+ {"id": 1688849860263951, "label": "edges2", "end_id": 1407374883553288, "start_id": 1407374883553287, "properties": {}}::edge
+ {"id": 1688849860263952, "label": "edges2", "end_id": 1407374883553289, "start_id": 1407374883553287, "properties": {}}::edge
+ {"id": 1688849860263954, "label": "edges2", "end_id": 1407374883553289, "start_id": 1407374883553288, "properties": {}}::edge
+ {"id": 1688849860263949, "label": "edges2", "end_id": 1407374883553289, "start_id": 1407374883553286, "properties": {}}::edge
+ {"id": 1688849860263956, "label": "edges2", "end_id": 1407374883553290, "start_id": 1407374883553289, "properties": {}}::edge
+ {"id": 1688849860263950, "label": "edges2", "end_id": 1407374883553290, "start_id": 1407374883553286, "properties": {}}::edge
+ {"id": 1688849860263953, "label": "edges2", "end_id": 1407374883553290, "start_id": 1407374883553287, "properties": {}}::edge
+ {"id": 1688849860263955, "label": "edges2", "end_id": 1407374883553290, "start_id": 1407374883553288, "properties": {}}::edge
+ {"id": 1688849860263957, "label": "edges2", "end_id": 1407374883553291, "start_id": 1407374883553290, "properties": {}}::edge
+ {"id": 1688849860263958, "label": "edges2", "end_id": 1407374883553292, "start_id": 1407374883553291, "properties": {}}::edge
+ {"id": 1688849860263959, "label": "edges2", "end_id": 1407374883553293, "start_id": 1407374883553292, "properties": {}}::edge
+ {"id": 2251799813685249, "label": "edges3", "end_id": 1970324836974594, "start_id": 1970324836974593, "properties": {}}::edge
+ {"id": 2251799813685252, "label": "edges3", "end_id": 1970324836974595, "start_id": 1970324836974594, "properties": {}}::edge
+ {"id": 2251799813685250, "label": "edges3", "end_id": 1970324836974595, "start_id": 1970324836974593, "properties": {}}::edge
+ {"id": 2251799813685253, "label": "edges3", "end_id": 1970324836974596, "start_id": 1970324836974594, "properties": {}}::edge
+ {"id": 2251799813685262, "label": "edges3", "end_id": 1970324836974596, "start_id": 1970324836974601, "properties": {}}::edge
+ {"id": 2251799813685251, "label": "edges3", "end_id": 1970324836974596, "start_id": 1970324836974593, "properties": {}}::edge
+ {"id": 2251799813685254, "label": "edges3", "end_id": 1970324836974596, "start_id": 1970324836974595, "properties": {}}::edge
+ {"id": 2251799813685255, "label": "edges3", "end_id": 1970324836974598, "start_id": 1970324836974597, "properties": {}}::edge
+ {"id": 2251799813685256, "label": "edges3", "end_id": 1970324836974599, "start_id": 1970324836974597, "properties": {}}::edge
+ {"id": 2251799813685258, "label": "edges3", "end_id": 1970324836974599, "start_id": 1970324836974598, "properties": {}}::edge
+ {"id": 2251799813685260, "label": "edges3", "end_id": 1970324836974600, "start_id": 1970324836974599, "properties": {}}::edge
+ {"id": 2251799813685257, "label": "edges3", "end_id": 1970324836974600, "start_id": 1970324836974597, "properties": {}}::edge
+ {"id": 2251799813685259, "label": "edges3", "end_id": 1970324836974600, "start_id": 1970324836974598, "properties": {}}::edge
+ {"id": 2251799813685261, "label": "edges3", "end_id": 1970324836974601, "start_id": 1970324836974600, "properties": {}}::edge
+ {"id": 2814749767106561, "label": "edges4", "end_id": 2533274790395906, "start_id": 2533274790395905, "properties": {}}::edge
+ {"id": 2814749767106563, "label": "edges4", "end_id": 2533274790395907, "start_id": 2533274790395906, "properties": {}}::edge
+ {"id": 2814749767106569, "label": "edges4", "end_id": 2533274790395907, "start_id": 2533274790395912, "properties": {}}::edge
+ {"id": 2814749767106562, "label": "edges4", "end_id": 2533274790395907, "start_id": 2533274790395905, "properties": {}}::edge
+ {"id": 2814749767106564, "label": "edges4", "end_id": 2533274790395909, "start_id": 2533274790395908, "properties": {}}::edge
+ {"id": 2814749767106565, "label": "edges4", "end_id": 2533274790395910, "start_id": 2533274790395908, "properties": {}}::edge
+ {"id": 2814749767106566, "label": "edges4", "end_id": 2533274790395910, "start_id": 2533274790395909, "properties": {}}::edge
+ {"id": 2814749767106567, "label": "edges4", "end_id": 2533274790395911, "start_id": 2533274790395910, "properties": {}}::edge
+ {"id": 2814749767106568, "label": "edges4", "end_id": 2533274790395912, "start_id": 2533274790395911, "properties": {}}::edge
+(78 rows)
 
-SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
- age_create_barbell_graph 
---------------------------
- 
-(1 row)
-
-SELECT COUNT(*) FROM gp1."edges";
- count 
--------
-    42
-(1 row)
-
-SELECT COUNT(*) FROM gp1."vertices";
- count 
--------
-    20
-(1 row)
-
-SELECT * FROM age_create_barbell_graph('gp2',5,10,'vertices',NULL,'edges',NULL);
+-- creating another graph
+SELECT * FROM age_create_barbell_graph('gp2',10,10,'vertices',NULL,'edges',NULL);
 NOTICE:  graph "gp2" has been created
 NOTICE:  VLabel "vertices" has been created
 NOTICE:  ELabel "edges" has been created
  age_create_barbell_graph 
 --------------------------
- 
+ 844424930131978
+(1 row)
+
+-- testing vertex NULL labels
+SELECT * FROM age_create_barbell_graph('gp3',6,6,NULL,NULL,'edges');
+NOTICE:  graph "gp3" has been created
+NOTICE:  ELabel "edges" has been created
+ age_create_barbell_graph 
+--------------------------
+ 281474976710662
 (1 row)
 
 -- SHOULD FAIL
+-- invalid graph name
 SELECT * FROM age_create_barbell_graph(NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 ERROR:  Graph name cannot be NULL
+SELECT * FROM age_create_barbell_graph(NULL,NULL,NULL);
+ERROR:  Graph name cannot be NULL
+-- invalid number of vertexes in complete graphs
 SELECT * FROM age_create_barbell_graph('gp2',NULL,0,'vertices',NULL,'edges',NULL); 
 ERROR:  Graph size cannot be NULL or lower than 3
+SELECT * FROM age_create_barbell_graph('gp2',0,0,'vertices',NULL,'edges',NULL);
+ERROR:  Graph size cannot be NULL or lower than 3
+SELECT * FROM age_create_barbell_graph('gp2',1,1,'vertices',NULL,'edges',NULL);
+ERROR:  Graph size cannot be NULL or lower than 3
+SELECT * FROM age_create_barbell_graph('gp2',2,2,'vertices',NULL,'edges',NULL);
+ERROR:  Graph size cannot be NULL or lower than 3
+SELECT * FROM age_create_barbell_graph('gp2',-1,0,'vertices',NULL,'edges',NULL);
+ERROR:  Graph size cannot be NULL or lower than 3
+-- invalid number of vertexes in bridge
+SELECT * FROM age_create_barbell_graph('gp2',3,-1,'vertices',NULL,'edges',NULL);
+ERROR:  Bridge size cannot be NULL or lower than 0
 SELECT * FROM age_create_barbell_graph('gp3',5,NULL,'vertices',NULL,'edges',NULL);
 ERROR:  Bridge size cannot be NULL or lower than 0
-SELECT * FROM age_create_barbell_graph('gp4',NULL,0,'vertices',NULL,'edges',NULL);
-ERROR:  Graph size cannot be NULL or lower than 3
-SELECT * FROM age_create_barbell_graph('gp5',5,0,'vertices',NULL,NULL,NULL);
-ERROR:  edge label can not be NULL
+-- invalid edge label
+SELECT * FROM age_create_barbell_graph('gp5',5,3,'vertices',NULL,NULL,NULL);
+ERROR:  edge label cannot be NULL
+SELECT * FROM age_create_barbell_graph('gp5',5,4,'vertices');
+ERROR:  edge label cannot be NULL
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
-ERROR:  vertex and edge label can not be same
+ERROR:  vertex and edge labels cannot be the same
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 10 other objects
 DETAIL:  drop cascades to table gp1._ag_label_vertex
 drop cascades to table gp1._ag_label_edge
-drop cascades to table gp1.vertices
-drop cascades to table gp1.edges
+drop cascades to table gp1.vertices1
+drop cascades to table gp1.edges1
+drop cascades to table gp1.vertices2
+drop cascades to table gp1.edges2
+drop cascades to table gp1.vertices3
+drop cascades to table gp1.edges3
+drop cascades to table gp1.vertices4
+drop cascades to table gp1.edges4
 NOTICE:  graph "gp1" has been dropped
  drop_graph 
 ------------
@@ -223,6 +369,17 @@ drop cascades to table gp2._ag_label_edge
 drop cascades to table gp2.vertices
 drop cascades to table gp2.edges
 NOTICE:  graph "gp2" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('gp3', true);
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table gp3._ag_label_vertex
+drop cascades to table gp3._ag_label_edge
+drop cascades to table gp3.edges
+NOTICE:  graph "gp3" has been dropped
  drop_graph 
 ------------
  
