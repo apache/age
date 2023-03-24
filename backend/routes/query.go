@@ -79,7 +79,7 @@ func Cypher(ctx echo.Context) error {
 	}
 
 	cols, _ := rows.ColumnTypes()
-	print("0 index val", cols[0].DatabaseTypeName())
+	//print("0 index val", cols[0].DatabaseTypeName())
 	if len(cols) == 1 && cols[0].DatabaseTypeName() == "VOID" {
 		return ctx.JSON(204, map[string]string{
 			"status": "success",
