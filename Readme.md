@@ -45,11 +45,11 @@ Visualize graph data generated using Apache AGE with Apache AGE Viewer applicati
    
 - <b>Query Translation: </b> Entered query translated to give appropriate results.
      
-- <b> Identification of SQL/Postgres: </b> Classification of SQL and Cypher must be present so we can clearly translate cyphers.
-    
 - <b>Schema Management:</b> It will also provide a visual schema editor for creating and managing indexes, constraints, and labels in your apache-age databases.
      
-   <b><i>Overall cycle work as : Data gathered from Db,Query entered,Query Translation, Output in Graph format(In Frontened)</b></i>
+- <b>Current AGE viewer desktop: </b> Currently our AGE viewer frontend has been developed on Go using Wails framework. Backend part is under development, AGE driver is been implemented using sessions. Furthermore query translation and graphical representation are ongoing. 
+          
+   <b><i> Application flow will be as follow : Data gathered from Db ==> Query entered ==> Query Translation ==> Output in Graph format(In Frontened)</b></i>
 
 
 </p>
