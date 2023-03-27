@@ -167,6 +167,29 @@ $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_set', $$
         MATCH (n {j: 5})
+        SET n.y = 53
+        SET n.y = 50
+        SET n.z = 99
+        SET n.arr = [n.y, n.z]
+        RETURN n
+$$) AS (a agtype);
+                                                             a                                                             
+---------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 50, "z": 99, "arr": [50, 99]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH (n {j: 5})
+        REMOVE n.arr
+        RETURN n
+$$) AS (a agtype);
+                                                    a                                                     
+----------------------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 50, "z": 99}}::vertex
+(1 row)
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH (n {j: 5})
         RETURN n
 $$) AS (a agtype);
                                                     a                                                     
@@ -219,6 +242,46 @@ $$) AS (a agtype);
 ---------------------------------------------------------------------------------------------------------
  {"id": 281474976710659, "label": "", "properties": {"y": 2}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 2, "z": 99}}::vertex
+(2 rows)
+
+-- Test that SET works with nodes(path) and relationships(path)
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        WITH nodes(p) AS ns
+        WITH ns[0] AS n
+        SET n.k = 99
+        SET n.k = 999
+        RETURN n
+$$) AS (a agtype);
+                                                         a                                                         
+-------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"k": 999, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "k": 999, "y": 2, "z": 99}}::vertex
+(2 rows)
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        WITH relationships(p) AS rs
+        WITH rs[0] AS r
+        SET r.l = 99
+        SET r.l = 999
+        RETURN r
+$$) AS (a agtype);
+                                                                        a                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842630, "label": "e", "end_id": 281474976710659, "start_id": 281474976710658, "properties": {"j": 34, "l": 999, "y": 99}}::edge
+ {"id": 1125899906842629, "label": "e", "end_id": 844424930131970, "start_id": 844424930131970, "properties": {"j": 34, "l": 999}}::edge
+(2 rows)
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        REMOVE n.k, e.l
+        RETURN p
+$$) AS (a agtype);
+                                                                                                                                                                            a                                                                                                                                                                            
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710658, "label": "", "properties": {"y": 1}}::vertex, {"id": 1125899906842630, "label": "e", "end_id": 281474976710659, "start_id": 281474976710658, "properties": {"j": 34, "y": 99}}::edge, {"id": 281474976710659, "label": "", "properties": {"y": 2}}::vertex]::path
+ [{"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 2, "z": 99}}::vertex, {"id": 1125899906842629, "label": "e", "end_id": 844424930131970, "start_id": 844424930131970, "properties": {"j": 34}}::edge, {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 2, "z": 99}}::vertex]::path
 (2 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n)-[]->(n) SET n.y = 99 RETURN n$$) AS (a agtype);
