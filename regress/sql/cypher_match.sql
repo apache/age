@@ -271,17 +271,30 @@ EXECUTE property_ps(agtype_build_map('props',
 -- need a following RETURN clause (should fail)
 SELECT * FROM cypher('cypher_match', $$MATCH (n:v)$$) AS (a agtype);
 
---Invalid Variables
+--invalid variable reuse, these should fail
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a)-[]-()-[]-(a:v1) RETURN a
 $$) AS (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (a)-[]-(a:v2)-[]-(a) RETURN a
+$$) AS (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (a)-[]-(a:v1) RETURN a
+$$) AS (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (a)-[]-(a)-[]-(a:v1) RETURN a
+$$) AS (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (a)-[]-(a)-[]-(a:invalid_label) RETURN a
+$$) AS (a agtype);
 
+--Valid variable reuse, although why would you want to do it this way?
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[]-()-[a]-() RETURN a
 $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_match', $$
-	MATCH (a:v1)-[]-()-[]-(a {id:'will_fail'}) RETURN a
+	MATCH (a:v1)-[]-()-[]-(a {id:'will_not_fail'}) RETURN a
 $$) AS (a agtype);
 
 --Incorrect Labels
@@ -372,6 +385,20 @@ SELECT * FROM cypher('cypher_match',
  $$MATCH (u)-[e]->(v) WHERE EXISTS((u)-[e]->(u)) AND EXISTS((v)-[e]->(v)) RETURN u, e, v $$)
 AS (u agtype, e agtype, v agtype);
 
+-- Return exists(pattern)
+
+SELECT * FROM cypher('cypher_match',
+ $$MATCH (u) RETURN EXISTS((u)-[]->()) $$)
+AS (exists agtype);
+
+SELECT * FROM cypher('cypher_match',
+ $$MATCH p=(u)-[e]->(v) RETURN EXISTS((p)) $$)
+AS (exists agtype);
+
+SELECT * FROM cypher('cypher_match',
+ $$MATCH (u)-[e]->(v) RETURN EXISTS((u)-[e]->(v)-[e]->(u))$$)
+AS (exists agtype);
+
 -- These should error
 -- Bad pattern
 SELECT * FROM cypher('cypher_match',
@@ -410,10 +437,116 @@ SELECT * FROM cypher('cypher_match',
  $$MATCH (u) WHERE EXISTS(u.id) AND EXISTS((u)-[]->(u)) RETURN u$$)
 AS (u agtype);
 
+-- Return exists(property)
+SELECT * FROM cypher('cypher_match',
+ $$MATCH (u) RETURN EXISTS(u.id), properties(u) $$)
+AS (exists agtype, properties agtype);
+
+SELECT * FROM cypher('cypher_match',
+ $$MATCH (u) RETURN EXISTS(u.name), properties(u) $$)
+AS (exists agtype, properties agtype);
+
 -- should give an error
 SELECT * FROM cypher('cypher_match',
  $$MATCH (u) WHERE EXISTS(u) RETURN u$$)
 AS (u agtype);
+
+--
+-- MATCH with WHERE isEmpty(property)
+--
+
+SELECT create_graph('for_isEmpty');
+
+-- Create vertices
+
+SELECT * FROM cypher('for_isEmpty',
+ $$CREATE (u:for_pred {id:1, type: "empty", list: [], map: {}, string: ""}),
+		  (v:for_pred {id:2, type: "filled", list: [1], map: {a:1}, string: "a"}),
+		  (w:for_pred)$$)
+AS (a agtype);
+
+-- Match vertices with empty properties
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u.list) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u.map) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u.string) RETURN properties(u) $$)
+AS (u agtype);
+
+-- Match vertices with non-empty properties
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE NOT isEmpty(u.list) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE NOT isEmpty(u.map) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE NOT isEmpty(u.string) RETURN properties(u) $$)
+AS (u agtype);
+
+-- Match vertices with no properties
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(properties(u)) RETURN properties(u) $$)
+AS (u agtype);
+
+-- Match vertices with properties
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE NOT isEmpty(properties(u)) RETURN properties(u) $$)
+AS (u agtype);
+
+-- Match vertices with null property (should return nothing since WHERE null)
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u.tree) RETURN properties(u) $$)
+AS (u agtype);
+
+-- Match and Return bool
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u.list) RETURN isEmpty(u.list), u.type $$)
+AS (b agtype, type agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE NOT isEmpty(u.list) RETURN isEmpty(u.list), u.type $$)
+AS (b agtype, type agtype);
+
+-- Return null on null
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) RETURN isEmpty(u.tree) $$)
+AS (b agtype);
+
+-- Should give an error
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(u) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(1) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty(1,2,3) RETURN properties(u) $$)
+AS (u agtype);
+
+SELECT * FROM cypher('for_isEmpty',
+ $$MATCH (u:for_pred) WHERE isEmpty() RETURN properties(u) $$)
+AS (u agtype);
+
+-- clean up
+SELECT drop_graph('for_isEmpty', true);
 
 --
 --Distinct
@@ -501,6 +634,20 @@ SELECT * FROM cypher('cypher_match', $$
     ORDER BY n, p, m, q
  $$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
 
+-- Tests to catch match following optional match logic
+-- this syntax is invalid in cypher
+SELECT * FROM cypher('cypher_match', $$
+	OPTIONAL MATCH (n)
+    MATCH (m)
+    RETURN n,m
+ $$) AS (n agtype, m agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (n)
+	OPTIONAL MATCH (m)
+    MATCH (o)
+    RETURN n,m
+ $$) AS (n agtype, m agtype);
 
 --
 -- Tests retrieving Var from some parent's cpstate during transformation
@@ -599,6 +746,95 @@ SELECT * FROM cypher('cypher_match', $$
     WHERE n.i = 1
     RETURN n
 $$) as (n agtype);
+
+--
+-- Regression tests to check previous clause variable refs
+--
+-- set up initial state and show what we're working with
+SELECT * FROM cypher('cypher_match', $$
+    CREATE (a {age: 4}) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+	CREATE (b {age: 6}) RETURN b $$) as (b agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) WHERE exists(a.name) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) WHERE exists(a.name) SET a.age = 4 RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a),(b) WHERE a.age = 4 AND a.name = "T" AND b.age = 6
+	RETURN a,b $$) as (a agtype, b agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a),(b) WHERE a.age = 4 AND a.name = "T" AND b.age = 6 CREATE
+	(a)-[:knows {relationship: "friends", years: 3}]->(b) $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a),(b) WHERE a.age = 4 AND a.name = "orphan" AND b.age = 6 CREATE
+	(a)-[:knows {relationship: "enemies", years: 4}]->(b) $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a)-[r]-(b) RETURN r $$) as (r agtype);
+
+-- check reuse of 'a' clause-to-clause - vertices
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a {age:4}) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) MATCH (a {age:4}) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a {age:4, name: "orphan"}) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) MATCH (a {age:4}) MATCH (a {name: "orphan"}) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a {age:4}) MATCH (a {name: "orphan"}) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) MATCH (a {age:4}) MATCH (a {name: "orphan"}) SET a.age = 3 RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) MATCH (a {age:3}) MATCH (a {name: "orphan"}) RETURN a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a {name: "orphan"}) MATCH (a {age:3}) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) WHERE exists(a.age) AND exists(a.name) RETURN a $$) as (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a) WHERE exists(a.age) AND NOT exists(a.name) RETURN a $$) as (a agtype);
+
+-- check reuse of 'r' clause-to-clause - edges
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r]-() RETURN r $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r]-() MATCH ()-[r {relationship: "friends"}]-() RETURN r $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r {years:3, relationship: "friends"}]-() RETURN r $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r {years:3}]-() MATCH ()-[r {relationship: "friends"}]-() RETURN r $$) as (r agtype);
+--mismatch year #, should return nothing
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r {years:2}]-() MATCH ()-[r {relationship: "friends"}]-() RETURN r $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r {relationship:"enemies"}]-() MATCH ()-[r {years:4}]-() RETURN r $$) as (r agtype);
+SELECT * FROM cypher('cypher_match', $$
+	MATCH ()-[r {relationship:"enemies"}]-() MATCH ()-[r {relationship:"friends"}]-() RETURN r $$) as (r agtype);
+
+-- check reuse within clause - vertices
+SELECT * FROM cypher('cypher_match', $$ CREATE (u {name: "Dave"})-[:knows]->({name: "John"})-[:knows]->(u) RETURN u $$) as (u agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(u)-[]-()-[]-(u) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(u)-[]->()-[]->(u) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[]->()-[]->(a {name: "Dave"}) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[]->()-[]->(a {name: "John"}) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "Dave"})-[]->()-[]->(a {name: "Dave"}) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "John"})-[]->()-[]->(a {name: "John"}) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "Dave"})-[]->()-[]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "John"})-[]->()-[]->(a) RETURN p $$)as (p agtype);
+
+-- these are illegal and should fail
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b]->()-[b]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b]->()-[b:knows]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b:knows]->()-[b:knows]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b:knows]->()-[b]->(a) RETURN p $$)as (p agtype);
 
 --
 -- Clean up

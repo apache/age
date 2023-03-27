@@ -31,7 +31,7 @@ NOTICE:  graph "graph" has been created
 SELECT * FROM ag_graph WHERE name = 'graph';
  graphid | name  | namespace 
 ---------+-------+-----------
-   17591 | graph | graph
+   17595 | graph | graph
 (1 row)
 
 -- create a label to test drop_label()

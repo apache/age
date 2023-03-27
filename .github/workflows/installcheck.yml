@@ -42,7 +42,7 @@ jobs:
         run: |
           make PG_CONFIG=$HOME/pg13/bin/pg_config installcheck
         continue-on-error: true
-          
+
       - name: Dump regression test errors
         if: steps.regression_tests.outcome != 'success'
         run: |

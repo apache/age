@@ -5,3 +5,5 @@ build.sh
 .deps
 .DS_Store
 .vscode
+*.tokens
+*.interp
