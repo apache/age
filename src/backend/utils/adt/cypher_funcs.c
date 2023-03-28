@@ -1672,6 +1672,8 @@ float8_cmp(const void *a, const void *b)
 Datum
 percentilecont(PG_FUNCTION_ARGS)
 {
+	if(PG_ARGISNULL(0))
+		PG_RETURN_NULL();
 	Jsonb *j = PG_GETARG_JSONB_P(0);
     Numeric pct = PG_GETARG_NUMERIC(1);
 	float8 pct_val = DatumGetFloat8(DirectFunctionCall1(numeric_float8, pct));
