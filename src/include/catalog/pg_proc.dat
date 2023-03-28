@@ -10874,6 +10874,9 @@
 { oid => '3985', descr => 'aggregate final function',
   proname => 'mode_final', proisstrict => 'f', prorettype => 'anyelement',
   proargtypes => 'internal anyelement', prosrc => 'mode_final' },
+{ oid => '8009', descr => 'returns the percentile of the given value over a group',
+  proname => 'percentilecont', proisstrict => 'f', prorettype => 'float8',
+  proargtypes => 'jsonb numeric', prosrc => 'percentilecont' },
 
 # hypothetical-set aggregates (and their support functions)
 { oid => '3986', descr => 'rank of hypothetical row',
