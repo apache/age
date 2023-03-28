@@ -67,6 +67,7 @@ static bool is_numeric_integer(Numeric n);
 static void ereport_invalid_jsonb_param(FunctionCallJsonbInfo *fcjinfo);
 static char *type_to_jsonb_type_str(Oid type);
 static Jsonb *datum_to_jsonb(Datum d, Oid type);
+static char* lowerString(char* str, int size);
 
 Datum
 jsonb_head(PG_FUNCTION_ARGS)
@@ -1522,4 +1523,83 @@ tointegerornull(PG_FUNCTION_ARGS)
 	}
 	else
 		PG_RETURN_NULL();
+}
+
+static char* lowerString(char* str, int size)
+{
+	for(int i = 0 ; i < size ; ++i)
+		str[i] = tolower(str[i]);
+	return str;
+}
+
+Datum
+tobooleanlist(PG_FUNCTION_ARGS)
+{
+	Jsonb *j = PG_GETARG_JSONB_P(0);
+	JsonbParseState *jpstate = NULL;
+	JsonbValue *ajv;
+	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reverse(): list is expected but %s",
+						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
+
+	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
+	if (JB_ROOT_COUNT(j) > 1)
+	{
+		JsonbIterator *it;
+		JsonbValue jv;
+		JsonbValue *jv_new;
+		JsonbValue sjv;
+		JsonbIteratorToken tok;
+		int32 counter = 0;
+		it = JsonbIteratorInit(&j->root);
+		tok = JsonbIteratorNext(&it, &jv, false);
+		while (tok != WJB_DONE)
+		{
+			if (tok == WJB_ELEM)
+			{
+				jv_new = getIthJsonbValueFromContainer(&j->root, counter++);
+				if (jv_new->type == jbvString || jv_new->type == jbvNumeric)
+				{
+					jv_new->val.string.val = lowerString(jv_new->val.string.val, jv_new->val.string.len);
+					if(strcmp(jv_new->val.string.val, "true") == 0) {
+						sjv.type = jbvBool;
+						sjv.val.boolean = true;
+					}
+					else if(strcmp(jv_new->val.string.val, "false") == 0) {
+						sjv.type = jbvBool;
+						sjv.val.boolean = false;
+					}
+					else {
+						sjv.type = jbvNull;
+					}
+					jv = sjv;
+				}
+				else if (jv_new->type == jbvNull)
+				{
+					sjv.type = jbvNull;
+					jv = sjv;
+				}
+				else if (jv_new->type == jbvBool)
+				{
+					sjv.type = jbvBool;
+					if (jv_new->val.boolean)
+						sjv.val.boolean = true;
+					else
+						sjv.val.boolean = false;
+					jv = sjv;
+				}
+				else
+				{
+					sjv.type = jbvNull;
+					jv = sjv;
+				}
+				pushJsonbValue(&jpstate, WJB_ELEM, &jv);
+			}
+			tok = JsonbIteratorNext(&it, &jv, true);
+		}
+	}
+	ajv = pushJsonbValue(&jpstate, WJB_END_ARRAY, NULL);
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(ajv));
 }

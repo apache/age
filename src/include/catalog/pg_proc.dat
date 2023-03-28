@@ -12037,6 +12037,9 @@
 { oid => '8007', descr => 'returns the integer equivalent or null',
   proname => 'tointegerornull', prorettype => 'int8', proisstrict => 't',
   proargtypes => 'any', prosrc => 'tointegerornull' },
+{ oid => '8008', descr => 'converts the given list to a boolean list',
+  proname => 'tobooleanlist', prorettype => 'jsonb',
+  proargtypes => 'jsonb', prosrc => 'tobooleanlist' },
 
 # supports for graphdatabase binary upgrade
 { oid => '8001', descr => 'for use by pg_upgrade',
