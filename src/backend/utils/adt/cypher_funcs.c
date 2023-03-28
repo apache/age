@@ -1727,3 +1727,51 @@ percentilecont(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 }
 
+Datum
+percentiledisc(PG_FUNCTION_ARGS)
+{
+	if(PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+	Jsonb *j = PG_GETARG_JSONB_P(0);
+    Numeric pct = PG_GETARG_NUMERIC(1);
+	float8 pct_val = DatumGetFloat8(DirectFunctionCall1(numeric_float8, pct));
+	float8 result = 0;
+	float8 n = JB_ROOT_COUNT(j);
+
+	JsonbParseState *jpstate = NULL;
+	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reverse(): list is expected but %s",
+						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
+
+	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
+	if (n > 1 && pct_val >= 0.f && pct_val <= 1.f)
+	{
+		JsonbIterator *it;
+		JsonbValue jv;
+		JsonbValue *jv_new;
+		JsonbIteratorToken tok;
+		int32 counter = 0;
+		float8 *arr = (float8 *)palloc(n * sizeof(float8));
+		float8 fl = floor((n - 1) * pct_val);
+		it = JsonbIteratorInit(&j->root);
+		tok = JsonbIteratorNext(&it, &jv, false);
+		while (tok != WJB_DONE)
+		{
+			if (tok == WJB_ELEM)
+			{
+				jv_new = getIthJsonbValueFromContainer(&j->root, counter++);
+				if(jv_new->type == jbvNumeric)
+					arr[counter - 1] = DatumGetFloat8(DirectFunctionCall1(numeric_float8, jv_new->val.numeric));
+			}
+			tok = JsonbIteratorNext(&it, &jv, true);
+		}
+		qsort(arr, n, sizeof(float8), float8_cmp);
+		result = arr[(int) fl];
+		pfree(arr);
+		PG_RETURN_FLOAT8(result);
+	}
+    else
+		PG_RETURN_NULL();
+}

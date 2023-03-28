@@ -10877,6 +10877,9 @@
 { oid => '8009', descr => 'returns the percentile of the given value over a group',
   proname => 'percentilecont', proisstrict => 'f', prorettype => 'float8',
   proargtypes => 'jsonb numeric', prosrc => 'percentilecont' },
+{ oid => '8010', descr => 'returns the percentile of the given value over a group',
+  proname => 'percentiledisc', proisstrict => 'f', prorettype => 'float8',
+  proargtypes => 'jsonb numeric', prosrc => 'percentiledisc' },
 
 # hypothetical-set aggregates (and their support functions)
 { oid => '3986', descr => 'rank of hypothetical row',

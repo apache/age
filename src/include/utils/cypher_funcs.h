@@ -39,6 +39,7 @@ extern Datum jsonb_tail(PG_FUNCTION_ARGS);
 
 /* mathematical */
 extern Datum percentilecont(PG_FUNCTION_ARGS);
+extern Datum percentiledisc(PG_FUNCTION_ARGS);
 
 /* mathematical - numeric */
 extern Datum jsonb_abs(PG_FUNCTION_ARGS);
