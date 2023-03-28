@@ -114,6 +114,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     bool update_indexes;
     TM_Result   result;
 
+    CommandId cid = GetCurrentCommandId(true);
     ResultRelInfo *saved_resultRelInfo = estate->es_result_relation_info;
     estate->es_result_relation_info = resultRelInfo;
 
@@ -139,7 +140,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
         result = table_tuple_update(resultRelInfo->ri_RelationDesc,
                                     &tuple->t_self, elemTupleSlot,
-                                    GetCurrentCommandId(true),
+                                    cid,
                                     //estate->es_output_cid,
                                     estate->es_snapshot,// NULL,
                                     estate->es_crosscheck_snapshot,
@@ -148,7 +149,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
         if (result == TM_SelfModified)
         {
-            if (hufd.cmax != estate->es_output_cid)
+            if (hufd.cmax != cid)
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
@@ -173,11 +174,11 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
           ExecInsertIndexTuples(elemTupleSlot, estate, false, NULL, NIL);
         }
 
-            ExecCloseIndices(resultRelInfo);
+        ExecCloseIndices(resultRelInfo);
     }
     else if (lock_result == TM_SelfModified)
     {
-        if (hufd.cmax != estate->es_output_cid)
+        if (hufd.cmax != cid)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
