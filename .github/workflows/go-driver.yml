@@ -2,10 +2,10 @@ name: Go Driver Tests
 
 on:
   push:
-    branches: [ "PG13" ]
+    branches: [ "alpha/PG14" ]
 
   pull_request:
-    branches: [ "PG13" ]
+    branches: [ "alpha/PG14" ]
 
 jobs:
   build:
