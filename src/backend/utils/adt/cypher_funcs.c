@@ -1451,23 +1451,8 @@ str_size(PG_FUNCTION_ARGS)
 Datum
 array_size(PG_FUNCTION_ARGS)
 {
-	AnyArrayType *arr = PG_GETARG_ANY_ARRAY_P(0);
-	int				ndims = AARR_NDIM(arr),
-					*dims = AARR_DIMS(arr),
-					result;
-
-	/* Sanity check: does it look like an array at all? */
-	if (ndims <= 0 || *dims > MAXDIM)
-		PG_RETURN_NULL();
-
-	result = ArrayGetNItems(ndims, dims);
-
-	// /* free pointers */
-	pfree(arr);
-	pfree(dims);
-
-	PG_RETURN_INT32(result);
-
+	AnyArrayType 	*v = PG_GETARG_ANY_ARRAY_P(0);
+	PG_RETURN_INT32(ArrayGetNItems(AARR_NDIM(v), AARR_DIMS(v)));
 }
 
 /*
