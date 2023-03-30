@@ -161,3 +161,6 @@ test: cypher_finalize
 
 # run scalar functions
 test: scalar
+
+# run list functions
+test: list
