@@ -1,0 +1,16 @@
+--
+-- Regression tests for scalar functions
+--
+-- Test for the tointegerornull() function
+RETURN tointegerornull('42'), tointegerornull('not a number'), tointegerornull(true), tointegerornull(['A', 'B', 'C']);
+ tointegerornull | tointegerornull | tointegerornull | tointegerornull 
+-----------------+-----------------+-----------------+-----------------
+ 42              |                 | 1               | 
+(1 row)
+
+RETURN tointegerornull(12.5), tointegerornull('13.5'), tointegerornull(45), tointegerornull(false);
+ tointegerornull | tointegerornull | tointegerornull | tointegerornull 
+-----------------+-----------------+-----------------+-----------------
+ 12              | 13              | 45              | 0
+(1 row)
+
