@@ -1,0 +1,42 @@
+--
+-- Regression tests for scalar functions
+--
+-- Test for the tointeger() function
+RETURN tointeger('42'), tointeger('not a number'), tointeger(true);
+ tointeger | tointeger | tointeger 
+-----------+-----------+-----------
+ 42        |           | 1
+(1 row)
+
+RETURN tointeger(45), tointeger(null), tointeger(false);
+ tointeger | tointeger | tointeger 
+-----------+-----------+-----------
+ 45        |           | 0
+(1 row)
+
+-- Test for the tofloat() function
+RETURN tofloat('11.5'), tofloat('not a number'), tofloat(true);
+ tofloat | tofloat | tofloat 
+---------+---------+---------
+ 11.5    |         | 1
+(1 row)
+
+RETURN tofloat(45), tofloat('42'), tofloat(null), tofloat(false);
+ tofloat | tofloat | tofloat | tofloat 
+---------+---------+---------+---------
+ 45      | 42      |         | 0
+(1 row)
+
+-- Test for the tofloatornull() function
+RETURN tofloatornull('11.5'), tofloatornull('not a number'), tofloatornull(true);
+ tofloatornull | tofloatornull | tofloatornull 
+---------------+---------------+---------------
+ 11.5          |               | 
+(1 row)
+
+RETURN tofloatornull(null), tofloatornull(false), tofloatornull(45), tofloatornull(45.5);
+ tofloatornull | tofloatornull | tofloatornull | tofloatornull 
+---------------+---------------+---------------+---------------
+               |               | 45            | 45.5
+(1 row)
+
