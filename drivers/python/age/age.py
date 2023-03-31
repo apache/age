@@ -172,6 +172,191 @@ class Age:
         self.connection = None    # psycopg2 connection]
         self.graphName = None
 
+
+    def get_pg_version(self):
+        """Get postgres version"""
+        crsr = self.connection.cursor()
+        crsr.execute('SELECT version()')
+        db_version = crsr.fetchone()
+        crsr.close()
+        return db_version
+
+
+    def close_connection(self):
+        """close connection with postgresql database"""
+        if self.connection is not None:
+            self.connection.close()
+            self.connection = None
+
+
+    def create_graph(self, graphName):
+        """create age db graph"""
+        try :
+            setUpAge(self.connection, graphName)
+            self.graphName = graphName
+        except Exception as e:
+            print(e)
+
+
+    def delete_graph(self, graphName = "None"):
+        """delete age db graph"""
+        if graphName == "None" :
+            graphName = self.graphName
+        try :
+            deleteGraph(self.connection, graphName)
+            self.graphName = None
+        except Exception as e:
+            print(e)
+
+
+    def dictToStr(self, property):
+        p = "{"
+        for x,y in property.items():
+            p+= x + " : "
+            if type(y) == type({}):
+                p+= self.dictToStr(y)
+            else :
+                p+= "'"
+                p+= str(y)
+                p+= "'"
+            p+= ","
+        p = p.removesuffix(',')
+        p+= "}"
+        return p
+
+
+    def extract_vertices(self, vertices):
+        """returns from an agtype to python dict vertices"""
+        tmp = {}
+        tmp['label'] = vertices.label
+        tmp['id'] = vertices.id
+        for x in vertices.properties:
+            tmp[x] = vertices[x]
+        return tmp
+
+
+    def extract_edge(self, edge):
+        """returns from an agtype to python dict edge"""
+        tmp = {}
+        tmp['label'] = edge.label
+        tmp['id'] = edge.id
+        tmp['start_id'] = edge.start_id
+        tmp['end_id'] = edge.end_id
+        for x in edge.properties:
+            tmp[x] = edge[x]
+        return tmp
+
+
+    def set_vertices(self,graphName , label, property):
+        """Add a vertices to the graph"""
+        with self.connection.cursor() as cursor:
+
+            query = """
+            SELECT * from cypher(
+                '%s', 
+                $$ 
+                    CREATE (v:%s %s) 
+                    RETURN v
+                $$
+            ) as (v agtype); 
+            """ % (graphName, label,self.dictToStr(property))
+            try :
+                cursor.execute(query)
+                for row in cursor:
+                    return self.extract_vertices(row[0])
+
+                # When data inserted or updated, You must commit.
+                self.connection.commit()
+            except Exception as ex:
+                print(type(ex), ex)
+                # if exception occurs, you must rollback all transaction. 
+                self.connection.rollback()
+
+
+    def set_edge(self, graphName, label1, prop1, label2, prop2, edge_label, edge_prop):
+        with self.connection.cursor() as cursor:
+            query ="""
+            SELECT * from cypher(
+                '%s', 
+                $$ 
+                    MATCH ( a:%s %s), (b:%s %s) 
+                    CREATE (a)-[r:%s %s]->(b)
+                $$) as (v agtype); 
+            """ % (
+                graphName,label1,
+                self.dictToStr(prop1), 
+                label2, 
+                self.dictToStr(prop2), 
+                edge_label, 
+                self.dictToStr(edge_prop)
+            )
+            try :
+                cursor.execute(query)
+                for row in cursor:
+                    print("CREATED::", row[0])
+                self.connection.commit()
+            except Exception as ex:
+                print(type(ex), ex)
+                self.connection.rollback()
+
+
+    def get_all_edge(self, graphName = "None" ):
+        if graphName == "None" :
+            graphName = self.graphName
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT * from cypher(
+                        %s, 
+                        $$ 
+                            MATCH p=()-[]->() 
+                            RETURN p 
+                            LIMIT 10 
+                        $$
+                    ) as (v agtype); """, (graphName,))
+                res = []
+                for row in cursor:
+                    path = row[0]
+                    tmp = {}
+                    tmp['v1'] = self.extract_vertices(path[0])
+                    tmp['e'] = self.extract_edge(path[1])
+                    tmp['v2'] = self.extract_vertices(path[2])
+                    # print(tmp)
+                    res.append(tmp)
+                return res
+
+
+        except Exception as ex:
+            print(type(ex), ex)
+            # if exception occurs, you must rollback even though just retrieving.
+            self.connection.rollback()
+
+
+    def get_all_vertices(self, graphName = "None"):
+        if graphName == "None" :
+            graphName = self.graphName
+        res = []
+        with self.connection.cursor() as cursor:
+            try :
+                cursor.execute(
+                    """
+                    SELECT * from cypher
+                    (%s, 
+                    $$ 
+                        MATCH (n) 
+                        RETURN n 
+                    $$) 
+                        as (v agtype); 
+                    """, (graphName,))
+                for row in cursor:
+                    vertices = self.extract_vertices(row[0])
+                    res.append(vertices)
+            except Exception as e:
+                print(e)
+        return res
+
+
     # Connect to PostgreSQL Server and establish session and type extension environment.
     def connect(self, graph:str=None, dsn:str=None, connection_factory=None, cursor_factory=None, **kwargs):
         conn = psycopg2.connect(dsn, connection_factory, cursor_factory, **kwargs)
@@ -212,6 +397,5 @@ class Age:
 
     # def queryCypher(self, cypherStmt:str, columns:list=None , params:tuple=None) -> ext.cursor :
     #     return queryCypher(self.connection, self.graphName, cypherStmt, columns, params)
-
 
 
