@@ -22,6 +22,7 @@
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "utils/lsyscache.h"
+#include "catalog/pg_inherits.h"
 
 #include "utils/age_vle.h"
 #include "catalog/ag_graph.h"
@@ -333,6 +334,19 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
     char *edge_label_name = NULL;
     int num_edge_property_constraints = 0;
     int num_edge_properties = 0;
+    List *child_oid_list = NIL;
+    bool isChild = false;
+    GRAPH_global_context *ggctx = NULL;
+
+    /*get the graph global context */
+    ggctx = find_GRAPH_global_context(vlelctx->graph_oid);
+    if (ggctx == NULL)
+    {
+        elog(ERROR, "could not find GRAPH global context for graph oid %d",
+             vlelctx->graph_oid);
+    }
+
+
 
     /* get the number of conditions from the prototype edge */
     num_edge_property_constraints = AGT_ROOT_COUNT(vlelctx->edge_property_constraint);
@@ -367,11 +381,26 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
         return false;
     }
 
+    /* get the children list of the current VLE_local_context*/
+    child_oid_list = getChildren(ggctx);
+    ListCell *lc;
+
+    /* check if child exists or not*/
+    foreach(lc, child_oid_list)
+    {
+        Oid child_oid = lfirst_oid(lc);
+        char *child_name = get_rel_name(child_oid);
+        if (strcmp(edge_label_name, child_name) == 0)
+        {
+            isChild = true;
+        }
+    }
+
     /*
      * Check for a label constraint. If the label name is NULL, there isn't one.
      */
     if (vlelctx->edge_label_name != NULL &&
-        strcmp(vlelctx->edge_label_name, edge_label_name) != 0)
+        strcmp(vlelctx->edge_label_name, edge_label_name) != 0  && !isChild) 
     {
         return false;
     }
