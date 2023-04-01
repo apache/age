@@ -25,6 +25,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "commands/label_commands.h"
+#include "catalog/pg_inherits.h"
 
 #include "utils/age_global_graph.h"
 #include "utils/agtype.h"
@@ -987,6 +988,62 @@ graphid get_edge_entry_start_vertex_id(edge_entry *ee)
 graphid get_edge_entry_end_vertex_id(edge_entry *ee)
 {
     return ee->end_vertex_id;
+}
+
+List* getChildren(GRAPH_global_context *ggctx)
+{
+    
+    Oid graph_oid;
+    Oid graph_namespace_oid;
+    Snapshot snapshot;
+    List *edge_label_names = NIL;
+    ListCell *lc;
+    List *children = NIL;
+
+    /* get the specific graph OID and namespace (schema) OID */
+    graph_oid = ggctx->graph_oid;
+    graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
+    /* get the active snapshot */
+    snapshot = GetActiveSnapshot();
+    /* get the names of all of the edge label tables */
+    edge_label_names = get_ag_labels_names(snapshot, graph_oid,
+                                           LABEL_TYPE_EDGE);
+    /* go through all edge label tables in list */
+    foreach (lc, edge_label_names)
+    {
+        Relation graph_edge_label;
+        HeapScanDesc scan_desc;
+        HeapTuple tuple;
+        char *edge_label_name;
+        Oid edge_label_table_oid;
+        TupleDesc tupdesc;
+        
+        
+        /* get the edge label name */
+        edge_label_name = lfirst(lc);
+
+        /* get the edge label name's OID */
+        edge_label_table_oid = get_relname_relid(edge_label_name,
+                                                 graph_namespace_oid);
+
+        List *child_edges_oid_temp = NIL;
+       
+        if( has_subclass(edge_label_table_oid))
+        {
+            child_edges_oid_temp = find_inheritance_children(edge_label_table_oid, NoLock);
+            
+            //loop through the child edges
+            ListCell *lc1;
+            foreach (lc1, child_edges_oid_temp)
+            {
+                Oid child_edge_oid = lfirst_oid(lc1);
+                children = lappend_oid(children, child_edge_oid);
+            }
+        }
+        
+    }
+    
+    return children;
 }
 
 /* PostgreSQL SQL facing functions */
