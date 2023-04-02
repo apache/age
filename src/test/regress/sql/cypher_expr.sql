@@ -323,6 +323,8 @@ MATCH (n:coll) SET n.l = tolower(n.name);
 MATCH (n:coll) SET n.u = toupper(n.name);
 MATCH (n:coll) RETURN n;
 
+RETURN e();
+
 -- Text matching
 
 CREATE (:ts {v: 'a fat cat sat on a mat and ate a fat rat'::tsvector});

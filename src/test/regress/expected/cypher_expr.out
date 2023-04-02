@@ -828,6 +828,12 @@ MATCH (n:coll) RETURN n;
  coll[7.1]{"l": "graphdatabase", "u": "GRAPHDATABASE", "name": "GraphDatabase"}
 (1 row)
 
+RETURN e();
+         e         
+-------------------
+ 2.718281828459045
+(1 row)
+
 -- Text matching
 CREATE (:ts {v: 'a fat cat sat on a mat and ate a fat rat'::tsvector});
 MATCH (n:ts) WHERE n.v::tsvector @@ 'cat & rat'::tsquery RETURN n;
