@@ -303,11 +303,13 @@ SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_A');
 SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_B');
 SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_A', ARRAY['PARENT_EDGE_A']);
 SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_B', ARRAY['PARENT_EDGE_B']);
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_C', ARRAY['CHILD_EDGE_B']);
 
 
 SELECT * FROM cypher('vle_inheritance_graph', $$
     CREATE (:Head {id: 1})-[:PARENT_EDGE_A]->(:Node {id: 2})-[:CHILD_EDGE_A]->(:Node {id: 3})-[:PARENT_EDGE_A]->(:Tail {id: 4}),
-            (:Head {id: 5})-[:PARENT_EDGE_B]->(:Node {id: 6})-[:CHILD_EDGE_B]->(:Node {id: 7})-[:PARENT_EDGE_B]->(:Tail {id: 8})
+            (:Head {id: 5})-[:PARENT_EDGE_B]->(:Node {id: 6})-[:CHILD_EDGE_B]->(:Node {id: 7})-[:PARENT_EDGE_B]->(:Tail {id: 8}),
+            (:Head {id: 9})-[:CHILD_EDGE_C]->(:Tail {id: 10})
     $$) AS (a agtype);
 
 --
@@ -338,13 +340,13 @@ SELECT * FROM cypher('vle_inheritance_graph', $$
     RETURN a.id, b.id
 $$) AS (a_id agtype, b_id agtype);
 
--- should find 6 rows
+-- should find 7 rows
 SELECT * FROM cypher('vle_inheritance_graph', $$
     MATCH (a)-[:PARENT_EDGE_B*]->(b)
     RETURN a.id, b.id
 $$) AS (a_id agtype, b_id agtype);
 
--- should find 3 rows
+-- should find 4 rows
 SELECT * FROM cypher('vle_inheritance_graph', $$
     MATCH (a)-[:PARENT_EDGE_B*1]->(b)
     RETURN a.id, b.id

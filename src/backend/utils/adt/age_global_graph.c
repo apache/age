@@ -1015,7 +1015,7 @@ List* get_child_edges(GRAPH_global_context *ggctx, char* edge_label_name)
     if(has_subclass(edge_label_table_oid))
     {
         /* get the edge's child labels OIDs */
-        child_edges_oid = find_inheritance_children(edge_label_table_oid, NoLock);
+        child_edges_oid = find_all_inheritors(edge_label_table_oid, NoLock, NULL);
     }
         
     return child_edges_oid;
