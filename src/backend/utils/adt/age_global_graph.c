@@ -1027,14 +1027,14 @@ List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name)
     /* get the edge label name's OID */
     edge_label_table_oid = get_relname_relid(edge_label_name,
                                              graph_namespace_oid);
-                                             
+
     List *child_edges_oid_temp = NIL;
     
     if( has_subclass(edge_label_table_oid))
     {
         child_edges_oid_temp = find_inheritance_children(edge_label_table_oid, NoLock);
         
-        //loop through the child edges
+        /*loop through the child edges*/
         ListCell *lc1;
         foreach (lc1, child_edges_oid_temp)
         {
