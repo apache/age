@@ -290,6 +290,106 @@ DROP FUNCTION show_list_use_vle;
 
 SELECT drop_graph('mygraph', true);
 
+
+--
+-- Test VLE for edge inheritance
+--
+
+SELECT create_graph('vle_inheritance_graph');
+SELECT create_vlabel('vle_inheritance_graph', 'Head');
+SELECT create_vlabel('vle_inheritance_graph', 'Tail');
+SELECT create_vlabel('vle_inheritance_graph', 'Node');
+SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_A');
+SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_B');
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_A', ARRAY['PARENT_EDGE_A']);
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_B', ARRAY['PARENT_EDGE_B']);
+
+
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    CREATE (:Head {id: 1})-[:PARENT_EDGE_A]->(:Node {id: 2})-[:CHILD_EDGE_A]->(:Node {id: 3})-[:PARENT_EDGE_A]->(:Tail {id: 4}),
+            (:Head {id: 5})-[:PARENT_EDGE_B]->(:Node {id: 6})-[:CHILD_EDGE_B]->(:Node {id: 7})-[:PARENT_EDGE_B]->(:Tail {id: 8})
+    $$) AS (a agtype);
+
+--
+-- VLE with the PARENT_EDGEs
+--
+
+-- should find 6 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 3 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 2 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*2]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*3]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 6 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 3 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 2 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*2]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*3]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+--
+-- VLE with the CHILD_EDGEs
+--
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_A*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_A*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_B*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_B*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+
 --
 -- Clean up
 --
@@ -297,6 +397,8 @@ SELECT drop_graph('mygraph', true);
 DROP TABLE start_and_end_points;
 
 SELECT drop_graph('cypher_vle', true);
+
+SELECT drop_graph('vle_inheritance_graph', true)
 
 --
 -- End
