@@ -381,8 +381,11 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
         return false;
     }
 
+    /*get the parent edge name*/
+    char* parent_edge_name = vlelctx->edge_label_name;
+   
     /* get the children list of the current VLE_local_context*/
-    child_oid_list = getChildren(ggctx);
+    child_oid_list = getChildren(ggctx, parent_edge_name);
     ListCell *lc;
 
     /* check if child exists or not*/

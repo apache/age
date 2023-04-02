@@ -60,5 +60,5 @@ Oid get_edge_entry_label_table_oid(edge_entry *ee);
 Datum get_edge_entry_properties(edge_entry *ee);
 graphid get_edge_entry_start_vertex_id(edge_entry *ee);
 graphid get_edge_entry_end_vertex_id(edge_entry *ee);
-List* getChildren(GRAPH_global_context *ggctx);
+List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name);
 #endif
