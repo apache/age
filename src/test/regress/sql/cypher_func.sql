@@ -185,3 +185,30 @@ MATCH (v) RETURN radians(v.degree);
 
 -- cleanup
 DROP GRAPH AG283 CASCADE;
+
+
+-- fix: array_tail did not work with integer type
+-- test 1: integer type
+SELECT tail(ARRAY[12,13,14,15,16]);
+-- test 2: null values
+SELECT tail(ARRAY['hi',null,null,'bye']);
+
+-- toFloatList (array): returns an array with the float equivalent of elements in an array
+-- test 1: text
+select toFloatList(ARRAY['12.5','-14.788','-0.004']);
+-- test 2: integer type
+select toFloatList(ARRAY[12,13,14,15]);
+-- test 3: null and float type
+select toFloatList(ARRAY[14.15, null, -45.78, null, null, 0.02]);
+-- test 4: null and boolean type
+select toFloatList(ARRAY[true, true, null]);
+
+-- toFloatList (jsonb): returns a jsonb array with numeric(float) equivalents of elements
+-- test 1: text
+return toFloatList(['12.5','-14.788','-0.004']);
+-- test 2: integer type
+return toFloatList([12,13,14,15]);
+-- test 3: null and float type
+return toFloatList([14.15, null, -45.78, null, null, 0.02]);
+-- test 4: null and boolean type
+return toFloatList([true, true, null]);

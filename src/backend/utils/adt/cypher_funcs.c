@@ -2792,9 +2792,86 @@ string_to_float(char* s)
 		return 0;
 }
 
+
 /*
  * tofloatlist:
- *		returns an array with the floatlist equivalent of all the elements
+ *		returns jsonb with the float/numeric equivalent of all the elements in jsonb
+ *		example: tofloatlist(['1.4','2.5','true']) = [1.4, 2.5, 1.0]
+ * 				 tofloatlist([null,'1289',34.6]) = [null,1289.0,34.6]
+ */
+Datum
+jsonb_tofloatlist(PG_FUNCTION_ARGS)
+{
+
+	Jsonb	   		*j = PG_GETARG_JSONB_P(0);
+	JsonbParseState *jpstate = NULL;
+	JsonbValue 		*ajv;
+
+	if (!JB_ROOT_IS_ARRAY(j) || JB_ROOT_IS_SCALAR(j))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("toStringList(): list is expected but %s",
+						JsonbToCString(NULL, &j->root, VARSIZE(j)))));
+
+	pushJsonbValue(&jpstate, WJB_BEGIN_ARRAY, NULL);
+
+	if (JB_ROOT_COUNT(j) > 1)
+	{
+		JsonbIterator 		*it;
+		JsonbValue			jv;
+		JsonbValue 			*jv_new;
+		JsonbValue			sjv;
+		JsonbIteratorToken 	tok;
+		int32 				counter = 0;
+		//Datum				s;
+
+		it = JsonbIteratorInit(&j->root);
+		tok = JsonbIteratorNext(&it, &jv, false);
+		sjv.type = jbvNumeric;
+
+		while (tok != WJB_DONE)
+		{
+			if (tok == WJB_ELEM)
+			{
+				jv_new = getIthJsonbValueFromContainer(&j->root, counter++);
+				if (jv_new->type == jbvString)
+				{	
+					char 	res[64];
+					get_cstring_substr(jv_new->val.string.val, res, 0, jv_new->val.string.len);
+					sjv.val.numeric = DatumGetNumeric(DirectFunctionCall2(numeric_round,(DirectFunctionCall1(float8_numeric, Float8GetDatum((float8) string_to_float(res)))),4));
+					jv = sjv;
+									
+				}
+				else if (jv_new->type == jbvNumeric)
+				{
+					jv = *jv_new;
+					
+				}
+				else if (jv_new->type == jbvBool)
+				{	
+					if (jv_new->val.boolean)					
+						sjv.val.numeric = int64_to_numeric(1);
+					
+					else				
+						sjv.val.numeric = int64_to_numeric(0);
+
+					jv = sjv;
+				}
+				pushJsonbValue(&jpstate, WJB_ELEM, &jv);
+			}
+
+			tok = JsonbIteratorNext(&it, &jv, true);
+		}
+	}
+
+	ajv = pushJsonbValue(&jpstate, WJB_END_ARRAY, NULL);
+
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(ajv));
+}
+
+/*
+ * tofloatlist:
+ *		returns an array with the float equivalent of all the elements in the array
  *		example: tofloatlist(['1.4','2.5','true']) = [1.4, 2.5, 1.0]
  * 				 tofloatlist([null,'1289',34.6]) = [null,1289.0,34.6]
  */

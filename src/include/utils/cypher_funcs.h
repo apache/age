@@ -96,6 +96,7 @@ extern Datum array_tostringlist(PG_FUNCTION_ARGS);
 extern Datum jsonb_tointegerlist(PG_FUNCTION_ARGS);
 extern Datum array_tointegerlist(PG_FUNCTION_ARGS);
 extern Datum array_tofloatlist(PG_FUNCTION_ARGS);
+extern Datum jsonb_tofloatlist(PG_FUNCTION_ARGS);
 extern Datum jsonb_array_reverse(PG_FUNCTION_ARGS);
 extern Datum array_reverse(PG_FUNCTION_ARGS);
 extern Datum split(PG_FUNCTION_ARGS);
