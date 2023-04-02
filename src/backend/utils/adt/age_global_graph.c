@@ -1009,12 +1009,8 @@ List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name)
     edge_label_names = get_ag_labels_names(snapshot, graph_oid,
                                            LABEL_TYPE_EDGE);
     
-    Relation graph_edge_label;
-    HeapScanDesc scan_desc;
-    HeapTuple tuple;
     char *edge_label_name;
     Oid edge_label_table_oid;
-    TupleDesc tupdesc;
     
     if (parent_edge_name == NULL)
     {
