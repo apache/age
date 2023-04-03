@@ -999,15 +999,12 @@ List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name)
     List *edge_label_names = NIL;
     ListCell *lc;
     List *children = NIL;
+    List *child_is_parent = NIL;
 
     /* get the specific graph OID and namespace (schema) OID */
     graph_oid = ggctx->graph_oid;
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
-    /* get the active snapshot */
-    snapshot = GetActiveSnapshot();
-    /* get the names of all of the edge label tables */
-    edge_label_names = get_ag_labels_names(snapshot, graph_oid,
-                                           LABEL_TYPE_EDGE);
+    
     
     char *edge_label_name;
     Oid edge_label_table_oid;
@@ -1025,9 +1022,11 @@ List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name)
                                              graph_namespace_oid);
 
     List *child_edges_oid_temp = NIL;
-    
+
+    /*Check if a Label is Parent or not*/
     if( has_subclass(edge_label_table_oid))
     {
+        /*Get all the children of a Parent*/
         child_edges_oid_temp = find_inheritance_children(edge_label_table_oid, NoLock);
         
         /*loop through the child edges*/
@@ -1035,11 +1034,51 @@ List* getChildren(GRAPH_global_context *ggctx, char* parent_edge_name)
         foreach (lc1, child_edges_oid_temp)
         {
             Oid child_edge_oid = lfirst_oid(lc1);
+            /*Check if a child is a Parent, If yes then add it to the list child_is_parent */
+            if (has_subclass(child_edge_oid)){
+                child_is_parent = lappend_oid(child_is_parent, child_edge_oid);
+            }
             children = lappend_oid(children, child_edge_oid);
+            
         }
     }
-          
-    
+
+    /*Check if any of the child is a parent or not*/
+    if (child_is_parent != NIL)
+    {
+        List* child_is_parent_temp = NIL;
+        ListCell *lc2;
+
+        /*Loop through all the childs which are parents.*/
+        /*Lopo through all the children, and store all children which are parents. This could've been done using a recursive function, but I used FOR LOOP*/
+        foreach (lc2, child_is_parent)
+        {
+            Oid child_edge_oid = lfirst_oid(lc2);
+
+            /*Check if the child is a parent*/
+            if (has_subclass(child_edge_oid)){
+
+                /*Get all the children*/
+                List *child_edges_oid_temp2 = find_inheritance_children(child_edge_oid, NoLock);
+                ListCell *lc3;
+
+                foreach (lc3, child_edges_oid_temp2)
+                {
+                    Oid child_edge_oid2 = lfirst_oid(lc3);
+                    if (has_subclass(child_edge_oid2)){
+                        child_is_parent_temp = lappend_oid(child_is_parent_temp, child_edge_oid2);
+                    }
+                    children = lappend_oid(children, child_edge_oid2);
+                }
+            }
+
+        }
+
+        /*Add the children which are parents to the list child_is_parent*/
+        child_is_parent = child_is_parent_temp;
+    }
+
+ 
     return children;
 }
 
