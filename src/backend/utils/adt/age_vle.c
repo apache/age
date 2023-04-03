@@ -335,7 +335,8 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
     int num_edge_property_constraints = 0;
     int num_edge_properties = 0;
     List *child_oid_list = NIL;
-    bool isChild = false;
+    ListCell *lc;
+    bool is_child = false;
     GRAPH_global_context *ggctx = NULL;
 
     /*get the graph global context */
@@ -363,11 +364,14 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
 
     /* get the edge label name from the oid */
     edge_label_name = get_rel_name(get_edge_entry_label_table_oid(ee));
+
     /* get our edge's properties */
     edge_property = DATUM_GET_AGTYPE_P(get_edge_entry_properties(ee));
+
     /* get the containers */
     agtc_edge_property_constraint = &vlelctx->edge_property_constraint->root;
     agtc_edge_property = &edge_property->root;
+
     /* get the number of properties in the edge to be matched */
     num_edge_properties = AGTYPE_CONTAINER_SIZE(agtc_edge_property);
 
@@ -381,18 +385,18 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
         return false;
     }
 
-    /* get the children list of the current VLE_local_context*/
-    child_oid_list = getChildren(ggctx);
-    ListCell *lc;
 
-    /* check if child exists or not*/
+    /* get the children list of the current VLE_local_context edge label name */
+    child_oid_list = get_child_edges(ggctx, vlelctx->edge_label_name);
+
+    /* check if child exists or not */
     foreach(lc, child_oid_list)
     {
         Oid child_oid = lfirst_oid(lc);
         char *child_name = get_rel_name(child_oid);
         if (strcmp(edge_label_name, child_name) == 0)
         {
-            isChild = true;
+            is_child = true;
         }
     }
 
@@ -400,7 +404,7 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
      * Check for a label constraint. If the label name is NULL, there isn't one.
      */
     if (vlelctx->edge_label_name != NULL &&
-        strcmp(vlelctx->edge_label_name, edge_label_name) != 0  && !isChild) 
+        strcmp(vlelctx->edge_label_name, edge_label_name) != 0  && !is_child) 
     {
         return false;
     }

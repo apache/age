@@ -490,11 +490,14 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
     /* get the specific graph OID and namespace (schema) OID */
     graph_oid = ggctx->graph_oid;
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
+
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
+
     /* get the names of all of the edge label tables */
     edge_label_names = get_ag_labels_names(snapshot, graph_oid,
                                            LABEL_TYPE_EDGE);
+
     /* go through all edge label tables in list */
     foreach (lc, edge_label_names)
     {
@@ -507,14 +510,18 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
 
         /* get the edge label name */
         edge_label_name = lfirst(lc);
+
         /* get the edge label name's OID */
         edge_label_table_oid = get_relname_relid(edge_label_name,
                                                  graph_namespace_oid);
+
         /* open the relation (table) and begin the scan */
         graph_edge_label = heap_open(edge_label_table_oid, ShareLock);
         scan_desc = heap_beginscan(graph_edge_label, snapshot, 0, NULL);
+
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_edge_label);
+
         /* bail if the number of columns differs */
         if (tupdesc->natts != 4)
         {
@@ -990,60 +997,34 @@ graphid get_edge_entry_end_vertex_id(edge_entry *ee)
     return ee->end_vertex_id;
 }
 
-List* getChildren(GRAPH_global_context *ggctx)
+/* Function to return all the child edges from the given parent edge */
+List* get_child_edges(GRAPH_global_context *ggctx, char* edge_label_name)
 {
-    
-    Oid graph_oid;
     Oid graph_namespace_oid;
-    Snapshot snapshot;
-    List *edge_label_names = NIL;
-    ListCell *lc;
-    List *children = NIL;
+    Oid edge_label_table_oid;
+    List *child_edges_oid = NIL;
+
+    /* return the empty list */
+    if (edge_label_name == NULL)
+    {
+        return child_edges_oid;
+    }
 
     /* get the specific graph OID and namespace (schema) OID */
-    graph_oid = ggctx->graph_oid;
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
-    /* get the active snapshot */
-    snapshot = GetActiveSnapshot();
-    /* get the names of all of the edge label tables */
-    edge_label_names = get_ag_labels_names(snapshot, graph_oid,
-                                           LABEL_TYPE_EDGE);
-    /* go through all edge label tables in list */
-    foreach (lc, edge_label_names)
+
+    /* get the edge label name's OID */
+    edge_label_table_oid = get_relname_relid(edge_label_name,
+                                            graph_namespace_oid);
+
+    /* verify if the current edge has child edges */
+    if(has_subclass(edge_label_table_oid))
     {
-        Relation graph_edge_label;
-        HeapScanDesc scan_desc;
-        HeapTuple tuple;
-        char *edge_label_name;
-        Oid edge_label_table_oid;
-        TupleDesc tupdesc;
-        
-        
-        /* get the edge label name */
-        edge_label_name = lfirst(lc);
-
-        /* get the edge label name's OID */
-        edge_label_table_oid = get_relname_relid(edge_label_name,
-                                                 graph_namespace_oid);
-
-        List *child_edges_oid_temp = NIL;
-       
-        if( has_subclass(edge_label_table_oid))
-        {
-            child_edges_oid_temp = find_inheritance_children(edge_label_table_oid, NoLock);
-            
-            //loop through the child edges
-            ListCell *lc1;
-            foreach (lc1, child_edges_oid_temp)
-            {
-                Oid child_edge_oid = lfirst_oid(lc1);
-                children = lappend_oid(children, child_edge_oid);
-            }
-        }
-        
+        /* get the edge's child labels OIDs */
+        child_edges_oid = find_all_inheritors(edge_label_table_oid, NoLock, NULL);
     }
-    
-    return children;
+        
+    return child_edges_oid;
 }
 
 /* PostgreSQL SQL facing functions */
