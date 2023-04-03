@@ -1004,6 +1004,12 @@ List* get_child_edges(GRAPH_global_context *ggctx, char* edge_label_name)
     Oid edge_label_table_oid;
     List *child_edges_oid = NIL;
 
+    /* return the empty list */
+    if (edge_label_name == NULL)
+    {
+        return child_edges_oid;
+    }
+
     /* get the specific graph OID and namespace (schema) OID */
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
 

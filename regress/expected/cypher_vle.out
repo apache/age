@@ -762,6 +762,242 @@ NOTICE:  graph "mygraph" has been dropped
 (1 row)
 
 --
+-- Test VLE for edge inheritance
+--
+SELECT create_graph('vle_inheritance_graph');
+NOTICE:  graph "vle_inheritance_graph" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_vlabel('vle_inheritance_graph', 'Head');
+NOTICE:  VLabel "Head" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_vlabel('vle_inheritance_graph', 'Tail');
+NOTICE:  VLabel "Tail" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_vlabel('vle_inheritance_graph', 'Node');
+NOTICE:  VLabel "Node" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_A');
+NOTICE:  ELabel "PARENT_EDGE_A" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('vle_inheritance_graph', 'PARENT_EDGE_B');
+NOTICE:  ELabel "PARENT_EDGE_B" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_A', ARRAY['PARENT_EDGE_A']);
+NOTICE:  ELabel CHILD_EDGE_A will inherit from PARENT_EDGE_A
+NOTICE:  merging column "id" with inherited definition
+NOTICE:  merging column "start_id" with inherited definition
+NOTICE:  merging column "end_id" with inherited definition
+NOTICE:  merging column "properties" with inherited definition
+NOTICE:  ELabel "CHILD_EDGE_A" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_B', ARRAY['PARENT_EDGE_B']);
+NOTICE:  ELabel CHILD_EDGE_B will inherit from PARENT_EDGE_B
+NOTICE:  merging column "id" with inherited definition
+NOTICE:  merging column "start_id" with inherited definition
+NOTICE:  merging column "end_id" with inherited definition
+NOTICE:  merging column "properties" with inherited definition
+NOTICE:  ELabel "CHILD_EDGE_B" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_C', ARRAY['CHILD_EDGE_B']);
+NOTICE:  ELabel CHILD_EDGE_C will inherit from CHILD_EDGE_B
+NOTICE:  merging column "id" with inherited definition
+NOTICE:  merging column "start_id" with inherited definition
+NOTICE:  merging column "end_id" with inherited definition
+NOTICE:  merging column "properties" with inherited definition
+NOTICE:  ELabel "CHILD_EDGE_C" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    CREATE (:Head {id: 1})-[:PARENT_EDGE_A]->(:Node {id: 2})-[:CHILD_EDGE_A]->(:Node {id: 3})-[:PARENT_EDGE_A]->(:Tail {id: 4}),
+            (:Head {id: 5})-[:PARENT_EDGE_B]->(:Node {id: 6})-[:CHILD_EDGE_B]->(:Node {id: 7})-[:PARENT_EDGE_B]->(:Tail {id: 8}),
+            (:Head {id: 9})-[:CHILD_EDGE_C]->(:Tail {id: 10})
+    $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+--
+-- VLE with the PARENT_EDGEs
+--
+-- should find 6 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 1    | 2
+ 1    | 3
+ 1    | 4
+ 2    | 3
+ 2    | 4
+ 3    | 4
+(6 rows)
+
+-- should find 3 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 1    | 2
+ 2    | 3
+ 3    | 4
+(3 rows)
+
+-- should find 2 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*2]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 1    | 3
+ 2    | 4
+(2 rows)
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_A*3]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 1    | 4
+(1 row)
+
+-- should find 7 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 5    | 6
+ 5    | 7
+ 5    | 8
+ 9    | 10
+ 6    | 7
+ 6    | 8
+ 7    | 8
+(7 rows)
+
+-- should find 4 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 5    | 6
+ 9    | 10
+ 6    | 7
+ 7    | 8
+(4 rows)
+
+-- should find 2 rows
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*2]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 5    | 7
+ 6    | 8
+(2 rows)
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:PARENT_EDGE_B*3]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 5    | 8
+(1 row)
+
+--
+-- VLE with the CHILD_EDGEs
+--
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_A*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 2    | 3
+(1 row)
+
+-- should find 1 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_A*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 2    | 3
+(1 row)
+
+-- should find 2 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_B*]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 9    | 10
+ 6    | 7
+(2 rows)
+
+-- should find 2 row
+SELECT * FROM cypher('vle_inheritance_graph', $$
+    MATCH (a)-[:CHILD_EDGE_B*1]->(b)
+    RETURN a.id, b.id
+$$) AS (a_id agtype, b_id agtype);
+ a_id | b_id 
+------+------
+ 9    | 10
+ 6    | 7
+(2 rows)
+
+--
 -- Clean up
 --
 DROP TABLE start_and_end_points;
@@ -782,6 +1018,24 @@ NOTICE:  graph "cypher_vle" has been dropped
  
 (1 row)
 
+SELECT drop_graph('vle_inheritance_graph', true)
 --
 -- End
 --
+NOTICE:  drop cascades to 10 other objects
+DETAIL:  drop cascades to table vle_inheritance_graph._ag_label_vertex
+drop cascades to table vle_inheritance_graph._ag_label_edge
+drop cascades to table vle_inheritance_graph."Head"
+drop cascades to table vle_inheritance_graph."Tail"
+drop cascades to table vle_inheritance_graph."Node"
+drop cascades to table vle_inheritance_graph."PARENT_EDGE_A"
+drop cascades to table vle_inheritance_graph."PARENT_EDGE_B"
+drop cascades to table vle_inheritance_graph."CHILD_EDGE_A"
+drop cascades to table vle_inheritance_graph."CHILD_EDGE_B"
+drop cascades to table vle_inheritance_graph."CHILD_EDGE_C"
+NOTICE:  graph "vle_inheritance_graph" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

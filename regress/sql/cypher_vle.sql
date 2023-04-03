@@ -380,13 +380,13 @@ SELECT * FROM cypher('vle_inheritance_graph', $$
     RETURN a.id, b.id
 $$) AS (a_id agtype, b_id agtype);
 
--- should find 1 row
+-- should find 2 row
 SELECT * FROM cypher('vle_inheritance_graph', $$
     MATCH (a)-[:CHILD_EDGE_B*]->(b)
     RETURN a.id, b.id
 $$) AS (a_id agtype, b_id agtype);
 
--- should find 1 row
+-- should find 2 row
 SELECT * FROM cypher('vle_inheritance_graph', $$
     MATCH (a)-[:CHILD_EDGE_B*1]->(b)
     RETURN a.id, b.id
