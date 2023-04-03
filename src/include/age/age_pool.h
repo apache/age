@@ -25,6 +25,7 @@
 bool isCypherQuery (Node* node, char** str);
 void preprocess_cypherstr(char *target);
 List* extractCypherFuncs(List* ParsedCyphertreeList);
+bool IsWriteQuery(List* cypher_funcs_list);
 
 
 #endif
