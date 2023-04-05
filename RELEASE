@@ -62,6 +62,6 @@ Fix property constraints against resolved variables. (#724) (#751) (#701) (#747)
 Include invalid labels in reused variables. (#751) (#762)
 Fix update_entity_tuple to use correct CommandId. (#769)
 Remove check for scalar agtypes in unwind. (#736)
-Update PG13 CI workflows. (#775)
+Update PG12 CI workflows. (#776)
 Update readme and version for python driver. (#780)
 Update README.md
