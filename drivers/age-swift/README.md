@@ -17,4 +17,4 @@
 
 # age-swift
 
-A description of this package.
+Apache Age Driver for Swift.
