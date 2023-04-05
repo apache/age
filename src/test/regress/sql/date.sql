@@ -364,3 +364,6 @@ select make_date(2013, 13, 1);
 select make_date(2013, 11, -1);
 select make_time(10, 55, 100.1);
 select make_time(24, 0, 2.1);
+
+RETURN date() = (SELECT CAST(NOW() as date)) AS equality;
+RETURN date() = (SELECT NOW()) AS equality;
