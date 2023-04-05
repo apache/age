@@ -20,28 +20,27 @@
 import PostgresClientKit
 
 
-func setUpAge(connection:Connection){
+func setUpAge(connection:Connection, graphName: String){
     do{
-        try connection.prepareStatement(text: "Load 'age';").execute()
-        try connection.prepareStatement(text: "SET search_path = ag_catalog, '$user', public;").execute()
-        
+        querySQL(statement: "Load 'age';", connection: connection)
+        querySQL(statement: "SET search_path = ag_catalog, '$user', public;", connection: connection)                
         let cursor = try connection.prepareStatement(text: "SELECT typelem FROM pg_type WHERE typname='_agtype'").execute();
         defer { cursor.close() }
         var oid:Int? = nil;
         for row in cursor {
-                let columns = try row.get().columns
+            let columns = try row.get().columns
             oid = try columns[0].int()
             break;
         }
-        
-        
+                               
         if oid == nil{
             // Will raise exception over here
-        }
-        
+        }     
     }catch{
         print(error)
     }
+    
+    checkGraphCreated(connection: connection, graphName: graphName)
 }
 
 
@@ -71,7 +70,33 @@ func connectDatabase(connectionParam:[String:Any]) -> Connection?{
 }
 
 
+func checkGraphCreated(connection:Connection, graphName:String){
+    do{
+        let rows = fetchSQL(statement: "SELECT count(*) FROM ag_graph WHERE name='" + graphName + "'", connection: connection);
+        print(rows)
+        let row_counts = rows[0] as! [PostgresValue];
+        let count = try row_counts[0].int();
+        if count < 1{
+            querySQL(statement: "SELECT create_graph('" + graphName + "');", connection: connection);
+        }
+    }catch{
+        print(error)
+    }
+}
+
+
 func querySQL(statement:String, connection:Connection){
+    do{
+        try connection.prepareStatement(text: statement).execute()
+    }catch{
+        print(error)
+    }
+}
+
+
+
+func fetchSQL(statement:String, connection:Connection)-> [Any]{
+    var rows:[Any] = [];
     do{
         let statement = try connection.prepareStatement(text: statement)
         defer { statement.close() }
@@ -80,14 +105,13 @@ func querySQL(statement:String, connection:Connection){
         defer { cursor.close() }
 
         for row in cursor {
-                let columns = try row.get().columns
-                columns.forEach{column in
-                    print(column)
-                }
-            }
+            rows.append(try row.get().columns);
+        }
     }catch{
         print(error)
     }
+    
+    return rows;
 }
 
 class Age{
@@ -102,15 +126,17 @@ class Age{
     
     func connect(connectionParam:[String:Any], graph:String){
         self.connection = connectDatabase(connectionParam: connectionParam)
-        setUpAge(connection:self.connection!)
+        setUpAge(connection:self.connection!, graphName: graph);
     }
     
     func execSQL(statement:String){
         if self.connection == nil{
             return print("The connection is not yet established")
         }
-        return querySQL(statement: statement, connection: self.connection!)
-    }
-    
-    
+        let rows = fetchSQL(statement: statement, connection: self.connection!)
+        
+        for column in rows{
+            print(column)
+        }
+    } 
 }
