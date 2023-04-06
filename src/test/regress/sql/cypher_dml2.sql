@@ -52,9 +52,9 @@ MATCH(v1:v_type{name:'TypeA'}), (v2:v_sub{name:'SubA'})
 CREATE (v1)-[:e_title_type{name:'(3)', val:3}]->(v2);
 
 MATCH(n)-[e*3]->(n3) RETURN e;
-MATCH(n)-[e*3]->(n3) RETURN head(e);
-MATCH(n)-[e*3]->(n3) RETURN tail(e);
-MATCH(n)-[e*3]->(n3) RETURN last(e);
+MATCH(n)-[e*3]->(n3) RETURN head(e), array_size(e);
+MATCH(n)-[e*3]->(n3) RETURN tail(e), array_size(e);
+MATCH(n)-[e*3]->(n3) RETURN last(e), array_size(e);
 
 MATCH (n) DETACH DELETE n;
 
