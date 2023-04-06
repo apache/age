@@ -334,7 +334,7 @@ SELECT tail(ARRAY['hi',null,null,'bye']);
  {NULL,NULL,bye}
 (1 row)
 
--- toFloatList (array): returns an array with the float equivalent of elements in an array
+-- toFloatList (array)
 -- test 1: text
 select toFloatList(ARRAY['12.5','-14.788','-0.004']);
       tofloatlist      
@@ -363,7 +363,7 @@ select toFloatList(ARRAY[true, true, null]);
  {1,1,NULL}
 (1 row)
 
--- toFloatList (jsonb): returns a jsonb array with numeric(float) equivalents of elements
+-- toFloatList (jsonb)
 -- test 1: text
 return toFloatList(['12.5','-14.788','-0.004']);
          tofloatlist          
@@ -392,7 +392,7 @@ return toFloatList([true, true, null]);
  [1, 1, null]
 (1 row)
 
--- Tests for toBoolean(): returns the boolean equivalent of integers, jsonb and booleans
+-- Tests for toBoolean()
 -- test Case-1 (Integer - Accepted Input(1 or 0) ):
 return toBoolean(1);
  toboolean 
@@ -421,7 +421,7 @@ return str_size('agensgraph'), toBoolean('agensgraph');
 return toBoolean(1.0);
 ERROR:  Invalid input type for toBoolean()
 ---
--- Tests for toBooleanOrNull(): returns the boolean or null equivalent of integers, jsonb and booleans
+-- Tests for toBooleanOrNull()
 -- test Case-1 (Integer - Accepted Input(1 or 0) ):
 return toBooleanOrNull(1);
  tobooleanornull 
@@ -455,5 +455,49 @@ return toBooleanOrNull(1.0);
  tobooleanornull 
 -----------------
  
+(1 row)
+
+-- Tests for toStringOrNull()
+-- test Case-1 (Integers):
+return toStringOrNull(123) as strornull;
+ strornull 
+-----------
+ "123"
+(1 row)
+
+-- test Case-2 (Float):
+return toStringOrNull(123.5) as strornull;
+ strornull 
+-----------
+ "123.5"
+(1 row)
+
+-- test Case-3(Timestamp):
+return toStringOrNull(datetime(2020,5,26,10,45,56,0,0,'GMT')) as strornull;
+         strornull          
+----------------------------
+ "Tue May 26 10:45:56 2020"
+(1 row)
+
+--Tests for toStringList()
+-- test Case-1 (Integers and floats):
+select toStringList(ARRAY[12,13.0,14.15,16,-17.0]);
+       tostringlist       
+--------------------------
+ {12,13.0,14.15,16,-17.0}
+(1 row)
+
+-- test Case-2 (Bool and null):
+select toStringList(ARRAY[true, null, null, false]);
+  tostringlist   
+-----------------
+ {t,NULL,NULL,f}
+(1 row)
+
+-- test Case-3 (Timestamp):
+select toStringList(ARRAY[datetime(2020,5,26,10,45,56,14,0,'GMT'),datetime(2017,2,13,10,52,10,87,10,'JST')]);
+                           tostringlist                            
+-------------------------------------------------------------------
+ {"Tue May 26 10:45:56.014 2020","Mon Feb 13 19:52:10.08701 2017"}
 (1 row)
 

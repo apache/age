@@ -193,7 +193,7 @@ SELECT tail(ARRAY[12,13,14,15,16]);
 -- test 2: null values
 SELECT tail(ARRAY['hi',null,null,'bye']);
 
--- toFloatList (array): returns an array with the float equivalent of elements in an array
+-- toFloatList (array)
 -- test 1: text
 select toFloatList(ARRAY['12.5','-14.788','-0.004']);
 -- test 2: integer type
@@ -203,7 +203,7 @@ select toFloatList(ARRAY[14.15, null, -45.78, null, null, 0.02]);
 -- test 4: null and boolean type
 select toFloatList(ARRAY[true, true, null]);
 
--- toFloatList (jsonb): returns a jsonb array with numeric(float) equivalents of elements
+-- toFloatList (jsonb)
 -- test 1: text
 return toFloatList(['12.5','-14.788','-0.004']);
 -- test 2: integer type
@@ -213,7 +213,7 @@ return toFloatList([14.15, null, -45.78, null, null, 0.02]);
 -- test 4: null and boolean type
 return toFloatList([true, true, null]);
 
--- Tests for toBoolean(): returns the boolean equivalent of integers, jsonb and booleans
+-- Tests for toBoolean()
 -- test Case-1 (Integer - Accepted Input(1 or 0) ):
 return toBoolean(1);
 -- test Case-2(Integer - Unaccepted value):
@@ -228,7 +228,7 @@ return str_size('agensgraph'), toBoolean('agensgraph');
 return toBoolean(1.0);
 
 ---
--- Tests for toBooleanOrNull(): returns the boolean or null equivalent of integers, jsonb and booleans
+-- Tests for toBooleanOrNull()
 -- test Case-1 (Integer - Accepted Input(1 or 0) ):
 return toBooleanOrNull(1);
 -- test Case-2(Integer - Unaccepted value):
@@ -239,3 +239,19 @@ return toBooleanOrNull('true');
 return str_size('agensgraph'), toBooleanOrNull('agensgraph');
 -- test Case-5(Unaccepted types):
 return toBooleanOrNull(1.0);
+
+-- Tests for toStringOrNull()
+-- test Case-1 (Integers):
+return toStringOrNull(123) as strornull;
+-- test Case-2 (Float):
+return toStringOrNull(123.5) as strornull;
+-- test Case-3(Timestamp):
+return toStringOrNull(datetime(2020,5,26,10,45,56,0,0,'GMT')) as strornull;
+
+--Tests for toStringList()
+-- test Case-1 (Integers and floats):
+select toStringList(ARRAY[12,13.0,14.15,16,-17.0]);
+-- test Case-2 (Bool and null):
+select toStringList(ARRAY[true, null, null, false]);
+-- test Case-3 (Timestamp):
+select toStringList(ARRAY[datetime(2020,5,26,10,45,56,14,0,'GMT'),datetime(2017,2,13,10,52,10,87,10,'JST')]);
