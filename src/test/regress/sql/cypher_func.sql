@@ -250,8 +250,29 @@ return toStringOrNull(datetime(2020,5,26,10,45,56,0,0,'GMT')) as strornull;
 
 --Tests for toStringList()
 -- test Case-1 (Integers and floats):
-select toStringList(ARRAY[12,13.0,14.15,16,-17.0]);
+select reverse(toStringList(ARRAY[12,13.0,14.15,16,-17.0]));
 -- test Case-2 (Bool and null):
 select toStringList(ARRAY[true, null, null, false]);
 -- test Case-3 (Timestamp):
 select toStringList(ARRAY[datetime(2020,5,26,10,45,56,14,0,'GMT'),datetime(2017,2,13,10,52,10,87,10,'JST')]);
+
+-- Tests for range() and reverse()
+-- test Case-1 (Without step, positive range):
+return range(1,10);
+-- test Case-2 (Without step, negative range):
+return range(1,-10);
+-- test Case-3 (positive range with step):
+return range(1,10,3);
+-- test Case-4 (negative range with step):
+return range(-1,-10,-3), reverse(range(-10,-20,-4));
+-- test Case-5(error cases):
+return range(1,10,-3);
+
+-- Tests for split()
+--test Case-1:
+return split('Hi/this/is/a/test/for/split','/');
+return reverse(split('Hope this works!',' '));
+-- test Case-2 (null string):
+return split(null,'/');
+-- test Case-3 (null delimeter):
+return split('Hi/this/is/a/test/for/split',null);

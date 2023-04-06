@@ -481,10 +481,10 @@ return toStringOrNull(datetime(2020,5,26,10,45,56,0,0,'GMT')) as strornull;
 
 --Tests for toStringList()
 -- test Case-1 (Integers and floats):
-select toStringList(ARRAY[12,13.0,14.15,16,-17.0]);
-       tostringlist       
+select reverse(toStringList(ARRAY[12,13.0,14.15,16,-17.0]));
+         reverse          
 --------------------------
- {12,13.0,14.15,16,-17.0}
+ {-17.0,16,14.15,13.0,12}
 (1 row)
 
 -- test Case-2 (Bool and null):
@@ -499,5 +499,69 @@ select toStringList(ARRAY[datetime(2020,5,26,10,45,56,14,0,'GMT'),datetime(2017,
                            tostringlist                            
 -------------------------------------------------------------------
  {"Tue May 26 10:45:56.014 2020","Mon Feb 13 19:52:10.08701 2017"}
+(1 row)
+
+-- Tests for range() and reverse()
+-- test Case-1 (Without step, positive range):
+return range(1,10);
+              range              
+---------------------------------
+ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+(1 row)
+
+-- test Case-2 (Without step, negative range):
+return range(1,-10);
+                      range                      
+-------------------------------------------------
+ [1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]
+(1 row)
+
+-- test Case-3 (positive range with step):
+return range(1,10,3);
+     range     
+---------------
+ [1, 4, 7, 10]
+(1 row)
+
+-- test Case-4 (negative range with step):
+return range(-1,-10,-3), reverse(range(-10,-20,-4));
+       range       |     reverse     
+-------------------+-----------------
+ [-1, -4, -7, -10] | [-18, -14, -10]
+(1 row)
+
+-- test Case-5(error cases):
+return range(1,10,-3);
+ range 
+-------
+ []
+(1 row)
+
+-- Tests for split()
+--test Case-1:
+return split('Hi/this/is/a/test/for/split','/');
+                       split                       
+---------------------------------------------------
+ ["Hi", "this", "is", "a", "test", "for", "split"]
+(1 row)
+
+return reverse(split('Hope this works!',' '));
+          reverse           
+----------------------------
+ ["works!", "this", "Hope"]
+(1 row)
+
+-- test Case-2 (null string):
+return split(null,'/');
+ split 
+-------
+ 
+(1 row)
+
+-- test Case-3 (null delimeter):
+return split('Hi/this/is/a/test/for/split',null);
+ split 
+-------
+ 
 (1 row)
 
