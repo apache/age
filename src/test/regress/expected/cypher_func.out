@@ -392,3 +392,68 @@ return toFloatList([true, true, null]);
  [1, 1, null]
 (1 row)
 
+-- Tests for toBoolean(): returns the boolean equivalent of integers, jsonb and booleans
+-- test Case-1 (Integer - Accepted Input(1 or 0) ):
+return toBoolean(1);
+ toboolean 
+-----------
+ t
+(1 row)
+
+-- test Case-2(Integer - Unaccepted value):
+return toBoolean(12);
+ERROR:  Invalid input integer for toBoolean(): 12
+-- test Case-3(Text - accepted input (‘true’ or ‘false’)):
+return toBoolean('true');
+ toboolean 
+-----------
+ t
+(1 row)
+
+-- test Case-4(Text - unaccepted values):
+return str_size('agensgraph'), toBoolean('agensgraph');
+ str_size | toboolean 
+----------+-----------
+ 10       | 
+(1 row)
+
+-- test Case-5(Unaccepted types):
+return toBoolean(1.0);
+ERROR:  Invalid input type for toBoolean()
+---
+-- Tests for toBooleanOrNull(): returns the boolean or null equivalent of integers, jsonb and booleans
+-- test Case-1 (Integer - Accepted Input(1 or 0) ):
+return toBooleanOrNull(1);
+ tobooleanornull 
+-----------------
+ t
+(1 row)
+
+-- test Case-2(Integer - Unaccepted value):
+return toBooleanOrNull(12);
+ tobooleanornull 
+-----------------
+ 
+(1 row)
+
+-- test Case-3(Text - accepted input (‘true’ or ‘false’)):
+return toBooleanOrNull('true');
+ tobooleanornull 
+-----------------
+ t
+(1 row)
+
+-- test Case-4(Text - unaccepted values):
+return str_size('agensgraph'), toBooleanOrNull('agensgraph');
+ str_size | tobooleanornull 
+----------+-----------------
+ 10       | 
+(1 row)
+
+-- test Case-5(Unaccepted types):
+return toBooleanOrNull(1.0);
+ tobooleanornull 
+-----------------
+ 
+(1 row)
+

@@ -212,3 +212,30 @@ return toFloatList([12,13,14,15]);
 return toFloatList([14.15, null, -45.78, null, null, 0.02]);
 -- test 4: null and boolean type
 return toFloatList([true, true, null]);
+
+-- Tests for toBoolean(): returns the boolean equivalent of integers, jsonb and booleans
+-- test Case-1 (Integer - Accepted Input(1 or 0) ):
+return toBoolean(1);
+-- test Case-2(Integer - Unaccepted value):
+return toBoolean(12);
+
+-- test Case-3(Text - accepted input (‘true’ or ‘false’)):
+return toBoolean('true');
+-- test Case-4(Text - unaccepted values):
+return str_size('agensgraph'), toBoolean('agensgraph');
+
+-- test Case-5(Unaccepted types):
+return toBoolean(1.0);
+
+---
+-- Tests for toBooleanOrNull(): returns the boolean or null equivalent of integers, jsonb and booleans
+-- test Case-1 (Integer - Accepted Input(1 or 0) ):
+return toBooleanOrNull(1);
+-- test Case-2(Integer - Unaccepted value):
+return toBooleanOrNull(12);
+-- test Case-3(Text - accepted input (‘true’ or ‘false’)):
+return toBooleanOrNull('true');
+-- test Case-4(Text - unaccepted values):
+return str_size('agensgraph'), toBooleanOrNull('agensgraph');
+-- test Case-5(Unaccepted types):
+return toBooleanOrNull(1.0);
