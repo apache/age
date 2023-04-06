@@ -1848,6 +1848,13 @@ datum_to_text(Datum d, Oid typeid)
 			break;
 		}
 
+		case TIMESTAMPTZOID:
+		{
+			s = DatumGetCString(DirectFunctionCall1(timestamptz_out, d));
+			PG_RETURN_TEXT_P(cstring_to_text(s));	
+			break;
+		}
+
 		/* unknown type */
 		case UNKNOWNOID:
 		{
@@ -2795,7 +2802,7 @@ string_to_float(char* s)
 
 /*
  * tofloatlist:
- *		returns jsonb with the float/numeric equivalent of all the elements in jsonb
+ *		returns an array with the floatlist equivalent of all the elements in jsonb
  *		example: tofloatlist(['1.4','2.5','true']) = [1.4, 2.5, 1.0]
  * 				 tofloatlist([null,'1289',34.6]) = [null,1289.0,34.6]
  */
@@ -2871,7 +2878,7 @@ jsonb_tofloatlist(PG_FUNCTION_ARGS)
 
 /*
  * tofloatlist:
- *		returns an array with the float equivalent of all the elements in the array
+ *		returns an array with the floatlist equivalent of all the elements in the array
  *		example: tofloatlist(['1.4','2.5','true']) = [1.4, 2.5, 1.0]
  * 				 tofloatlist([null,'1289',34.6]) = [null,1289.0,34.6]
  */
