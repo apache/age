@@ -319,6 +319,13 @@ SimpleQuery(POOL_CONNECTION * frontend,
 			Node *temp = llast(cyphertree);
 	        list_delete_ptr(cyphertree, temp);
 			List* cypher_funcs_list = extractCypherFuncs(cyphertree);
+			bool isWriteQuery = IsWriteQuery(cypher_funcs_list);
+			
+
+			// removing the last node of parsed cypher.
+			Node *temp = llast(cyphertree);
+	        list_delete_ptr(cyphertree, temp);
+			List* cypher_funcs_list = extractCypherFuncs(cyphertree);
 			
 		}
 

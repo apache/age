@@ -93,11 +93,39 @@ isCypherQuery (Node* node, char** retstr)
 				{
 					List *sublist = (List *) lfirst(list_head(functions)); 
 					FuncCall *fntree = (FuncCall *) lfirst(list_head(sublist));
-					StringInfoData str;
-					initStringInfo(&str);
-					_outNode(&str,fntree->funcname);
+					List* funcname = fntree->funcname;
+
+					bool isCypherCall = false;
+
+					StringInfoData buff;
+					initStringInfo(&buff);
+
+					if (funcname->length == 2)
+					{
+						StringInfoData schemaName;
+						initStringInfo(&schemaName);
+						_outNode(&schemaName,linitial(funcname));
+
+						if (!strcmp("\"ag_catalog\"",schemaName.data))
+						{
+							_outNode(&buff,lsecond(funcname));
+
+							if (!strcmp("\"cypher\"",buff.data))
+							{
+								isCypherCall = true;
+							}
+						}
+					}
+					else if (funcname->length == 1)
+					{
+						_outNode(&buff,linitial(funcname));
+						if (!strcmp("\"cypher\"",buff.data))
+							{
+								isCypherCall = true;
+							}
+					}
 					
-					if (!strcmp("\"cypher\"",str.data)){
+					if (isCypherCall){
 
 						StringInfoData cypher_str;
 						initStringInfo(&cypher_str);
@@ -118,7 +146,11 @@ isCypherQuery (Node* node, char** retstr)
 	return false; 
 }
 
-List* extractCypherFuncs(List *ParsedCyphertreeList)
+List* 
+/* Returns all the Cypher Nodes
+   in the given parse tree.
+*/
+extractCypherFuncs(List *ParsedCyphertreeList)
 {
 
 	ListCell *resultfl;
@@ -140,4 +172,27 @@ List* extractCypherFuncs(List *ParsedCyphertreeList)
 	}
 	
 	return cypher_funcs_list;
+}
+
+bool 
+/* Returns true if the given cypher node
+   is a write query.
+*/
+IsWriteQuery(List *cypher_funcs_list){
+	ListCell *cypherfl;
+	foreach (cypherfl, cypher_funcs_list)
+	{
+		char *cypher_func = (char *)lfirst(cypherfl);
+
+
+		// DETACH DELETE is covered under cypher_delete.
+            // REMOVE command is covered under cypher_set.
+        if (is_ag_node(cypher_func, cypher_create) || is_ag_node(cypher_func, cypher_set) ||
+        is_ag_node(cypher_func, cypher_delete) || is_ag_node(cypher_func, cypher_merge))
+        {
+        	return true;
+        }
+	}
+
+	return false;
 }
