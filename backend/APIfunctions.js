@@ -1,11 +1,12 @@
-const fetch = require("node-fetch");
-const readline = require("readline");
+// some pre-requisites to run these functions on desktop enviroment
+// const fetch = require("node-fetch");
+// const readline = require("readline");
 
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+// const rl = readline.createInterface({
+//     input: process.stdin,
+//     output: process.stdout
+//   });
 
 // Test data which will come from the frontend
 const conn = {
