@@ -270,9 +270,15 @@ return range(1,10,-3);
 
 -- Tests for split()
 --test Case-1:
-return split('Hi/this/is/a/test/for/split','/');
-return reverse(split('Hope this works!',' '));
+return str_size('Hi/this/is/a/test/for/split'), split('Hi/this/is/a/test/for/split','/');
+return str_size('Hope this works!'), reverse(split('Hope this works!',' '));
 -- test Case-2 (null string):
 return split(null,'/');
 -- test Case-3 (null delimeter):
 return split('Hi/this/is/a/test/for/split',null);
+
+-- Test for datetime() and localDatetime()
+return datetime(2020,5,26,10,45,56,0,0,'GMT');
+RETURN datetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
+RETURN localDatetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
+RETURN get_time() = (SELECT CAST(NOW() as time)) AS equality;

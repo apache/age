@@ -539,16 +539,16 @@ return range(1,10,-3);
 
 -- Tests for split()
 --test Case-1:
-return split('Hi/this/is/a/test/for/split','/');
-                       split                       
----------------------------------------------------
- ["Hi", "this", "is", "a", "test", "for", "split"]
+return str_size('Hi/this/is/a/test/for/split'), split('Hi/this/is/a/test/for/split','/');
+ str_size |                       split                       
+----------+---------------------------------------------------
+ 27       | ["Hi", "this", "is", "a", "test", "for", "split"]
 (1 row)
 
-return reverse(split('Hope this works!',' '));
-          reverse           
-----------------------------
- ["works!", "this", "Hope"]
+return str_size('Hope this works!'), reverse(split('Hope this works!',' '));
+ str_size |          reverse           
+----------+----------------------------
+ 16       | ["works!", "this", "Hope"]
 (1 row)
 
 -- test Case-2 (null string):
@@ -563,5 +563,30 @@ return split('Hi/this/is/a/test/for/split',null);
  split 
 -------
  
+(1 row)
+
+-- Test for datetime() and localDatetime()
+return datetime(2020,5,26,10,45,56,0,0,'GMT');
+       datetime        
+-----------------------
+ "2020-05-26T10:45:56"
+(1 row)
+
+RETURN datetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
+ equality 
+----------
+ t
+(1 row)
+
+RETURN localDatetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
+ equality 
+----------
+ t
+(1 row)
+
+RETURN get_time() = (SELECT CAST(NOW() as time)) AS equality;
+ equality 
+----------
+ t
 (1 row)
 
