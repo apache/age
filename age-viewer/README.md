@@ -16,4 +16,6 @@ to this in your browser, and you can call your Go code from devtools.
 
 ## Building
 
-To build a redistributable, production mode package, use `wails build`.
+To build a redistributable, production mode package, use `wails build`or either use `wails dev`.
+
+If you want to see the demo then .exe file is available in ageviewer->build->bin-> .exe
