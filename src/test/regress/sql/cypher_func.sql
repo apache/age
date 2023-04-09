@@ -295,8 +295,34 @@ select toIntegerList(ARRAY[true, null, true]);
 -- test Case-1 (Text):
 select toFloatList(ARRAY['12.5','-14.788','-0.004']);
 -- test Case-2(Integer):
-select toFloatList(ARRAY[12,13,14,15]);
+select toFloatList(ARRAY[12,13,14,15, round(35.77)]);
 -- test Case-3(null and float):
 select toFloatList(ARRAY[14.15, null, -45.78, null, null, 0.02]);
 -- test Case-4(Boolean and null):
 select toFloatList(ARRAY[true, true, null]);
+
+--Tests for toStringList(jsonb)
+-- test Case-1 (Integers and floats):
+return reverse(toStringList([12,13.0,14.15,16,-17.0, round(13.567,2)]));
+-- test Case-2 (Bool and null):
+return toStringList([true, null, null, false]);
+-- test Case-3 (Timestamp):
+return toStringList([datetime(2020,5,26,10,45,56,14,0,'GMT'),datetime(2017,2,13,10,52,10,87,10,'JST')]);
+
+-- Tests for toIntegerList(jsonb)
+-- test Case-1 (Text and null):
+return array_size(['12','13.8','-4',null]), pg_typeof(['12','13.8','-4',null]), toIntegerList(['12','13.8','-4',null]);
+-- test Case-2(Float):
+return toIntegerList([12.5,14.7,-0.5]);
+-- test Case-3(Boolean and null):
+return toIntegerList([true, null, true]);
+
+-- Tests for toFloatList()
+-- test Case-1 (Text):
+return toFloatList(['12.5','-14.788','-0.004']);
+-- test Case-2(Integer):
+return toFloatList(reverse([12,13,14,15]));
+-- test Case-3(null and float):
+return toFloatList([14.15, null, -45.78, null, null, 0.02]);
+-- test Case-4(Boolean and null):
+return toFloatList([true, true, null]);
