@@ -590,3 +590,54 @@ RETURN get_time() = (SELECT CAST(NOW() as time)) AS equality;
  t
 (1 row)
 
+-- Tests for toIntegerList()
+-- test Case-1 (Text and null):
+select toIntegerList(ARRAY['12','13.8','-4',null]);
+  tointegerlist  
+-----------------
+ {12,13,-4,NULL}
+(1 row)
+
+-- test Case-2(Float):
+select toIntegerList(ARRAY[12.5,14.7,-0.5]);
+ tointegerlist 
+---------------
+ {12,14,0}
+(1 row)
+
+-- test Case-3(Boolean and null):
+select toIntegerList(ARRAY[true, null, true]);
+ tointegerlist 
+---------------
+ {1,NULL,1}
+(1 row)
+
+-- Tests for toFloatList()
+-- test Case-1 (Text):
+select toFloatList(ARRAY['12.5','-14.788','-0.004']);
+      tofloatlist      
+-----------------------
+ {12.5,-14.788,-0.004}
+(1 row)
+
+-- test Case-2(Integer):
+select toFloatList(ARRAY[12,13,14,15]);
+  tofloatlist  
+---------------
+ {12,13,14,15}
+(1 row)
+
+-- test Case-3(null and float):
+select toFloatList(ARRAY[14.15, null, -45.78, null, null, 0.02]);
+            tofloatlist             
+------------------------------------
+ {14.15,NULL,-45.78,NULL,NULL,0.02}
+(1 row)
+
+-- test Case-4(Boolean and null):
+select toFloatList(ARRAY[true, true, null]);
+ tofloatlist 
+-------------
+ {1,1,NULL}
+(1 row)
+

@@ -282,3 +282,21 @@ return datetime(2020,5,26,10,45,56,0,0,'GMT');
 RETURN datetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
 RETURN localDatetime() = (SELECT CAST(NOW() as timestamp)) AS equality;
 RETURN get_time() = (SELECT CAST(NOW() as time)) AS equality;
+
+-- Tests for toIntegerList()
+-- test Case-1 (Text and null):
+select toIntegerList(ARRAY['12','13.8','-4',null]);
+-- test Case-2(Float):
+select toIntegerList(ARRAY[12.5,14.7,-0.5]);
+-- test Case-3(Boolean and null):
+select toIntegerList(ARRAY[true, null, true]);
+
+-- Tests for toFloatList()
+-- test Case-1 (Text):
+select toFloatList(ARRAY['12.5','-14.788','-0.004']);
+-- test Case-2(Integer):
+select toFloatList(ARRAY[12,13,14,15]);
+-- test Case-3(null and float):
+select toFloatList(ARRAY[14.15, null, -45.78, null, null, 0.02]);
+-- test Case-4(Boolean and null):
+select toFloatList(ARRAY[true, true, null]);
