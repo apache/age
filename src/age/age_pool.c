@@ -146,7 +146,7 @@ isCypherQuery (Node* node, char** retstr)
 	return false; 
 }
 
-List* 
+bool 
 /* Checks if the cypher tree contains any 
  * clauses that are Write operations.
 */
