@@ -306,23 +306,6 @@ SimpleQuery(POOL_CONNECTION * frontend,
 	{
 		node = raw_parser2(parse_tree_list);
 
-		char* cypherstr;
-
-		/*
-		 * if query is cypher query then extract cypher functions
-		 */
-		if (isCypherQuery(node,&cypherstr)){
-
-			List* cyphertree = parse_cypher(cypherstr);
-
-			// removing the last node of parsed cypher.
-			Node *temp = llast(cyphertree);
-	        list_delete_ptr(cyphertree, temp);
-			List* cypher_funcs_list = extractCypherFuncs(cyphertree);
-			bool isWriteQuery = IsWriteQuery(cypher_funcs_list);
-			
-		}
-
 		/*
 		 * Start query context
 		 */

@@ -146,53 +146,32 @@ isCypherQuery (Node* node, char** retstr)
 	return false; 
 }
 
-List* 
-/* Returns all the Cypher Nodes
-   in the given parse tree.
+bool 
+/* Checks if the cypher tree contains any 
+ * clauses that are Write operations.
 */
-extractCypherFuncs(List *ParsedCyphertreeList)
+isWriteQuery(List *ParsedCyphertreeList)
 {
+	//Removing last node because it is only used by EXPLAIN
+	list_delete_ptr(ParsedCyphertreeList, llast(ParsedCyphertreeList));
 
 	ListCell *resultfl;
 
-	List *cypher_funcs_list= NIL;
-
 	foreach (resultfl, ParsedCyphertreeList)
 	{
-		Node *newnode = (Node *)lfirst(resultfl);
+		Node *node = (Node *)lfirst(resultfl);
 
-		ExtensibleNode *extnode;
-
-		if (IsA(newnode, ExtensibleNode)){
-
-			extnode = (ExtensibleNode *)newnode;
-			cypher_funcs_list = lappend(cypher_funcs_list, extnode->extnodename);
-
+		if (IsA(node, ExtensibleNode))
+		{
+			// DETACH DELETE is covered under cypher_delete.
+            // REMOVE command is covered under cypher_set.
+			if (is_ag_node(node, cypher_create) || is_ag_node(node, cypher_set) ||
+				is_ag_node(node, cypher_delete) || is_ag_node(node, cypher_merge))
+			{
+				return true;
+			}
 		}
 	}
 	
-	return cypher_funcs_list;
-}
-
-bool 
-/* Returns true if the given cypher node
-   is a write query.
-*/
-IsWriteQuery(List *cypher_funcs_list){
-	ListCell *cypherfl;
-	foreach (cypherfl, cypher_funcs_list)
-	{
-		char *cypher_func = (char *)lfirst(cypherfl);
-
-
-		// DETACH DELETE is covered under cypher_delete.
-            // REMOVE command is covered under cypher_set.
-        if (is_ag_node(cypher_func, cypher_create) || is_ag_node(cypher_func, cypher_set) ||
-        is_ag_node(cypher_func, cypher_delete) || is_ag_node(cypher_func, cypher_merge))
-        {
-        	return true;
-        }
-	}
-
 	return false;
 }
