@@ -1,13 +1,13 @@
 import logo from './assets/images/logo-universal.png';
-import React from 'react';
 import './App.css';
 
 function App() {
     return (
         <div id="App">
-            <h1>Welcome to Apache AGE Viewer</h1>
+            <h1>Welcome to Apache AGE viewer</h1>
+            <img src={logo} id="logo" alt="logo"/>
         </div>
-    );
+    )
 }
 
 export default App

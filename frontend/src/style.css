@@ -1,15 +1,15 @@
 html {
     background-color: rgb(127, 129, 131);
     text-align: center;
-    color: rgb(18, 14, 14);
-    
+    color: white;
 }
 
 body {
     margin: 0;
-    color: rgb(53, 51, 54);
-    font-family: Georgia, serif;
-    font-size: large;
+    color: white;
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
 }
 
 @font-face {

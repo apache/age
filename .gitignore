@@ -1,3 +1,16 @@
-/results/
-*.o
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
 *.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# env files
+.env
+
+build/bin
+node_modules
+frontend/dist
