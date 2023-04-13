@@ -8307,6 +8307,55 @@ Datum age_sqrt(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+PG_FUNCTION_INFO_V1(age_fact);
+
+Datum age_fact(PG_FUNCTION_ARGS)
+{
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    agtype_value agtv_result;
+    int64 arg;
+    Numeric numeric_result;
+    bool is_null = true;
+
+    /* extract argument values */
+    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+    /* check number of args */
+    if (nargs != 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("fact() invalid number of arguments")));
+
+    /* check for a null input */
+    if (nargs < 0 || nulls[0])
+        PG_RETURN_NULL();
+
+    /*
+     * fact() supports integer or the agtype integer.
+     */
+    arg = get_int64_from_int_datums(args[0], types[0], "fact", &is_null);
+
+    /* check for a agtype null input */
+    if (is_null)
+        PG_RETURN_NULL();
+
+    /* return null if the argument is < 0; these are invalid args for factorial */
+    if (arg < 0)
+        PG_RETURN_NULL();
+
+    /* We need the input as a numeric so that we can pass it off to PG */
+    numeric_result = DatumGetNumeric(DirectFunctionCall1(numeric_fac,
+                                                         NumericGetDatum(arg)));
+
+    /* build the result */
+    agtv_result.type = AGTV_NUMERIC;
+    agtv_result.val.numeric = numeric_result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
 PG_FUNCTION_INFO_V1(age_timestamp);
 
 Datum age_timestamp(PG_FUNCTION_ARGS)
