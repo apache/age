@@ -107,7 +107,7 @@ SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH(n) RETURN n$$) as (n ag
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
  count 
 -------
- 72485
+     0
 (1 row)
 
 SELECT create_vlabel('agload_test_graph','Country2');

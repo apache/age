@@ -64,8 +64,6 @@ NOTICE:  VLabel "parent_vlabel" has been created
 
 SELECT create_vlabel('cypher_create', 'child_vlabel_one', ARRAY['parent_vlabel']);
 NOTICE:  VLabel child_vlabel_one will inherit from parent_vlabel
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  VLabel "child_vlabel_one" has been created
  create_vlabel 
 ---------------
@@ -75,10 +73,6 @@ NOTICE:  VLabel "child_vlabel_one" has been created
 SELECT create_vlabel('cypher_create', 'child_vlabel_two', ARRAY['parent_vlabel', 'child_vlabel_one']);
 NOTICE:  VLabel child_vlabel_two will inherit from parent_vlabel
 NOTICE:  VLabel child_vlabel_two will inherit from child_vlabel_one
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  VLabel "child_vlabel_two" has been created
  create_vlabel 
 ---------------
@@ -89,12 +83,6 @@ SELECT create_vlabel('cypher_create', 'child_vlabel_three', ARRAY['parent_vlabel
 NOTICE:  VLabel child_vlabel_three will inherit from parent_vlabel
 NOTICE:  VLabel child_vlabel_three will inherit from child_vlabel_one
 NOTICE:  VLabel child_vlabel_three will inherit from child_vlabel_two
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  VLabel "child_vlabel_three" has been created
  create_vlabel 
 ---------------
@@ -135,10 +123,6 @@ NOTICE:  ELabel "parent_elabel" has been created
 
 SELECT create_elabel('cypher_create', 'child_elabel_one', ARRAY['parent_elabel']);
 NOTICE:  ELabel child_elabel_one will inherit from parent_elabel
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "child_elabel_one" has been created
  create_elabel 
 ---------------
@@ -148,14 +132,6 @@ NOTICE:  ELabel "child_elabel_one" has been created
 SELECT create_elabel('cypher_create', 'child_elabel_two', ARRAY['parent_elabel', 'child_elabel_one']);
 NOTICE:  ELabel child_elabel_two will inherit from parent_elabel
 NOTICE:  ELabel child_elabel_two will inherit from child_elabel_one
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "start_id"
-NOTICE:  merging multiple inherited definitions of column "end_id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "child_elabel_two" has been created
  create_elabel 
 ---------------
@@ -166,18 +142,6 @@ SELECT create_elabel('cypher_create', 'child_elabel_three', ARRAY['parent_elabel
 NOTICE:  ELabel child_elabel_three will inherit from parent_elabel
 NOTICE:  ELabel child_elabel_three will inherit from child_elabel_one
 NOTICE:  ELabel child_elabel_three will inherit from child_elabel_two
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "start_id"
-NOTICE:  merging multiple inherited definitions of column "end_id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging multiple inherited definitions of column "id"
-NOTICE:  merging multiple inherited definitions of column "start_id"
-NOTICE:  merging multiple inherited definitions of column "end_id"
-NOTICE:  merging multiple inherited definitions of column "properties"
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "child_elabel_three" has been created
  create_elabel 
 ---------------
