@@ -357,8 +357,8 @@ SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN e $$
 SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*]-()<-[]-(:end) RETURN p $$) AS (e agtype);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     e                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 844424930131969, "label": "begin", "properties": {}}::vertex, {"id": 2533274790395906, "label": "bypass_edge", "end_id": 844424930131969, "start_id": 1407374883553282, "properties": {"name": "bypass edge", "number": 2, "packages": [1, 3, 5, 7], "dangerous": {"type": "poisons", "level": "all"}}}::edge, {"id": 1407374883553282, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685253, "label": "alternate_edge", "end_id": 1407374883553282, "start_id": 1407374883553283, "properties": {"name": "backup edge", "number": 2, "packages": [1, 3, 5, 7]}}::edge, {"id": 1407374883553283, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685252, "label": "alternate_edge", "end_id": 1407374883553283, "start_id": 1688849860263937, "properties": {"name": "backup edge", "number": 1, "packages": [1, 3, 5, 7]}}::edge, {"id": 1688849860263937, "label": "end", "properties": {}}::vertex]::path
  [{"id": 844424930131969, "label": "begin", "properties": {}}::vertex, {"id": 2533274790395906, "label": "bypass_edge", "end_id": 844424930131969, "start_id": 1407374883553282, "properties": {"name": "bypass edge", "number": 2, "packages": [1, 3, 5, 7], "dangerous": {"type": "poisons", "level": "all"}}}::edge, {"id": 1407374883553282, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685253, "label": "alternate_edge", "end_id": 1407374883553282, "start_id": 1407374883553283, "properties": {"name": "backup edge", "number": 2, "packages": [1, 3, 5, 7]}}::edge, {"id": 1407374883553283, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685252, "label": "alternate_edge", "end_id": 1407374883553283, "start_id": 1688849860263937, "properties": {"name": "backup edge", "number": 1, "packages": [1, 3, 5, 7]}}::edge, {"id": 1688849860263937, "label": "end", "properties": {}}::vertex, {"id": 1970324836974594, "label": "self_loop", "end_id": 1688849860263937, "start_id": 1688849860263937, "properties": {"name": "self loop", "number": 2, "dangerous": {"type": "all", "level": "all"}}}::edge, {"id": 1688849860263937, "label": "end", "properties": {}}::vertex]::path
+ [{"id": 844424930131969, "label": "begin", "properties": {}}::vertex, {"id": 2533274790395906, "label": "bypass_edge", "end_id": 844424930131969, "start_id": 1407374883553282, "properties": {"name": "bypass edge", "number": 2, "packages": [1, 3, 5, 7], "dangerous": {"type": "poisons", "level": "all"}}}::edge, {"id": 1407374883553282, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685253, "label": "alternate_edge", "end_id": 1407374883553282, "start_id": 1407374883553283, "properties": {"name": "backup edge", "number": 2, "packages": [1, 3, 5, 7]}}::edge, {"id": 1407374883553283, "label": "middle", "properties": {}}::vertex, {"id": 2251799813685252, "label": "alternate_edge", "end_id": 1407374883553283, "start_id": 1688849860263937, "properties": {"name": "backup edge", "number": 1, "packages": [1, 3, 5, 7]}}::edge, {"id": 1688849860263937, "label": "end", "properties": {}}::vertex]::path
 (2 rows)
 
 -- Each should return 31
@@ -808,10 +808,6 @@ NOTICE:  ELabel "PARENT_EDGE_B" has been created
 
 SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_A', ARRAY['PARENT_EDGE_A']);
 NOTICE:  ELabel CHILD_EDGE_A will inherit from PARENT_EDGE_A
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "CHILD_EDGE_A" has been created
  create_elabel 
 ---------------
@@ -820,10 +816,6 @@ NOTICE:  ELabel "CHILD_EDGE_A" has been created
 
 SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_B', ARRAY['PARENT_EDGE_B']);
 NOTICE:  ELabel CHILD_EDGE_B will inherit from PARENT_EDGE_B
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "CHILD_EDGE_B" has been created
  create_elabel 
 ---------------
@@ -832,10 +824,6 @@ NOTICE:  ELabel "CHILD_EDGE_B" has been created
 
 SELECT create_elabel('vle_inheritance_graph', 'CHILD_EDGE_C', ARRAY['CHILD_EDGE_B']);
 NOTICE:  ELabel CHILD_EDGE_C will inherit from CHILD_EDGE_B
-NOTICE:  merging column "id" with inherited definition
-NOTICE:  merging column "start_id" with inherited definition
-NOTICE:  merging column "end_id" with inherited definition
-NOTICE:  merging column "properties" with inherited definition
 NOTICE:  ELabel "CHILD_EDGE_C" has been created
  create_elabel 
 ---------------
