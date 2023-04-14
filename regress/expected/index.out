@@ -265,9 +265,11 @@ $$) as (n agtype);
 (0 rows)
 
 ALTER TABLE cypher_index."Country" ADD PRIMARY KEY (id);
+ERROR:  multiple primary keys for table "Country" are not allowed
 CREATE UNIQUE INDEX CONCURRENTLY cntry_id_idx ON cypher_index."Country" (id);
 ALTER TABLE cypher_index."Country"  CLUSTER ON cntry_id_idx;
 ALTER TABLE cypher_index."City" ADD PRIMARY KEY (id);
+ERROR:  multiple primary keys for table "City" are not allowed
 CREATE UNIQUE INDEX city_id_idx ON cypher_index."City" (id);
 ALTER TABLE cypher_index."City" CLUSTER ON city_id_idx;
 ALTER TABLE cypher_index.has_city

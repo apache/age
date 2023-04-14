@@ -40,19 +40,9 @@ SELECT COUNT(*) FROM gp1."vertices";
 (1 row)
 
 SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
-                                                             n                                                              
-----------------------------------------------------------------------------------------------------------------------------
- {"id": 1125899906842625, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842626, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842627, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
- {"id": 1125899906842631, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842634, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
- {"id": 1125899906842633, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131971, "properties": {}}::edge
- {"id": 1125899906842628, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131969, "properties": {}}::edge
-(10 rows)
+ n 
+---
+(0 rows)
 
 SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
  create_complete_graph 

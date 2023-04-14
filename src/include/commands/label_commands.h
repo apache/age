@@ -60,6 +60,6 @@ Datum create_vlabel(PG_FUNCTION_ARGS);
 Datum create_elabel(PG_FUNCTION_ARGS);
 
 Oid create_label(char *graph_name, char *label_name, char label_type,
-                 List *parents, int is_inheriting);
+                 List *parents);
 
 #endif
