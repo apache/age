@@ -1349,6 +1349,12 @@ RETURN properties(vt1);
 DROP GRAPH ag189 CASCADE;
 
 --
+-- UNIQUE IDENTIFIER
+--
+
+-- RETURN randomuuid();
+
+--
 -- UNWIND
 --
 

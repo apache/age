@@ -1193,30 +1193,32 @@ jsonb_string_regex(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-Datum 
-jsonb_exists(PG_FUNCTION_ARGS)
+Datum exists(PG_FUNCTION_ARGS)
 {
-	Jsonb *jsonb_data = PG_GETARG_JSONB_P(0);
-	text *key = PG_GETARG_TEXT_P(1);
-	char *key_str = text_to_cstring(key);
-    JsonbValue *jsonb_value;
+    Jsonb *jsonb_data = PG_GETARG_JSONB_P(0);
+    text *key = PG_GETARG_TEXT_P(1);
+    char *key_str = text_to_cstring(key);
     JsonbIterator *it;
     JsonbValue v;
     bool exists = false;
 
-	it = JsonbIteratorInit(&jsonb_data->root);
+    it = JsonbIteratorInit(&jsonb_data->root);
 
-	while((jsob_value == JsonbIteratorNext(&it, &v, false)) != NULL)
-	{
-        if (jsonb_value->type == jbvString &&
-            strcmp(jsonb_value->val.string.val, key_str) == 0)
+    while (true)
+    {
+        JsonbIteratorToken token = JsonbIteratorNext(&it, &v, false);
+        if (token == WJB_DONE) {
+            break;
+        }
+        if (token == WJB_KEY && v.type == jbvString &&
+            strcmp(v.val.string.val, key_str) == 0)
         {
             exists = true;
             break;
-        }		
-	}	
+        }
+    }
 
-	PG_RETURN_BOOL(exists);
+    PG_RETURN_BOOL(exists);
 }
 
 
@@ -1681,20 +1683,12 @@ tofloatornull(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 }
 
-//randomUUID()
 Datum
-randomUUID(PG_FUNCTION_ARGS)
+randomuuid(PG_FUNCTION_ARGS)
 {
-    pg_uuid_t uuid;
-    char uuid_str[UUID_LEN_STR + 1];
+    Datum uuid = gen_random_uuid(fcinfo);
+    char* uuid_str;
+    uuid_str = DatumGetCString(DirectFunctionCall1(uuid_out, uuid));
 
-    uuid_generate(uuid);
-    uuid_unparse(uuid, uuid_str);
-
-    /* Reformat the UUID string */
-    char formatted_uuid_str[37];
-    snprintf(formatted_uuid_str, sizeof(formatted_uuid_str), "%8s-%4s-%4s-%4s-%12s",
-             uuid_str, uuid_str + 8, uuid_str + 13, uuid_str + 18, uuid_str + 23);
-
-    PG_RETURN_TEXT_P(cstring_to_text(formatted_uuid_str));
+    PG_RETURN_TEXT_P(uuid_str);
 }

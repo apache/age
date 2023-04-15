@@ -3240,6 +3240,16 @@ DETAIL:  drop cascades to sequence ag189.ag_label_seq
 drop cascades to vlabel ag_vertex
 drop cascades to elabel ag_edge
 drop cascades to vlabel test
+
+--
+-- UNIQUE IDENTIFIER
+--
+-- return randomuuid();
+--              randomuuid
+-- ---------------------------------------
+-- "ec10f07-a8d1-4d46-a63f-aea64524e4a3"
+-- (1 row)
+
 --
 -- UNWIND
 --

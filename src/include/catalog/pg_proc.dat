@@ -12022,7 +12022,7 @@
   proargtypes => 'jsonb', prosrc => 'cypher_isempty_jsonb' },
 { oid => '7249', descr => 'does jsonb key exist?',
   proname => 'exists', prorettype => 'bool',
-  proargtypes => 'jsonb', prosrc => 'jsonb_exists' },
+  proargtypes => 'jsonb', prosrc => 'exists' },
 
 # graphdatabase array functions
 { oid => '7300', descr => 'the first element in a array',
@@ -12053,8 +12053,8 @@
 { oid => '8005', descr => 'return float equivalents or null',
   proname => 'tofloatornull', prorettype => 'float8', proisstrict => 't', pronargs => '1',
   proargtypes => 'any', prosrc => 'tofloatornull' },
-{ oid => '8006', descr => 'return random and unique identifiers', 
-  proname => 'randomUUID',  prorettype => 'float8', proisstrict => 't', pronargs => '1',
-  proargtypes => 'any', prosrc => 'randomUUID' },
+{ oid => '8006', descr => 'generate random UUID',
+  proname => 'randomuuid', proleakproof => 't', provolatile => 'v',
+  prorettype => 'text', proargtypes => '', prosrc => 'randomuuid' },
 
 ]

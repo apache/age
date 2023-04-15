@@ -94,6 +94,7 @@ extern Datum tofloat(PG_FUNCTION_ARGS);
 extern Datum tofloatornull(PG_FUNCTION_ARGS);
 
 /* string manipulation function */
-extern Datum randomUUID(PG_FUNCTION_ARGS);
+extern Datum randomuuid(PG_FUNCTION_ARGS);
+extern Datum exists(PG_FUNCTION_ARGS);
 
 #endif							/* CYPHER_FUNCS_H */
