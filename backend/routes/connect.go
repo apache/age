@@ -9,6 +9,11 @@ import (
 	"github.com/labstack/echo"
 )
 
+/*
+This function takes user data from the request body, establishes a database connection, saves the
+connection information in the session, and returns a JSON response with a "status" field
+set to "connected". It handles errors related to invalid data, connection establishment, and session saving.
+*/
 func ConnectToDb(c echo.Context) error {
 	udata, err := models.FromRequestBody(c)
 	if err != nil {
@@ -33,6 +38,11 @@ func ConnectToDb(c echo.Context) error {
 	return c.JSON(200, map[string]string{"status": "connected"})
 }
 
+/*
+DisconnectFromDb is used to disconnect from a database by removing the database
+connection object from the user's session  and clearing the cookies. It returns a
+JSON response with a status message indicating that the disconnection was successful.
+*/
 func DisconnectFromDb(c echo.Context) error {
 	sess := c.Get("database").(*sessions.Session)
 	dbObj := sess.Values["db"]

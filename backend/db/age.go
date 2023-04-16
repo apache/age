@@ -1,5 +1,8 @@
 package db
 
+// code defines a set of SQL statements that are likely used by backend for initializing the
+// AGE extension, setting the path, getting metadata, using ANALZE command and Getting the Pg_version.
+
 const INIT_EXTENSION = `
 CREATE EXTENSION IF NOT EXISTS age;
 LOAD 'age';
