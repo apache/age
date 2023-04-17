@@ -358,12 +358,18 @@ static void change_label_inheritance(char *graph_name, char *label_name, List* p
     ListCell *lc;
     RangeVar* rv;
     RangeVar* last_element;
-    char alter_command[500];
-    char inherit_command[500];
+    char* alter_command;
+    char* inherit_command;
     char* parent_table_name;
+    size_t alter_command_size = strlen(graph_name) + strlen(label_name) + 20; // initial size for ALTER command string
+    size_t inherit_command_size = strlen(graph_name) + 50; // initial size for INHERIT command string
 
     if(parents->length != 0 && label_name != NULL)
     {
+        /* Allocate memory for the SQL command strings */
+        alter_command = (char*) malloc(alter_command_size * sizeof(char));
+        inherit_command = (char*) malloc(inherit_command_size * sizeof(char));
+
         /* Build the SQL command string */
         sprintf(alter_command,"ALTER TABLE \"%s\".\"%s\"", graph_name, label_name);
 
@@ -386,6 +392,9 @@ static void change_label_inheritance(char *graph_name, char *label_name, List* p
                 sprintf(inherit_command, " INHERIT \"%s\".\"%s\",", graph_name, parent_table_name);
             }
 
+            /* Append the INHERIT command to the ALTER command */
+            alter_command_size += strlen(inherit_command);
+            alter_command = (char*) realloc(alter_command, alter_command_size * sizeof(char));
             strcat(alter_command, inherit_command);
 
         }
@@ -394,6 +403,10 @@ static void change_label_inheritance(char *graph_name, char *label_name, List* p
         SPI_connect();
         SPI_execute(alter_command, false, 0);
         SPI_finish();
+
+        /* Free dynamically allocated memory */
+        free(alter_command);
+        free(inherit_command);
     }
 }
 
