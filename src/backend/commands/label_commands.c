@@ -61,8 +61,6 @@
  * that users can find the backed relation for a label only by its name.
  */
 #define gen_label_relation_name(label_name) (label_name)
-#define NO_INHERITANCE 0
-#define YES_INHERITANCE 1
 
 static void create_table_for_label(char *graph_name, char *label_name,
                                    char *schema_name, char *rel_name,
@@ -382,13 +380,13 @@ static void change_label_inheritance(char *graph_name, char *label_name, List* p
             if (last_element == rv)
             {
                 sprintf(inherit_command, " INHERIT \"%s\".\"%s\";", graph_name, parent_table_name);
-                strcat(alter_command, inherit_command);
             }
             else
             {
                 sprintf(inherit_command, " INHERIT \"%s\".\"%s\",", graph_name, parent_table_name);
-                strcat(alter_command, inherit_command);
             }
+
+            strcat(alter_command, inherit_command);
 
         }
 
