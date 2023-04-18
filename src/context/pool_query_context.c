@@ -38,6 +38,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "age/age_pool.h"
+#include "age/cypher_parser.h"
 /*
  * Where to send query
  */
@@ -611,7 +613,7 @@ pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
 					 * If a writing function call is used, we prefer to send
 					 * to the primary.
 					 */
-					else if (pool_has_function_call(node))
+					else if (pool_has_function_call(node) && !isCypherQuery(node, NULL))
 					{
 						ereport(DEBUG1,
 								(errmsg("could not load balance because writing functions are used"),
@@ -1152,6 +1154,18 @@ pool_extended_send_and_wait(POOL_QUERY_CONTEXT * query_context,
 static POOL_DEST send_to_where(Node *node, char *query)
 
 {
+	// Before analyzing SQL query, check for cypher queries. 
+	char* cypherstr;
+	if (isCypherQuery(node, &cypherstr)){
+		List* parsed_cypher_tree = parse_cypher(cypherstr);
+		if (isWriteQuery(parsed_cypher_tree)){
+			return POOL_PRIMARY;
+		}
+		else{
+			return POOL_EITHER;
+		}
+	}
+
 /* From storage/lock.h */
 #define NoLock					0
 #define AccessShareLock			1	/* SELECT */
