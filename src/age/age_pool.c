@@ -19,12 +19,18 @@
 
 #include "pool.h"
 
+#include <string.h>
 #include "parser/pg_list.h"
 #include "parser/nodes.h"
 #include "parser/parsenodes.h"
 #include "utils/elog.h"
 #include "parser/extensible.h"
 #include "age/cypher_nodes.h"
+
+
+bool isCypherQuery (Node* node, char** str);
+void preprocess_cypherstr(char *target);
+bool isWriteQuery(List *ParsedCyphertreeList);
 
 
 void
