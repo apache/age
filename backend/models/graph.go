@@ -6,10 +6,15 @@ import (
 	"errors"
 )
 
+// Graph is a struct that contains the name of a graph.
 type Graph struct {
 	Name string
 }
 
+/*
+GetMetaData returns the metadata for a given graph instance g, based on the version of the database.
+and returns a set of rows and an error (if any)
+*/
 func (g *Graph) GetMetaData(conn *sql.DB, v int) (*sql.Rows, error) {
 
 	defer conn.Close()
