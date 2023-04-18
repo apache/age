@@ -73,8 +73,11 @@ preprocess_cypherstr(char *target)
 
 bool
 /* If the given raw parse tree root node 
-*  contains a cypher call, the cypher query
-*  inside is stored within str.
+*  contains a cypher call, true is
+*  returned and the cypher query
+*  inside is stored within str. Pass NULL as
+*  the second argument if you don't need
+*  to extract the actual cypher query content.
 */
 isCypherQuery (Node* node, char** retstr)
 {
@@ -131,8 +134,9 @@ isCypherQuery (Node* node, char** retstr)
 							}
 					}
 					
-					if (isCypherCall){
-
+					if (isCypherCall)
+					{	
+						if (retstr != NULL){
 						StringInfoData cypher_str;
 						initStringInfo(&cypher_str);
 
@@ -141,6 +145,7 @@ isCypherQuery (Node* node, char** retstr)
 						preprocess_cypherstr(cypher_str.data);
 
 						*retstr = cypher_str.data;
+						}
 
 						return true;
 					}
