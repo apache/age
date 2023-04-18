@@ -14,14 +14,13 @@ PGAPPICON=win32
 
 subdir = src/bin/psql
 top_builddir = ../../..
-include $(top_builddir)/src/Makefile.global
 
 # make this available to TAP test scripts
 export with_readline
 
 REFDOCDIR= $(top_srcdir)/doc/src/sgml/ref
 
-override CPPFLAGS := -I. -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS)
+override CPPFLAGS := -I. -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS)  -I$(PGSRC)/src/include -I$(PGSRC)/src/interfaces/libpq
 LDFLAGS_INTERNAL += -L$(top_builddir)/src/fe_utils -lpgfeutils $(libpq_pgport)
 
 OBJS = \
