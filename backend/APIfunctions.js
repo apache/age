@@ -14,7 +14,7 @@ const conn = {
   host: "localhost",
   password: "ABCDEFGH",
   user: "kamleshk",
-  dbname: "testdb",
+  dbname: "demodb",
   ssl: "disable",
   graph_init: true,
   version: 11,
@@ -100,7 +100,26 @@ function query() {
   });
 }
 
-
+function disconnect() {
+  fetch('http://localhost:8080/disconnect', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookies.join('; '), // Send the cookies from the previous connection
+    },
+  })
+  .then(response => {
+    console.log(response.status);
+    cookies = []; // Clear the cookies variable
+    return response.json();
+  })
+  .then(data => {
+    console.log(data);
+  })
+  .catch(error => {
+    console.error(error);
+  });
+}
 
 
 // dummy function to test the above functions
@@ -110,7 +129,7 @@ function query() {
 
 // rl.question('Enter the function number: ', (input) => {
 //     const choice = parseInt(input);
-//     if (Number.isNaN(choice) || choice < 1 || choice > 3) {
+//     if (Number.isNaN(choice) || choice < 1 || choice > 4) {
 //       console.log('Invalid choice. Please try again.');
 //     } else {
 //       switch (choice) {
@@ -123,7 +142,10 @@ function query() {
 //         case 3:
 //           query();
 //           break;
-//       }
+//         case 4:
+//           disconnect();
+//           break;
+//       }DisconnectFromDb
 //     }
 //     // rl.close();
 //     chooseFunction()

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo"
 )
 
+// main is the entry point for the Backend, it starts the server, and sets up the routes.
 func main() {
 	app := echo.New()
 	gob.Register(models.Connection{})
