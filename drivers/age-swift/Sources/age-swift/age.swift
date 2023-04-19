@@ -139,4 +139,32 @@ class Age{
             print(column)
         }
     } 
+
+
+    /*
+     * Performs a SQL COMMIT command to commit the current
+     * transaction. Any previous Cursor for this Connection is
+     * closed.
+     */
+    func commit(){
+        do{
+            try self.connection?.commitTransaction()
+        } catch{
+            print(error)
+        }
+    }
+    
+    
+    /*
+     * Performs a SQL ROLLBACK command to rollback the current
+     * transaction. Any previous Cursor for this Connection is
+     * closed.
+     */
+    func rollback(){
+        do{
+            try self.connection?.rollbackTransaction();
+        } catch{
+            print(error)
+        }
+    }
 }
