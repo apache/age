@@ -1,12 +1,11 @@
 # Wails & Vite
-
 build/bin
 frontend/dist
 .DS_Store
+node_modules/    
 
 
 # Golang
-
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -19,6 +18,7 @@ frontend/dist
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
 
 # IDEs
 .idea
