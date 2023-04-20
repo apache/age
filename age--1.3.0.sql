@@ -4190,8 +4190,8 @@ CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name, 
-                                                graph_size int, 
+CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name,
+                                                graph_size int,
                                                 bridge_size int,
                                                 node_label name = NULL,
                                                 node_properties agtype = NULL,
