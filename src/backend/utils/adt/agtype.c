@@ -4041,6 +4041,10 @@ Datum agtype_typecast_int(PG_FUNCTION_ARGS)
         pfree(string);
         string = NULL;
         break;
+    case AGTV_BOOL:
+        d = DirectFunctionCall1(bool_int4,
+                                DatumGetBool(arg_value->val.boolean));
+        break;
     /* what was given doesn't cast to an int */
     default:
         ereport(ERROR,
