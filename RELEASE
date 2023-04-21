@@ -46,7 +46,7 @@ Implement plus-equal operator in SET clause. (#638)
 Implement CI test for python driver. (#587)
 Move from travis CI to github actions for build. (#673)
 Update all driver CIs to Github actions.
-Fix build warnings. (#709)
+Fix build warnings.
 Updated Readme for drivers folder. (#642)
 Removed async from function definitions. (#680)
 Barbell graph generation (#648) and Barbell regress tests. (#708)
