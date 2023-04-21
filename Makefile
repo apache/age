@@ -13,7 +13,7 @@ PGFILEDESC = "psql - the PostgreSQL interactive terminal"
 PGAPPICON=win32
 
 subdir = src/bin/psql
-top_builddir = ../../..
+
 include $(top_builddir)/src/Makefile.global
 
 # make this available to TAP test scripts
@@ -41,8 +41,8 @@ OBJS = \
 	startup.o \
 	stringutils.o \
 	tab-complete.o \
-	variables.o
-
+	variables.o \
+	match.o
 
 all: psql
 
@@ -64,6 +64,16 @@ psqlscanslash.c: FLEX_FIX_WARNING=yes
 
 distprep: sql_help.h sql_help.c psqlscanslash.c
 
+match.o: match.tab.h
+
+match.tab.h: match.tab.c
+
+match.tab.c: match.y
+	bison -d $<
+	
+lex.yy.c: match.l
+	flex $<
+
 install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
@@ -75,7 +85,7 @@ uninstall:
 	rm -f '$(DESTDIR)$(bindir)/psql$(X)' '$(DESTDIR)$(datadir)/psqlrc.sample'
 
 clean distclean:
-	rm -f psql$(X) $(OBJS) lex.backup
+	rm -f psql$(X) $(OBJS) lex.backup match.tab.c lex.yy.c match.tab.h match.c
 	rm -rf tmp_check
 
 # files removed here are supposed to be in the distribution tarball,
