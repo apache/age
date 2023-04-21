@@ -464,25 +464,27 @@ Datum age_create_path(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(2)) 
     {
         namestrcpy(vertex_label_name, AG_DEFAULT_LABEL_VERTEX);
+        vertex_label_str = AG_DEFAULT_LABEL_VERTEX;
     }
     else 
     {
         vertex_label_name = PG_GETARG_NAME(2);
+        vertex_label_str = NameStr(*vertex_label_name);
     }
-    vertex_label_str = NameStr(*vertex_label_name);
-
+    
 
     /* Get the edge label. */
     if (PG_ARGISNULL(3))
     {
         namestrcpy(edge_label_name, AG_DEFAULT_LABEL_EDGE);
+        edge_label_str = AG_DEFAULT_LABEL_EDGE;
     }
     else
     {
         edge_label_name = PG_GETARG_NAME(3);
+        edge_label_str = NameStr(*edge_label_name);
     }
-    edge_label_str = NameStr(*edge_label_name);
-
+    
 
     /* Compare both edge and vertex labels (they cannot be the same).*/
     if (strcmp(vertex_label_str, edge_label_str) == 0)
