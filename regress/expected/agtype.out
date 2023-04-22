@@ -2083,6 +2083,12 @@ SELECT agtype_to_bool(agtype_in('1'));
  t
 (1 row)
 
+SELECT agtype_to_bool(agtype_in('0'));
+ agtype_to_bool 
+----------------
+ f
+(1 row)
+
 -- These should all fail
 SELECT agtype_to_bool(agtype_in('null'));
 ERROR:  cannot cast agtype null to type boolean
