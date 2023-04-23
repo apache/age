@@ -33,6 +33,10 @@
     <img src="https://img.shields.io/badge/Release-v1.2.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
+  <a href="https://www.postgresql.org/docs/11/index.html">
+    <img src="https://img.shields.io/badge/Version-PostgreSQL 11-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/11/index.html"/>
+  </a>   
+  &nbsp;
   <a href="https://github.com/apache/age/issues">
     <img src="https://img.shields.io/github/issues/apache/age"/>
   </a>
@@ -243,9 +247,10 @@ $$) as (v agtype);
 To query the graph, you can use the MATCH clause.  
 
 ```bash
-SELECT * FROM cypher('graph_name', $$
-MATCH (v)
-RETURN v
+SELECT * 
+FROM cypher('graph_name', $$
+    MATCH (v)
+    RETURN v
 $$) as (v agtype);
 ```
 

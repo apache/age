@@ -1700,7 +1700,7 @@ cypher_update_information *transform_cypher_set_item_list(
                     ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg(
-                         "SET clause doesnt not support updating maps or lists in a property"),
+                         "SET clause doesn't not support updating maps or lists in a property"),
                      parser_errposition(pstate, set_item->location)));
             }
 
@@ -4352,20 +4352,29 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
             transform_entity *entity = find_variable(cpstate, rel->name);
 
             /*
-             * TODO: openCypher allows a variable to be used before it
-             * is properly declared. This logic is not satifactory
-             * for that and must be better developed.
+             * If the variable already exists, verify that it is for an edge.
+             * You cannot have the same edge repeated in a path.
+             * You cannot have an variable that is for a vertex.
              */
-            if (entity != NULL &&
-                (entity->type != ENT_EDGE ||
-                 !IS_DEFAULT_LABEL_EDGE(rel->label) ||
-                 rel->props))
+            if (entity != NULL)
             {
-                ereport(ERROR,
-                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("variable %s already exists", rel->name),
-                         parser_errposition(pstate, rel->location)));
+                if (entity->type == ENT_EDGE)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("duplicate edge variable '%s' within a clause",
+                                    rel->name),
+                             parser_errposition(pstate, rel->location)));
+                }
+                if (entity->type == ENT_VERTEX)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("variable '%s' is for a vertex", rel->name),
+                             parser_errposition(pstate, rel->location)));
+                }
             }
+
             return te->expr;
         }
     }
@@ -4444,7 +4453,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
          *  segmentation faults, and other errors.
          *
          *  Update: Nonexistent and mismatched labels now return a NULL value to
-         *  prevent segmentation faults, and other errors. We can also consider 
+         *  prevent segmentation faults, and other errors. We can also consider
          *  if an all-purpose label would be useful.
          */
         node->label = NULL;
@@ -4501,20 +4510,38 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
         {
             transform_entity *entity = find_variable(cpstate, node->name);
 
-            /*
-             * TODO: openCypher allows a variable to be used before it
-             * is properly declared. This logic is not satifactory
-             * for that and must be better developed.
-             */
-            if (entity != NULL &&
-                (entity->type != ENT_VERTEX ||
-                 !IS_DEFAULT_LABEL_VERTEX(node->label) ||
-                 node->props))
+            /* If the variable already exists, verify that it is for a vertex */
+            if (entity != NULL && (entity->type != ENT_VERTEX))
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("variable %s already exists", node->name),
+                         errmsg("variable '%s' is for a edge", node->name),
                          parser_errposition(pstate, node->location)));
+            }
+
+            /*
+             * If the variable already exists, verify that any label specified
+             * is of the same name or scope. Reject those that aren't.
+             */
+            if (entity != NULL)
+            {
+                cypher_node *cnode = (cypher_node *)entity->entity.node;
+
+
+
+                if (!node->label ||
+                    (cnode != NULL &&
+                    node != NULL &&
+                    /* allow node using a default label against resolved var */
+                    pg_strcasecmp(node->label, AG_DEFAULT_LABEL_VERTEX) != 0 &&
+                    /* allow labels with the same name */
+                    pg_strcasecmp(cnode->label, node->label) != 0))
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("multiple labels for variable '%s' are not supported", node->name),
+                             parser_errposition(pstate, node->location)));
+                }
             }
 
             return te->expr;
@@ -5521,7 +5548,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * for one tuple the path exists (or there is multiple paths that exist and all
  * paths must be emitted) and for another the path does not exist. This is
  * similar to OPTIONAL MATCH, however with the added feature of creating the
- * path if not there, rather than just emiting NULL.
+ * path if not there, rather than just emitting NULL.
  */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)
