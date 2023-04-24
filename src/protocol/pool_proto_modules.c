@@ -263,6 +263,30 @@ SimpleQuery(POOL_CONNECTION * frontend,
 	/* parse SQL string */
 	parse_tree_list = raw_parser(contents, RAW_PARSE_DEFAULT, len, &error, !REPLICATION);
 
+
+	List* cyphertree = NULL;
+
+	// After SQL part has been parsed and is valid, we check for the Cypher query.
+	if (parse_tree_list != NIL){
+
+		char* cypherstr;
+		
+		if (isCypherQuery(raw_parser2(parse_tree_list),&cypherstr)){
+
+			cyphertree = parse_cypher(cypherstr);
+			
+			if (cyphertree == NIL){
+				// if the cypher query has a syntax error 
+				// then consider the entire SQL query as having
+				// a syntax error. This way we can use pre-existing
+				// error handling setup for syntax errors.
+				parse_tree_list = NIL;
+			}
+		}
+	}
+
+
+	//resume SQL processing as normal
 	if (parse_tree_list == NIL)
 	{
 		/* is the query empty? */
@@ -562,7 +586,7 @@ SimpleQuery(POOL_CONNECTION * frontend,
 			 * Decide where to send query
 			 */
 			pool_where_to_send(query_context, query_context->original_query,
-							   query_context->parse_tree);
+							   query_context->parse_tree, cyphertree);
 		}
 
 		/*
@@ -1303,7 +1327,7 @@ Parse(POOL_CONNECTION * frontend, POOL_CONNECTION_POOL * backend,
 		 * Decide where to send query
 		 */
 		pool_where_to_send(query_context, query_context->original_query,
-						   query_context->parse_tree);
+						   query_context->parse_tree, NULL);
 
 		if (pool_config->disable_load_balance_on_write == DLBOW_DML_ADAPTIVE && strlen(name) != 0)
 			pool_setall_node_to_be_sent(query_context);
@@ -1592,7 +1616,7 @@ Bind(POOL_CONNECTION * frontend, POOL_CONNECTION_POOL * backend,
 		if (!SL_MODE)
 		{
 			pool_where_to_send(query_context, query_context->original_query,
-							   query_context->parse_tree);
+							   query_context->parse_tree, NULL);
 		}
 
 		if (parse_before_bind(frontend, backend, parse_msg, bind_msg) != POOL_CONTINUE)
@@ -1603,7 +1627,7 @@ Bind(POOL_CONNECTION * frontend, POOL_CONNECTION_POOL * backend,
 		TSTATE(backend, MAIN_REPLICA ? PRIMARY_NODE_ID : REAL_MAIN_NODE_ID) == 'T')
 	{
 		pool_where_to_send(query_context, query_context->original_query,
-							query_context->parse_tree);
+							query_context->parse_tree, NULL);
 	}
 
 	/*
@@ -2803,7 +2827,7 @@ ProcessFrontendResponse(POOL_CONNECTION * frontend,
 			MemoryContextSwitchTo(old_context);
 
 			pool_where_to_send(query_context, query_context->original_query,
-							   query_context->parse_tree);
+							   query_context->parse_tree, NULL);
 
 			if (MAJOR(backend) == PROTO_MAJOR_V3)
 				status = FunctionCall3(frontend, backend, len, contents);

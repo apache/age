@@ -58,7 +58,7 @@ typedef enum
 									(errmsg("setting db node for query to be sent, no query context")));\
 						} while (0)
 
-static POOL_DEST send_to_where(Node *node, char *query);
+static POOL_DEST send_to_where(Node *node, char *query, List* cyphertree);
 static void where_to_send_deallocate(POOL_QUERY_CONTEXT * query_context, Node *node);
 static char *remove_read_write(int len, const char *contents, int *rewritten_len);
 static void set_virtual_main_node(POOL_QUERY_CONTEXT *query_context);
@@ -428,7 +428,7 @@ pool_force_query_node_to_backend(POOL_QUERY_CONTEXT * query_context, int backend
  * Decide where to send queries(thus expecting response)
  */
 void
-pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
+pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node, List* cyphertree)
 {
 	POOL_SESSION_CONTEXT *session_context;
 	POOL_CONNECTION_POOL *backend;
@@ -470,7 +470,7 @@ pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
 	{
 		POOL_DEST	dest;
 
-		dest = send_to_where(node, query);
+		dest = send_to_where(node, query, cyphertree);
 
 		dml_adaptive(node, query);
 
@@ -613,7 +613,7 @@ pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
 					 * If a writing function call is used, we prefer to send
 					 * to the primary.
 					 */
-					else if (pool_has_function_call(node) && !isCypherQuery(node, NULL))
+					else if (pool_has_function_call(node) && cyphertree == NIL)
 					{
 						ereport(DEBUG1,
 								(errmsg("could not load balance because writing functions are used"),
@@ -711,7 +711,7 @@ pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
 			 * If a writing function call is used or replicate_select is true,
 			 * we prefer to send to all nodes.
 			 */
-			if (pool_has_function_call(node) || pool_config->replicate_select)
+			if ( (pool_has_function_call(node) && cyphertree == NULL) || pool_config->replicate_select)
 			{
 				pool_setall_node_to_be_sent(query_context);
 			}
@@ -738,7 +738,7 @@ pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node)
 		else
 		{
 			if (is_select_query(node, query) && !pool_config->replicate_select &&
-				!pool_has_function_call(node))
+				!(pool_has_function_call(node) && cyphertree == NULL))
 			{
 				/* only send to main node */
 				pool_set_node_to_be_sent(query_context, REAL_MAIN_NODE_ID);
@@ -1151,17 +1151,18 @@ pool_extended_send_and_wait(POOL_QUERY_CONTEXT * query_context,
  * From syntactically analysis decide the statement to be sent to the
  * primary, the standby or either or both in native replication+HR/SR mode.
  */
-static POOL_DEST send_to_where(Node *node, char *query)
+static POOL_DEST send_to_where(Node *node, char *query, List* cyphertree)
 
 {
-	// Before analyzing SQL query, check for cypher queries. 
-	char* cypherstr;
-	if (isCypherQuery(node, &cypherstr)){
-		List* parsed_cypher_tree = parse_cypher(cypherstr);
-		if (isWriteQuery(parsed_cypher_tree)){
+	// Before analyzing SQL query, check if query is a cypher query.
+	if (cyphertree != NULL)
+	{
+		if (isWriteQuery(cyphertree))
+		{
 			return POOL_PRIMARY;
 		}
-		else{
+		else
+		{
 			return POOL_EITHER;
 		}
 	}
@@ -1487,7 +1488,7 @@ static POOL_DEST send_to_where(Node *node, char *query)
 			char	   *string = nodeToString(prepare_statement->query);
 
 			/* Note that this is a recursive call */
-			return send_to_where((Node *) (prepare_statement->query), string);
+			return send_to_where((Node *) (prepare_statement->query), string, NULL);
 		}
 
 		/*
