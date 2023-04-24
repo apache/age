@@ -1,4 +1,25 @@
-/results/
-*.o
+# Wails & Vite
+build/bin
+frontend/dist
+.DS_Store
+node_modules/    
+
+
+# Golang
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
 *.so
-node_modules/
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+
+# IDEs
+.idea
+.vscode
