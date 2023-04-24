@@ -1120,7 +1120,7 @@ static int _scan_errmsg(const char *msg, const ag_yy_extra *extra)
 
 static int _scan_errposition(const int location, const ag_yy_extra *extra)
 {
-    int pos;
+    /*int pos;
 
     // no-op if location is unknown
     if (location < 0)
@@ -1128,8 +1128,8 @@ static int _scan_errposition(const int location, const ag_yy_extra *extra)
 
     // convert byte offset to number of characters
     pos = pg_mbstrlen_with_len(extra->scan_buf, location) + 1;
-
-    return errposition(pos);
+    return errposition(pos);*/
+    return 0; // Returning dummy value as PGPOOL does not use scan_errposition. See scan.l for details.
 }
 
 ag_scanner_t ag_scanner_create(const char *s)
