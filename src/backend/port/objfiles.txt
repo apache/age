@@ -1,0 +1,1 @@
+src/backend/port/atomics.o src/backend/port/pg_sema.o src/backend/port/pg_shmem.o

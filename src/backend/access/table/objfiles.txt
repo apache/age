@@ -1,0 +1,1 @@
+src/backend/access/table/table.o src/backend/access/table/tableam.o src/backend/access/table/tableamapi.o src/backend/access/table/toast_helper.o

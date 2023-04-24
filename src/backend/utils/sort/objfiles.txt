@@ -1,0 +1,1 @@
+src/backend/utils/sort/logtape.o src/backend/utils/sort/qsort_interruptible.o src/backend/utils/sort/sharedtuplestore.o src/backend/utils/sort/sortsupport.o src/backend/utils/sort/tuplesort.o src/backend/utils/sort/tuplestore.o

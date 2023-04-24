@@ -1,0 +1,1 @@
+src/backend/access/brin/brin.o src/backend/access/brin/brin_bloom.o src/backend/access/brin/brin_inclusion.o src/backend/access/brin/brin_minmax.o src/backend/access/brin/brin_minmax_multi.o src/backend/access/brin/brin_pageops.o src/backend/access/brin/brin_revmap.o src/backend/access/brin/brin_tuple.o src/backend/access/brin/brin_validate.o src/backend/access/brin/brin_xlog.o

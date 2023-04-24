@@ -1,0 +1,1 @@
+src/backend/utils/fmgr/dfmgr.o src/backend/utils/fmgr/fmgr.o src/backend/utils/fmgr/funcapi.o

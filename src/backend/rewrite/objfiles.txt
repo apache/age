@@ -1,0 +1,1 @@
+src/backend/rewrite/rewriteDefine.o src/backend/rewrite/rewriteHandler.o src/backend/rewrite/rewriteManip.o src/backend/rewrite/rewriteRemove.o src/backend/rewrite/rewriteSearchCycle.o src/backend/rewrite/rewriteSupport.o src/backend/rewrite/rowsecurity.o

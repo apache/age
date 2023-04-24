@@ -1,0 +1,1 @@
+src/backend/statistics/dependencies.o src/backend/statistics/extended_stats.o src/backend/statistics/mcv.o src/backend/statistics/mvdistinct.o

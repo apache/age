@@ -1,0 +1,1 @@
+src/backend/access/tablesample/bernoulli.o src/backend/access/tablesample/system.o src/backend/access/tablesample/tablesample.o

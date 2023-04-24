@@ -1,0 +1,1 @@
+src/backend/storage/lmgr/condition_variable.o src/backend/storage/lmgr/deadlock.o src/backend/storage/lmgr/lmgr.o src/backend/storage/lmgr/lock.o src/backend/storage/lmgr/lwlock.o src/backend/storage/lmgr/lwlocknames.o src/backend/storage/lmgr/predicate.o src/backend/storage/lmgr/proc.o src/backend/storage/lmgr/s_lock.o src/backend/storage/lmgr/spin.o

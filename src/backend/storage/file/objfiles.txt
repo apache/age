@@ -1,0 +1,1 @@
+src/backend/storage/file/buffile.o src/backend/storage/file/copydir.o src/backend/storage/file/fd.o src/backend/storage/file/fileset.o src/backend/storage/file/reinit.o src/backend/storage/file/sharedfileset.o

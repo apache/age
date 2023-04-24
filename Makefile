@@ -13,7 +13,7 @@ PGFILEDESC = "psql - the PostgreSQL interactive terminal"
 PGAPPICON=win32
 
 subdir = src/bin/psql
-top_builddir = ../../..
+top_builddir = .
 include $(top_builddir)/src/Makefile.global
 
 # make this available to TAP test scripts
@@ -88,3 +88,4 @@ check:
 
 installcheck:
 	$(prove_installcheck)
+

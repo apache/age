@@ -1,0 +1,14 @@
+prefix=/home/aditya/Apache/cli/postgresql-15.0
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libecpg_compat
+Description: PostgreSQL libecpg_compat library
+Url: https://www.postgresql.org/
+Version: 15.0
+Requires: 
+Requires.private: libecpg libpgtypes
+Cflags: -I${includedir}
+Libs: -L${libdir} -lecpg_compat
+Libs.private:  -lpgcommon -lpgport -lpq -lm

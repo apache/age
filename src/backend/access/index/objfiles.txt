@@ -1,0 +1,1 @@
+src/backend/access/index/amapi.o src/backend/access/index/amvalidate.o src/backend/access/index/genam.o src/backend/access/index/indexam.o

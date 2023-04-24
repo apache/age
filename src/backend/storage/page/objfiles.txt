@@ -1,0 +1,1 @@
+src/backend/storage/page/bufpage.o src/backend/storage/page/checksum.o src/backend/storage/page/itemptr.o

@@ -1,0 +1,1 @@
+src/backend/optimizer/prep/prepagg.o src/backend/optimizer/prep/prepjointree.o src/backend/optimizer/prep/prepqual.o src/backend/optimizer/prep/preptlist.o src/backend/optimizer/prep/prepunion.o

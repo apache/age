@@ -1,0 +1,1 @@
+src/backend/tcop/cmdtag.o src/backend/tcop/dest.o src/backend/tcop/fastpath.o src/backend/tcop/postgres.o src/backend/tcop/pquery.o src/backend/tcop/utility.o
