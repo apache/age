@@ -203,6 +203,156 @@ ERROR:  edge label can not be NULL
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 ERROR:  vertex and edge label can not be same
+-- PATH GRAPH TESTS
+-- Should throw an error because number of vertices cannot be less than 2.
+SELECT age_create_path('path_graph_1', 1, NULL, NULL, false);
+NOTICE:  graph "path_graph_1" has been created
+ERROR:  Number of vertices in path cannot be less than 2.
+-- Should create 5 vertices with 4 edges. All standard ag_labels.
+SELECT age_create_path('path_graph_5_false', 5, NULL, NULL, false);
+NOTICE:  graph "path_graph_5_false" has been created
+ age_create_path 
+-----------------
+ 
+(1 row)
+
+SELECT * FROM path_graph_5_false._ag_label_vertex;
+       id        | properties 
+-----------------+------------
+ 281474976710657 | {}
+ 281474976710658 | {}
+ 281474976710659 | {}
+ 281474976710660 | {}
+ 281474976710661 | {}
+(5 rows)
+
+SELECT * FROM path_graph_5_false._ag_label_edge;
+       id        |    start_id     |     end_id      | properties 
+-----------------+-----------------+-----------------+------------
+ 562949953421313 | 281474976710660 | 281474976710661 | {}
+ 562949953421314 | 281474976710659 | 281474976710660 | {}
+ 562949953421315 | 281474976710658 | 281474976710659 | {}
+ 562949953421316 | 281474976710657 | 281474976710658 | {}
+(4 rows)
+
+-- Should create 5 vertices with 8 edges. All standard ag_labels.
+SELECT age_create_path('path_graph_5_true', 5, NULL, NULL, true);
+NOTICE:  graph "path_graph_5_true" has been created
+ age_create_path 
+-----------------
+ 
+(1 row)
+
+SELECT * FROM path_graph_5_true._ag_label_vertex;
+       id        | properties 
+-----------------+------------
+ 281474976710657 | {}
+ 281474976710658 | {}
+ 281474976710659 | {}
+ 281474976710660 | {}
+ 281474976710661 | {}
+(5 rows)
+
+SELECT * FROM path_graph_5_true._ag_label_edge;
+       id        |    start_id     |     end_id      | properties 
+-----------------+-----------------+-----------------+------------
+ 562949953421313 | 281474976710660 | 281474976710661 | {}
+ 562949953421313 | 281474976710661 | 281474976710660 | {}
+ 562949953421314 | 281474976710659 | 281474976710660 | {}
+ 562949953421314 | 281474976710660 | 281474976710659 | {}
+ 562949953421315 | 281474976710658 | 281474976710659 | {}
+ 562949953421315 | 281474976710659 | 281474976710658 | {}
+ 562949953421316 | 281474976710657 | 281474976710658 | {}
+ 562949953421316 | 281474976710658 | 281474976710657 | {}
+(8 rows)
+
+-- Should create 10 vertices with 9 edges. New ag_labels.
+SELECT age_create_path('path_graph_10_false', 10, 'PathVertex', 'PATH_EDGE', false);
+NOTICE:  graph "path_graph_10_false" has been created
+NOTICE:  VLabel "PathVertex" has been created
+NOTICE:  ELabel "PATH_EDGE" has been created
+ age_create_path 
+-----------------
+ 
+(1 row)
+
+SELECT * FROM path_graph_10_false."PathVertex";
+       id        | properties 
+-----------------+------------
+ 844424930131969 | {}
+ 844424930131970 | {}
+ 844424930131971 | {}
+ 844424930131972 | {}
+ 844424930131973 | {}
+ 844424930131974 | {}
+ 844424930131975 | {}
+ 844424930131976 | {}
+ 844424930131977 | {}
+ 844424930131978 | {}
+(10 rows)
+
+SELECT * FROM path_graph_10_false."PATH_EDGE";
+        id        |    start_id     |     end_id      | properties 
+------------------+-----------------+-----------------+------------
+ 1125899906842625 | 844424930131977 | 844424930131978 | {}
+ 1125899906842626 | 844424930131976 | 844424930131977 | {}
+ 1125899906842627 | 844424930131975 | 844424930131976 | {}
+ 1125899906842628 | 844424930131974 | 844424930131975 | {}
+ 1125899906842629 | 844424930131973 | 844424930131974 | {}
+ 1125899906842630 | 844424930131972 | 844424930131973 | {}
+ 1125899906842631 | 844424930131971 | 844424930131972 | {}
+ 1125899906842632 | 844424930131970 | 844424930131971 | {}
+ 1125899906842633 | 844424930131969 | 844424930131970 | {}
+(9 rows)
+
+-- Should create 10 vertices with 18 edges. New ag_labels.
+SELECT age_create_path('path_graph_10_true', 10, 'PathVertex', 'PATH_EDGE', true);
+NOTICE:  graph "path_graph_10_true" has been created
+NOTICE:  VLabel "PathVertex" has been created
+NOTICE:  ELabel "PATH_EDGE" has been created
+ age_create_path 
+-----------------
+ 
+(1 row)
+
+SELECT * FROM path_graph_10_true."PathVertex";
+       id        | properties 
+-----------------+------------
+ 844424930131969 | {}
+ 844424930131970 | {}
+ 844424930131971 | {}
+ 844424930131972 | {}
+ 844424930131973 | {}
+ 844424930131974 | {}
+ 844424930131975 | {}
+ 844424930131976 | {}
+ 844424930131977 | {}
+ 844424930131978 | {}
+(10 rows)
+
+SELECT * FROM path_graph_10_true."PATH_EDGE";
+        id        |    start_id     |     end_id      | properties 
+------------------+-----------------+-----------------+------------
+ 1125899906842625 | 844424930131977 | 844424930131978 | {}
+ 1125899906842625 | 844424930131978 | 844424930131977 | {}
+ 1125899906842626 | 844424930131976 | 844424930131977 | {}
+ 1125899906842626 | 844424930131977 | 844424930131976 | {}
+ 1125899906842627 | 844424930131975 | 844424930131976 | {}
+ 1125899906842627 | 844424930131976 | 844424930131975 | {}
+ 1125899906842628 | 844424930131974 | 844424930131975 | {}
+ 1125899906842628 | 844424930131975 | 844424930131974 | {}
+ 1125899906842629 | 844424930131973 | 844424930131974 | {}
+ 1125899906842629 | 844424930131974 | 844424930131973 | {}
+ 1125899906842630 | 844424930131972 | 844424930131973 | {}
+ 1125899906842630 | 844424930131973 | 844424930131972 | {}
+ 1125899906842631 | 844424930131971 | 844424930131972 | {}
+ 1125899906842631 | 844424930131972 | 844424930131971 | {}
+ 1125899906842632 | 844424930131970 | 844424930131971 | {}
+ 1125899906842632 | 844424930131971 | 844424930131970 | {}
+ 1125899906842633 | 844424930131969 | 844424930131970 | {}
+ 1125899906842633 | 844424930131970 | 844424930131969 | {}
+(18 rows)
+
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
 NOTICE:  drop cascades to 4 other objects
@@ -223,6 +373,50 @@ drop cascades to table gp2._ag_label_edge
 drop cascades to table gp2.vertices
 drop cascades to table gp2.edges
 NOTICE:  graph "gp2" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('path_graph_5_false', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table path_graph_5_false._ag_label_vertex
+drop cascades to table path_graph_5_false._ag_label_edge
+NOTICE:  graph "path_graph_5_false" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('path_graph_5_true', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table path_graph_5_true._ag_label_vertex
+drop cascades to table path_graph_5_true._ag_label_edge
+NOTICE:  graph "path_graph_5_true" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('path_graph_10_false', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table path_graph_10_false._ag_label_vertex
+drop cascades to table path_graph_10_false._ag_label_edge
+drop cascades to table path_graph_10_false."PathVertex"
+drop cascades to table path_graph_10_false."PATH_EDGE"
+NOTICE:  graph "path_graph_10_false" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('path_graph_10_true', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table path_graph_10_true._ag_label_vertex
+drop cascades to table path_graph_10_true._ag_label_edge
+drop cascades to table path_graph_10_true."PathVertex"
+drop cascades to table path_graph_10_true."PATH_EDGE"
+NOTICE:  graph "path_graph_10_true" has been dropped
  drop_graph 
 ------------
  
