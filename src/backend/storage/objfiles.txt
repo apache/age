@@ -1,0 +1,10 @@
+src/backend/storage/buffer/buf_init.o src/backend/storage/buffer/buf_table.o src/backend/storage/buffer/bufmgr.o src/backend/storage/buffer/freelist.o src/backend/storage/buffer/localbuf.o
+src/backend/storage/file/buffile.o src/backend/storage/file/copydir.o src/backend/storage/file/fd.o src/backend/storage/file/fileset.o src/backend/storage/file/reinit.o src/backend/storage/file/sharedfileset.o
+src/backend/storage/freespace/freespace.o src/backend/storage/freespace/fsmpage.o src/backend/storage/freespace/indexfsm.o
+src/backend/storage/ipc/barrier.o src/backend/storage/ipc/dsm.o src/backend/storage/ipc/dsm_impl.o src/backend/storage/ipc/ipc.o src/backend/storage/ipc/ipci.o src/backend/storage/ipc/latch.o src/backend/storage/ipc/pmsignal.o src/backend/storage/ipc/procarray.o src/backend/storage/ipc/procsignal.o src/backend/storage/ipc/shm_mq.o src/backend/storage/ipc/shm_toc.o src/backend/storage/ipc/shmem.o src/backend/storage/ipc/shmqueue.o src/backend/storage/ipc/signalfuncs.o src/backend/storage/ipc/sinval.o src/backend/storage/ipc/sinvaladt.o src/backend/storage/ipc/standby.o
+src/backend/storage/large_object/inv_api.o
+src/backend/storage/lmgr/condition_variable.o src/backend/storage/lmgr/deadlock.o src/backend/storage/lmgr/lmgr.o src/backend/storage/lmgr/lock.o src/backend/storage/lmgr/lwlock.o src/backend/storage/lmgr/lwlocknames.o src/backend/storage/lmgr/predicate.o src/backend/storage/lmgr/proc.o src/backend/storage/lmgr/s_lock.o src/backend/storage/lmgr/spin.o
+src/backend/storage/page/bufpage.o src/backend/storage/page/checksum.o src/backend/storage/page/itemptr.o
+src/backend/storage/smgr/md.o src/backend/storage/smgr/smgr.o
+src/backend/storage/sync/sync.o
+

@@ -1,0 +1,1 @@
+src/backend/storage/buffer/buf_init.o src/backend/storage/buffer/buf_table.o src/backend/storage/buffer/bufmgr.o src/backend/storage/buffer/freelist.o src/backend/storage/buffer/localbuf.o

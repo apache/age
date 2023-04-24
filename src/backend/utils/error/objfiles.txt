@@ -1,0 +1,1 @@
+src/backend/utils/error/assert.o src/backend/utils/error/csvlog.o src/backend/utils/error/elog.o src/backend/utils/error/jsonlog.o

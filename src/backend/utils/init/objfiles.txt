@@ -1,0 +1,1 @@
+src/backend/utils/init/globals.o src/backend/utils/init/miscinit.o src/backend/utils/init/postinit.o

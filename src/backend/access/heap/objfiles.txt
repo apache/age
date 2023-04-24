@@ -1,0 +1,1 @@
+src/backend/access/heap/heapam.o src/backend/access/heap/heapam_handler.o src/backend/access/heap/heapam_visibility.o src/backend/access/heap/heaptoast.o src/backend/access/heap/hio.o src/backend/access/heap/pruneheap.o src/backend/access/heap/rewriteheap.o src/backend/access/heap/vacuumlazy.o src/backend/access/heap/visibilitymap.o

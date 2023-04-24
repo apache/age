@@ -1,0 +1,1 @@
+src/backend/storage/freespace/freespace.o src/backend/storage/freespace/fsmpage.o src/backend/storage/freespace/indexfsm.o

@@ -1,0 +1,14 @@
+prefix=/home/aditya/Apache/cli/age
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libpq
+Description: PostgreSQL libpq library
+Url: https://www.postgresql.org/
+Version: 15.0
+Requires: 
+Requires.private: 
+Cflags: -I${includedir}
+Libs: -L${libdir} -lpq
+Libs.private:  -lpgcommon -lpgport -lm

@@ -1,0 +1,1 @@
+src/backend/libpq/auth-sasl.o src/backend/libpq/auth-scram.o src/backend/libpq/auth.o src/backend/libpq/be-fsstubs.o src/backend/libpq/be-secure-common.o src/backend/libpq/be-secure.o src/backend/libpq/crypt.o src/backend/libpq/hba.o src/backend/libpq/ifaddr.o src/backend/libpq/pqcomm.o src/backend/libpq/pqformat.o src/backend/libpq/pqmq.o src/backend/libpq/pqsignal.o

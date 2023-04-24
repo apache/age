@@ -1,0 +1,1 @@
+src/backend/optimizer/path/allpaths.o src/backend/optimizer/path/clausesel.o src/backend/optimizer/path/costsize.o src/backend/optimizer/path/equivclass.o src/backend/optimizer/path/indxpath.o src/backend/optimizer/path/joinpath.o src/backend/optimizer/path/joinrels.o src/backend/optimizer/path/pathkeys.o src/backend/optimizer/path/tidpath.o

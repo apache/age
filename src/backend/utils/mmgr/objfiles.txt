@@ -1,0 +1,1 @@
+src/backend/utils/mmgr/aset.o src/backend/utils/mmgr/dsa.o src/backend/utils/mmgr/freepage.o src/backend/utils/mmgr/generation.o src/backend/utils/mmgr/mcxt.o src/backend/utils/mmgr/memdebug.o src/backend/utils/mmgr/portalmem.o src/backend/utils/mmgr/slab.o

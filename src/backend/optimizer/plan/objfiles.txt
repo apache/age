@@ -1,0 +1,1 @@
+src/backend/optimizer/plan/analyzejoins.o src/backend/optimizer/plan/createplan.o src/backend/optimizer/plan/initsplan.o src/backend/optimizer/plan/planagg.o src/backend/optimizer/plan/planmain.o src/backend/optimizer/plan/planner.o src/backend/optimizer/plan/setrefs.o src/backend/optimizer/plan/subselect.o

@@ -1,0 +1,1 @@
+src/backend/storage/smgr/md.o src/backend/storage/smgr/smgr.o
