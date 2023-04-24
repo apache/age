@@ -406,6 +406,8 @@ Datum age_create_path(PG_FUNCTION_ARGS)
     Oid nsp_id;
 
     graphid object_graph_id;
+    graphid start_vertex_graph_id;
+    graphid end_vertex_graph_id;
 
     agtype *props = NULL;
 
@@ -425,7 +427,7 @@ Datum age_create_path(PG_FUNCTION_ARGS)
     label_cache_data *vertex_cache;
     label_cache_data *edge_cache;
 
-    int64 no_vertices;
+    int64 no_vertices, start_vid, end_vid, eid, lid;
     int64 vid = 1;
     int32 vertex_label_id;
     int32 edge_label_id;
@@ -508,10 +510,8 @@ Datum age_create_path(PG_FUNCTION_ARGS)
     }
 
 
-    /* Get the direction of the graph (boolean to tell if it is bidirectional or not). */
+    /* Get the direction of the graph. */
     bidirectional = (PG_GETARG_BOOL(4) == true) ? true : false;
-
-
 
     vertex_label_id = get_label_id(vertex_label_str, graph_id);
     edge_label_id = get_label_id(edge_label_str, graph_id);
@@ -530,6 +530,7 @@ Datum age_create_path(PG_FUNCTION_ARGS)
     vertex_seq_id = get_relname_relid(vertex_seq_name_str, nsp_id);
     edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
 
+
     /* Creating vertices. */
     for (int i = 0; i < no_vertices; i++)
     {   
@@ -538,6 +539,39 @@ Datum age_create_path(PG_FUNCTION_ARGS)
         props = create_empty_agtype();
         insert_vertex_simple(graph_id, vertex_label_str, object_graph_id, props);
     }
+
+
+    /* This is for getting the last vid. Connecting the vertices will is based on this. */
+    lid = vid;
+
+
+    /* Creating the edges. */
+    for (int i = 0; i < no_vertices-1; i++)
+    {
+        end_vid = lid;
+        start_vid = lid-1;
+        eid = nextval_internal(edge_seq_id, true);
+        object_graph_id = make_graphid(edge_label_id, eid);
+
+        start_vertex_graph_id = make_graphid(vertex_label_id, start_vid);
+        end_vertex_graph_id = make_graphid(vertex_label_id, end_vid);
+
+        props = create_empty_agtype();
+
+        insert_edge_simple(graph_id, edge_label_str,
+                           object_graph_id, start_vertex_graph_id,
+                           end_vertex_graph_id, props);
+        
+        if (bidirectional == true)
+        {
+            insert_edge_simple(graph_id, edge_label_str,
+                           object_graph_id, end_vertex_graph_id,
+                           start_vertex_graph_id, props);
+        }
+        
+        lid--;
+    }
+
     PG_RETURN_VOID();
 }
 
