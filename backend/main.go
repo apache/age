@@ -17,9 +17,10 @@ func main() {
 	app.Use(session.UserSessions())
 
 	app.POST("/connect", routes.ConnectToDb)
+	app.POST("/disconnect", routes.DisconnectFromDb)
 
-	cypher := app.Group("/query", routes.CypherMiddleWare) // "/query" is group of routes under which "/metadata" route is defined
-	cypher.Use(m.ValidateContentTypeMiddleWare)            // there we use metadata ends point using localhost:8080/query/metadata
+	cypher := app.Group("/query", routes.CypherMiddleWare)
+	cypher.Use(m.ValidateContentTypeMiddleWare)
 	cypher.POST("/metadata", routes.GraphMetaData)
 	cypher.POST("", routes.Cypher)
 	app.Start(":8080")
