@@ -76,7 +76,38 @@ SELECT * FROM age_create_barbell_graph('gp5',5,0,'vertices',NULL,NULL,NULL);
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 
+
+-- PATH GRAPH TESTS
+
+-- Should throw an error because number of vertices cannot be less than 2.
+SELECT age_create_path('path_graph_1', 1, NULL, NULL, false);
+
+-- Should create 5 vertices with 4 edges. All standard ag_labels.
+SELECT age_create_path('path_graph_5_false', 5, NULL, NULL, false);
+SELECT * FROM path_graph_5_false._ag_label_vertex;
+SELECT * FROM path_graph_5_false._ag_label_edge;
+
+-- Should create 5 vertices with 8 edges. All standard ag_labels.
+SELECT age_create_path('path_graph_5_true', 5, NULL, NULL, true);
+SELECT * FROM path_graph_5_true._ag_label_vertex;
+SELECT * FROM path_graph_5_true._ag_label_edge;
+
+-- Should create 10 vertices with 9 edges. New ag_labels.
+SELECT age_create_path('path_graph_10_false', 10, 'PathVertex', 'PATH_EDGE', false);
+SELECT * FROM path_graph_10_false."PathVertex";
+SELECT * FROM path_graph_10_false."PATH_EDGE";
+
+-- Should create 10 vertices with 18 edges. New ag_labels.
+SELECT age_create_path('path_graph_10_true', 10, 'PathVertex', 'PATH_EDGE', true);
+SELECT * FROM path_graph_10_true."PathVertex";
+SELECT * FROM path_graph_10_true."PATH_EDGE";
+
+
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
 SELECT drop_graph('gp2', true);
+SELECT drop_graph('path_graph_5_false', true);
+SELECT drop_graph('path_graph_5_true', true);
+SELECT drop_graph('path_graph_10_false', true);
+SELECT drop_graph('path_graph_10_true', true);
 
