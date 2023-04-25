@@ -13,22 +13,40 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from . import age
-from .age import *
-from .models import *
-from .builder import ResultHandler, DummyResultHandler, parseAgeValue, newResultHandler
-from . import VERSION 
+from .age import Age
+from .models import Model, Property, Relationship
+from .builder import ResultHandler, parseAgeValue, newResultHandler
+from . import VERSION
 
-def version():
+
+def version() -> str:
+    """
+    Returns the version of the Age library.
+    """
     return VERSION.VERSION
 
 
-def connect(dsn=None, graph=None, connection_factory=None, cursor_factory=None, **kwargs):
-        ag = Age()
-        ag.connect(dsn=dsn, graph=graph, connection_factory=connection_factory, cursor_factory=cursor_factory, **kwargs)
-        return ag
+def connect(dsn=None, graph=None, connection_factory=None, cursor_factory=None, **kwargs) -> Age:
+    """
+    Establishes a connection to an Age graph database and returns an Age object.
+    """
+    ag = Age()
+    ag.connect(dsn=dsn, graph=graph, connection_factory=connection_factory,
+               cursor_factory=cursor_factory, **kwargs)
+    return ag
 
-# Dummy ResultHandler
-rawPrinter = DummyResultHandler()
 
-__name__="age"
+# Result Handlers
+class RawPrinter(ResultHandler):
+    """
+    Result handler that prints raw query results to the console.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def handleResult(self, result):
+        print(result)
+
+
+__name__ = "age"
