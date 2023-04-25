@@ -1,8 +1,11 @@
 package main
 
+import "C"
+
 import (
 	"embed"
 
+	"github.com/lxn/win"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -18,11 +21,12 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:  "Apache AGE Viewer",
-		Width:  800,
-		Height: 600,
+		Width:  int(win.GetSystemMetrics(win.SM_CXSCREEN)), //dynamic width, sets screen width
+		Height: int(win.GetSystemMetrics(win.SM_CYSCREEN)), //dynamic height
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
+
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		Bind: []interface{}{
