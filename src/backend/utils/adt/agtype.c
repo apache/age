@@ -2575,7 +2575,7 @@ Datum agtype_to_bool(PG_FUNCTION_ARGS)
     agtype_value agtv;
 
     if (!agtype_extract_scalar(&agtype_in->root, &agtv) ||
-        agtv.type != AGTV_BOOL)
+        (agtv.type != AGTV_BOOL && agtv.type != AGTV_INTEGER))
         cannot_cast_agtype_value(agtv.type, "boolean");
 
     PG_FREE_IF_COPY(agtype_in, 0);
