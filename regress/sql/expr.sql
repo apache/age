@@ -516,6 +516,10 @@ $$) AS (i bigint);
 
 SELECT * FROM cypher('type_coercion', $$
 	RETURN true
+$$) AS (i int);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
 $$) AS (i bigint);
 
 --Invalid String Format
@@ -583,6 +587,12 @@ RETURN 2.71::int
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN 2.71::numeric::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN true::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN false::integer
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN ([0, {one: 1.0, pie: 3.1415927, e: 2::numeric}, 2, null][1].one)::int

@@ -541,6 +541,13 @@ SELECT bool_to_agtype(true) = bool_to_agtype(true);
 SELECT bool_to_agtype(true) <> bool_to_agtype(false);
 
 --
+-- Test boolean to integer 
+--
+SELECT agtype_to_int4(agtype_in('true'));
+SELECT agtype_to_int4(agtype_in('false'));
+SELECT agtype_to_int4(agtype_in('null'));
+
+--
 -- Test boolean to pg_bigint cast
 --
 SELECT agtype_to_int8(agtype_in('true'));
