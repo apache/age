@@ -104,7 +104,7 @@ extern void pool_unset_node_to_be_sent(POOL_QUERY_CONTEXT * query_context, int n
 extern void pool_clear_node_to_be_sent(POOL_QUERY_CONTEXT * query_context);
 extern void pool_setall_node_to_be_sent(POOL_QUERY_CONTEXT * query_context);
 extern bool pool_multi_node_to_be_sent(POOL_QUERY_CONTEXT * query_context);
-extern void pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node);
+extern void pool_where_to_send(POOL_QUERY_CONTEXT * query_context, char *query, Node *node, List* cyphertree);
 extern POOL_STATUS pool_send_and_wait(POOL_QUERY_CONTEXT * query_context, int send_type, int node_id);
 extern POOL_STATUS pool_extended_send_and_wait(POOL_QUERY_CONTEXT * query_context, char *kind, int len, char *contents, int send_type, int node_id, bool nowait);
 extern Node *pool_get_parse_tree(void);

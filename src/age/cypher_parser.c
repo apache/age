@@ -150,13 +150,26 @@ List *parse_cypher(const char *s)
     cypher_yy_extra extra;
     int yyresult;
 
+    MemoryContext oldContext = CurrentMemoryContext; // saving pre-error context
+    
     scanner = ag_scanner_create(s);
     extra.result = NIL;
     extra.extra = NULL;
 
-    yyresult = cypher_yyparse(scanner, &extra);
 
-    ag_scanner_destroy(scanner);
+    PG_TRY();
+    {
+        yyresult = cypher_yyparse(scanner,&extra);
+        ag_scanner_destroy(scanner);
+    }
+    PG_CATCH();
+    {
+        MemoryContextSwitchTo(oldContext);
+        ag_scanner_destroy(scanner);
+        yyresult = -1;
+        FlushErrorState();
+    }
+    PG_END_TRY();
 
     /*
      * cypher_yyparse() returns 0 if parsing was successful.
