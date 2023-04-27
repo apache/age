@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+SET extra_float_digits = 0;
 LOAD 'age';
 SET search_path TO ag_catalog;
 SELECT * FROM create_graph('expr');
@@ -39,18 +40,18 @@ SELECT * FROM cypher('expr', $$RETURN {}$$) AS r(c agtype);
 SELECT * FROM cypher('expr', $$
 RETURN {s: 's', i: 1, f: 1.0, b: true, z: null}
 $$) AS r(c agtype);
-                    c                    
------------------------------------------
- {"b": true, "f": 1.0, "i": 1, "s": "s"}
+                         c                          
+----------------------------------------------------
+ {"b": true, "f": 1.0, "i": 1, "s": "s", "z": null}
 (1 row)
 
 -- nested maps
 SELECT * FROM cypher('expr', $$
 RETURN {s: {s: 's'}, t: {i: 1, e: {f: 1.0}, s: {a: {b: true}}}, z: null}
 $$) AS r(c agtype);
-                                     c                                      
-----------------------------------------------------------------------------
- {"s": {"s": "s"}, "t": {"e": {"f": 1.0}, "i": 1, "s": {"a": {"b": true}}}}
+                                           c                                           
+---------------------------------------------------------------------------------------
+ {"s": {"s": "s"}, "t": {"e": {"f": 1.0}, "i": 1, "s": {"a": {"b": true}}}, "z": null}
 (1 row)
 
 --
@@ -1143,7 +1144,7 @@ $$) AS (i bigint);
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
 $$) AS (i bigint);
-ERROR:  invalid input syntax for integer: "1.0"
+ERROR:  invalid input syntax for type bigint: "1.0"
 -- Casting to ints that will cause overflow
 SELECT * FROM cypher('type_coercion', $$
 	RETURN 10000000000000000000
@@ -1312,11 +1313,11 @@ SELECT agtype_in('null::int');
 SELECT * FROM cypher('expr', $$
 RETURN '0.0'::int
 $$) AS r(result agtype);
-ERROR:  invalid input syntax for integer: "0.0"
+ERROR:  invalid input syntax for type bigint: "0.0"
 SELECT * FROM cypher('expr', $$
 RETURN '1.5'::int
 $$) AS r(result agtype);
-ERROR:  invalid input syntax for integer: "1.5"
+ERROR:  invalid input syntax for type bigint: "1.5"
 SELECT * FROM cypher('graph_name', $$
 RETURN "15555555555555555555555555555"::int
 $$) AS (string_result agtype);
@@ -4266,6 +4267,59 @@ HINT:  No function matches the given name and argument types. You might need to 
 SELECT * FROM age_atan2(1);
 ERROR:  atan2() invalid number of arguments
 --
+-- Hyperbolic functions: sinh
+--
+SELECT * FROM cypher('expr', $$
+    RETURN sinh(3.1415)
+$$) AS (results agtype);
+     results      
+------------------
+ 11.5476653707437
+(1 row)
+
+SELECT * from sinh(3.1415), age_sinh(3.1415);
+       sinh       |     age_sinh     
+------------------+------------------
+ 11.5476653707437 | 11.5476653707437
+(1 row)
+
+-- should return null
+SELECT * FROM cypher('expr', $$
+	RETURN sinh(null)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM age_sinh(null);
+ age_sinh 
+----------
+ 
+(1 row)
+
+-- should fail
+SELECT * FROM cypher('expr', $$
+	RETURN sinh("0")
+$$) AS (results agtype);
+ERROR:  sinh() unsupported argument agtype 1
+SELECT * FROM cypher('expr', $$
+	RETURN sinh()
+$$) AS (results agtype);
+ERROR:  function ag_catalog.age_sinh() does not exist
+LINE 2:  RETURN sinh()
+                ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+	RETURN sinh('0')
+$$) AS (results agtype);
+ERROR:  sinh() unsupported argument agtype 1
+SELECT * FROM age_sinh();
+ERROR:  function age_sinh() does not exist
+LINE 1: SELECT * FROM age_sinh();
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+--
 -- pi
 --
 SELECT * FROM cypher('expr', $$
@@ -5302,7 +5356,7 @@ SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN stDev(u.gpa), stDevP(u.gpa) $$)
 AS (stDev agtype, stDevP agtype);
        stdev       |      stdevp       
 -------------------+-------------------
- 0.549566929066705 | 0.508800109100231
+ 0.549566929066706 | 0.508800109100232
 (1 row)
 
 -- should return 0
