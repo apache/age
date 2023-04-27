@@ -7,3 +7,4 @@ build.sh
 .DS_Store
 *.tokens
 *.interp
+.vscode
