@@ -374,3 +374,55 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     
     PG_RETURN_VOID();
 }
+
+PG_FUNCTION_INFO_V1(age_create_barabasi_albert_graph);
+/*
+* Returns a random graph using Barabási–Albert preferential attachment
+*
+* A graph of nodes is grown by attaching new nodes each with edges that are preferentially attached to existing nodes with high degree.
+* 
+* The network begins with an initial connected network of m_0 nodes.  New nodes are added to the network one at a time. Each new node is 
+* connected to m <= m_0 existing nodes with a probability that is proportional to the number of links that the existing nodes already have. 
+* Formally, the probability p_i that the new node is connected to node i is: (p_i = k_i / Σ k_j). Where k_i is the degree of node i and the sum
+* is made over all pre-existing nodes j. 
+*
+* Heavily linked nodes ("hubs") tend to quickly accumulate even more links, while nodes with only a few 
+* links are unlikely to be chosen as the destination for a new link. The new nodes have a "preference" to attach themselves to the already 
+* heavily linked nodes. 
+*/
+Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS) 
+{
+    Oid graph_id;
+    Oid vertex_seq_id;
+    Oid edge_seq_id;
+    Oid nsp_id;
+
+    graphid object_graph_id;
+    graphid start_vertex_graph_id;
+    graphid end_vertex_graph_id;
+
+    agtype *props = NULL;
+
+	Name graph_name;
+    Name vertex_label_name;
+    Name vertex_seq_name;
+    Name edge_label_name;
+    Name edge_seq_name;
+
+	char* graph_name_str;
+    char* vertex_label_str;
+    char* vertex_seq_name_str;
+    char* edge_label_str;
+    char* edge_seq_name_str;
+
+    graph_cache_data *graph_cache;
+    label_cache_data *vertex_cache;
+    label_cache_data *edge_cache;
+
+    int64 no_vertices, start_vid, end_vid, eid, lid;
+    int64 vid = 1;
+    int32 vertex_label_id;
+    int32 edge_label_id;
+
+    bool bidirectional;
+}
