@@ -17,6 +17,7 @@
  * under the License.
  */
 
+SET extra_float_digits = 0;
 LOAD 'age';
 SET search_path TO ag_catalog;
 
@@ -1770,6 +1771,30 @@ SELECT * FROM age_acos();
 SELECT * FROM age_atan();
 SELECT * FROM age_atan2();
 SELECT * FROM age_atan2(1);
+
+--
+-- Hyperbolic functions: sinh
+--
+SELECT * FROM cypher('expr', $$
+    RETURN sinh(3.1415)
+$$) AS (results agtype);
+SELECT * from sinh(3.1415), age_sinh(3.1415);
+-- should return null
+SELECT * FROM cypher('expr', $$
+	RETURN sinh(null)
+$$) AS (results agtype);
+SELECT * FROM age_sinh(null);
+-- should fail
+SELECT * FROM cypher('expr', $$
+	RETURN sinh("0")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+	RETURN sinh()
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+	RETURN sinh('0')
+$$) AS (results agtype);
+SELECT * FROM age_sinh();
 
 --
 -- pi
