@@ -1141,6 +1141,14 @@ $$) AS (i bigint);
 
 SELECT * FROM cypher('type_coercion', $$
 	RETURN true
+$$) AS (i bigint);
+ i 
+---
+ 1
+(1 row)
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
 $$) AS (i int);
  i 
 ---
