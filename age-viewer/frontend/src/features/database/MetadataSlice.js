@@ -19,20 +19,20 @@
 
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import uuid from 'react-uuid';
+import { BASE_URL, MESSAGES, STATUS } from '../../utils/constants';
 
 export const getMetaData = createAsyncThunk(
   'database/getMetaData',
   async (arg) => {
     try {
-      const response = await fetch('http://localhost:3001/api/v1/db/meta',
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(arg),
-        });
+      const response = await fetch(`${BASE_URL}db/meta`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(arg),
+      });
       if (response.ok) {
         const ret = await response.json();
         Object.keys(ret).forEach((gname) => {
@@ -54,13 +54,13 @@ export const getMetaData = createAsyncThunk(
       throw response;
     } catch (error) {
       const errorDetail = {
-        name: 'Database Connection Failed',
+        name: MESSAGES.DATABASE_CONNECTION_FAILED,
         message: `[${error.severity}]:(${error.code}) ${error.message} `,
         statusText: error.statusText,
       };
       throw errorDetail;
     }
-  },
+  }
 );
 /*
 export const getMetaChartData = createAsyncThunk(
@@ -93,11 +93,13 @@ const MetadataSlice = createSlice({
     currentGraph: '',
   },
   reducers: {
-    resetMetaData: (state) => (state.initialState),
+    resetMetaData: (state) => state.initialState,
     changeCurrentGraph: (state, action) => ({
       ...state,
-      currentGraph: Object.entries(state.graphs)
-        .find(([k, data]) => data.id === action.payload.id || k === action.payload.name)[0],
+      currentGraph: Object.entries(state.graphs).find(
+        ([k, data]) =>
+          data.id === action.payload.id || k === action.payload.name
+      )[0],
     }),
   },
   extraReducers: {
@@ -106,14 +108,17 @@ const MetadataSlice = createSlice({
         return {
           ...state,
           graphs: action.payload,
-          status: 'connected',
+          status: STATUS.CONNECTED,
           dbname: action.payload.database,
-          currentGraph: state.currentGraph !== '' ? state.currentGraph : Object.keys(action.payload)[0],
+          currentGraph:
+            state.currentGraph !== ''
+              ? state.currentGraph
+              : Object.keys(action.payload)[0],
         };
       }
       return {
         ...state,
-        status: 'disconnected',
+        status: STATUS.DISCONNECTED,
         dbname: action.payload.database,
       };
     },

@@ -18,63 +18,63 @@
  */
 
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { BASE_URL, MESSAGES, STATUS } from '../../utils/constants';
 
 export const connectToDatabase = createAsyncThunk(
   'database/connectToDatabase',
   async (formData) => {
-    formData.port = String(formData.port)
-    console.log(formData);
+    formData.port = String(formData.port);
     try {
-      const response = await fetch('http://localhost:3001/api/v1/db/connect',
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        });
-      if (response.ok) { 
-        console.log(response);
-        return await response.json(); 
+      const response = await fetch(`${BASE_URL}db/connect`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      if (response.ok) {
+        return await response.json();
       }
       throw response;
     } catch (error) {
       const errorJson = await error.json();
       const errorDetail = {
-        name: 'Failed to Retrieve Connection Information',
+        name: MESSAGES.FAILED_TO_RETRIEVE_CONNECTION_INFORMATION,
         message: `[${errorJson.severity}]:(${errorJson.code}) ${errorJson.message} `,
         statusText: error.statusText,
       };
       throw errorDetail;
     }
-  },
+  }
 );
 
 export const disconnectToDatabase = createAsyncThunk(
   'database/disconnectToDatabase',
   async () => {
-    await fetch('http://localhost:3001/api/v1/db/disconnect');
-  },
+    await fetch(`${BASE_URL}db/disconnect`);
+  }
 );
 
 export const getConnectionStatus = createAsyncThunk(
   'database/getConnectionStatus',
   async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/v1/db');
-      if (response.ok) { return await response.json(); }
+      const response = await fetch(`${BASE_URL}db`);
+      if (response.ok) {
+        return await response.json();
+      }
       throw response;
     } catch (error) {
       const errorJson = await error.json();
       const errorDetail = {
-        name: 'Failed to Retrieve Connection Information',
+        name: MESSAGES.FAILED_TO_RETRIEVE_CONNECTION_INFORMATION,
         message: `[${errorJson.severity}]:(${errorJson.code}) ${errorJson.message} `,
         statusText: error.statusText,
       };
       throw errorDetail;
     }
-  },
+  }
 );
 
 const DatabaseSlice = createSlice({
@@ -96,7 +96,7 @@ const DatabaseSlice = createSlice({
       password: action.payload.Password,
       database: action.payload.Database,
       graph: action.payload.Graphs,
-      status: 'connected',
+      status: STATUS.CONNECTED,
     }),
     [connectToDatabase.rejected]: () => ({
       host: '',
@@ -105,7 +105,7 @@ const DatabaseSlice = createSlice({
       password: '',
       database: '',
       graph: '',
-      status: 'disconnected',
+      status: STATUS.DISCONNECTED,
     }),
     [disconnectToDatabase.fulfilled]: () => ({
       host: '',
@@ -114,7 +114,7 @@ const DatabaseSlice = createSlice({
       password: '',
       database: '',
       graph: '',
-      status: 'disconnected',
+      status: STATUS.DISCONNECTED,
     }),
     [getConnectionStatus.fulfilled]: (state, action) => ({
       host: action.payload.Host,
@@ -123,7 +123,7 @@ const DatabaseSlice = createSlice({
       password: action.payload.Password,
       database: action.payload.Database,
       graph: action.payload.Graphs,
-      status: 'connected',
+      status: STATUS.CONNECTED,
     }),
     [getConnectionStatus.rejected]: () => ({
       host: '',
@@ -132,7 +132,7 @@ const DatabaseSlice = createSlice({
       password: '',
       database: '',
       graph: '',
-      status: 'disconnected',
+      status: STATUS.DISCONNECTED,
     }),
   },
 });
