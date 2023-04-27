@@ -1700,7 +1700,7 @@ cypher_update_information *transform_cypher_set_item_list(
                     ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg(
-                         "SET clause doesnt not support updating maps or lists in a property"),
+                         "SET clause doesn't not support updating maps or lists in a property"),
                      parser_errposition(pstate, set_item->location)));
             }
 
@@ -4501,11 +4501,6 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
         /* also search for the variable from a previous transforms */
         expr = colNameToVar(pstate, node->name, false, node->location);
 
-        if (expr != NULL)
-        {
-            return (Expr*)expr;
-        }
-
         if (te != NULL)
         {
             transform_entity *entity = find_variable(cpstate, node->name);
@@ -4527,8 +4522,6 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
             {
                 cypher_node *cnode = (cypher_node *)entity->entity.node;
 
-
-
                 if (!node->label ||
                     (cnode != NULL &&
                     node != NULL &&
@@ -4545,6 +4538,10 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
             }
 
             return te->expr;
+        }
+        else if (expr != NULL)
+        {
+            return (Expr*)expr;
         }
     }
     else
@@ -5548,7 +5545,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * for one tuple the path exists (or there is multiple paths that exist and all
  * paths must be emitted) and for another the path does not exist. This is
  * similar to OPTIONAL MATCH, however with the added feature of creating the
- * path if not there, rather than just emiting NULL.
+ * path if not there, rather than just emitting NULL.
  */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)

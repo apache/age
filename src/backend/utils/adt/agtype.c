@@ -1966,7 +1966,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
     /* initialize the result */
     memset(&result, 0, sizeof(agtype_in_state));
 
-    /* push in the begining of the agtype array */
+    /* push in the beginning of the agtype array */
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY, NULL);
 
     /* loop through the path components */
@@ -2563,7 +2563,8 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
         (agtv.type != AGTV_FLOAT &&
          agtv.type != AGTV_INTEGER &&
          agtv.type != AGTV_NUMERIC &&
-         agtv.type != AGTV_STRING))
+         agtv.type != AGTV_STRING &&
+         agtv.type != AGTV_BOOL))
         cannot_cast_agtype_value(agtv.type, "int");
 
     PG_FREE_IF_COPY(agtype_in, 0);
@@ -2579,6 +2580,9 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_STRING)
         result = DatumGetInt64(DirectFunctionCall1(int8in,
                            CStringGetDatum(agtv.val.string.val)));
+    else if(agtv.type == AGTV_BOOL)
+        result = DatumGetInt64(DirectFunctionCall1(bool_int4, 
+                      BoolGetDatum(agtv.val.boolean)));
     else
         elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
@@ -8127,6 +8131,38 @@ Datum age_e(PG_FUNCTION_ARGS)
 
     /* get e by raising e to 1 - no, they don't have a constant e :/ */
     float_result = DatumGetFloat8(DirectFunctionCall1(dexp, Float8GetDatum(1)));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = float_result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_pi);
+
+Datum age_pi(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    float8 float_result;
+
+    float_result = DatumGetFloat8(DirectFunctionCall1(dpi, 0));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = float_result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_rand);
+
+Datum age_rand(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    float8 float_result;
+
+    float_result = DatumGetFloat8(DirectFunctionCall1(drandom, 0));
 
     /* build the result */
     agtv_result.type = AGTV_FLOAT;
