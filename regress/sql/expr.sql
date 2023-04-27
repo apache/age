@@ -532,6 +532,10 @@ $$) AS (i bigint);
 
 SELECT * FROM cypher('type_coercion', $$
 	RETURN true
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
 $$) AS (i int);
 
 SELECT * FROM cypher('type_coercion', $$
