@@ -146,23 +146,21 @@ function chooseFunction() {
 
 rl.question('Enter the function number: ', (input) => {
     const choice = parseInt(input);
-    if (Number.isNaN(choice) || choice < 1 || choice > 4) {
-      console.log('Invalid choice. Please try again.');
-    } else {
-      switch (choice) {
-        case 1:
-          connect();
-          break;
-        case 2:
-          queryMetadata();
-          break;
-        case 3:
-          query();
-          break;
-        case 4:
-          disconnect();
-          break;
-      }
+    switch (choice) {
+      case 1:
+        connect();
+        break;
+      case 2:
+        queryMetadata();
+        break;
+      case 3:
+        query();
+        break;
+      case 4:
+        disconnect();
+        break;
+      default:
+        console.log('Invalid choice. Please try again.');
     }
     // rl.close();
     chooseFunction()
