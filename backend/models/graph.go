@@ -15,15 +15,21 @@ type Graph struct {
 GetMetaData returns the metadata for a given graph instance g, based on the version of the database.
 and returns a set of rows and an error (if any)
 */
-func (g *Graph) GetMetaData(conn *sql.DB, v int) (*sql.Rows, error) {
+func (g *Graph) GetMetaData(conn *sql.DB, v int, dataChan chan<- *sql.Rows, errorChan chan<- error) {
 
 	defer conn.Close()
+	var data *sql.Rows
+	var err error
+
 	switch v {
 	case 11:
-		return conn.Query(db.META_DATA_11, g.Name)
+		data, err = conn.Query(db.META_DATA_11, g.Name)
 	case 12:
-		return conn.Query(db.META_DATA_12, g.Name)
+		data, err = conn.Query(db.META_DATA_12, g.Name)
 	default:
-		return nil, errors.New("unsupported version")
+		err = errors.New("unsupported version")
 	}
+
+	errorChan <- err
+	dataChan <- data
 }
