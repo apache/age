@@ -197,20 +197,24 @@ uint32 get_agtype_length(const agtype_container *agtc, int index)
  */
 static int get_type_sort_priority(enum agtype_value_type type)
 {
-    if (type == AGTV_OBJECT)
+    if (type == AGTV_EDGE)
         return 0;
-    if (type == AGTV_VERTEX)
+    if (type == AGTV_PATH)
         return 1;
-    if (type == AGTV_ARRAY)
+    if (type == AGTV_OBJECT)
         return 2;
-    if (type == AGTV_STRING)
+    if (type == AGTV_VERTEX)
         return 3;
-    if (type == AGTV_BOOL)
+    if (type == AGTV_ARRAY)
         return 4;
-    if (type == AGTV_NUMERIC || type == AGTV_INTEGER || type == AGTV_FLOAT)
+    if (type == AGTV_STRING)
         return 5;
-    if (type == AGTV_NULL)
+    if (type == AGTV_BOOL)
         return 6;
+    if (type == AGTV_NUMERIC || type == AGTV_INTEGER || type == AGTV_FLOAT)
+        return 7;
+    if (type == AGTV_NULL)
+        return 8;
     return -1;
 }
 
