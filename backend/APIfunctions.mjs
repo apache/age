@@ -50,6 +50,11 @@ function connect() {
 }
 
 function queryMetadata() {
+  if(cookies == undefined)
+  {
+    console.log("Please use connect function (option 1) before selecting other options")
+    return;
+  }
   const graph = {
     name: "demo_graph",
   };
