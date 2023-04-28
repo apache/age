@@ -113,6 +113,11 @@ function query() {
 }
 
 function disconnect() {
+  if(cookies == undefined)
+  {
+    console.log("Please use connect function (option 1) before selecting other options")
+    return;
+  }
   fetch('http://localhost:8080/disconnect', {
     method: 'POST',
     headers: {
