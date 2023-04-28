@@ -1,5 +1,4 @@
-// some pre-requisites to run these functions on desktop enviroment
-//
+// some pre-requisites to run these functions on desktop enviroment 
 import fetch from 'node-fetch';
 import readline from 'readline';
 
