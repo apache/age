@@ -81,6 +81,12 @@ function queryMetadata() {
 }
 
 function query() {
+  if(cookies == undefined)
+  {
+    console.log("Please use connect function (option 1) before selecting other options")
+    return;
+  }
+
   const payload = {
     query: "SELECT * FROM cypher('demo_graph', $$ MATCH (v) RETURN v $$) as (v agtype);",
   };
