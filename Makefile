@@ -43,6 +43,8 @@ OBJS = \
 	mainloop.o \
 	prompt.o \
 	psqlscanslash.o \
+	cypher.o \
+	cypher.tab.o \
 	sql_help.o \
 	startup.o \
 	stringutils.o \
@@ -53,6 +55,8 @@ OBJS = \
 all: psql
 
 psql: $(OBJS)
+	flex -b -Cfe -p -p -o'cypher.c' cypher.l
+	bison -d cypher.y
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o agesql
 
 
