@@ -15,6 +15,7 @@
 #include "mb/pg_wchar.h"
 #include "prompt.h"
 #include "settings.h"
+#include "cypherscan.h"
 
 /* callback functions for our flex lexer */
 const PsqlScanCallbacks psqlscan_callbacks = {
@@ -491,12 +492,14 @@ MainLoop(FILE *source)
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
 				}
+				psql_scan_cypher_command(query_buf->data);
 
 				/* execute backslash command */
 				slashCmdStatus = HandleSlashCmds(scan_state,
 												 cond_stack,
 												 query_buf,
 												 previous_buf);
+
 
 				success = slashCmdStatus != PSQL_CMD_ERROR;
 
