@@ -3,6 +3,7 @@ build/bin
 frontend/dist
 .DS_Store
 node_modules/    
+package.json.md5
 
 
 # Golang
