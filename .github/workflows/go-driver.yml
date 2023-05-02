@@ -2,7 +2,7 @@ name: Go Driver Tests
 
 on:
   push:
-    branches: [ "master", PG11 ]
+    branches: [ mohayu22-props ]
 
   pull_request:
     branches: [ "master", PG11 ]
