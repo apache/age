@@ -1027,7 +1027,8 @@ static Query * transform_cypher_call_stmt(cypher_parsestate *cpstate,
 {
     ParseState *pstate = (ParseState *)cpstate;
     cypher_call *self = (cypher_call *)clause->self;
-
+    Node *nextClause = NULL;
+   
     if (!clause->prev && !clause->next) /* CALL [YIELD] -- the most simple call */
     {
         if (self->where) /* Error check for WHERE clause after YIELD without RETURN */
@@ -1048,6 +1049,22 @@ static Query * transform_cypher_call_stmt(cypher_parsestate *cpstate,
     {
         if (!self->yield_items)
         {
+            nextClause = (Node *) clause->next->self;
+
+            if (!clause->prev && is_ag_node(nextClause, cypher_return))
+            {
+                cypher_return *returnClause = (cypher_return *) nextClause;
+                ResTarget *target = (ResTarget *) lfirst(returnClause->items->head);
+                ColumnRef *cref = (ColumnRef *) target->val;
+                char *colName = (char *) strVal((Node *) linitial(cref->fields));
+
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_COLUMN),
+                         errmsg("could not find rte for %s", colName),
+                         parser_errposition(pstate,
+                                            exprLocation((Node *) target))));
+            }
+
             ereport(ERROR,
                     (errcode(ERRCODE_SYNTAX_ERROR),
                      errmsg("Procedure call inside a query does not support naming results implicitly"),
