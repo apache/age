@@ -4203,6 +4203,16 @@ CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.age_create_path(graph_name Name, n int,
+                              vertex_label_name Name = NULL,
+                              edge_label_name Name = NULL,
+                              bidirectional bool = true)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name, 
                                                 graph_size int, 
                                                 bridge_size int,
