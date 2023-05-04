@@ -19,7 +19,7 @@ tests: test scripts live here. Each test case has its own
 	   should return non 0 value. To add a new test case, simply
 	   create a shell script under this.
 
-	   The test name "001.*" to "050.*" is for regular regression
+	   The test name "01.*" and  "001.*" to "050.*" is for regular regression
 	   tests, while after "051.*" are for bugs.
 
 	   regress.sh exports following environment variables which can be
