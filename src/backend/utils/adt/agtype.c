@@ -2737,7 +2737,8 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
     if (!agtype_extract_scalar(&agtype_in->root, &agtv) ||
         (agtv.type != AGTV_FLOAT &&
          agtv.type != AGTV_INTEGER &&
-         agtv.type != AGTV_NUMERIC))
+         agtv.type != AGTV_NUMERIC &&
+         agtv.type != AGTV_STRING))
         cannot_cast_agtype_value(agtv.type, "float");
 
     PG_FREE_IF_COPY(agtype_in, 0);
@@ -2766,6 +2767,9 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
     else if (agtv.type == AGTV_NUMERIC)
         result = DatumGetFloat8(DirectFunctionCall1(numeric_float8,
                      NumericGetDatum(agtv.val.numeric)));
+    else if (agtv.type == AGTV_STRING)
+        result = DatumGetFloat8(DirectFunctionCall1(float8in,
+                                                    CStringGetDatum(agtv.val.string.val)));
     else
         elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
 
