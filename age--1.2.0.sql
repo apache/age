@@ -4196,20 +4196,27 @@ STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name, nodes int, edge_label name, node_label name = NULL)
+CREATE FUNCTION ag_catalog.create_complete_graph(
+    graph_name name, 
+    number_of_nodes int, 
+    edge_label name, 
+    edge_properties agtype = NULL,
+    node_label name = NULL,
+    node_properties agtype = NULL)
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name, 
-                                                graph_size int, 
-                                                bridge_size int,
-                                                node_label name = NULL,
-                                                node_properties agtype = NULL,
-                                                edge_label name = NULL,
-                                                edge_properties agtype = NULL)
+CREATE FUNCTION ag_catalog.age_create_barbell_graph(
+    graph_name name, 
+    graph_size int, 
+    bridge_size int,
+    node_label name = NULL,
+    node_properties agtype = NULL,
+    edge_label name = NULL,
+    edge_properties agtype = NULL)
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
