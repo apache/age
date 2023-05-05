@@ -956,7 +956,8 @@ static Node *transform_cypher_typecast(cypher_parsestate *cpstate,
     {
         fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_PG_BIGINT));
     }
-    else if ((pg_strcasecmp(ctypecast->typecast, "bool") == 0 || pg_strcasecmp(ctypecast->typecast, "boolean") == 0))
+    else if ((pg_strcasecmp(ctypecast->typecast, "bool") == 0 || 
+             pg_strcasecmp(ctypecast->typecast, "boolean") == 0))
     {
         fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_BOOL));
     }
