@@ -163,7 +163,8 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
                                            Node *id_field, char *label);
 static Node *create_property_constraints(cypher_parsestate *cpstate,
                                          transform_entity *entity,
-                                         Node *property_constraints);
+                                         Node *property_constraints,
+                                         Node *prop_expr);
 static TargetEntry *findTarget(List *targetList, char *resname);
 static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
                                                    cypher_relationship *rel,
@@ -1331,7 +1332,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     old_expr_kind = pstate->p_expr_kind;
     pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
     funcexpr = ParseFuncOrColumn(pstate, unwind->funcname,
-                                 list_make2(expr, makeBoolConst(true, false)),
+                                 list_make1(expr),
                                  pstate->p_last_srf, unwind, false,
                                  target_syntax_loc);
 
@@ -1699,7 +1700,7 @@ cypher_update_information *transform_cypher_set_item_list(
                     ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg(
-                         "SET clause doesnt not support updating maps or lists in a property"),
+                         "SET clause doesn't not support updating maps or lists in a property"),
                      parser_errposition(pstate, set_item->location)));
             }
 
@@ -2507,6 +2508,23 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
 
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
+
+    if(self->optional == true && clause->next)
+    {
+        cypher_clause *next = clause->next;
+        if (is_ag_node(next->self, cypher_match))
+        {
+            cypher_match *next_self = (cypher_match *)next->self;
+            if (!next_self->optional)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_SYNTAX_ERROR),
+                         errmsg("MATCH cannot follow OPTIONAL MATCH"),
+                         parser_errposition(pstate,
+                                            exprLocation((Node *) next_self))));
+            }
+        }
+    }
 
     // If there is no previous clause, transform to a general MATCH clause.
     if (self->optional == true && clause->prev != NULL)
@@ -3480,33 +3498,43 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
  */
 static Node *create_property_constraints(cypher_parsestate *cpstate,
                                          transform_entity *entity,
-                                         Node *property_constraints)
+                                         Node *property_constraints,
+                                         Node *prop_expr)
 {
     ParseState *pstate = (ParseState *)cpstate;
     char *entity_name;
-    ColumnRef *cr;
-    Node *prop_expr, *const_expr;
+    Node *const_expr;
     RangeTblEntry *rte;
     Node *last_srf = pstate->p_last_srf;
 
-    cr = makeNode(ColumnRef);
-
-    entity_name = get_entity_name(entity);
-
-    cr->fields = list_make2(makeString(entity_name), makeString("properties"));
-
-    // use Postgres to get the properties' transform node
-    if ((rte = find_rte(cpstate, entity_name)))
+    /*
+     * If the prop_expr node wasn't passed in, create it. Otherwise, skip
+     * the creation step.
+     */
+    if (prop_expr == NULL)
     {
-        prop_expr = scanRTEForColumn(pstate, rte, AG_VERTEX_COLNAME_PROPERTIES,
-                                     -1, 0, NULL);
-    }
-    else
-    {
-        prop_expr = transformExpr(pstate, (Node *)cr, EXPR_KIND_WHERE);
+        ColumnRef *cr = NULL;
+
+        cr = makeNode(ColumnRef);
+        entity_name = get_entity_name(entity);
+        cr->fields = list_make2(makeString(entity_name),
+                                makeString("properties"));
+
+        /* use Postgres to get the properties' transform node */
+        rte = find_rte(cpstate, entity_name);
+        if (rte != NULL)
+        {
+            prop_expr = scanRTEForColumn(pstate, rte,
+                                         AG_VERTEX_COLNAME_PROPERTIES, -1, 0,
+                                         NULL);
+        }
+        else
+        {
+            prop_expr = transformExpr(pstate, (Node *)cr, EXPR_KIND_WHERE);
+        }
     }
 
-    // use cypher to get the constraints' transform node
+    /* use cypher to get the constraints' transform node */
     const_expr = transform_cypher_expr(cpstate, property_constraints,
                                        EXPR_KIND_WHERE);
 
@@ -3791,13 +3819,68 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             entity = make_transform_entity(cpstate, ENT_VERTEX, (Node *)node,
                                            expr);
 
-            /* transform properties if they exist */
+            /* transform the properties if they exist */
             if (node->props)
             {
                 Node *n = NULL;
+                Node *prop_var = NULL;
+                Node *prop_expr = NULL;
+
+                /*
+                 * We need to build a transformed properties(prop_var)
+                 * expression IF the properties variable already exists from a
+                 * previous clause. Please note that the "found" prop_var was
+                 * previously transformed.
+                 */
+
+                /* get the prop_var if it was previously resolved */
+                if (node->name != NULL)
+                {
+                    prop_var = colNameToVar(pstate, node->name, false,
+                                            node->location);
+                }
+
+                /*
+                 * If prop_var exists and is an alias, just pass it through by
+                 * assigning the prop_expr the prop_var.
+                 */
+                if (prop_var != NULL &&
+                    pg_strncasecmp(node->name, AGE_DEFAULT_ALIAS_PREFIX,
+                                   strlen(AGE_DEFAULT_ALIAS_PREFIX)) == 0)
+                {
+                    prop_expr = prop_var;
+                }
+                /*
+                 * Else, if it exists and is not an alias, create the prop_expr
+                 * as a transformed properties(prop_var) function node.
+                 */
+                else if (prop_var != NULL)
+                {
+                    /*
+                     * Remember that prop_var is already transformed. We need
+                     * to built the transform manually.
+                     */
+                    FuncCall *fc = NULL;
+                    List *targs = NIL;
+                    List *fname = NIL;
+
+                    targs = lappend(targs, prop_var);
+                    fname = list_make2(makeString("ag_catalog"),
+                                       makeString("age_properties"));
+                    fc = makeFuncCall(fname, targs, -1);
+
+                    /*
+                     * Hand off to ParseFuncOrColumn to create the function
+                     * expression for properties(prop_var)
+                     */
+                    prop_expr = ParseFuncOrColumn(pstate, fname, targs,
+                                                  pstate->p_last_srf, fc, false,
+                                                  -1);
+                }
 
                 ((cypher_map*)node->props)->keep_null = true;
-                n = create_property_constraints(cpstate, entity, node->props);
+                n = create_property_constraints(cpstate, entity, node->props,
+                                                prop_expr);
 
                 cpstate->property_constraint_quals =
                     lappend(cpstate->property_constraint_quals, n);
@@ -3856,13 +3939,66 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 
                 if (rel->props)
                 {
-                    Node *n;
+                    Node *r = NULL;
+                    Node *prop_var = NULL;
+                    Node *prop_expr = NULL;
+
+                    /*
+                     * We need to build a transformed properties(prop_var)
+                     * expression IF the properties variable already exists from
+                     * a previous clause. Please note that the "found" prop_var
+                     * was previously transformed.
+                     */
+
+                    /* get the prop_var if it was previously resolved */
+                    if (rel->name != NULL)
+                    {
+                        prop_var = colNameToVar(pstate, rel->name, false,
+                                                rel->location);
+                    }
+
+                    /*
+                     * If prop_var exists and is an alias, just pass it through by
+                     * assigning the prop_expr the prop_var.
+                     */
+                    if (prop_var != NULL &&
+                        pg_strncasecmp(rel->name, AGE_DEFAULT_ALIAS_PREFIX,
+                                       strlen(AGE_DEFAULT_ALIAS_PREFIX)) == 0)
+                    {
+                        prop_expr = prop_var;
+                    }
+                    /*
+                     * Else, if it exists and is not an alias, create the prop_expr
+                     * as a transformed properties(prop_var) function node.
+                     */
+                    else if (prop_var != NULL)
+                    {
+                        /*
+                         * Remember that prop_var is already transformed. We need
+                         * to built the transform manually.
+                         */
+                        FuncCall *fc = NULL;
+                        List *targs = NIL;
+                        List *fname = NIL;
+
+                        targs = lappend(targs, prop_var);
+                        fname = list_make2(makeString("ag_catalog"),
+                                           makeString("age_properties"));
+                        fc = makeFuncCall(fname, targs, -1);
+
+                        /*
+                         * Hand off to ParseFuncOrColumn to create the function
+                         * expression for properties(prop_var)
+                         */
+                        prop_expr = ParseFuncOrColumn(pstate, fname, targs,
+                                                      pstate->p_last_srf, fc,
+                                                      false, -1);
+                    }
 
                     ((cypher_map*)rel->props)->keep_null = true;
-                    n = create_property_constraints(cpstate, entity,
-                                                          rel->props);
+                    r = create_property_constraints(cpstate, entity, rel->props, prop_expr);
                     cpstate->property_constraint_quals =
-                        lappend(cpstate->property_constraint_quals, n);
+                        lappend(cpstate->property_constraint_quals, r);
                 }
 
                 entities = lappend(entities, entity);
@@ -4216,20 +4352,29 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
             transform_entity *entity = find_variable(cpstate, rel->name);
 
             /*
-             * TODO: openCypher allows a variable to be used before it
-             * is properly declared. This logic is not satifactory
-             * for that and must be better developed.
+             * If the variable already exists, verify that it is for an edge.
+             * You cannot have the same edge repeated in a path.
+             * You cannot have an variable that is for a vertex.
              */
-            if (entity != NULL &&
-                (entity->type != ENT_EDGE ||
-                 !IS_DEFAULT_LABEL_EDGE(rel->label) ||
-                 rel->props))
+            if (entity != NULL)
             {
-                ereport(ERROR,
-                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("variable %s already exists", rel->name),
-                         parser_errposition(pstate, rel->location)));
+                if (entity->type == ENT_EDGE)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("duplicate edge variable '%s' within a clause",
+                                    rel->name),
+                             parser_errposition(pstate, rel->location)));
+                }
+                if (entity->type == ENT_VERTEX)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("variable '%s' is for a vertex", rel->name),
+                             parser_errposition(pstate, rel->location)));
+                }
             }
+
             return te->expr;
         }
     }
@@ -4308,7 +4453,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
          *  segmentation faults, and other errors.
          *
          *  Update: Nonexistent and mismatched labels now return a NULL value to
-         *  prevent segmentation faults, and other errors. We can also consider 
+         *  prevent segmentation faults, and other errors. We can also consider
          *  if an all-purpose label would be useful.
          */
         node->label = NULL;
@@ -4356,32 +4501,47 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
         /* also search for the variable from a previous transforms */
         expr = colNameToVar(pstate, node->name, false, node->location);
 
-        if (expr != NULL)
-        {
-            return (Expr*)expr;
-        }
-
         if (te != NULL)
         {
             transform_entity *entity = find_variable(cpstate, node->name);
 
-            /*
-             * TODO: openCypher allows a variable to be used before it
-             * is properly declared. This logic is not satifactory
-             * for that and must be better developed.
-             */
-            if (entity != NULL &&
-                (entity->type != ENT_VERTEX ||
-                 !IS_DEFAULT_LABEL_VERTEX(node->label) ||
-                 node->props))
+            /* If the variable already exists, verify that it is for a vertex */
+            if (entity != NULL && (entity->type != ENT_VERTEX))
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("variable %s already exists", node->name),
+                         errmsg("variable '%s' is for a edge", node->name),
                          parser_errposition(pstate, node->location)));
             }
 
+            /*
+             * If the variable already exists, verify that any label specified
+             * is of the same name or scope. Reject those that aren't.
+             */
+            if (entity != NULL)
+            {
+                cypher_node *cnode = (cypher_node *)entity->entity.node;
+
+                if (!node->label ||
+                    (cnode != NULL &&
+                    node != NULL &&
+                    /* allow node using a default label against resolved var */
+                    pg_strcasecmp(node->label, AG_DEFAULT_LABEL_VERTEX) != 0 &&
+                    /* allow labels with the same name */
+                    pg_strcasecmp(cnode->label, node->label) != 0))
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("multiple labels for variable '%s' are not supported", node->name),
+                             parser_errposition(pstate, node->location)));
+                }
+            }
+
             return te->expr;
+        }
+        else if (expr != NULL)
+        {
+            return (Expr*)expr;
         }
     }
     else
@@ -5385,7 +5545,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * for one tuple the path exists (or there is multiple paths that exist and all
  * paths must be emitted) and for another the path does not exist. This is
  * similar to OPTIONAL MATCH, however with the added feature of creating the
- * path if not there, rather than just emiting NULL.
+ * path if not there, rather than just emitting NULL.
  */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)

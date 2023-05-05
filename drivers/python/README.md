@@ -22,7 +22,16 @@ pip install -r requirements.txt
 
 ### Test
 ```
-python -m unittest -v test_age_py.py
+python test_age_py.py \
+-host "127.0.0.1" \
+-db "postgres" \
+-u "postgres" \
+-pass "agens" \
+-port 5432 \
+-gn "test_graph"
+```
+
+```
 python -m unittest -v test_agtypes.py
 ```
 
@@ -31,17 +40,10 @@ python -m unittest -v test_agtypes.py
 python setup.py install
 ```
 
-### Install from PyPi
-
-```
-pip install apache-age-python
-```
-
 ### For more information about [Apache AGE](https://age.apache.org/)
 * Apache Age : https://age.apache.org/
 * Github : https://github.com/apache/age
 * Document : https://age.apache.org/age-manual/master/index.html
-* apache-age-python GitHub : https://github.com/rhizome-ai/apache-age-python
 
 ### Check AGE loaded on your PostgreSQL
 Connect to your containerized Postgres instance and then run the following commands:

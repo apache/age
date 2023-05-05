@@ -33,6 +33,10 @@
     <img src="https://img.shields.io/badge/Release-v1.2.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
+  <a href="https://www.postgresql.org/docs/11/index.html">
+    <img src="https://img.shields.io/badge/Version-PostgreSQL 11-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/11/index.html"/>
+  </a>   
+  &nbsp;
   <a href="https://github.com/apache/age/issues">
     <img src="https://img.shields.io/github/issues/apache/age"/>
   </a>
@@ -65,7 +69,7 @@
 
 </br>
 
-Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust databases features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational background who require graph data analytics can use this extension with minimal effort because they can use existing data without having to go through migration. 
+Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust database features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational database background who require graph data analytics can use this extension with minimal effort because they can use existing data without going through migration. 
 
 There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 
@@ -75,7 +79,7 @@ There is a strong need for cohesive, easy-to-implement multi-model databases. As
 Apache AGE is : 
 
 - **Powerful**: adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
-- **Flexible**: allows you to perform openCypher queries, which makes complex queries much easier to write. It also enables multiple graphs at the same time.
+- **Flexible**: allows you to perform openCypher queries, which makes complex queries much easier to write. It also enables querying multiple graphs at the same time.
 - **Intelligent**: allows you to perform graph queries that are the basis for many next-level web services such as fraud detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management, and more.
 
 <h2><img height="30" src="/img/features.svg">&nbsp;&nbsp;Features</h2>
@@ -240,12 +244,22 @@ FROM cypher('graph_name', $$
 $$) as (v agtype);
 ```
 
+To create a single vertex with label and properties, use the CREATE clause.
+
+```bash
+SELECT * 
+FROM cypher('graph_name', $$
+    CREATE (:label {property:value})
+$$) as (v agtype);
+```
+
 To query the graph, you can use the MATCH clause.  
 
 ```bash
-SELECT * FROM cypher('graph_name', $$
-MATCH (v)
-RETURN v
+SELECT * 
+FROM cypher('graph_name', $$
+    MATCH (v)
+    RETURN v
 $$) as (v agtype);
 ```
 
@@ -290,7 +304,7 @@ $$) as (e agtype);
 
 <h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
 
-Starting with Apache AGE is very simple. You can easily select your platform and incorporate the relevant SDK into your code.
+Starting with Apache AGE is very simple. You can easily select your platform and incorporate the relevant SDK into your code.
 </br>
 </br>
 

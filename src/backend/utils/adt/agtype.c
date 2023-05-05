@@ -1991,7 +1991,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
     /* initialize the result */
     memset(&result, 0, sizeof(agtype_in_state));
 
-    /* push in the begining of the agtype array */
+    /* push in the beginning of the agtype array */
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY, NULL);
 
     /* loop through the path components */
@@ -8209,6 +8209,38 @@ Datum age_e(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+PG_FUNCTION_INFO_V1(age_pi);
+
+Datum age_pi(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    float8 float_result;
+
+    float_result = DatumGetFloat8(DirectFunctionCall1(dpi, 0));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = float_result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_rand);
+
+Datum age_rand(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    float8 float_result;
+
+    float_result = DatumGetFloat8(DirectFunctionCall1(drandom, 0));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = float_result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
 PG_FUNCTION_INFO_V1(age_exp);
 
 Datum age_exp(PG_FUNCTION_ARGS)
@@ -10043,14 +10075,11 @@ Datum age_range(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(age_unnest);
 /*
  * Function to convert the Array type of Agtype into each row. It is used for
- * Cypher `UNWIND` clause, but considering the situation in which the user can
- * directly use this function in vanilla PGSQL, put a second parameter related
- * to this.
+ * Cypher `UNWIND` clause.
  */
 Datum age_unnest(PG_FUNCTION_ARGS)
 {
     agtype *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
-    bool block_types = PG_GETARG_BOOL(1);
     ReturnSetInfo *rsi;
     Tuplestorestate *tuple_store;
     TupleDesc tupdesc;
@@ -10101,15 +10130,6 @@ Datum age_unnest(PG_FUNCTION_ARGS)
             Datum values[1];
             bool nulls[1] = {false};
             agtype *val = agtype_value_to_agtype(&v);
-
-            if (block_types && (
-                    v.type == AGTV_VERTEX || v.type == AGTV_EDGE || v.type == AGTV_PATH))
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                                errmsg("UNWIND clause does not support agtype %s",
-                                       agtype_value_type_to_string(v.type))));
-            }
 
             /* use the tmp context so we can clean up after each tuple is done */
             old_cxt = MemoryContextSwitchTo(tmp_cxt);

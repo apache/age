@@ -142,6 +142,18 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     vtx_name_str = AG_DEFAULT_LABEL_VERTEX;
     edge_name_str = NameStr(*edge_label_name);
 
+    if (!PG_ARGISNULL(3))
+    {
+        vtx_label_name = PG_GETARG_NAME(3);
+        vtx_name_str = NameStr(*vtx_label_name);
+        
+        // Check if vertex and edge label are same
+        if (strcmp(vtx_name_str, edge_name_str) == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("vertex and edge label can not be same")));
+        }
+    }
 
     if (!graph_exists(graph_name_str))
     {
@@ -154,8 +166,6 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     
     if (!PG_ARGISNULL(3))
     {
-        vtx_label_name = PG_GETARG_NAME(3);
-        vtx_name_str = NameStr(*vtx_label_name);
         // Check if label with the input name already exists
         if (!label_exists(vtx_name_str, graph_id))
         {
@@ -185,12 +195,13 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     vtx_seq_id = get_relname_relid(vtx_seq_name_str, nsp_id);
     edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
 
+    props = create_empty_agtype();  
+  
     /* Creating vertices*/
     for (i=(int64)1;i<=no_vertices;i++)
     {   
         vid = nextval_internal(vtx_seq_id, true);
         object_graph_id = make_graphid(vtx_label_id, vid);
-        props = create_empty_agtype();
         insert_vertex_simple(graph_id,vtx_name_str,object_graph_id,props);
     }
 
@@ -208,9 +219,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
             start_vertex_graph_id = make_graphid(vtx_label_id, start_vid);
             end_vertex_graph_id = make_graphid(vtx_label_id, end_vid);
-
-            props = create_empty_agtype();
-
+          
             insert_edge_simple(graph_id, edge_name_str,
                             object_graph_id, start_vertex_graph_id,
                             end_vertex_graph_id, props);
