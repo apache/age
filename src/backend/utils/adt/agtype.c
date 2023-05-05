@@ -2576,7 +2576,9 @@ Datum agtype_to_bool(PG_FUNCTION_ARGS)
 
     if (!agtype_extract_scalar(&agtype_in->root, &agtv) ||
         (agtv.type != AGTV_BOOL && agtv.type != AGTV_INTEGER))
+    {    
         cannot_cast_agtype_value(agtv.type, "boolean");
+    }
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
@@ -2599,7 +2601,9 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
 
     /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
     if (arg_agt == NULL)
+    {
         PG_RETURN_NULL();
+    }
 
     if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
         (agtv.type != AGTV_FLOAT &&
@@ -2607,26 +2611,40 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
          agtv.type != AGTV_NUMERIC &&
          agtv.type != AGTV_STRING &&
          agtv.type != AGTV_BOOL))
+    {    
         cannot_cast_agtype_value(agtv.type, "int");
+    }
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
     if (agtv.type == AGTV_INTEGER)
+    {    
         result = agtv.val.int_value;
+    }
     else if (agtv.type == AGTV_FLOAT)
+    {
         result = DatumGetInt64(DirectFunctionCall1(dtoi8,
                                 Float8GetDatum(agtv.val.float_value)));
+    }                            
     else if (agtv.type == AGTV_NUMERIC)
+    {
         result = DatumGetInt64(DirectFunctionCall1(numeric_int8,
                      NumericGetDatum(agtv.val.numeric)));
+    }
     else if (agtv.type == AGTV_STRING)
+    {    
         result = DatumGetInt64(DirectFunctionCall1(int8in,
                            CStringGetDatum(agtv.val.string.val)));
+    }
     else if(agtv.type == AGTV_BOOL)
+    {
         result = DatumGetInt64(DirectFunctionCall1(bool_int4, 
                       BoolGetDatum(agtv.val.boolean)));
+    }
     else
+    {
         elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
+    }
 
     PG_RETURN_INT64(result);
 }
@@ -2648,35 +2666,51 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
 
     /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
     if (arg_agt == NULL)
+    {    
         PG_RETURN_NULL();
-
+    }
+    
     if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
         (agtv.type != AGTV_FLOAT &&
          agtv.type != AGTV_INTEGER &&
          agtv.type != AGTV_NUMERIC &&
          agtv.type != AGTV_STRING &&
          agtv.type != AGTV_BOOL))
+    {    
         cannot_cast_agtype_value(agtv.type, "int");
+    }
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
     if (agtv.type == AGTV_INTEGER)
+    {    
         result = DatumGetInt32(DirectFunctionCall1(int84,
                     Int64GetDatum(agtv.val.int_value)));
+    }
     else if (agtv.type == AGTV_FLOAT)
+    {    
         result = DatumGetInt32(DirectFunctionCall1(dtoi4,
                                 Float8GetDatum(agtv.val.float_value)));
+    }
     else if (agtv.type == AGTV_NUMERIC)
+    {
         result = DatumGetInt32(DirectFunctionCall1(numeric_int4,
                      NumericGetDatum(agtv.val.numeric)));
+    }
     else if (agtv.type == AGTV_STRING)
+    {    
         result = DatumGetInt32(DirectFunctionCall1(int4in,
                            CStringGetDatum(agtv.val.string.val)));
+    }
     else if(agtv.type == AGTV_BOOL)
-    result = DatumGetInt64(DirectFunctionCall1(bool_int4, 
+    {    
+        result = DatumGetInt64(DirectFunctionCall1(bool_int4, 
                     BoolGetDatum(agtv.val.boolean)));
+    }
     else
+    {
         elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
+    }
 
     PG_RETURN_INT32(result);
 }
