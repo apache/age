@@ -2143,21 +2143,6 @@ SELECT agtype_to_int8(agtype_in('false'));
 (1 row)
 
 --
--- Test boolean to pg_bigint cast
---
-SELECT agtype_to_int8(agtype_in('true'));
- agtype_to_int8 
-----------------
-              1
-(1 row)
-
-SELECT agtype_to_int8(agtype_in('false'));
- agtype_to_int8 
-----------------
-              0
-(1 row)
-
---
 -- Test boolean to integer 
 --
 SELECT agtype_to_int4(agtype_in('true'));
