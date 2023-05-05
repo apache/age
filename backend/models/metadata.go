@@ -1,14 +1,25 @@
 package models
 
-// MetaDataContainer is a struct that contains the metadata for a graph. It contains a list of nodes and a list of edges.
+// struct that holds the graph metadata and user role information.
 type MetaDataContainer struct {
+	Graphs map[string]GraphData
+}
+
+// struct that contains separate slices for storing nodes and edges
+type GraphData struct {
 	Nodes []MetaData
 	Edges []MetaData
 }
 
-// MetaData is a struct that contains the metadata for a node or an edge.
+// struct that represents a single row of metadata from the database.
+// It contains information about the label, count, kind, namespace, namespace_id,
+// graph, and relation.
 type MetaData struct {
-	Label string
-	Cnt   int
-	Kind  string
+	Label        string
+	Cnt          int
+	Kind         string
+	NameSpace    string
+	Namespace_id int
+	Graph        string
+	Relation     string
 }
