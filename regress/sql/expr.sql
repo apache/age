@@ -529,8 +529,6 @@ SELECT * FROM cypher('type_coercion', $$
     RETURN 1
 $$) AS (i bool);
 
-$$) AS (i bigint);
-
 --Invalid String Format
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
