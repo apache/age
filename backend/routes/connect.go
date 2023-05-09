@@ -4,6 +4,7 @@ import (
 	"age-viewer-go/models"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo"
@@ -34,8 +35,30 @@ func ConnectToDb(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(400, "could not save session")
 	}
+	
+	type connectionInfo struct {
+		Host     string
+		Version  int
+		Port     int
+		Database string
+		User     string
+		Password string
+		Graphs   []string
+	}
 
-	return c.JSON(200, map[string]string{"status": "connected"})
+	portInt, _ := strconv.Atoi(udata.Port)
+
+	response := connectionInfo{
+		Host:     udata.Host,
+		Version:  udata.Version,
+		Port:     portInt,
+		Database: udata.DbName,
+		User:     udata.User,
+		Password: udata.Password,
+		Graphs:   []string{},
+	}
+
+	return c.JSON(200, response)
 }
 
 /*
