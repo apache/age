@@ -84,10 +84,5 @@ func StatusDB(c echo.Context) error {
 		return echo.NewHTTPError(400, "no database connection found")
 	}
 
-	conn, ok := dbObj.(models.Connection)
-	if !ok {
-		return echo.NewHTTPError(400, "invalid database connection type")
-	}
-
-	return c.JSON(200, conn)
+	return c.JSON(200, dbObj)
 }
