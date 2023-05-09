@@ -1155,6 +1155,17 @@ $$) AS (i int);
  1
 (1 row)
 
+--
+-- Coerce to Postgres bool/boolean type
+--
+SELECT * FROM cypher('type_coercion', $$
+    RETURN 1
+$$) AS (i bool);
+ i 
+---
+ t
+(1 row)
+
 --Invalid String Format
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
@@ -1359,6 +1370,17 @@ SELECT * FROM cypher('expr', $$
 RETURN 'infinity'::float::int
 $$) AS r(result agtype);
 ERROR:  bigint out of range
+--
+-- Test from an agtype value to agtype int
+--
+SELECT * FROM cypher('expr', $$
+RETURN 0::bool
+$$) AS r(result agtype);
+ result 
+--------
+ false
+(1 row)
+
 -- Test from an agtype value to an agtype numeric
 --
 SELECT * FROM cypher('expr', $$

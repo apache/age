@@ -522,6 +522,13 @@ SELECT * FROM cypher('type_coercion', $$
 	RETURN true
 $$) AS (i int);
 
+--
+-- Coerce to Postgres bool/boolean type
+--
+SELECT * FROM cypher('type_coercion', $$
+    RETURN 1
+$$) AS (i bool);
+
 --Invalid String Format
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
@@ -629,6 +636,13 @@ RETURN 'NaN'::float::int
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN 'infinity'::float::int
+$$) AS r(result agtype);
+
+--
+-- Test from an agtype value to agtype int
+--
+SELECT * FROM cypher('expr', $$
+RETURN 0::bool
 $$) AS r(result agtype);
 
 -- Test from an agtype value to an agtype numeric
