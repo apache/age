@@ -68,3 +68,26 @@ func DisconnectFromDb(c echo.Context) error {
 	}
 	return c.JSON(200, map[string]string{"status": "disconnected"})
 }
+
+/*
+StatusDB is used to get the Status response from a database by using the database
+connection object from the user's session. It returns a JSON response with fields
+containing the host, postgres version, port, database, user, password, list of graphs
+and current graph. If the connection has not been established, it returns a message
+stating no database found connection.
+*/
+func StatusDB(c echo.Context) error {
+	sess := c.Get("database").(*sessions.Session)
+	dbObj := sess.Values["db"]
+
+	if dbObj == nil {
+		return echo.NewHTTPError(400, "no database connection found")
+	}
+
+	conn, ok := dbObj.(models.Connection)
+	if !ok {
+		return echo.NewHTTPError(400, "invalid database connection type")
+	}
+
+	return c.JSON(200, conn)
+}

@@ -17,6 +17,7 @@ func main() {
 	app.Use(session.UserSessions())
 
 	app.POST("/connect", routes.ConnectToDb)
+	app.GET("/status", routes.StatusDB)
 	app.POST("/disconnect", routes.DisconnectFromDb)
 
 	cypher := app.Group("/query", routes.CypherMiddleWare)
