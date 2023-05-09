@@ -2139,6 +2139,27 @@ SELECT agtype_to_int8(agtype_in('false'));
 (1 row)
 
 --
+-- Test boolean to integer cast
+--
+SELECT agtype_to_int4(agtype_in('true'));
+ agtype_to_int4 
+----------------
+              1
+(1 row)
+
+SELECT agtype_to_int4(agtype_in('false'));
+ agtype_to_int4 
+----------------
+              0
+(1 row)
+
+SELECT agtype_to_int4(agtype_in('null'));
+ agtype_to_int4 
+----------------
+               
+(1 row)
+
+--
 -- Test agtype to int[]
 --
 SELECT agtype_to_int4_array(agtype_in('[1,2,3]'));
