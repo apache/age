@@ -637,7 +637,12 @@ $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN 'infinity'::float::int
 $$) AS r(result agtype);
-
+SELECT * FROM cypher('expr', $$
+RETURN ''::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'falze'::int
+$$) AS r(result agtype);
 --
 -- Test from an agtype value to agtype int
 --
@@ -645,6 +650,16 @@ SELECT * FROM cypher('expr', $$
 RETURN 0::bool
 $$) AS r(result agtype);
 
+-- these should fail
+SELECT * FROM cypher('expr', $$
+RETURN 1.23::bool
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ''::bool
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'falze'::bool
+$$) AS r(result agtype);
 -- Test from an agtype value to an agtype numeric
 --
 SELECT * FROM cypher('expr', $$

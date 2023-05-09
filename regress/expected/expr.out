@@ -1370,6 +1370,14 @@ SELECT * FROM cypher('expr', $$
 RETURN 'infinity'::float::int
 $$) AS r(result agtype);
 ERROR:  bigint out of range
+SELECT * FROM cypher('expr', $$
+RETURN ''::int
+$$) AS r(result agtype);
+ERROR:  invalid input syntax for integer: ""
+SELECT * FROM cypher('expr', $$
+RETURN 'falze'::int
+$$) AS r(result agtype);
+ERROR:  invalid input syntax for integer: "falze"
 --
 -- Test from an agtype value to agtype int
 --
@@ -1381,6 +1389,19 @@ $$) AS r(result agtype);
  false
 (1 row)
 
+-- these should fail
+SELECT * FROM cypher('expr', $$
+RETURN 1.23::bool
+$$) AS r(result agtype);
+ERROR:  cannot cast agtype float to type boolean
+SELECT * FROM cypher('expr', $$
+RETURN ''::bool
+$$) AS r(result agtype);
+ERROR:  cannot cast agtype string to type boolean
+SELECT * FROM cypher('expr', $$
+RETURN 'falze'::bool
+$$) AS r(result agtype);
+ERROR:  cannot cast agtype string to type boolean
 -- Test from an agtype value to an agtype numeric
 --
 SELECT * FROM cypher('expr', $$
