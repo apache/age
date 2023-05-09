@@ -37,7 +37,8 @@
 
 [0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
 [a-zA-Z][a-zA-Z0-9_]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
-"([^\"]|\.)*" { yylval.str_val = strdup(yytext); return STRING; }
+\"([^\"]|\.)*\" { yylval.str_val = strdup(yytext); return STRING; }
+[ \t]+    /* ignore spaces and tabs */;
 . { return UNKNOWN; }
 
 %%
