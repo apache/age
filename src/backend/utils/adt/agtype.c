@@ -2761,12 +2761,16 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
          agtv.type != AGTV_INTEGER &&
          agtv.type != AGTV_NUMERIC &&
          agtv.type != AGTV_STRING))
+    {
         cannot_cast_agtype_value(agtv.type, "float");
-
+    }
+    
     PG_FREE_IF_COPY(agtype_in, 0);
 
     if (agtv.type == AGTV_FLOAT)
+    {
         result = agtv.val.float_value;
+    }
     else if (agtv.type == AGTV_INTEGER)
     {
         /*
@@ -2787,14 +2791,20 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
                             errmsg("cannot cast to float8, integer value out of range")));
     }
     else if (agtv.type == AGTV_NUMERIC)
+    {    
         result = DatumGetFloat8(DirectFunctionCall1(numeric_float8,
                      NumericGetDatum(agtv.val.numeric)));
+    }
     else if (agtv.type == AGTV_STRING)
+    {
         result = DatumGetFloat8(DirectFunctionCall1(float8in,
                                                     CStringGetDatum(agtv.val.string.val)));
+    }
     else
+    {    
         elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
-
+    }
+    
     PG_RETURN_FLOAT8(result);
 }
 
