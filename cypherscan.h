@@ -5,7 +5,7 @@
  *
  * src/bin/psql/cypherscan.h
  */
-#ifndef CYPHERSACN_H
+#ifndef CYPHERSCAN_H
 #define CYPHERSCAN_H
 
 #include "fe_utils/psqlscan.h"
