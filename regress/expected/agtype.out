@@ -2163,6 +2163,9 @@ SELECT agtype_to_int4(agtype_in('null'));
                
 (1 row)
 
+--
+-- Test agtype to integer cast
+--
 SELECT agtype_to_int4(agtype_in('1'));
  agtype_to_int4 
 ----------------
@@ -2186,6 +2189,8 @@ SELECT agtype_to_int4(agtype_in('"string"'));
 ERROR:  invalid input syntax for integer: "string"
 SELECT agtype_to_int4(agtype_in('[1, 2, 3]'));
 ERROR:  cannot cast agtype array to type int
+SELECT agtype_to_int4(agtype_in('{"int":1}'));
+ERROR:  cannot cast agtype object to type int
 --
 -- Test agtype to int[]
 --

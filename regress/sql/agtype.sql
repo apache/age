@@ -552,12 +552,17 @@ SELECT agtype_to_int8(agtype_in('false'));
 SELECT agtype_to_int4(agtype_in('true'));
 SELECT agtype_to_int4(agtype_in('false'));
 SELECT agtype_to_int4(agtype_in('null'));
+
+--
+-- Test agtype to integer cast
+--
 SELECT agtype_to_int4(agtype_in('1'));
 SELECT agtype_to_int4(agtype_in('1.45'));
 SELECT agtype_to_int4(agtype_in('1.444::numeric'));
 -- These should all fail
 SELECT agtype_to_int4(agtype_in('"string"'));
 SELECT agtype_to_int4(agtype_in('[1, 2, 3]'));
+SELECT agtype_to_int4(agtype_in('{"int":1}'));
 
 --
 -- Test agtype to int[]
