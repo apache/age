@@ -47,6 +47,150 @@
 #include "utils/load/age_load.h"
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
+#include "utils/age_graphid_ds.h"
+
+
+/* Acessing struct members from GRAPH_global_context does not work, neither the functions located
+*  at age_global_graph.h. These functions and the use of the struct's fields would have helped
+*  when creating the Barabasi-Albert graph due to the way which the graph is created (searching 
+*  each vertex on the graph to see which one of them has the largest amount of edges related to
+*  it). Therefore, some rather simplistic structures were created to fulfill this purpose.
+**/
+
+/* Auxiliary struct to store the content of the edges. */
+typedef struct edge_content {
+    graphid oid;
+    graphid from_vertex;
+    graphid to_vertex;
+} edge_content;
+
+
+/* Auxiliary struct to store the content of the vertices. */
+typedef struct vertex_content {
+    graphid oid;
+    int num_edges_in;
+    int num_edges_out;
+    edge_content* edges_in;
+    edge_content* edges_out;
+} vertex_content;
+
+
+/* Auxiliary struct to store content of the graph. */
+typedef struct graph_content {
+    int total_vertices;
+    vertex_content* vertices;
+} graph_content;
+
+
+graph_content* new_graph_content()
+{
+    graph_content* new_graph = malloc(sizeof(graph_content));
+    new_graph->total_vertices = 0;
+    new_graph->vertices = NULL;
+    return new_graph;
+}
+
+
+vertex_content* new_vertex_content(graphid oid)
+{
+    vertex_content* new_vertex = malloc(sizeof(vertex_content));
+    new_vertex->oid = oid;
+    new_vertex->edges_in = NULL;
+    new_vertex->edges_out = NULL;
+    new_vertex->num_edges_in = 0;
+    new_vertex->num_edges_out = 0;
+    return new_vertex;
+}
+
+
+edge_content* new_edge_content(graphid oid, graphid from_vertex, graphid to_vertex)
+{
+    edge_content* new_edge = malloc(sizeof(edge_content));
+    new_edge->oid = oid;
+    new_edge->from_vertex = from_vertex;
+    new_edge->to_vertex = to_vertex;
+    return new_edge;
+}
+
+
+static void content_insert_edge_in_vertex(vertex_content* vertex, edge_content* edge)
+{
+    if (vertex->num_edges_in == 0)
+    {
+        vertex->edges_in = (edge_content*) malloc(sizeof(edge_content));
+        vertex->edges_in[vertex->num_edges_in] = *edge;
+        vertex->num_edges_in++;
+    }
+    else
+    {
+        int new_size = vertex->num_edges_in + 1;
+        int old_size = new_size - 1;
+        edge_content* new_edges = (edge_content*) malloc(sizeof(edge_content) * new_size);
+        memcpy(new_edges, vertex->edges_in, old_size * sizeof(edge_content));
+        free(vertex->edges_in);
+
+        vertex->edges_in = new_edges;
+
+        vertex->edges_out[old_size] = *edge;
+
+        vertex->num_edges_in++;
+    }
+}
+
+
+static void content_insert_edge_out_vertex(vertex_content* vertex, edge_content* edge)
+{
+    if (vertex->num_edges_out == 0)
+    {
+        vertex->edges_out = (edge_content*) malloc(sizeof(edge_content));
+        vertex->edges_out[vertex->num_edges_out] = *edge;
+        vertex->num_edges_out++;
+    }
+    else
+    {
+        int new_size = vertex->num_edges_out + 1;
+        int old_size = new_size - 1;
+        edge_content* new_edges = (edge_content*) malloc(sizeof(edge_content) * new_size);
+        memcpy(new_edges, vertex->edges_out, old_size * sizeof(edge_content));
+        free(vertex->edges_out);
+
+        vertex->edges_out = new_edges;
+
+        vertex->edges_out[old_size] = *edge;
+
+        vertex->num_edges_out++;
+    }
+}
+
+
+static void content_insert_vertex(graph_content* graph, vertex_content* vertex)
+{
+    int new_size = graph->total_vertices + 1;
+    int old_size = new_size - 1;
+    vertex_content* new_vertices = (vertex_content*) malloc(sizeof(vertex_content) * new_size);
+    memcpy(new_vertices, graph->vertices, old_size * sizeof(vertex_content));
+    free(graph->vertices);
+
+    graph->vertices = new_vertices;
+
+    graph->vertices[old_size] = *vertex;
+
+    graph->total_vertices++;
+}
+
+
+static void free_graph_content(graph_content* graph)
+{
+    vertex_content vc;
+    for (int i = 0; i < graph->total_vertices; i++)
+    {
+        vc = graph->vertices[i];
+        free(vc.edges_in);
+        free(vc.edges_out);
+    }
+    free(graph->vertices);
+    free(graph);
+}
 
 
 int64 get_nextval_internal(graph_cache_data* graph_cache, 
@@ -386,9 +530,15 @@ PG_FUNCTION_INFO_V1(age_create_barabasi_albert_graph);
 * Formally, the probability p_i that the new node is connected to node i is: (p_i = k_i / Σ k_j). Where k_i is the degree of node i and the sum
 * is made over all pre-existing nodes j. 
 *
-* Heavily linked nodes ("hubs") tend to quickly accumulate even more links, while nodes with only a few 
-* links are unlikely to be chosen as the destination for a new link. The new nodes have a "preference" to attach themselves to the already 
-* heavily linked nodes. 
+* Input:
+* 
+* 1. graph_name - Name of the graph to be created
+* 2. n - The number of vertices
+* 3. m - Number of edges to attach from a new node to existing nodes
+* 4. vertex_label_name - Name of the label to assign each vertex to.
+* 5. edge_label_name - Name of the label to assign each edge to.
+* 6. bidirectional - Bidirectional True or False. Default True.
+*
 */
 Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS) 
 {
@@ -398,8 +548,7 @@ Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS)
     Oid nsp_id;
 
     graphid object_graph_id;
-    graphid start_vertex_graph_id;
-    graphid end_vertex_graph_id;
+    graphid current_graphid; 
 
     agtype *props = NULL;
 
@@ -419,10 +568,236 @@ Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS)
     label_cache_data *vertex_cache;
     label_cache_data *edge_cache;
 
-    int64 no_vertices, start_vid, end_vid, eid, lid;
+    graph_content* graph_c;
+    vertex_content* vertex_c;
+    vertex_content* current_vertex_c;
+    vertex_content* end_vertex = NULL;
+    edge_content* edge_c;
+
+    ListGraphId* vertex_content_analysis_list = NULL;
+    GraphIdNode* list_head;
+
+    int64 no_vertices, no_edges, eid, list_size;
     int64 vid = 1;
     int32 vertex_label_id;
     int32 edge_label_id;
+    int vc_num_edges;
+
+    float random_prob;
+    srand(time(NULL));
 
     bool bidirectional;
+
+    /* Get the name of the graph. */
+	if (PG_ARGISNULL(0))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("Graph name cannot be NULL")));
+    }
+    graph_name = PG_GETARG_NAME(0);
+    graph_name_str = NameStr(*graph_name);
+
+
+    /* Check if graph exists. If it doesn't, create the graph. */
+    if (!graph_exists(graph_name_str))
+    {
+        DirectFunctionCall1(create_graph, CStringGetDatum(graph_name));
+    }
+    graph_id = get_graph_oid(graph_name_str);
+    graph_c = new_graph_content();
+
+
+    /* Get the number of vertices. */
+	if (PG_ARGISNULL(1))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                                errmsg("Number of vertices cannot be NULL.")));
+	}
+    no_vertices = PG_GETARG_INT64(1);
+
+
+    /* Get the number of edges to attach from a new node to existing nodes. */
+    if (PG_ARGISNULL(2))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                                errmsg("Number of edges cannot be NULL.")));
+	}
+    no_edges = PG_GETARG_INT64(2);
+
+
+    /* Get the vertex label. */
+    if (PG_ARGISNULL(3)) 
+    {
+        namestrcpy(vertex_label_name, AG_DEFAULT_LABEL_VERTEX);
+        vertex_label_str = AG_DEFAULT_LABEL_VERTEX;
+    }
+    else 
+    {
+        vertex_label_name = PG_GETARG_NAME(2);
+        vertex_label_str = NameStr(*vertex_label_name);
+    }
+
+
+    /* Get the edge label. */
+    if (PG_ARGISNULL(4))
+    {
+        namestrcpy(edge_label_name, AG_DEFAULT_LABEL_EDGE);
+        edge_label_str = AG_DEFAULT_LABEL_EDGE;
+    }
+    else
+    {
+        edge_label_name = PG_GETARG_NAME(3);
+        edge_label_str = NameStr(*edge_label_name);
+    }
+
+
+    /* Compare both edge and vertex labels (they cannot be the same).*/
+    if (strcmp(vertex_label_str, edge_label_str) == 0)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("vertex and edge label can not be same")));
+    }
+
+
+    /* If the vertex label does not exist, create the label. */
+    if (!label_exists(vertex_label_str, graph_id))
+    {
+        DirectFunctionCall2(create_vlabel, CStringGetDatum(graph_name), CStringGetDatum(vertex_label_name));
+    }
+
+
+    /* If the edge label does not exist, create the label. */
+    if (!label_exists(edge_label_str, graph_id))
+    {
+        DirectFunctionCall2(create_elabel, CStringGetDatum(graph_name), CStringGetDatum(edge_label_name));
+    }
+
+
+    /* Get the direction of the graph. */
+    bidirectional = (PG_GETARG_BOOL(5) == true) ? true : false;
+
+    vertex_label_id = get_label_id(vertex_label_str, graph_id);
+    edge_label_id = get_label_id(edge_label_str, graph_id);
+
+    graph_cache = search_graph_name_cache(graph_name_str);
+    vertex_cache = search_label_name_graph_cache(vertex_label_str,graph_id);
+    edge_cache = search_label_name_graph_cache(edge_label_str,graph_id);
+
+    nsp_id = graph_cache->namespace;
+    vertex_seq_name = &(vertex_cache->seq_name);
+    vertex_seq_name_str = NameStr(*vertex_seq_name);
+
+    edge_seq_name = &(edge_cache->seq_name);
+    edge_seq_name_str = NameStr(*edge_seq_name);
+
+    vertex_seq_id = get_relname_relid(vertex_seq_name_str, nsp_id);
+    edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
+    
+    /* For each vertex we create. */
+    for (int i = 0; i < no_vertices; i++)
+    {   
+        vertex_content_analysis_list = NULL;
+        vid = nextval_internal(vertex_seq_id, true);
+        object_graph_id = make_graphid(vertex_label_id, vid);
+        props = create_empty_agtype();
+
+        /* Insert the vertex in the auxiliary graph. */
+        vertex_c = new_vertex_content(object_graph_id);
+        content_insert_vertex(graph_c, vertex_c);
+
+        /* Insert the vertex in the real graph. */
+        insert_vertex_simple(graph_id, vertex_label_str, object_graph_id, props);
+        
+        /* Not the first vertex we create. */
+        if(i > 0)
+        {
+            /* Iterate through the created vertices to see which are the ones with most edges. 
+            *  Add it N times where N equals to the amount of edges it has. */
+            for(int j = 0; j < graph_c->total_vertices; j++)
+            {
+                current_vertex_c = new_vertex_content(NULL);
+                *current_vertex_c = graph_c->vertices[j];
+                vc_num_edges = current_vertex_c->num_edges_in + current_vertex_c->num_edges_out;
+
+                if(vc_num_edges == 0)
+                {
+                    vertex_content_analysis_list = append_graphid(vertex_content_analysis_list, current_vertex_c->oid);
+                }
+                else
+                {
+                    for (int num = 0; num < vc_num_edges; num++)
+                    {
+                        vertex_content_analysis_list = append_graphid(vertex_content_analysis_list, current_vertex_c->oid);
+                    }
+                } 
+            }
+
+
+            /* For each vertex we create to the new node, calculate the probability */
+            for (int w = 0; w < no_edges; w++)
+            {
+                list_size = get_list_size(vertex_content_analysis_list);
+                if (list_size != 0)
+                {
+                    random_prob = rand() % list_size;
+                }
+                else
+                {
+                    random_prob = list_size;
+                }
+                
+
+                /* Iterate through the list of vertex_content until we reach the random position */
+                list_head = get_list_head(vertex_content_analysis_list);
+                current_graphid = get_graphid(list_head);
+                for (int k = 0; k < random_prob; k++)
+                {
+                    current_graphid = get_graphid(list_head);
+                    list_head = next_GraphIdNode(list_head);
+                }
+
+                /* Fetch the vertex_contet according to the random graphid. */
+                for (int a = 0; a <= graph_c->total_vertices; a++)
+                {
+                    if (graph_c->vertices[a].oid == current_graphid)
+                    {
+                        end_vertex = &graph_c->vertices[a];
+                    }
+                }
+
+                /* Create the edge id and store it in the graph and in the auxiliary vertices. */
+                eid = nextval_internal(edge_seq_id, true);
+                object_graph_id = make_graphid(edge_label_id, eid);
+
+                props = create_empty_agtype();
+
+                insert_edge_simple(graph_id, edge_label_str,
+                                object_graph_id, vertex_c->oid,
+                                current_graphid, props);
+
+                edge_c = new_edge_content(object_graph_id, vertex_c->oid, current_graphid);
+                content_insert_edge_in_vertex(vertex_c, edge_c);
+                content_insert_edge_out_vertex(end_vertex, edge_c);
+                
+                if (bidirectional == true)
+                {
+                    eid = nextval_internal(edge_seq_id, true);
+                    object_graph_id = make_graphid(edge_label_id, eid);
+
+                    props = create_empty_agtype();
+
+                    insert_edge_simple(graph_id, edge_label_str,
+                                object_graph_id, current_graphid,
+                                vertex_c->oid, props);
+
+                    content_insert_edge_in_vertex(end_vertex, edge_c);
+                    content_insert_edge_out_vertex(vertex_c, edge_c);
+                }
+            }
+            free_graphid_stack(vertex_content_analysis_list);
+        }
+    }
+    free_graph_content(graph_c);
+    free_ListGraphId(vertex_content_analysis_list);
+    PG_RETURN_VOID();
 }
