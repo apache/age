@@ -9,7 +9,7 @@ PSQL=$PGBIN/psql
 # sleep time after reload in seconds
 st=10
 
-for mode in r
+for mode in s
 do
 	rm -fr $TESTDIR
 	mkdir $TESTDIR
@@ -25,7 +25,7 @@ do
 	echo "backend_weight0 = 0" >> etc/pgpool.conf
 	echo "backend_weight1 = 1" >> etc/pgpool.conf
 	echo "statement_level_load_balance = on" >> etc/pgpool.conf
-
+	
 
 	./startall
 
@@ -33,47 +33,55 @@ do
 
 	wait_for_pgpool_startup
 
-	$PSQL -p 11002 template1 <<EOF
+
+
+	$PSQL test <<EOF
+-- Setup
 CREATE EXTENSION IF NOT EXISTS age;
-LOAD 'age';
+LOAD 'age';	
+SET search_path = ag_catalog, public;
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (dummy) RETURN dummy \$\$) as (v ag_catalog.agtype); -- Forcing secondary node to Self-Load AGE with a dummy MATCH
+
+-- Database population
 SELECT create_graph('test_graph');
-EOF
 
-	$PSQL -p 11003 template1 <<EOF
-CREATE EXTENSION IF NOT EXISTS age;
-LOAD 'age';
-EOF
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ CREATE (:vertex1 {i: 123}) \$\$) as (v ag_catalog.agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ CREATE (:vertex2 {i: 124}) \$\$) as (v ag_catalog.agtype);
 
 
-	$PSQL template1 <<EOF
-
-
-SELECT * FROM cypher('test_graph', \$\$ CREATE (:vertex1 {i: 123}) \$\$) as (v agtype);
-SELECT * FROM cypher('test_graph', \$\$ CREATE (:vertex2 {i: 124}) \$\$) as (v agtype);
+-- Read Query
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (v) RETURN v \$\$) as (v ag_catalog.agtype);
 
 EOF
 
 
 # check if simple load balance worked
-	fgrep "SELECT * FROM cypher('test_graph', \$\$ MATCH (v) RETURN v \$\$) as (v agtype);" log/pgpool.log |grep "DB node id: 1">/dev/null 2>&1
+	fgrep "SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (v) RETURN v \$\$) as (v ag_catalog.agtype);" log/pgpool.log |grep "DB node id: 1">/dev/null 2>&1
 	if [ $? != 0 ];then
 	# expected result not found
 		echo fail: select is sent to zero-weight node.
 		./shutdownall
 		exit 1
 	fi
-	echo ok: simple load balance works.
+	echo ok: load balance works.
 
 
-# check a set of cypher queries:
+
+# CREATE cypher queries:
 	
-	$PSQL template1 <<EOF
+	$PSQL test <<EOF
+-- Setup
+CREATE EXTENSION IF NOT EXISTS age;
+LOAD 'age';	
+SET search_path = ag_catalog, public;
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (dummy) RETURN dummy \$\$) as (v ag_catalog.agtype); -- Forcing Secondary node to Self-Load AGE with a dummy MATCH
+
 -- Create node for Alice and Bob
-SELECT * FROM cypher('test_graph', \$\$ CREATE (p:Person {name: 'Alice', age: 30}) RETURN p.name \$\$) AS (a agtype);
-SELECT * FROM cypher('test_graph', \$\$ CREATE (p:Person {name: 'Bob', age: 35}) RETURN p.name \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ CREATE (p:Person {name: 'Alice', age: 30}) RETURN p.name \$\$) AS (a ag_catalog.agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ CREATE (p:Person {name: 'Bob', age: 35}) RETURN p.name \$\$) AS (a ag_catalog.agtype);
 
 -- Create a relationship between Alice and Bob
-SELECT * FROM cypher('test_graph', \$\$ MATCH (a:Person {name: 'Alice'}), (b:Person {name: 'Bob'}) CREATE (a)-[:FRIENDS_WITH]->(b) RETURN a.name \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (a:Person {name: 'Alice'}), (b:Person {name: 'Bob'}) CREATE (a)-[:FRIENDS_WITH]->(b) RETURN a.name \$\$) AS (a ag_catalog.agtype);
 
 EOF
 
@@ -99,31 +107,36 @@ EOF
 		./shutdownall
 		exit 1
 	fi
-	echo ok: Wrtie queries work.
+	echo ok: Write queries work.
 
 
 	
-# Read and Update query
-	$PSQL template1 <<EOF
+# Read and Update queries
+	$PSQL test <<EOF
+-- Setup
+CREATE EXTENSION IF NOT EXISTS age;
+LOAD 'age';	
+SET search_path = ag_catalog, public;
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (dummy) RETURN dummy \$\$) as (v ag_catalog.agtype); -- Forcing secondary node to Self-Load AGE with a dummy MATCH
+
 
 -- Get all Person nodes
-SELECT * FROM cypher('test_graph', \$\$ MATCH (p:Person) RETURN p.name \$\$) AS (a agtype);
-
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (p:Person) RETURN p.name \$\$) AS (a ag_catalog.agtype);
 
 -- Get all relationships between Person nodes
-SELECT * FROM cypher('test_graph', \$\$ MATCH (a:Person)-[r:FRIENDS_WITH]->(b:Person) RETURN a.name \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (a:Person)-[r:FRIENDS_WITH]->(b:Person) RETURN a.name \$\$) AS (a ag_catalog.agtype);
 
 -- Update Alice's age 
-SELECT * FROM cypher('test_graph', \$\$ MATCH (p:Person {name: 'Alice'}) SET p.age = 31 RETURN p.age \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (p:Person {name: 'Alice'}) SET p.age = 31 RETURN p.age \$\$) AS (a ag_catalog.agtype);
 
 -- Merge a new node or update if exists with the same name
-SELECT * FROM cypher('test_graph', \$\$ MERGE (p:Person {name: 'Charlie', age: 25}) RETURN p.name \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MERGE (p:Person {name: 'Charlie', age: 25}) RETURN p.name \$\$) AS (a ag_catalog.agtype);
 
 -- Delete the relationship between Alice and Bob
-SELECT * FROM cypher('test_graph', \$\$ MATCH (a:Person {name: 'Alice'})-[r:FRIENDS_WITH]->(b:Person {name: 'Bob'}) DELETE r RETURN a.age \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (a:Person {name: 'Alice'})-[r:FRIENDS_WITH]->(b:Person {name: 'Bob'}) DELETE r RETURN a.age \$\$) AS (a ag_catalog.agtype);
 
 -- Delete the node for Charlie
-SELECT * FROM cypher('test_graph', \$\$ MATCH (p:Person {name: 'Charlie'}) DETACH DELETE p RETURN p.name \$\$) AS (a agtype);
+SELECT * FROM ag_catalog.cypher('test_graph', \$\$ MATCH (p:Person {name: 'Charlie'}) DETACH DELETE p RETURN p.name \$\$) AS (a ag_catalog.agtype);
 
 EOF
 
@@ -177,7 +190,7 @@ EOF
 		exit 1
 	fi
 
-	echo ok: Wrtie queries work.
+	echo ok: Write queries work.
 
 
 	./shutdownall
