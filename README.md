@@ -139,10 +139,24 @@ You will need to install an AGE compatible version of Postgres<a>, for now AGE s
 
 You can use a <a href="https://www.postgresql.org/download/">package management </a> that your OS provides to download AGE.
 
-<br>
-
+<h4>Ubuntu</h4>
+     
+- **Postgres 11**
+     
 ```bash
-sudo apt install postgresql 
+sudo apt install postgresql-11 postgresql-server-dev-11
+
+```
+     
+- **Postgres 12**
+```bash
+sudo apt install postgresql-12 postgresql-server-dev-12 
+
+```
+     
+- **Postgres 13**
+```bash
+sudo apt install postgresql-13 postgresql-server-dev-13
 
 ```
 <h4>
