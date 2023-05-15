@@ -1,0 +1,56 @@
+<project>
+    <shortName>age</shortName>
+    <fullName>AGE</fullName>
+    <version>1.1.1</version>
+    <licenseFile>${build_project_directory}/assets/LICENSE</licenseFile>
+    <leftImage>${build_project_directory}\assets\img\left.png</leftImage>
+    <logoImage>${build_project_directory}\assets\img\logo.png</logoImage>
+    <splashImage>${build_project_directory}\assets\img\splash.png</splashImage>
+    <componentList>
+        <component>
+            <name>default</name>
+            <description>Default Component</description>
+            <canBeEdited>1</canBeEdited>
+            <selected>1</selected>
+            <show>1</show>
+            <folderList>
+                <folder>
+                    <description>Windows Postgre Lib</description>
+                    <destination>${windows_folder_program_files}\PostgreSQL\11\lib</destination>
+                    <name>winPostgreLib</name>
+                    <platforms>windows</platforms>
+                    <distributionFileList>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age.dll</origin>
+                        </distributionFile>
+                    </distributionFileList>
+                </folder>
+                <folder>
+                    <description>Windows Postgre Extension</description>
+                    <destination>${windows_folder_program_files}\PostgreSQL\11\share\extension</destination>
+                    <name>winPostgreExtention</name>
+                    <platforms>windows</platforms>
+                    <distributionFileList>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age.control</origin>
+                        </distributionFile>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age--1.1.1.sql</origin>
+                        </distributionFile>
+                    </distributionFileList>
+                </folder>
+                <folder>
+                    <description>Windows x64 PostgreLib</description>
+                    <destination>${windows_folder_program_files}\PostgreSQL\11\lib</destination>
+                    <name>win64PostgreLib</name>
+                    <platforms>windows-x64</platforms>
+                    <distributionFileList>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age.dll</origin>
+                        </distributionFile>
+                    </distributionFileList>
+                </folder>
+        </component>
+    </componentList>
+    
+</project>
