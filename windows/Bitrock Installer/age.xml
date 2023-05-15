@@ -50,7 +50,58 @@
                         </distributionFile>
                     </distributionFileList>
                 </folder>
+                <folder>
+                    <description>Windows x64 postgre extension</description>
+                    <destination>${windows_folder_program_files}\PostgreSQL\11\share\extension</destination>
+                    <name>win64PostgreExtension</name>
+                    <platforms>windows-x64</platforms>
+                    <distributionFileList>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age--1.1.1.sql</origin>
+                        </distributionFile>
+                        <distributionFile>
+                            <origin>${build_project_directory}/assets/Windows/age.control</origin>
+                        </distributionFile>
+                    </distributionFileList>
+                </folder>
+            </folderList>
+            <startMenuShortcutList>
+                <startMenuShortcut>
+                    <comment>Uninstall ${product_fullname}</comment>
+                    <name>Uninstall ${product_fullname}</name>
+                    <runAsAdmin>0</runAsAdmin>
+                    <runInTerminal>0</runInTerminal>
+                    <windowsExec>${installdir}/${uninstallerName}.exe</windowsExec>
+                    <windowsExecArgs></windowsExecArgs>
+                    <windowsIcon></windowsIcon>
+                    <windowsPath>${installdir}/</windowsPath>
+                </startMenuShortcut>
+            </startMenuShortcutList>
         </component>
     </componentList>
-    
+    <enableRollback>1</enableRollback>
+    <enableTimestamp>1</enableTimestamp>
+    <outputDirectory>${build_project_directory}</outputDirectory>
+    <vendor>Apache</vendor>
+    <licenseFileList>
+        <licenseFile>
+            <code>en</code>
+            <file>${build_project_directory}/assets/LICENSE</file>
+        </licenseFile>
+    </licenseFileList>
+    <parameterList>
+        <directoryParameter>
+            <name>installdir</name>
+            <description>Installer.Parameter.installdir.description</description>
+            <explanation>Installer.Parameter.installdir.explanation</explanation>
+            <value></value>
+            <default>${platform_install_prefix}/${product_shortname}-${product_version}</default>
+            <allowEmptyValue>0</allowEmptyValue>
+            <ask>yes</ask>
+            <cliOptionName>prefix</cliOptionName>
+            <mustBeWritable>yes</mustBeWritable>
+            <mustExist>0</mustExist>
+            <width>40</width>
+        </directoryParameter>
+    </parameterList> 
 </project>
