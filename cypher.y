@@ -36,6 +36,8 @@ int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %token <str_val> IDENTIFIER STRING
 %token UNKNOWN
 
+%type <str_val> str_val
+
 %left PIPE
 %left ARROW
 
@@ -44,62 +46,73 @@ int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %%
 
 statement:
-    { printf("Query parsed successfully.\n"); }
+    query
     ;
 
 query:
     match_clause
-    //where_clause_opt
-    //with_clause_opt
-    //return_clause
+    where_clause_opt
+    with_clause_opt
+    return_clause
     ;
 
 match_clause:
-    MATCH path_pattern { printf("Match clause parsed successfully.\n"); }
+    MATCH  { 
+        printf("Match clause parsed successfully.\n Match = true\n"); 
+    } path_pattern
 	;    
 
 path_pattern:
     node_pattern
-    | node_pattern ARROW rel_pattern node_pattern { printf("Path pattern parsed successfully.\n"); }
+    | node_pattern ARROW rel_pattern { printf("Path pattern parsed successfully.\n"); }
+    node_pattern
     ;
 
 node_pattern:
-    LPAREN node_labels_opt node_properties_opt RPAREN { printf("Node pattern parsed successfully.\n"); }
+    LPAREN node_labels_opt
+    {
+        printf("Node pattern parsed successfully.\n");
+    }
+    node_properties_opt RPAREN
     ;
+
 
 node_labels_opt:
     /* empty */ { printf("No node labels.\n"); }
-    | COLON IDENTIFIER { printf("Node label parsed: %s.\n", $2); }
+    | IDENTIFIER {
+        printf("Labels: %s\n", $1);}
+    | COLON IDENTIFIER { printf("Node label parsed.\n label: %s\n", $2); }
     | node_labels_opt COLON IDENTIFIER { printf("Node label parsed: %s.\n", $3); }
     ;
 
 node_properties_opt:
     /* empty */ { printf("No node properties.\n"); }
     | LBRACE map_literal RBRACE { printf("Node properties parsed successfully.\n"); }
+    
+str_val:
+    IDENTIFIER 
+        {
+            $$ = $1;
+        }
+    | STRING 
+        {
+            $$ = $1;
+        }
     ;
 
 rel_pattern:
-    rel_type rel_direction rel_type { printf("Rel pattern parsed successfully.\n"); }
+    rel_type rel_direction rel_type { printf("Rel pattern parsed is directed.\n"); }
     ;
 
 rel_type:
-    { printf("Rel type parsed: \n"); }
+    COLON str_val { printf("Rel type parsed: %s.\n", $2); }
+    | LBRACKET str_val RBRACKET { printf("Rel type parsed: %s.\n", $2); }
     ;
-
-//rel_type:
-//    COLON str_val { printf("Rel type parsed: %s.\n", $2); }
-//     | LBRACKET str_val RBRACKET { printf("Rel type parsed: %s.\n", $2); }
-//    ;
-
 
 rel_direction:
-    {printf("Rel direction parsed: ->.\n"); }
+    ARROW { printf("Rel direction parsed: ->.\n"); }
+    | ARROW str_val ARROW { printf("Rel direction parsed: ->%s->.\n", $2); }
     ;
-
-//rel_direction:
-//    ARROW { printf("Rel direction parsed: ->.\n"); }
-//    | ARROW rel_type_name ARROW { printf("Rel direction parsed: ->%s->.\n", $2); }
-//    ;
 
 map_literal:
     /* empty */ { printf("Empty map literal.\n"); }
@@ -112,13 +125,13 @@ nonempty_map_literal:
     ;
 
 map_entry:
-    IDENTIFIER COLON expression { printf("Map entry parsed successfully.\n"); }
+    IDENTIFIER COLON expression { printf("Map entry parsed successfully.\nProperty %s\n" , $1); }
     ;
 
 expression:
     INTEGER { printf("Integer expression parsed: %d.\n", $1); }
     | STRING { printf("String expression parsed: %s.\n", $1); }
-    | IDENTIFIER { printf("Identifier expression parsed: %s.\n", $1); }
+    | IDENTIFIER { printf("Identifier expression parsed: %s\n", $1); }
     ;
 
 where_clause_opt:
@@ -129,6 +142,7 @@ where_clause_opt:
 with_clause_opt:
     /* empty */ { printf("No WITH clause.\n"); }
     | WITH expression_list return_clause { printf("WITH clause parsed successfully.\n"); }
+        ;
 
 expression_list:
 	expression { printf("Expression parsed successfully.\n"); }
@@ -136,8 +150,8 @@ expression_list:
 	;
 
 return_clause:
-	RETURN return_item_list order_clause_opt skip_clause_opt limit_clause_opt { printf("Return clause parsed successfully.\n"); }
-;
+	RETURN return_item_list order_clause_opt skip_clause_opt limit_clause_opt { printf("Return clause parsed successfully.\nReturn = true\n"); }
+        ;
 
 return_item_list:
 	return_item { printf("Return item parsed successfully.\n"); }
@@ -155,29 +169,29 @@ order_clause_opt:
 	;
 
 sort_item_list:
-sort_item { printf("Sort item parsed successfully.\n"); }
-| sort_item_list COMMA sort_item { printf("Sort item parsed successfully.\n"); }
-;
+    sort_item { printf("Sort item parsed successfully.\n"); }
+    | sort_item_list COMMA sort_item { printf("Sort item parsed successfully.\n"); }
+    ;
 
 sort_item:
-expression sort_direction_opt { printf("Sort item parsed successfully.\n"); }
-;
+    expression sort_direction_opt { printf("Sort item parsed successfully.\n"); }
+    ;
 
 sort_direction_opt:
 	/* empty */ { printf("Sort direction not specified; defaulting to ASC.\n"); order_clause_direction = 1; }
 	| ASC { printf("Sort direction specified: ASC.\n"); order_clause_direction = 1; }
 	| DESC { printf("Sort direction specified: DESC.\n"); order_clause_direction = -1; }
-	;
+    ;
 
 skip_clause_opt:
 	/* empty */ { printf("No SKIP clause.\n"); }
 	| SKIP INTEGER { printf("SKIP clause parsed: %d.\n", $2); }
-	;
+    ;
 
 limit_clause_opt:
 	/* empty */ { printf("No LIMIT clause.\n"); }
 	| LIMIT INTEGER { printf("LIMIT clause parsed: %d.\n", $2); }
-	;
+    ;
 
 %%
 
@@ -189,5 +203,5 @@ void yyerror(char const *s)
 void
 psql_scan_cypher_command(PsqlScanState state)
 {
-
+    yyparse();
 }
