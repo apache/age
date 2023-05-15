@@ -131,7 +131,7 @@ static void content_insert_edge_in_vertex(vertex_content* vertex, edge_content* 
 
         vertex->edges_in = new_edges;
 
-        vertex->edges_out[old_size] = *edge;
+        vertex->edges_in[old_size] = *edge;
 
         vertex->num_edges_in++;
     }
@@ -633,7 +633,7 @@ Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS)
     }
     else 
     {
-        vertex_label_name = PG_GETARG_NAME(2);
+        vertex_label_name = PG_GETARG_NAME(3);
         vertex_label_str = NameStr(*vertex_label_name);
     }
 
@@ -646,7 +646,7 @@ Datum age_create_barabasi_albert_graph(PG_FUNCTION_ARGS)
     }
     else
     {
-        edge_label_name = PG_GETARG_NAME(3);
+        edge_label_name = PG_GETARG_NAME(4);
         edge_label_str = NameStr(*edge_label_name);
     }
 

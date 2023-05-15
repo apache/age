@@ -228,3 +228,108 @@ NOTICE:  graph "gp2" has been dropped
  
 (1 row)
 
+-- Tests for the Barabasi-Albert graph generation.
+SELECT age_create_barabasi_albert_graph('barabasi_albert_a', 10, 1, NULL, NULL, false);
+NOTICE:  graph "barabasi_albert_a" has been created
+ age_create_barabasi_albert_graph 
+----------------------------------
+ 
+(1 row)
+
+SELECT age_create_barabasi_albert_graph('barabasi_albert_b', 10, 2, 'BARABASI_VERTEX', 'BARABASI_EDGE', true);
+NOTICE:  graph "barabasi_albert_b" has been created
+NOTICE:  VLabel "BARABASI_VERTEX" has been created
+NOTICE:  ELabel "BARABASI_EDGE" has been created
+ age_create_barabasi_albert_graph 
+----------------------------------
+ 
+(1 row)
+
+SELECT age_create_barabasi_albert_graph('barabasi_albert_c', 20, 1, NULL, NULL, NULL);
+NOTICE:  graph "barabasi_albert_c" has been created
+ age_create_barabasi_albert_graph 
+----------------------------------
+ 
+(1 row)
+
+-- Should return 10 vertices and 9 edges.
+SELECT COUNT(*) FROM barabasi_albert_a._ag_label_vertex;
+ count 
+-------
+    10
+(1 row)
+
+SELECT COUNT(*) FROM barabasi_albert_a._ag_label_edge;
+ count 
+-------
+     9
+(1 row)
+
+-- Should return 10 vertices and 36 edges.
+SELECT COUNT(*) FROM barabasi_albert_b."BARABASI_VERTEX";
+ count 
+-------
+    10
+(1 row)
+
+SELECT COUNT(*) FROM barabasi_albert_b."BARABASI_EDGE";
+ count 
+-------
+    36
+(1 row)
+
+-- Should return 20 vertices and 19 edges.
+SELECT COUNT(*) FROM barabasi_albert_c._ag_label_vertex;
+ count 
+-------
+    20
+(1 row)
+
+SELECT COUNT(*) FROM barabasi_albert_c._ag_label_edge;
+ count 
+-------
+    19
+(1 row)
+
+-- Should throw errors.
+SELECT age_create_barabasi_albert_graph(NULL, NULL, NULL, NULL, NULL, NULL);
+ERROR:  Graph name cannot be NULL
+SELECT age_create_barabasi_albert_graph('barabasi_albert_d', NULL, NULL, NULL, NULL, NULL);
+NOTICE:  graph "barabasi_albert_d" has been created
+ERROR:  Number of vertices cannot be NULL.
+SELECT age_create_barabasi_albert_graph('barabasi_albert_e', 10, NULL, NULL, NULL, NULL);
+NOTICE:  graph "barabasi_albert_e" has been created
+ERROR:  Number of edges cannot be NULL.
+-- Drop Barabasi-Albert Graphs
+SELECT drop_graph('barabasi_albert_a', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table barabasi_albert_a._ag_label_vertex
+drop cascades to table barabasi_albert_a._ag_label_edge
+NOTICE:  graph "barabasi_albert_a" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('barabasi_albert_b', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table barabasi_albert_b._ag_label_vertex
+drop cascades to table barabasi_albert_b._ag_label_edge
+drop cascades to table barabasi_albert_b."BARABASI_VERTEX"
+drop cascades to table barabasi_albert_b."BARABASI_EDGE"
+NOTICE:  graph "barabasi_albert_b" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('barabasi_albert_c', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table barabasi_albert_c._ag_label_vertex
+drop cascades to table barabasi_albert_c._ag_label_edge
+NOTICE:  graph "barabasi_albert_c" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
