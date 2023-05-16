@@ -42,31 +42,48 @@ GraphIdNode *next_GraphIdNode(GraphIdNode *node);
 graphid get_graphid(GraphIdNode *node);
 
 /* graphid stack functions */
+
 /* create a new ListGraphId stack */
 ListGraphId *new_graphid_stack(void);
+
 /* free a ListGraphId stack */
 void free_graphid_stack(ListGraphId *stack);
+
 /* push a graphid onto a ListGraphId stack */
 void push_graphid_stack(ListGraphId *stack, graphid id);
+
 /* pop (remove) a GraphIdNode from the top of the stack */
 graphid pop_graphid_stack(ListGraphId *stack);
+
 /* peek (doesn't remove) at the head entry of a ListGraphId stack */
 GraphIdNode *peek_stack_head(ListGraphId *stack);
+
 /* peek (doesn't remove) at the tail entry of a ListGraphId stack */
 GraphIdNode *peek_stack_tail(ListGraphId *stack);
+
 /* return the size of a ListGraphId stack */
 int64 get_stack_size(ListGraphId *stack);
 
 /* graphid list functions */
+
 /*
  * Helper function to add a graphid to the end of a ListGraphId container.
  * If the container is NULL, it creates the container with the entry.
  */
 ListGraphId *append_graphid(ListGraphId *container, graphid id);
+
+/* removes a specified GraphIdNode from the list */
+graphid remove_graphid_list(ListGraphId *container, graphid id);
+
 /* free a ListGraphId container */
 void free_ListGraphId(ListGraphId *container);
+
 /* return a reference to the head entry of a list */
 GraphIdNode *get_list_head(ListGraphId *list);
+
+/* return a reference to the tail entry of a list */
+GraphIdNode *get_list_tail(ListGraphId *list);
+
 /* get the size of the passed list */
 int64 get_list_size(ListGraphId *list);
 

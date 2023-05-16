@@ -86,6 +86,12 @@ GraphIdNode *get_list_head(ListGraphId *list)
     return list->head;
 }
 
+/* return a reference to the tail entry of a list */
+GraphIdNode *get_list_tail(ListGraphId *list)
+{
+    return list->tail;
+}
+
 /* get the size of the passed list */
 int64 get_list_size(ListGraphId *list)
 {
@@ -126,6 +132,63 @@ ListGraphId *append_graphid(ListGraphId *container, graphid id)
 
     return container;
 }
+
+
+/* removes a specified GraphIdNode from the list */
+graphid remove_graphid_list(ListGraphId *container, graphid id)
+{
+    graphid removed_id = 0; // Default value if id is not found
+
+    if (container == NULL)
+    {
+        // Empty container, nothing to remove
+        return removed_id;
+    }
+
+    GraphIdNode *current = get_list_head(container);
+    GraphIdNode *previous = NULL;
+
+    while (current != NULL)
+    {
+        if (current->id == id)
+        {
+            // Found the node with the specified id
+            if (previous == NULL)
+            {
+                // The node to remove is the head
+                container->head = current->next;
+            }
+            else
+            {
+                // The node to remove is not the head
+                previous->next = current->next;
+
+                if (current == container->tail)
+                {
+                    // The node to remove is the tail
+                    container->tail = previous;
+                }
+            }
+
+            removed_id = current->id;
+
+            // Free the memory of the node
+            pfree(current);
+            current = NULL;
+
+            // Decrease the size of the container
+            container->size--;
+
+            break;
+        }
+
+        previous = current;
+        current = current->next;
+    }
+
+    return removed_id;
+}
+
 
 /* free (delete) a ListGraphId list */
 void free_ListGraphId(ListGraphId *container)
