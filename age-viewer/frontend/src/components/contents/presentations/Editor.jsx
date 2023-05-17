@@ -22,13 +22,17 @@ import { useDispatch } from 'react-redux';
 import uuid from 'react-uuid';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimesCircle, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import {
+  faTimesCircle,
+  faToggleOff,
+  faToggleOn,
+} from '@fortawesome/free-solid-svg-icons';
 import store from '../../../app/store';
 import AlertContainers from '../../alert/containers/AlertContainers';
 import CodeMirror from '../../editor/containers/CodeMirrorWapperContainer';
 import SideBarToggle from '../../editor/containers/SideBarMenuToggleContainer';
 import { setting } from '../../../conf/config';
-import IconPlay from '../../../icons/IconPlay';
+import IconPlay from '../../../assets/icons/IconPlay';
 import { getMetaData } from '../../../features/database/MetadataSlice';
 
 const Editor = ({
@@ -70,12 +74,18 @@ const Editor = ({
     } else if (command.toUpperCase() === ':SERVER STATUS') {
       dispatch(() => trimFrame('ServerStatus'));
       dispatch(() => addFrame(command, 'ServerStatus', refKey));
-    } else if (database.status === 'disconnected' && command.toUpperCase() === ':SERVER DISCONNECT') {
+    } else if (
+      database.status === 'disconnected' &&
+      command.toUpperCase() === ':SERVER DISCONNECT'
+    ) {
       dispatch(() => trimFrame('ServerDisconnect'));
       dispatch(() => trimFrame('ServerConnect'));
       dispatch(() => addAlert('ErrorNoDatabaseConnected'));
       dispatch(() => addFrame(command, 'ServerDisconnect', refKey));
-    } else if (database.status === 'disconnected' && command.toUpperCase() === ':SERVER CONNECT') {
+    } else if (
+      database.status === 'disconnected' &&
+      command.toUpperCase() === ':SERVER CONNECT'
+    ) {
       if (!setting.closeWhenDisconnect) {
         dispatch(() => trimFrame('ServerConnect'));
         dispatch(() => addFrame(':server connect', 'ServerConnect'));
@@ -84,11 +94,17 @@ const Editor = ({
       dispatch(() => trimFrame('ServerConnect'));
       dispatch(() => addAlert('ErrorNoDatabaseConnected'));
       dispatch(() => addFrame(command, 'ServerConnect', refKey));
-    } else if (database.status === 'connected' && command.toUpperCase() === ':SERVER DISCONNECT') {
+    } else if (
+      database.status === 'connected' &&
+      command.toUpperCase() === ':SERVER DISCONNECT'
+    ) {
       dispatch(() => trimFrame('ServerDisconnect'));
       dispatch(() => addAlert('NoticeServerDisconnected'));
       dispatch(() => addFrame(command, 'ServerDisconnect', refKey));
-    } else if (database.status === 'connected' && command.toUpperCase() === ':SERVER CONNECT') {
+    } else if (
+      database.status === 'connected' &&
+      command.toUpperCase() === ':SERVER CONNECT'
+    ) {
       if (!setting.connectionStatusSkip) {
         dispatch(() => trimFrame('ServerStatus'));
         dispatch(() => addAlert('NoticeAlreadyConnected'));
@@ -118,7 +134,9 @@ const Editor = ({
   };
 
   useEffect(() => {
-    const reqCancel = Object.keys(activePromises).filter((ref) => !activeRequests.includes(ref));
+    const reqCancel = Object.keys(activePromises).filter(
+      (ref) => !activeRequests.includes(ref)
+    );
     reqCancel.forEach((ref) => {
       activePromises[ref].abort();
       delete activePromises[ref];
@@ -135,7 +153,7 @@ const Editor = ({
           alertName={alert.alertName}
           errorMessage={alert.alertProps.errorMessage}
         />
-      )),
+      ))
     );
   }, [alertList]);
 
@@ -144,15 +162,20 @@ const Editor = ({
       <div className="editor">
         <div className="container-fluid editor-area card-header">
           <div className="input-group input-style">
-
-            <div id="codeMirrorEditor" className="form-control col-11 editor-code-wrapper">
+            <div
+              id="codeMirrorEditor"
+              className="form-control col-11 editor-code-wrapper"
+            >
               <CodeMirror
                 onClick={onClick}
                 value={command}
                 onChange={setCommand}
               />
             </div>
-            <div className="input-group-append ml-auto editor-button-wrapper" id="editor-buttons">
+            <div
+              className="input-group-append ml-auto editor-button-wrapper"
+              id="editor-buttons"
+            >
               {/* <button className="frame-head-button btn btn-link"
                type="button" onClick={() => favoritesCommand()}>
                 <FontAwesomeIcon
@@ -160,11 +183,13 @@ const Editor = ({
                   size="lg"
                 />
               </button> */}
-              <button className={command ? 'btn show-eraser' : 'btn hide-eraser'} type="button" id="eraser" onDoubleClick={() => clearCommand()}>
-                <FontAwesomeIcon
-                  icon={faTimesCircle}
-                  size="1x"
-                />
+              <button
+                className={command ? 'btn show-eraser' : 'btn hide-eraser'}
+                type="button"
+                id="eraser"
+                onDoubleClick={() => clearCommand()}
+              >
+                <FontAwesomeIcon icon={faTimesCircle} size="1x" />
               </button>
               <button
                 className="frame-head-button btn btn-link"
@@ -189,7 +214,7 @@ const Editor = ({
                     document.getElementById('wrapper')?.classList?.add('wrapper');
                   } */
                 }}
-                title={(isActive) ? 'Hide' : 'Show'}
+                title={isActive ? 'Hide' : 'Show'}
               >
                 <SideBarToggle isActive={isActive} />
               </button>
@@ -220,14 +245,16 @@ Editor.propTypes = {
   addFrame: PropTypes.func.isRequired,
   trimFrame: PropTypes.func.isRequired,
   addAlert: PropTypes.func.isRequired,
-  alertList: PropTypes.arrayOf(PropTypes.shape({
-    alertName: PropTypes.string.isRequired,
-    alertProps: PropTypes.shape({
-      key: PropTypes.string.isRequired,
-      alertType: PropTypes.string.isRequired,
-      errorMessage: PropTypes.string.isRequired,
-    }),
-  })).isRequired,
+  alertList: PropTypes.arrayOf(
+    PropTypes.shape({
+      alertName: PropTypes.string.isRequired,
+      alertProps: PropTypes.shape({
+        key: PropTypes.string.isRequired,
+        alertType: PropTypes.string.isRequired,
+        errorMessage: PropTypes.string.isRequired,
+      }),
+    })
+  ).isRequired,
   isActive: PropTypes.bool.isRequired,
   database: PropTypes.shape({
     status: PropTypes.string.isRequired,

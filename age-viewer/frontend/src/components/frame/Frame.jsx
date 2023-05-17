@@ -35,9 +35,9 @@ import styles from './Frame.module.scss';
 import { removeFrame } from '../../features/frame/FrameSlice';
 import { setCommand } from '../../features/editor/EditorSlice';
 import { removeActiveRequests } from '../../features/cypher/CypherSlice';
-import EdgeWeight from '../../icons/EdgeWeight';
-import IconFilter from '../../icons/IconFilter';
-import IconSearchCancel from '../../icons/IconSearchCancel';
+import EdgeWeight from '../../assets/icons/EdgeWeight';
+import IconFilter from '../../assets/icons/IconFilter';
+import IconSearchCancel from '../../assets/icons/IconSearchCancel';
 
 const Frame = ({
   reqString,
@@ -74,9 +74,7 @@ const Frame = ({
       <div className={styles.FrameHeader}>
         <div className={styles.FrameHeaderText}>
           {'$ '}
-          <strong>
-            {reqString}
-          </strong>
+          <strong>{reqString}</strong>
           <FontAwesomeIcon
             id={styles.toEditor}
             title="copy to editor"
@@ -90,7 +88,11 @@ const Frame = ({
         </div>
         <div className={styles.ButtonArea}>
           {!isTable && onThick ? (
-            <Popover placement="bottomLeft" content={thicnessMenu} trigger="click">
+            <Popover
+              placement="bottomLeft"
+              content={thicnessMenu}
+              trigger="click"
+            >
               <Button
                 size="large"
                 type="link"
@@ -158,22 +160,17 @@ const Frame = ({
               size="lg"
             />
           </Button>
-          {
-            !isTable && onRefresh ? (
-              <Button
-                size="large"
-                type="link"
-                className={`${styles.FrameButton}`}
-                onClick={() => onRefresh()}
-                title="Refresh"
-              >
-                <FontAwesomeIcon
-                  icon={faSync}
-                  size="lg"
-                />
-              </Button>
-            ) : null
-          }
+          {!isTable && onRefresh ? (
+            <Button
+              size="large"
+              type="link"
+              className={`${styles.FrameButton}`}
+              onClick={() => onRefresh()}
+              title="Refresh"
+            >
+              <FontAwesomeIcon icon={faSync} size="lg" />
+            </Button>
+          ) : null}
           {/* <Button
             size="large"
             type="link"
@@ -201,7 +198,9 @@ const Frame = ({
             type="link"
             className={`${styles.FrameButton}`}
             onClick={() => {
-              if (window.confirm('Are you sure you want to close this window?')) {
+              if (
+                window.confirm('Are you sure you want to close this window?')
+              ) {
                 dispatch(removeFrame(refKey));
                 dispatch(removeActiveRequests(refKey));
               } else {

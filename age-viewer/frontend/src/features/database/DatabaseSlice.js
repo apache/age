@@ -23,7 +23,6 @@ export const connectToDatabase = createAsyncThunk(
   'database/connectToDatabase',
   async (formData) => {
     formData.port = String(formData.port)
-    console.log(formData);
     try {
       const response = await fetch('http://localhost:3001/api/v1/db/connect',
         {
@@ -34,9 +33,9 @@ export const connectToDatabase = createAsyncThunk(
           },
           body: JSON.stringify(formData),
         });
-      if (response.ok) { 
+      if (response.ok) {
         console.log(response);
-        return await response.json(); 
+        return await response.json();
       }
       throw response;
     } catch (error) {

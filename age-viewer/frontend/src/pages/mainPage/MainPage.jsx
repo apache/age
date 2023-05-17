@@ -18,17 +18,14 @@
  */
 
 import React from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'antd/dist/antd.css';
-import './static/style.css';
-import './static/navbar-fixed-left.css';
-import AllRoutes from './routes/routes';
+import DefaultTemplate from '../../components/template/DefaultTemplate';
 
-function App() {
+const MainPage = () => {
   return (
-    <>
-      <AllRoutes />
-    </>
+    <React.Fragment>
+      <DefaultTemplate />
+    </React.Fragment>
   );
-}
-export default App;
+};
+
+export default MainPage;

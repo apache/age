@@ -20,7 +20,7 @@ const conn = {
   version: 11,
 };
 
-// cookies will be stored here, these are store whenever connect() fun is called 
+// cookies will be stored here, these are store whenever connect() fun is called
 // and will be used in subsequent calls
 let cookies;
 
@@ -33,11 +33,8 @@ function connect() {
     body: JSON.stringify(conn),
   })
   .then(response => {
-    console.log(response.status);
-
     // Store the cookies from the response
     cookies = response.headers.raw()['set-cookie'];
-
     return response.json();
   })
   .then(data => {
@@ -62,12 +59,10 @@ function queryMetadata() {
     body: JSON.stringify(graph),
   })
   .then(response => {
-    console.log(response.status);
 
     return response.json();
   })
   .then(data => {
-    console.log(data);
   })
   .catch(error => {
     console.error(error);
@@ -125,7 +120,7 @@ function disconnect() {
 // dummy function to test the above functions
 
 // let choice;
-// function chooseFunction() {  
+// function chooseFunction() {
 
 // rl.question('Enter the function number: ', (input) => {
 //     const choice = parseInt(input);
