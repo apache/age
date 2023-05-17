@@ -22,19 +22,19 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'antd/dist/antd.css';
 import './static/style.css';
 import './static/navbar-fixed-left.css';
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import MainPage from './pages/Main/MainPage';
 import First from './pages/Main/First';
 
-
-function App(){
+function App() {
+  console.log('fix erros');
   return (
     <Router>
       <Routes>
-        <Route exact path="/" element={<First/>} />
-        <Route exact path="/second" element={<MainPage/>} />
+        <Route exact path="/" element={<First />} />
+        <Route exact path="/second" element={<MainPage />} />
       </Routes>
     </Router>
   );
-  }
+}
 export default App;
