@@ -373,3 +373,20 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     
     PG_RETURN_VOID();
 }
+
+
+PG_FUNCTION_INFO_V1(age_create_erdos_renyi_graph);
+/*
+    ag_catalog.age_create_erdos_renyi_graph(graph_name Name, n int, p float
+                                    vertex_label_name Name DEFAULT = NULL,
+                                    edge_label_name Name DEAULT = NULL,
+                                    bidirectional bool DEFAULT = true)
+
+    The Erdős–Rényi model is a random graph generation model that produces 
+    graphs where each edge has a fixed probability of being present or absent, 
+    independently of the other edges.
+*/
+Datum age_create_erdos_renyi_graph(PG_FUNCTION_ARGS)
+{
+    PG_RETURN_VOID();
+}

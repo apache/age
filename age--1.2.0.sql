@@ -4215,6 +4215,20 @@ CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+
+CREATE FUNCTION ag_catalog.age_create_erdos_renyi_graph(graph_name Name, 
+                                                n int, 
+                                                p float
+                                                vertex_label_name Name DEFAULT = NULL,
+                                                edge_label_name Name DEAULT = NULL,
+                                                bidirectional bool DEFAULT = true)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+
 CREATE FUNCTION ag_catalog.age_prepare_cypher(cstring, cstring)
 RETURNS boolean
 LANGUAGE c
