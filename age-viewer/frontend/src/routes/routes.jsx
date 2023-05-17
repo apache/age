@@ -18,9 +18,9 @@
  */
 
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import MainPage from './pages/Main/MainPage';
-import First from './pages/Main/First';
-import { PATH } from '../utils/constants/route.constant';
+import First from '../pages/Main/First';
+import { PATH } from '../utils/constants/routes.constant';
+import MainPage from '../pages/Main/MainPage';
 const AllRoutes = () => {
   return (
     <>

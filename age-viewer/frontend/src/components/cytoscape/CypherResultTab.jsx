@@ -22,7 +22,7 @@ import { Component } from 'react';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTable } from '@fortawesome/free-solid-svg-icons';
-import IconGraph from '../../icons/IconGraph';
+import IconGraph from '../../assets/icons/IconGraph';
 
 class CypherResultTab extends Component {
   constructor(props) {

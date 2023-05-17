@@ -19,5 +19,5 @@
 
 export const PATH = {
   ROOT_PATH: '/',
-  MAIN_PAGE_PATH: '/second',
+  MAIN_PAGE_PATH: '/mainpage',
 };

@@ -41,8 +41,8 @@ import cxtmenu from '@lsvih/cytoscape-cxtmenu';
 import { initLocation, seletableLayouts } from './CytoscapeLayouts';
 import { stylesheet } from './CytoscapeStyleSheet';
 import { generateCytoscapeElement } from '../../features/cypher/CypherUtil';
-import IconFilter from '../../icons/IconFilter';
-import IconSearchCancel from '../../icons/IconSearchCancel';
+import IconFilter from '../../assets/icons/IconFilter';
+import IconSearchCancel from '../../assets/icons/IconSearchCancel';
 import styles from '../frame/Frame.module.scss';
 
 cytoscape.use(COSEBilkent);

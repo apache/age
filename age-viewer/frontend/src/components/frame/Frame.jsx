@@ -35,9 +35,9 @@ import styles from './Frame.module.scss';
 import { removeFrame } from '../../features/frame/FrameSlice';
 import { setCommand } from '../../features/editor/EditorSlice';
 import { removeActiveRequests } from '../../features/cypher/CypherSlice';
-import EdgeWeight from '../../icons/EdgeWeight';
-import IconFilter from '../../icons/IconFilter';
-import IconSearchCancel from '../../icons/IconSearchCancel';
+import EdgeWeight from '../../assets/icons/EdgeWeight';
+import IconFilter from '../../assets/icons/IconFilter';
+import IconSearchCancel from '../../assets/icons/IconSearchCancel';
 
 const Frame = ({
   reqString,
