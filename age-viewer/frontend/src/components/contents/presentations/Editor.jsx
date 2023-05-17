@@ -28,7 +28,7 @@ import AlertContainers from '../../alert/containers/AlertContainers';
 import CodeMirror from '../../editor/containers/CodeMirrorWapperContainer';
 import SideBarToggle from '../../editor/containers/SideBarMenuToggleContainer';
 import { setting } from '../../../conf/config';
-import IconPlay from '../../../icons/IconPlay';
+import IconPlay from '../../../assets/icons/IconPlay';
 import { getMetaData } from '../../../features/database/MetadataSlice';
 
 const Editor = ({

@@ -20,11 +20,11 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Modal, Image } from 'react-bootstrap';
-import Agce from '../../../images/agce.gif';
-import Query from '../../../images/queryEditor.png';
-import Copy from '../../../images/copy.png';
-import CSV from '../../../images/graphCSV.png';
-import Menu from '../../../images/graphMenu.png';
+import Agce from '../../../assets/images/agce.gif';
+import Query from '../../../assets/images/queryEditor.png';
+import Copy from '../../../assets/images/copy.png';
+import CSV from '../../../assets/images/graphCSV.png';
+import Menu from '../../../assets/images/graphMenu.png';
 
 const TutorialBody = ({ page, text, addiText }) => {
   const [curImg, setCurImg] = useState();

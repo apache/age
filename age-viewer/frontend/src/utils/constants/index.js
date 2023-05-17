@@ -17,18 +17,13 @@
  * under the License.
  */
 
-import React from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'antd/dist/antd.css';
-import './static/style.css';
-import './static/navbar-fixed-left.css';
-import AllRoutes from './routes/routes';
-
-function App() {
-  return (
-    <>
-      <AllRoutes />
-    </>
-  );
-}
-export default App;
+export const MESSAGES = {
+  FAILED_TO_RETRIEVE_CONNECTION_INFORMATION:
+    'Failed to Retrieve Connection Information',
+  DATABASE_CONNECTION_FAILED: 'Database Connection Failed',
+};
+export const BASE_URL = 'http://localhost:3001/api/v1/';
+export const STATUS = {
+  CONNECTED: 'connected',
+  DISCONNECTED: 'disconnected',
+};
