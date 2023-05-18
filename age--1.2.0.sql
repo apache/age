@@ -4216,12 +4216,12 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 
-CREATE FUNCTION ag_catalog.age_create_erdos_renyi_graph(graph_name Name, 
+CREATE FUNCTION ag_catalog.age_create_erdos_renyi_graph(graph_name name, 
                                                 n int, 
-                                                p float
-                                                vertex_label_name Name DEFAULT = NULL,
-                                                edge_label_name Name DEAULT = NULL,
-                                                bidirectional bool DEFAULT = true)
+                                                p name,
+                                                vertex_label_name name = NULL,
+                                                edge_label_name name = NULL,
+                                                bidirectional bool = true)
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
