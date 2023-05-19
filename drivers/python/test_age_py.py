@@ -19,7 +19,7 @@ import decimal
 import age 
 import argparse
 
-DSN = "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=agens"
+DSN = "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=agens connect_timeout=5"
 
 class TestAgeBasic(unittest.TestCase):
     ag = None
@@ -31,7 +31,7 @@ class TestAgeBasic(unittest.TestCase):
         TEST_PORT = self.args.port
         TEST_HOST = self.args.host
         TEST_GRAPH_NAME = self.args.graphName
-        self.ag = age.connect(graph=TEST_GRAPH_NAME, host=TEST_HOST, port=TEST_PORT, dbname=TEST_DB, user=TEST_USER, password=TEST_PASSWORD)
+        self.ag = age.connect(graph=TEST_GRAPH_NAME, host=TEST_HOST, port=TEST_PORT, dbname=TEST_DB, user=TEST_USER, password=TEST_PASSWORD, connect_timeout=5)
 
 
     def tearDown(self):
