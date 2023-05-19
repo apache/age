@@ -80,3 +80,27 @@ SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 SELECT drop_graph('gp1', true);
 SELECT drop_graph('gp2', true);
 
+
+-- Tests for Erdos-Renyi graph generation.
+
+-- Unidirectional.
+SELECT * FROM age_create_erdos_renyi_graph('ErdosRenyi_1', 6, '0', NULL, NULL, false); -- No edges are created.
+SELECT * FROM age_create_erdos_renyi_graph('ErdosRenyi_2', 6, '1', NULL, NULL, false); -- All edges are created.
+
+SELECT count(*) FROM "ErdosRenyi_1"._ag_label_edge; -- No edges are created.
+SELECT count(*) FROM "ErdosRenyi_2"._ag_label_edge; -- All edges are created (15).
+
+-- Bidirectional.
+SELECT * FROM age_create_erdos_renyi_graph('ErdosRenyi_3', 6, '1', NULL, NULL, true); -- All edges are created.
+
+SELECT count(*) FROM "ErdosRenyi_3"._ag_label_edge; -- All edges are created (30).
+
+-- Errors.
+SELECT * FROM age_create_erdos_renyi_graph(NULL, NULL, NULL, NULL, NULL, NULL); -- Graph name cannot be NULL.
+SELECT * FROM age_create_erdos_renyi_graph('ErdosRenyi_Error', NULL, NULL, NULL, NULL, NULL); -- Number of vertices cannot be NULL.
+SELECT * FROM age_create_erdos_renyi_graph('ErdosRenyi_Error', 6, NULL, NULL, NULL, NULL); -- Probability cannot be NULL.
+
+-- Drop Erdos-Renyi Graphs.
+SELECT drop_graph('ErdosRenyi_1', true);
+SELECT drop_graph('ErdosRenyi_2', true);
+SELECT drop_graph('ErdosRenyi_3', true);
