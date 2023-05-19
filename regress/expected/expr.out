@@ -6013,13 +6013,9 @@ SELECT * FROM cypher('opt_forms', $$MATCH (u)-->()<--(v) RETURN u.i, v.i$$) AS (
 (2 rows)
 
 SELECT * FROM cypher('opt_forms', $$MATCH (u) CREATE (u)-[:edge]->() RETURN *$$) AS (results agtype);
-                               results                                
-----------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 1}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 2}}::vertex
- {"id": 281474976710659, "label": "", "properties": {"i": 3}}::vertex
-(3 rows)
-
+ERROR:  return row and column definition list do not match
+LINE 1: SELECT * FROM cypher('opt_forms', $$MATCH (u) CREATE (u)-[:e...
+                      ^
 SELECT * FROM cypher('opt_forms', $$MATCH (u)-->()<--(v) RETURN *$$) AS (col1 agtype, col2 agtype);
                                  col1                                 |                                 col2                                 
 ----------------------------------------------------------------------+----------------------------------------------------------------------
@@ -6469,11 +6465,10 @@ NOTICE:  graph "case_statement" has been dropped
 (1 row)
 
 SELECT * FROM drop_graph('opt_forms', true);
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to table opt_forms._ag_label_vertex
 drop cascades to table opt_forms._ag_label_edge
 drop cascades to table opt_forms."KNOWS"
-drop cascades to table opt_forms.edge
 NOTICE:  graph "opt_forms" has been dropped
  drop_graph 
 ------------

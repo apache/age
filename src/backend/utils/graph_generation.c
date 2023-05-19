@@ -562,7 +562,7 @@ Datum age_create_erdos_renyi_graph(PG_FUNCTION_ARGS)
             /* Generate a random float number between 0 and 1. */
             random_prob = (float) ((float)rand() / (float)RAND_MAX);
 
-            if (random_prob >= set_prob && i != j)
+            if (random_prob <= set_prob && i != j)
             {
                 eid = nextval_internal(edge_seq_id, true);
                 object_graph_id = make_graphid(edge_label_id, eid);
