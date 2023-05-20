@@ -1,6 +1,8 @@
 package session
 
 import (
+	"net/http"
+
 	"github.com/labstack/echo"
 )
 
@@ -20,4 +22,3 @@ func UserSessions() echo.MiddlewareFunc {
 		}
 	}
 }
-
