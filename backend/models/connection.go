@@ -10,7 +10,7 @@ import (
 
 // Connection struct represents the connection parameters for a database
 type Connection struct {
-	Port      string
+	Port      int
 	Host      string
 	Password  string
 	User      string
@@ -18,6 +18,9 @@ type Connection struct {
 	SSL       string `default:"require"`
 	GraphInit bool
 	Version   int
+	Graphs	[]string
+	Graph    string
+
 }
 
 /*
@@ -41,7 +44,7 @@ func (c *Connection) ToSQLString(secure ...string) string {
 	}
 
 	str := fmt.Sprintf(
-		"user=%s port=%s host=%s password=%s sslmode=%s dbname=%s",
+		"user=%s port=%d host=%s password=%s sslmode=%s dbname=%s",
 		c.User,
 		c.Port,
 		c.Host,
