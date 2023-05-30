@@ -1,18 +1,18 @@
 // some pre-requisites to run these functions on desktop enviroment
-// const fetch = require("node-fetch");
-// const readline = require("readline");
+const fetch = require("node-fetch");
+const readline = require("readline");
 
 
-// const rl = readline.createInterface({
-//     input: process.stdin,
-//     output: process.stdout
-//   });
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
 
 // Test data which will come from the frontend
 const conn = {
   port: "5432",
   host: "localhost",
-  password: "ABCDEFGH",
+  password: "Welcome@1",
   user: "kamleshk",
   dbname: "demodb",
   ssl: "disable",
@@ -49,30 +49,26 @@ function connect() {
 }
 
 function queryMetadata() {
-  const graph = {
-    name: "demo_graph",
-  };
-
   fetch('http://localhost:8080/query/metadata', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Cookie': cookies.join('; '),
     },
-    body: JSON.stringify(graph),
   })
   .then(response => {
     console.log(response.status);
-
     return response.json();
   })
   .then(data => {
-    console.log(data);
+    // visualize the data in formatted ways
+    console.log(JSON.stringify(data, null, 2));
   })
   .catch(error => {
     console.error(error);
   });
 }
+
 
 function query() {
   const payload = {
@@ -124,33 +120,33 @@ function disconnect() {
 
 // dummy function to test the above functions
 
-// let choice;
-// function chooseFunction() {  
+let choice;
+function chooseFunction() {  
 
-// rl.question('Enter the function number: ', (input) => {
-//     const choice = parseInt(input);
-//     if (Number.isNaN(choice) || choice < 1 || choice > 4) {
-//       console.log('Invalid choice. Please try again.');
-//     } else {
-//       switch (choice) {
-//         case 1:
-//           connect();
-//           break;
-//         case 2:
-//           queryMetadata();
-//           break;
-//         case 3:
-//           query();
-//           break;
-//         case 4:
-//           disconnect();
-//           break;
-//       }DisconnectFromDb
-//     }
-//     // rl.close();
-//     chooseFunction()
-//   });
+rl.question('Enter the function number: ', (input) => {
+    const choice = parseInt(input);
+    if (Number.isNaN(choice) || choice < 1 || choice > 4) {
+      console.log('Invalid choice. Please try again.');
+    } else {
+      switch (choice) {
+        case 1:
+          connect();
+          break;
+        case 2:
+          queryMetadata();
+          break;
+        case 3:
+          query();
+          break;
+        case 4:
+          disconnect();
+          break;
+      }
+    }
+    // rl.close();
+    chooseFunction()
+  });
 
-// }
+}
 
-// chooseFunction();
+chooseFunction();

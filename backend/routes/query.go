@@ -100,39 +100,73 @@ func Cypher(ctx echo.Context) error {
 }
 
 /*
-retrieves graph metadata for a given graph, and returns it as JSON. It uses the graph object to determine
-which graph to query, and the user object to determine the database version. The retrieved metadata is
-then organized into two lists: one for nodes and one for edges, before being returned as a JSON response.
+queries the database for graph metadata, such as labels, count, kind, and namespace, and organizes this information
+into a structured format, separating nodes and edges for each unique namespace. The function then returns this metadata
+as a JSON object.
 */
 func GraphMetaData(c echo.Context) error {
+	// Create channels to handle data and errors
 	dataChan := make(chan *sql.Rows, 1)
 	errChan := make(chan error, 1)
 
+	// Retrieve user and connection information from the context
 	user := c.Get("user").(models.Connection)
 	conn := c.Get("conn").(*sql.DB)
-	graph := models.Graph{}
-	c.Bind(&graph)
+
+	// Analyze the database for faster processing
 	conn.Exec(db.ANALYZE)
-	go graph.GetMetaData(conn, user.Version, dataChan, errChan)
+
+	// Run GetMetaData in a goroutine
+	models.GetMetaData(conn, user.Version, dataChan, errChan)
+
+	// Wait for the data and error results
 	data, err := <-dataChan, <-errChan
 
+	// Check if there is any error
 	if err != nil {
 		return echo.NewHTTPError(400, err.Error())
 	}
-	results := models.MetaDataContainer{}
 
+	// Initialize a new MetaDataContainer with an empty map for Graphs
+	results := models.MetaDataContainer{
+		Graphs: make(map[string]models.GraphData),
+	}
+
+	// Iterate through the data rows
 	for data.Next() {
 		row := models.MetaData{}
-		err := data.Scan(&row.Label, &row.Cnt, &row.Kind)
-		if row.Kind == "v" {
-			results.Nodes = append(results.Nodes, row)
-		} else {
-			results.Edges = append(results.Edges, row)
-		}
 
+		// Scan the row data into the MetaData struct
+		err := data.Scan(&row.Label, &row.Cnt, &row.Kind, &row.NameSpace, &row.Namespace_id, &row.Graph, &row.Relation)
 		if err != nil {
 			print(err.Error())
 		}
+
+		// Check for empty namespace (no graphs) and return an error
+		if row.NameSpace == "" {
+			return echo.NewHTTPError(400, "No Graph exists for the database")
+		}
+
+		// Initialize GraphData if it doesn't exist for the current namespace
+		if _, exists := results.Graphs[row.NameSpace]; !exists {
+			results.Graphs[row.NameSpace] = models.GraphData{}
+		}
+
+		// Get the current GraphData for the namespace
+		graphData := results.Graphs[row.NameSpace]
+
+		// Append the row data to Nodes or Edges based on the Kind
+		if row.Kind == "v" {
+			graphData.Nodes = append(graphData.Nodes, row)
+		} else {
+			graphData.Edges = append(graphData.Edges, row)
+		}
+
+		// Update the GraphData in the results map
+		results.Graphs[row.NameSpace] = graphData
 	}
+
+	// Return the final results as JSON
+
 	return c.JSON(200, results)
 }

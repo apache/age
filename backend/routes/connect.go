@@ -16,6 +16,7 @@ set to "connected". It handles errors related to invalid data, connection establ
 */
 func ConnectToDb(c echo.Context) error {
 	udata, err := models.FromRequestBody(c)
+
 	if err != nil {
 		return echo.NewHTTPError(400, "invalid data")
 	}
@@ -30,6 +31,7 @@ func ConnectToDb(c echo.Context) error {
 	defer db.Close()
 	sess := c.Get("database").(*sessions.Session)
 	sess.Values["db"] = udata
+
 	err = sess.Save(c.Request(), c.Response().Writer)
 	if err != nil {
 		return echo.NewHTTPError(400, "could not save session")
@@ -45,6 +47,7 @@ JSON response with a status message indicating that the disconnection was succes
 */
 func DisconnectFromDb(c echo.Context) error {
 	sess := c.Get("database").(*sessions.Session)
+
 	dbObj := sess.Values["db"]
 	if dbObj == nil {
 		return echo.NewHTTPError(400, "no database connection found")

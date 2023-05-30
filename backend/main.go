@@ -15,7 +15,7 @@ func main() {
 	app := echo.New()
 	gob.Register(models.Connection{})
 	app.Use(session.UserSessions())
-
+	
 	app.POST("/connect", routes.ConnectToDb)
 	app.POST("/disconnect", routes.DisconnectFromDb)
 
