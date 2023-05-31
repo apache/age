@@ -22,42 +22,69 @@
  * HAS NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
+#ifndef MY_HEADER_H
+#define MY_HEADER_H
+
 #include "postgres.h"
 
 #include "mb/pg_wchar.h"
 #include "nodes/primnodes.h"
 #include "parser/parse_node.h"
-
 #include "parser/cypher_parse_node.h"
+
+typedef struct cypher_parsestate
+{
+    ParseState parsestate;
+    int default_alias_num;
+    char *graph_name;
+    Oid graph_oid;
+    /* other fields */
+} cypher_parsestate;
+
+typedef struct errpos_ecb_state
+{
+    ErrorContextCallback ecb;
+    ParseState *pstate;
+    int query_loc;
+    /* other fields */
+} errpos_ecb_state;
+
+cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate);
+void free_cypher_parsestate(cypher_parsestate *cpstate);
+void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate, int query_loc);
+void cancel_errpos_ecb(errpos_ecb_state *ecb_state);
+RangeTblEntry *find_rte(cypher_parsestate *cpstate, char *varname);
+char *get_next_default_alias(cypher_parsestate *cpstate);
+
+#endif  // MY_HEADER_H
+
+#include "my_header.h"
 
 static void errpos_ecb(void *arg);
 
-// NOTE: sync the logic with make_parsestate()
 cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
 {
-    ParseState *parent_pstate = (ParseState *)parent_cpstate;
-    cypher_parsestate *cpstate;
-    ParseState *pstate;
-
-    cpstate = palloc0(sizeof(*cpstate));
-
-    pstate = (ParseState *)cpstate;
+    /* Create a new cypher_parsestate and initialize the ParseState */
+    cypher_parsestate *cpstate = palloc0(sizeof(*cpstate));
+    ParseState *pstate = &cpstate->parsestate;
 
     /* Fill in fields that don't start at null/false/zero */
-    pstate->parentParseState = parent_pstate;
+    pstate->parentParseState = (ParseState *)parent_cpstate;
     pstate->p_next_resno = 1;
     pstate->p_resolve_unknowns = true;
 
     if (parent_cpstate)
     {
-        pstate->p_sourcetext = parent_pstate->p_sourcetext;
-        pstate->p_queryEnv = parent_pstate->p_queryEnv;
-        pstate->p_pre_columnref_hook = parent_pstate->p_pre_columnref_hook;
-        pstate->p_post_columnref_hook = parent_pstate->p_post_columnref_hook;
-        pstate->p_paramref_hook = parent_pstate->p_paramref_hook;
-        pstate->p_coerce_param_hook = parent_pstate->p_coerce_param_hook;
-        pstate->p_ref_hook_state = parent_pstate->p_ref_hook_state;
+        /* Inherit certain fields from the parent parse state */
+        pstate->p_sourcetext = parent_cpstate->parsestate.p_sourcetext;
+        pstate->p_queryEnv = parent_cpstate->parsestate.p_queryEnv;
+        pstate->p_pre_columnref_hook = parent_cpstate->parsestate.p_pre_columnref_hook;
+        pstate->p_post_columnref_hook = parent_cpstate->parsestate.p_post_columnref_hook;
+        pstate->p_paramref_hook = parent_cpstate->parsestate.p_paramref_hook;
+        pstate->p_coerce_param_hook = parent_cpstate->parsestate.p_coerce_param_hook;
+        pstate->p_ref_hook_state = parent_cpstate->parsestate.p_ref_hook_state;
 
+        /* Inherit graph-related fields */
         cpstate->graph_name = parent_cpstate->graph_name;
         cpstate->graph_oid = parent_cpstate->graph_oid;
         cpstate->params = parent_cpstate->params;
@@ -68,12 +95,13 @@ cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
 
 void free_cypher_parsestate(cypher_parsestate *cpstate)
 {
-    free_parsestate((ParseState *)cpstate);
+    /* Free the cypher_parsestate */
+    pfree(cpstate);
 }
 
-void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate,
-                      int query_loc)
+void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate, int query_loc)
 {
+    /* Set up error context callback */
     ecb_state->ecb.previous = error_context_stack;
     ecb_state->ecb.callback = errpos_ecb;
     ecb_state->ecb.arg = ecb_state;
@@ -85,15 +113,13 @@ void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate,
 
 void cancel_errpos_ecb(errpos_ecb_state *ecb_state)
 {
+    /* Cancel error context callback */
     error_context_stack = ecb_state->ecb.previous;
 }
 
-/*
- * adjust the current error position by adding the position of the current
- * query which is a subquery of a parent query
- */
 static void errpos_ecb(void *arg)
 {
+    /* Adjust the error position based on the query location */
     errpos_ecb_state *ecb_state = arg;
     int query_pos;
 
@@ -108,7 +134,7 @@ static void errpos_ecb(void *arg)
 
 RangeTblEntry *find_rte(cypher_parsestate *cpstate, char *varname)
 {
-    ParseState *pstate = (ParseState *) cpstate;
+    ParseState *pstate = &cpstate->parsestate;
     ListCell *lc;
 
     foreach (lc, pstate->p_rtable)
@@ -125,28 +151,11 @@ RangeTblEntry *find_rte(cypher_parsestate *cpstate, char *varname)
     return NULL;
 }
 
-/*
- * Generates a default alias name for when a query needs on and the parse
- * state does not provide one.
- */
 char *get_next_default_alias(cypher_parsestate *cpstate)
 {
-    char *alias_name;
-    int nlen = 0;
-
-    /* get the length of the combinded string */
-    nlen = snprintf(NULL, 0, "%s%d", AGE_DEFAULT_ALIAS_PREFIX,
-                    cpstate->default_alias_num);
-
-    /* allocate the space */
-    alias_name = palloc0(nlen + 1);
-
-    /* create the name */
-    snprintf(alias_name, nlen + 1, "%s%d", AGE_DEFAULT_ALIAS_PREFIX,
-             cpstate->default_alias_num);
-
-    /* increment the default alias number */
+    char alias_num_str[32];
+    snprintf(alias_num_str, sizeof(alias_num_str), "%d", cpstate->default_alias_num);
     cpstate->default_alias_num++;
 
-    return alias_name;
+    return pg_strdup(AGE_DEFAULT_ALIAS_PREFIX, alias_num_str);
 }
