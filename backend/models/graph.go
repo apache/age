@@ -33,3 +33,28 @@ func GetMetaData(conn *sql.DB, v int, dataChan chan<- *sql.Rows, errorChan chan<
 	errorChan <- err
 	dataChan <- data
 }
+
+// GetGraphNamesFromDB retrieves all unique graph names from the database
+// and returns a slice of graph names, the first graph name, and an error (if any).
+// The first graph name will be an empty string if there are no graph names.
+func GetGraphNamesFromDB(conn *sql.DB) ([]string, string, error) {
+	data, err := conn.Query(db.GET_ALL_GRAPHS)
+	if err != nil {
+		return nil, "", err
+	}
+	defer data.Close()
+	graphNames := make([]string, 0)
+	for data.Next() {
+		var graphName string
+		err := data.Scan(&graphName)
+		if err != nil {
+			return nil, "", err
+		}
+		graphNames = append(graphNames, graphName)
+	}
+	firstGraphName := ""
+	if len(graphNames) > 0 {
+		firstGraphName = graphNames[0]
+	}
+	return graphNames, firstGraphName, nil
+}

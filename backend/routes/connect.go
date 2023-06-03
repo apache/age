@@ -12,9 +12,8 @@ import (
 /*
 This function takes user data from the request body, establishes a database connection, saves the
 connection information in the session, and it returns a JSON response with fields
-containing the host, postgres version, port, database, user, password, list of graphs 
+containing the host, postgres version, port, database, user, password, list of graphs
 and current graph. It handles errors related to invalid data, connection establishment, and session saving.
-
 */
 func ConnectToDb(c echo.Context) error {
 	udata, err := models.FromRequestBody(c)
@@ -32,13 +31,22 @@ func ConnectToDb(c echo.Context) error {
 	}
 	defer db.Close()
 	sess := c.Get("database").(*sessions.Session)
-	udata.Graphs = []string{}
+
 	sess.Values["db"] = udata
+
+	// Call GetGraphNamesFromDB from the models package to retrieve
+	// the graph names and the first graph name from the database.
+	graphNames, firstGraphName, err := models.GetGraphNamesFromDB(db)
+	if err != nil {
+		return echo.NewHTTPError(400, fmt.Sprintf("could not retrieve graph names due to %s", err.Error()))
+	}
 
 	err = sess.Save(c.Request(), c.Response().Writer)
 	if err != nil {
 		return echo.NewHTTPError(400, "could not save session")
 	}
+	udata.Graphs = graphNames
+	udata.Graph = firstGraphName
 
 	return c.JSON(200, udata)
 }
