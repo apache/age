@@ -84,6 +84,49 @@
             <destination>${build_project_directory}/assets</destination>
             <origin>${build_project_directory}\..\..\LICENSE</origin>
         </copyFile>
-
+        <copyFile>
+            <destination>${build_project_directory}\assets\Windows\</destination>
+            <origin>${build_project_directory}\..\..\age.control</origin>
+        </copyFile>
+        <copyFile>
+            <destination>${build_project_directory}assets\Windows\</destination>
+            <origin>${build_project_directory}\..\..\age--1.2.0.sql</origin>
+        </copyFile>
     </preBuildActionList>
+    <postBuildActionList>
+        <deleteFile>
+            <path>${build_project_directory}\assets\Windows\age.control</path>
+        </deleteFile>
+        <deleteFile>
+            <path>${build_project_directory}\assets\Windows\age--1.2.0.sql</path>
+        </deleteFile>
+        <deleteFile>
+            <path>${build_project_directory}\assets\LICENSE</path>
+        </deleteFile>
+    </postBuildActionList>
+    <enableRollback>1</enableRollback>
+    <enableTimestamp>1</enableTimestamp>
+    <outputDirectory>${build_project_directory}</outputDirectory>
+    <vendor>Apache</vendor>
+    <licenseFileList>
+        <licenseFile>
+            <code>en</code>
+            <file>${build_project_directory}/assets/LICENSE</file>
+        </licenseFile>
+    </licenseFileList>
+    <parameterList>
+        <directoryParameter>
+            <name>installdir</name>
+            <description>Installer.Parameter.installdir.description</description>
+            <explanation>Installer.Parameter.installdir.explanation</explanation>
+            <value></value>
+            <default>${platform_install_prefix}/${product_shortname}-${product_version}</default>
+            <allowEmptyValue>0</allowEmptyValue>
+            <ask>yes</ask>
+            <cliOptionName>prefix</cliOptionName>
+            <mustBeWritable>yes</mustBeWritable>
+            <mustExist>0</mustExist>
+            <width>40</width>
+        </directoryParameter>
+    </parameterList>
 </project>
