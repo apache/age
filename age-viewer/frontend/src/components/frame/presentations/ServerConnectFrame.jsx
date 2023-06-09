@@ -34,8 +34,6 @@ import {
   /* getMetaChartData, */ getMetaData,
 } from '../../../features/database/MetadataSlice';
 
-import axios from 'axios';
-
 const FormInitialValue = {
   database: '',
   graph: '',
@@ -46,33 +44,29 @@ const FormInitialValue = {
 };
 
 const ServerConnectFrame = ({ refKey, isPinned, reqString, currentGraph }) => {
-  const connectToDatabase = async (data) => {
-    const formData = {
-      graph_init: true,
-      ssl: 'disable',
-      version: 11,
-    };
+  const dispatch = useDispatch();
 
-    const updatedData = { ...data, ...formData };
-    try {
-      const response = await fetch('http://localhost:8080/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedData),
-      });
+  const connectToDatabase = (data) =>
+    dispatch(connectToDatabaseApi(data)).then((response) => {
+      if (response.type === 'database/connectToDatabase/fulfilled') {
+        dispatch(addAlert('NoticeServerConnected'));
+        dispatch(trimFrame('ServerConnect'));
+        dispatch(getMetaData({ currentGraph })).then((metadataResponse) => {
+          if (metadataResponse.type === 'database/getMetaData/fulfilled') {
+            const graphName = Object.keys(metadataResponse.payload)[0];
+            /* dispatch(getMetaChartData()); */
+            dispatch(changeGraph({ graphName }));
+          }
+          if (metadataResponse.type === 'database/getMetaData/rejected') {
+            dispatch(addAlert('ErrorMetaFail'));
+          }
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Response:', data);
-      } else {
-        console.log('Request failed with status:', response.status);
+        dispatch(addFrame(':server status', 'ServerStatus'));
+      } else if (response.type === 'database/connectToDatabase/rejected') {
+        dispatch(addAlert('ErrorServerConnectFail', response.error.message));
       }
-    } catch (error) {
-      console.log('Error:', error);
-    }
-  };
+    });
 
   return (
     <Frame reqString={reqString} isPinned={isPinned} refKey={refKey}>
