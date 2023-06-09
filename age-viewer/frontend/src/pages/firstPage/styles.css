@@ -1,0 +1,27 @@
+.popup__button {
+  text-align: center;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 1em;
+  text-transform: uppercase;
+  color: white;
+  border-radius: 10px;
+  margin: 10px;
+  padding: 1em 3em;
+  background-size: 200% auto;
+  box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+  background-image: linear-gradient(to right, #540772 0%, #9c0c89 50%, #22129b 100%);
+  transition: 0.5s;
+}
+
+
+.container {
+  margin-top: 2rem;
+  text-Align: center;
+
+}
+
+.container__heading {
+  text-Align: center;
+
+}

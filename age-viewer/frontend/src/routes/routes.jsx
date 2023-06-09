@@ -17,18 +17,20 @@
  * under the License.
  */
 
-import React from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'antd/dist/antd.css';
-import './static/style.css';
-import './static/navbar-fixed-left.css';
-import AllRoutes from './routes/routes';
-
-function App() {
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import FirstPage from '../pages/firstPage/firstPage';
+import { PATH } from '../utils/constants/routes.constant';
+import MainPage from '../pages/mainPage/MainPage';
+const AllRoutes = () => {
   return (
     <>
-      <AllRoutes />
+      <Router>
+        <Routes>
+          <Route exact path={PATH.ROOT_PATH} element={<FirstPage />} />
+          <Route exact path={PATH.MAIN_PAGE_PATH} element={<MainPage />} />
+        </Routes>
+      </Router>
     </>
   );
-}
-export default App;
+};
+export default AllRoutes;

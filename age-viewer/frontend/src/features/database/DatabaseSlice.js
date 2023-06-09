@@ -40,6 +40,7 @@ export const connectToDatabase = createAsyncThunk(
         },
         body: JSON.stringify(updateFormData),
       });
+
       if (response.ok) {
         console.log(response);
         return await response.json();

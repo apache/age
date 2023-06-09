@@ -17,9 +17,13 @@
  * under the License.
  */
 
-import React from 'react';
-import DefaultTemplate from '../../components/template/DefaultTemplate';
-
-const MainPage = () => <DefaultTemplate />;
-
-export default MainPage;
+export const MESSAGES = {
+  FAILED_TO_RETRIEVE_CONNECTION_INFORMATION:
+    'Failed to Retrieve Connection Information',
+  DATABASE_CONNECTION_FAILED: 'Database Connection Failed',
+};
+export const BASE_URL = 'http://localhost:3001/api/v1/';
+export const STATUS = {
+  CONNECTED: 'connected',
+  DISCONNECTED: 'disconnected',
+};

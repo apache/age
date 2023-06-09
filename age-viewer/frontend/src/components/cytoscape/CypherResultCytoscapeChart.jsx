@@ -41,8 +41,8 @@ import cxtmenu from '@lsvih/cytoscape-cxtmenu';
 import { initLocation, seletableLayouts } from './CytoscapeLayouts';
 import { stylesheet } from './CytoscapeStyleSheet';
 import { generateCytoscapeElement } from '../../features/cypher/CypherUtil';
-import IconFilter from '../../icons/IconFilter';
-import IconSearchCancel from '../../icons/IconSearchCancel';
+import IconFilter from '../../assets/icons/IconFilter';
+import IconSearchCancel from '../../assets/icons/IconSearchCancel';
 import styles from '../frame/Frame.module.scss';
 
 cytoscape.use(COSEBilkent);
@@ -134,7 +134,7 @@ const CypherResultCytoscapeCharts = ({
     const generatedData = generateCytoscapeElement(
       d.rows,
       maxDataOfGraph,
-      true,
+      true
     );
     if (generatedData.elements.nodes.length === 0) {
       alert('No data to extend.');
@@ -182,7 +182,7 @@ const CypherResultCytoscapeCharts = ({
         commands: [
           {
             content: ReactDOMServer.renderToString(
-              <FontAwesomeIcon icon={faLockOpen} size="lg" />,
+              <FontAwesomeIcon icon={faLockOpen} size="lg" />
             ),
             select(ele) {
               ele.animate({ position: initLocation[ele.id()] });
@@ -190,7 +190,7 @@ const CypherResultCytoscapeCharts = ({
           },
           {
             content: ReactDOMServer.renderToString(
-              <FontAwesomeIcon icon={faProjectDiagram} size="lg" />,
+              <FontAwesomeIcon icon={faProjectDiagram} size="lg" />
             ),
             select(ele) {
               const elAnimate = ele.animation({
@@ -227,7 +227,7 @@ const CypherResultCytoscapeCharts = ({
           },
           {
             content: ReactDOMServer.renderToString(
-              <FontAwesomeIcon icon={faEyeSlash} size="lg" />,
+              <FontAwesomeIcon icon={faEyeSlash} size="lg" />
             ),
             select(ele) {
               ele.remove();
@@ -235,7 +235,7 @@ const CypherResultCytoscapeCharts = ({
           },
           {
             content: ReactDOMServer.renderToString(
-              <FontAwesomeIcon icon={faTrash} size="lg" />,
+              <FontAwesomeIcon icon={faTrash} size="lg" />
             ),
             select(ele) {
               dispatch(openModal());
@@ -259,7 +259,7 @@ const CypherResultCytoscapeCharts = ({
           },
           {
             content: ReactDOMServer.renderToString(
-              <IconSearchCancel size="lg" />,
+              <IconSearchCancel size="lg" />
             ),
             select(ele) {
               const keywordObject = {
@@ -309,7 +309,7 @@ const CypherResultCytoscapeCharts = ({
       if (cytoscapeObject) return;
       setCytoscapeObject(newCytoscapeObject);
     },
-    [cytoscapeObject],
+    [cytoscapeObject]
   );
 
   return (
@@ -333,13 +333,13 @@ CypherResultCytoscapeCharts.propTypes = {
       PropTypes.shape({
         // eslint-disable-next-line react/forbid-prop-types
         data: PropTypes.any,
-      }),
+      })
     ),
     edges: PropTypes.arrayOf(
       PropTypes.shape({
         // eslint-disable-next-line react/forbid-prop-types
         data: PropTypes.any,
-      }),
+      })
     ),
   }).isRequired,
   // eslint-disable-next-line react/forbid-prop-types

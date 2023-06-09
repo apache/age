@@ -17,18 +17,7 @@
  * under the License.
  */
 
-import React from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'antd/dist/antd.css';
-import './static/style.css';
-import './static/navbar-fixed-left.css';
-import AllRoutes from './routes/routes';
-
-function App() {
-  return (
-    <>
-      <AllRoutes />
-    </>
-  );
-}
-export default App;
+export const PATH = {
+  ROOT_PATH: '/',
+  MAIN_PAGE_PATH: '/mainpage',
+};

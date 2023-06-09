@@ -22,7 +22,7 @@ import { Component } from 'react';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTable } from '@fortawesome/free-solid-svg-icons';
-import IconGraph from '../../icons/IconGraph';
+import IconGraph from '../../assets/icons/IconGraph';
 
 class CypherResultTab extends Component {
   constructor(props) {
@@ -36,15 +36,31 @@ class CypherResultTab extends Component {
   render() {
     const activeTab = (refKey, tabType) => {
       if (tabType === 'graph') {
-        document.getElementById(`${refKey}-${tabType}`).classList.add('selected-frame-tab');
-        document.getElementById(`${refKey}-${tabType}`).classList.remove('deselected-frame-tab');
-        document.getElementById(`${refKey}-table`).classList.add('deselected-frame-tab');
-        document.getElementById(`${refKey}-table`).classList.remove('selected-frame-tab');
+        document
+          .getElementById(`${refKey}-${tabType}`)
+          .classList.add('selected-frame-tab');
+        document
+          .getElementById(`${refKey}-${tabType}`)
+          .classList.remove('deselected-frame-tab');
+        document
+          .getElementById(`${refKey}-table`)
+          .classList.add('deselected-frame-tab');
+        document
+          .getElementById(`${refKey}-table`)
+          .classList.remove('selected-frame-tab');
       } else if (tabType === 'table') {
-        document.getElementById(`${refKey}-${tabType}`).classList.add('selected-frame-tab');
-        document.getElementById(`${refKey}-${tabType}`).classList.remove('deselected-frame-tab');
-        document.getElementById(`${refKey}-graph`).classList.add('deselected-frame-tab');
-        document.getElementById(`${refKey}-graph`).classList.remove('selected-frame-tab');
+        document
+          .getElementById(`${refKey}-${tabType}`)
+          .classList.add('selected-frame-tab');
+        document
+          .getElementById(`${refKey}-${tabType}`)
+          .classList.remove('deselected-frame-tab');
+        document
+          .getElementById(`${refKey}-graph`)
+          .classList.add('deselected-frame-tab');
+        document
+          .getElementById(`${refKey}-graph`)
+          .classList.remove('selected-frame-tab');
       }
     };
     return (
@@ -52,8 +68,15 @@ class CypherResultTab extends Component {
         <button
           className="btn"
           type="button"
-          style={{ width: '50%', fontSize: '14px', color: this.currentTab === 'graph' ? '#142B80' : '#495057' }}
-          onClick={() => { activeTab(this.refKey, 'graph'); this.setIsTable(false); }}
+          style={{
+            width: '50%',
+            fontSize: '14px',
+            color: this.currentTab === 'graph' ? '#142B80' : '#495057',
+          }}
+          onClick={() => {
+            activeTab(this.refKey, 'graph');
+            this.setIsTable(false);
+          }}
         >
           <IconGraph />
           <br />
@@ -70,8 +93,15 @@ class CypherResultTab extends Component {
         <button
           className="btn"
           type="button"
-          style={{ width: '50%', fontSize: '14px', color: this.currentTab === 'table' ? '#142B80' : '#495057' }}
-          onClick={() => { activeTab(this.refKey, 'table'); this.setIsTable(true); }}
+          style={{
+            width: '50%',
+            fontSize: '14px',
+            color: this.currentTab === 'table' ? '#142B80' : '#495057',
+          }}
+          onClick={() => {
+            activeTab(this.refKey, 'table');
+            this.setIsTable(true);
+          }}
         >
           <FontAwesomeIcon icon={faTable} style={{ fontSize: '25px' }} />
           <br />

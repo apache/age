@@ -20,7 +20,7 @@ const conn = {
   version: 11,
 };
 
-// cookies will be stored here, these are store whenever connect() fun is called 
+// cookies will be stored here, these are store whenever connect() fun is called
 // and will be used in subsequent calls
 let cookies;
 
@@ -33,11 +33,8 @@ function connect() {
     body: JSON.stringify(conn),
   })
   .then(response => {
-    console.log(response.status);
-
     // Store the cookies from the response
     cookies = response.headers.raw()['set-cookie'];
-
     return response.json();
   })
   .then(data => {
@@ -61,7 +58,7 @@ function queryMetadata() {
     return response.json();
   })
   .then(data => {
-    // visualize the data in formatted ways
+    // Visualize the data in formatted ways
     console.log(JSON.stringify(data, null, 2));
   })
   .catch(error => {
@@ -119,11 +116,9 @@ function disconnect() {
 
 
 // dummy function to test the above functions
-
 let choice;
-function chooseFunction() {  
-
-rl.question('Enter the function number: ', (input) => {
+function chooseFunction() {
+  rl.question('Enter the function number: ', (input) => {
     const choice = parseInt(input);
     if (Number.isNaN(choice) || choice < 1 || choice > 4) {
       console.log('Invalid choice. Please try again.');
@@ -144,9 +139,8 @@ rl.question('Enter the function number: ', (input) => {
       }
     }
     // rl.close();
-    chooseFunction()
+    chooseFunction();
   });
-
 }
 
 chooseFunction();
