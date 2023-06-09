@@ -10,11 +10,11 @@ const rl = readline.createInterface({
 
 // Test data which will come from the frontend
 const conn = {
-  port: "5432",
+  port: 5432,
   host: "localhost",
   password: "Welcome@1",
   user: "kamleshk",
-  dbname: "demodb",
+  dbname: "testdb",
   ssl: "disable",
   graph_init: true,
   version: 11,

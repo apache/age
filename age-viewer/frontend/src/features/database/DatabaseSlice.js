@@ -22,17 +22,25 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 export const connectToDatabase = createAsyncThunk(
   'database/connectToDatabase',
   async (formData) => {
-    formData.port = String(formData.port)
+    formData.port = parseInt(formData.port);
+    const appendForm = {
+      ssl: 'disbale',
+      graph_init: false,
+      version: 11,
+    };
+
+    const updateFormData = { ...formData, ...appendForm };
+
     try {
-      const response = await fetch('http://localhost:3001/api/v1/db/connect',
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        });
+      const response = await fetch('http://localhost:8080/connect', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateFormData),
+      });
+
       if (response.ok) {
         console.log(response);
         return await response.json();
@@ -47,14 +55,14 @@ export const connectToDatabase = createAsyncThunk(
       };
       throw errorDetail;
     }
-  },
+  }
 );
 
 export const disconnectToDatabase = createAsyncThunk(
   'database/disconnectToDatabase',
   async () => {
     await fetch('http://localhost:3001/api/v1/db/disconnect');
-  },
+  }
 );
 
 export const getConnectionStatus = createAsyncThunk(
@@ -62,7 +70,9 @@ export const getConnectionStatus = createAsyncThunk(
   async () => {
     try {
       const response = await fetch('http://localhost:3001/api/v1/db');
-      if (response.ok) { return await response.json(); }
+      if (response.ok) {
+        return await response.json();
+      }
       throw response;
     } catch (error) {
       const errorJson = await error.json();
@@ -73,7 +83,7 @@ export const getConnectionStatus = createAsyncThunk(
       };
       throw errorDetail;
     }
-  },
+  }
 );
 
 const DatabaseSlice = createSlice({

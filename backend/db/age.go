@@ -34,6 +34,8 @@ INNER JOIN ag_label as label
 ON label.name = q1.label
 AND label.graph = g.graphid;`
 
+const GET_ALL_GRAPHS = `SELECT DISTINCT(split_part(relation::text, '.', 1)) as graph_name FROM ag_catalog.ag_label;`
+
 const ANALYZE = `ANALYZE;`
 
 const PG_VERSION = `show server_version_num;`

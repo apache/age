@@ -18,10 +18,10 @@ func main() {
 	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
-	  }))
+	}))
 	gob.Register(models.Connection{})
 	app.Use(session.UserSessions())
-	
+
 	app.POST("/connect", routes.ConnectToDb)
 	app.GET("/status", routes.StatusDB)
 	app.POST("/disconnect", routes.DisconnectFromDb)

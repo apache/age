@@ -18,9 +18,8 @@ type Connection struct {
 	SSL       string `default:"require"`
 	GraphInit bool
 	Version   int
-	Graphs	[]string
-	Graph    string
-
+	Graphs    []string
+	Graph     string
 }
 
 /*
