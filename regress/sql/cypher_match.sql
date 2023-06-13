@@ -965,6 +965,17 @@ SELECT * FROM cypher('cypher_match', $$ MATCH ({name: "Dave"}) MATCH ({name: "Da
 SELECT * FROM cypher('cypher_match', $$MATCH ({n0:0}) MATCH ()-[]->() MATCH ({n1:0})-[]-() RETURN 0 AS n2$$) as (a agtype);
 
 --
+-- issue#945 : un-aliased match clauses should be included in output node
+--
+SELECT * from cypher('cypher_match', $$ CREATE (a:label1 {id: '1'}), (b:label1 {id: '2'})$$) as (a agtype);
+SELECT * from cypher('cypher_match', $$ CREATE (a:label2 {id: '1'}), (b:label2 {id: '2'})$$) as (a agtype);
+SELECT * from cypher('cypher_match', $$ MATCH (:label1) RETURN count(*) $$) as (result agtype);
+SELECT * from cypher('cypher_match', $$ MATCH (:label1),(:label2) RETURN count(*) $$) as (result agtype);
+SELECT * from cypher('cypher_match', $$ MATCH (a:label1),(:label2) RETURN count(*) $$) as (result agtype);
+SELECT * from cypher('cypher_match', $$ MATCH (:label1),(a:label2) RETURN count(*) $$) as (result agtype);
+
+
+--
 -- self referencing property constraints (issue #898)
 --
 SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name}) RETURN a $$) as (a agtype);

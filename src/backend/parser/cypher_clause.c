@@ -91,9 +91,10 @@
  *      1. the node is in a path variable
  *      2. the node is a variable
  *      3. the node contains filter properties
+ *      4. the node has a valid label
  */
 #define INCLUDE_NODE_IN_JOIN_TREE(path, node) \
-    (path->var_name || node->name || node->props)
+    (path->var_name || node->name || node->props || node->label )
 
 typedef Query *(*transform_method)(cypher_parsestate *cpstate,
                                    cypher_clause *clause);
@@ -3805,7 +3806,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             }
 
             /* should we make the node available */
-            output_node = (special_VLE_case && !node->name && !node->props) ?
+            output_node = (special_VLE_case && !node->name && !node->props && !valid_label) ?
                           false :
                           INCLUDE_NODE_IN_JOIN_TREE(path, node);
 

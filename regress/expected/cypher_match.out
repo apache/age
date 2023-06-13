@@ -2120,6 +2120,43 @@ SELECT * FROM cypher('cypher_match', $$MATCH ({n0:0}) MATCH ()-[]->() MATCH ({n1
 (0 rows)
 
 --
+-- issue#945 : un-aliased match clauses should be included in output node
+--
+SELECT * from cypher('cypher_match', $$ CREATE (a:label1 {id: '1'}), (b:label1 {id: '2'})$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * from cypher('cypher_match', $$ CREATE (a:label2 {id: '1'}), (b:label2 {id: '2'})$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * from cypher('cypher_match', $$ MATCH (:label1) RETURN count(*) $$) as (result agtype);
+ result 
+--------
+ 2
+(1 row)
+
+SELECT * from cypher('cypher_match', $$ MATCH (:label1),(:label2) RETURN count(*) $$) as (result agtype);
+ result 
+--------
+ 4
+(1 row)
+
+SELECT * from cypher('cypher_match', $$ MATCH (a:label1),(:label2) RETURN count(*) $$) as (result agtype);
+ result 
+--------
+ 4
+(1 row)
+
+SELECT * from cypher('cypher_match', $$ MATCH (:label1),(a:label2) RETURN count(*) $$) as (result agtype);
+ result 
+--------
+ 4
+(1 row)
+
+--
 -- self referencing property constraints (issue #898)
 --
 SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name}) RETURN a $$) as (a agtype);
@@ -2178,7 +2215,7 @@ SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETU
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
-NOTICE:  drop cascades to 17 other objects
+NOTICE:  drop cascades to 19 other objects
 DETAIL:  drop cascades to table cypher_match._ag_label_vertex
 drop cascades to table cypher_match._ag_label_edge
 drop cascades to table cypher_match.v
@@ -2196,6 +2233,8 @@ drop cascades to table cypher_match.other_v
 drop cascades to table cypher_match.opt_match_v
 drop cascades to table cypher_match.opt_match_e
 drop cascades to table cypher_match.knows
+drop cascades to table cypher_match.label1
+drop cascades to table cypher_match.label2
 NOTICE:  graph "cypher_match" has been dropped
  drop_graph 
 ------------
