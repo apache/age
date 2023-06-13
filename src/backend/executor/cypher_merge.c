@@ -64,7 +64,7 @@ const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      NULL, NULL, NULL, NULL};
 
 /*
- * Initializes the MERGE Execution Node at the begginning of the execution
+ * Initializes the MERGE Execution Node at the beginning of the execution
  * phase.
  */
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
@@ -306,7 +306,7 @@ static void mark_tts_isnull(TupleTableSlot *slot)
 /*
  * Function that is called mid-execution. This function will call
  * its subtree in the execution tree, and depending on the results
- * create the new path, and depending on the the context of the MERGE
+ * create the new path, and depending on the context of the MERGE
  * within the query pass data to the parent execution node.
  *
  * Returns a TupleTableSlot with the next tuple to it parent or
@@ -490,7 +490,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             Assert(css->found_a_path == false);
 
             /*
-             * This block of sub-case 1 should only be executued once. To
+             * This block of sub-case 1 should only be executed once. To
              * create the single path if the path does not exist. If we find
              * ourselves here again, the internal state of the MERGE execution
              * node was incorrectly altered.
@@ -593,7 +593,7 @@ static void rescan_cypher_merge(CustomScanState *node)
 {
     ereport(ERROR,
             (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("cypher merge clause cannot be rescaned"),
+                     errmsg("cypher merge clause cannot be rescanned"),
                      errhint("its unsafe to use joins in a query with a Cypher MERGE clause")));
 }
 
