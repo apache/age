@@ -108,7 +108,7 @@ const InitGraphModal = ({ show, setShow }) => {
         }
       })
       .catch((err) => {
-        console.log('error', err);
+
         setLoading(false);
         setError(err);
       });

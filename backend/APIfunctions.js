@@ -1,26 +1,25 @@
 // some pre-requisites to run these functions on desktop enviroment
-const fetch = require("node-fetch");
-const readline = require("readline");
-
+const fetch = require('node-fetch');
+const readline = require('readline');
 
 const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+  input: process.stdin,
+  output: process.stdout,
+});
 
 // Test data which will come from the frontend
 const conn = {
   port: 5432,
-  host: "localhost",
-  password: "Welcome@1",
-  user: "kamleshk",
-  dbname: "testdb",
-  ssl: "disable",
+  host: 'localhost',
+  password: 'Welcome@1',
+  user: 'kamleshk',
+  dbname: 'testdb',
+  ssl: 'disable',
   graph_init: true,
   version: 11,
 };
 
-// cookies will be stored here, these are store whenever connect() fun is called 
+// cookies will be stored here, these are store whenever connect() fun is called
 // and will be used in subsequent calls
 let cookies;
 
@@ -32,20 +31,20 @@ function connect() {
     },
     body: JSON.stringify(conn),
   })
-  .then(response => {
-    console.log(response.status);
+    .then((response) => {
+      s;
 
-    // Store the cookies from the response
-    cookies = response.headers.raw()['set-cookie'];
+      // Store the cookies from the response
+      cookies = response.headers.raw()['set-cookie'];
 
-    return response.json();
-  })
-  .then(data => {
-    console.log(data);
-  })
-  .catch(error => {
-    console.error(error);
-  });
+      return response.json();
+    })
+    .then((data) => {
+      console.log(data);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
 }
 
 function queryMetadata() {
@@ -53,47 +52,41 @@ function queryMetadata() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookies.join('; '),
+      Cookie: cookies.join('; '),
     },
   })
-  .then(response => {
-    console.log(response.status);
-    return response.json();
-  })
-  .then(data => {
-    // visualize the data in formatted ways
-    console.log(JSON.stringify(data, null, 2));
-  })
-  .catch(error => {
-    console.error(error);
-  });
+    .then((response) => {
+      return response.json();
+    })
+    .then((data) => {
+      // visualize the data in formatted ways
+    })
+    .catch((error) => {
+      console.error(error);
+    });
 }
-
 
 function query() {
   const payload = {
-    query: "SELECT * FROM cypher('demo_graph', $$ MATCH (v) RETURN v $$) as (v agtype);",
+    query:
+      "SELECT * FROM cypher('demo_graph', $$ MATCH (v) RETURN v $$) as (v agtype);",
   };
 
   fetch('http://localhost:8080/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookies.join('; '),
+      Cookie: cookies.join('; '),
     },
     body: JSON.stringify(payload),
   })
-  .then(response => {
-    console.log(response.status);
-
-    return response.json();
-  })
-  .then(data => {
-    console.log(data);
-  })
-  .catch(error => {
-    console.error(error);
-  });
+    .then((response) => {
+      return response.json();
+    })
+    .then((data) => {})
+    .catch((error) => {
+      console.error(error);
+    });
 }
 
 function disconnect() {
@@ -101,32 +94,29 @@ function disconnect() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookies.join('; '), // Send the cookies from the previous connection
+      Cookie: cookies.join('; '), // Send the cookies from the previous connection
     },
   })
-  .then(response => {
-    console.log(response.status);
-    cookies = []; // Clear the cookies variable
-    return response.json();
-  })
-  .then(data => {
-    console.log(data);
-  })
-  .catch(error => {
-    console.error(error);
-  });
+    .then((response) => {
+      cookies = []; // Clear the cookies variable
+      return response.json();
+    })
+    .then((data) => {
+      console.log(data);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
 }
-
 
 // dummy function to test the above functions
 
 let choice;
-function chooseFunction() {  
-
-rl.question('Enter the function number: ', (input) => {
+function chooseFunction() {
+  rl.question('Enter the function number: ', (input) => {
     const choice = parseInt(input);
     if (Number.isNaN(choice) || choice < 1 || choice > 4) {
-      console.log('Invalid choice. Please try again.');
+      console.warn('Invalid choice. Please try again.');
     } else {
       switch (choice) {
         case 1:
@@ -144,9 +134,8 @@ rl.question('Enter the function number: ', (input) => {
       }
     }
     // rl.close();
-    chooseFunction()
+    chooseFunction();
   });
-
 }
 
 chooseFunction();
