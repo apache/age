@@ -41,7 +41,6 @@ export const connectToDatabase = createAsyncThunk(
         body: JSON.stringify(updateFormData),
       });
       if (response.ok) {
-        console.log(response);
         return await response.json();
       }
       throw response;
@@ -60,7 +59,7 @@ export const connectToDatabase = createAsyncThunk(
 export const disconnectToDatabase = createAsyncThunk(
   'database/disconnectToDatabase',
   async () => {
-    await fetch('http://localhost:3001/api/v1/db/disconnect');
+    await fetch('http://localhost:8080/disconnect');
   }
 );
 
@@ -68,7 +67,7 @@ export const getConnectionStatus = createAsyncThunk(
   'database/getConnectionStatus',
   async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/v1/db');
+      const response = await fetch('http://localhost:8080/status');
       if (response.ok) {
         return await response.json();
       }

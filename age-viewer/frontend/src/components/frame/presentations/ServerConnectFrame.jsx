@@ -65,12 +65,10 @@ const ServerConnectFrame = ({ refKey, isPinned, reqString, currentGraph }) => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Response:', data);
       } else {
         console.log('Request failed with status:', response.status);
       }
     } catch (error) {
-      console.log('Error:', error);
     }
   };
 
