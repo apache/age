@@ -3659,13 +3659,51 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
 
     /*
      * If we have a variable name (rel name), make the target entry. Otherwise,
-     * there isn't a reason to create one.
+     * there isn't a reason to create one. Additionally, verify that it is not
+     * reused.
      */
     if (rel->name != NULL)
     {
         FuncExpr *fexpr;
         List *args = list_make1(var);
         Oid func_oid = InvalidOid;
+        transform_entity *entity = NULL;
+
+        te = findTarget(query->targetList, rel->name);
+        entity = find_variable(cpstate, rel->name);
+
+        /* If the variable already exists, error out */
+        if (te && entity)
+        {
+            if (entity->type == ENT_VERTEX)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for a vertex", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+            else if (entity->type == ENT_EDGE)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for an edge", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+            else
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("duplicate variable '%s'", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+        }
+        else if (te && !entity)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                     errmsg("variable '%s' already exists", rel->name),
+                     parser_errposition(pstate, rel->location)));
+        }
 
         /*
          * Get the oid for the materialize function that returns a list of
