@@ -2,6 +2,5 @@ go 1.18
 
 use (
     ./
-    ./age-viewer
     ./backend
 ) 
