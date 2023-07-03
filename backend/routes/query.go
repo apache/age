@@ -86,7 +86,7 @@ func Cypher(ctx echo.Context) error {
 	m.CypherCall(conn, q, c)
 	data := <-c
 	err = data.Err
-	res := data.Res
+	res := data
 	msg := data.Msg
 	if err != nil {
 		return echo.NewHTTPError(400, fmt.Sprintf("unable to process query. error: %s", err.Error()))
