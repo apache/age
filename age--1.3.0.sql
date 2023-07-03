@@ -24,15 +24,17 @@
 -- catalog tables
 --
 
+
 CREATE TABLE ag_graph (
+  graphid oid NOT NULL,
   name name NOT NULL,
   namespace regnamespace NOT NULL
-) WITH (OIDS);
+);
+
+CREATE UNIQUE INDEX ag_graph_graphid_index ON ag_graph USING btree (graphid);
 
 -- include content of the ag_graph table into the pg_dump output
 SELECT pg_catalog.pg_extension_config_dump('ag_graph', '');
-
-CREATE UNIQUE INDEX ag_graph_oid_index ON ag_graph USING btree (oid);
 
 CREATE UNIQUE INDEX ag_graph_name_index ON ag_graph USING btree (name);
 
@@ -46,24 +48,26 @@ CREATE DOMAIN label_id AS int NOT NULL CHECK (VALUE > 0 AND VALUE <= 65535);
 CREATE DOMAIN label_kind AS "char" NOT NULL CHECK (VALUE = 'v' OR VALUE = 'e');
 
 CREATE TABLE ag_label (
+
   name name NOT NULL,
   graph oid NOT NULL,
   id label_id,
   kind label_kind,
   relation regclass NOT NULL,
-  seq_name name NOT NULL
-) WITH (OIDS);
+  seq_name name NOT NULL,
+  CONSTRAINT fk_graph_oid
+  FOREIGN KEY(graph)
+  REFERENCES ag_graph(graphid)
+);
 
 -- include content of the ag_label table into the pg_dump output
 SELECT pg_catalog.pg_extension_config_dump('ag_label', '');
-
-CREATE UNIQUE INDEX ag_label_oid_index ON ag_label USING btree (oid);
 
 CREATE UNIQUE INDEX ag_label_name_graph_index
 ON ag_label
 USING btree (name, graph);
 
-CREATE UNIQUE INDEX ag_label_graph_id_index
+CREATE UNIQUE INDEX ag_label_graph_oid_index
 ON ag_label
 USING btree (graph, id);
 
