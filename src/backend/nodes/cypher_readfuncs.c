@@ -186,8 +186,8 @@ void read_cypher_create_target_nodes(struct ExtensibleNode *node)
     READ_LOCALS(cypher_create_target_nodes);
 
     READ_NODE_FIELD(paths);
-    READ_INT_FIELD(flags);
-    READ_INT_FIELD(graph_oid);
+    READ_UINT_FIELD(flags);
+    READ_UINT_FIELD(graph_oid);
 }
 
 /*
@@ -212,7 +212,7 @@ void read_cypher_target_node(struct ExtensibleNode *node)
     READ_LOCALS(cypher_target_node);
 
     READ_CHAR_FIELD(type);
-    READ_INT_FIELD(flags);
+    READ_UINT_FIELD(flags);
     READ_ENUM_FIELD(dir, cypher_rel_dir);
     READ_NODE_FIELD(id_expr);
     READ_NODE_FIELD(id_expr_state);
@@ -236,7 +236,7 @@ void read_cypher_update_information(struct ExtensibleNode *node)
     READ_LOCALS(cypher_update_information);
 
     READ_NODE_FIELD(set_items);
-    READ_INT_FIELD(flags);
+    READ_UINT_FIELD(flags);
     READ_INT_FIELD(tuple_position);
     READ_STRING_FIELD(graph_name);
     READ_STRING_FIELD(clause_name);
@@ -268,9 +268,9 @@ void read_cypher_delete_information(struct ExtensibleNode *node)
     READ_LOCALS(cypher_delete_information);
 
     READ_NODE_FIELD(delete_items);
-    READ_INT_FIELD(flags);
+    READ_UINT_FIELD(flags);
     READ_STRING_FIELD(graph_name);
-    READ_INT_FIELD(graph_oid);
+    READ_UINT_FIELD(graph_oid);
     READ_BOOL_FIELD(detach);
 }
 
@@ -294,7 +294,7 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
 {
     READ_LOCALS(cypher_merge_information);
 
-    READ_INT_FIELD(flags);
+    READ_UINT_FIELD(flags);
     READ_UINT_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);

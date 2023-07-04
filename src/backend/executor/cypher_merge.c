@@ -117,7 +117,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
             continue;
         }
 
-        // Open relation and aquire a row exclusive lock.
+        // Open relation and acquire a row exclusive lock.
         rel = table_open(cypher_node->relid, RowExclusiveLock);
 
         // Initialize resultRelInfo for the vertex

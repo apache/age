@@ -24,7 +24,6 @@
 -- catalog tables
 --
 
-
 CREATE TABLE ag_graph (
   graphid oid NOT NULL,
   name name NOT NULL,
@@ -48,7 +47,6 @@ CREATE DOMAIN label_id AS int NOT NULL CHECK (VALUE > 0 AND VALUE <= 65535);
 CREATE DOMAIN label_kind AS "char" NOT NULL CHECK (VALUE = 'v' OR VALUE = 'e');
 
 CREATE TABLE ag_label (
-
   name name NOT NULL,
   graph oid NOT NULL,
   id label_id,

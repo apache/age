@@ -56,7 +56,7 @@ public class BaseDockerizedTest {
             imageTag = "latest";
         }
         agensGraphContainer = new GenericContainer<>(DockerImageName
-            .parse("apache/age:PG12_latest"))
+            .parse("apache/age:" + imageTag))
             .withEnv("POSTGRES_PASSWORD", CORRECT_DB_PASSWORDS)
             .withExposedPorts(5432);
         agensGraphContainer.start();

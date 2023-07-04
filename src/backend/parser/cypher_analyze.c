@@ -68,11 +68,11 @@ static const char *expr_get_const_cstring(Node *expr, const char *source_str);
 static int get_query_location(const int location, const char *source_str);
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, uint32 graph_oid, Param *params);
+                             char *graph_name, Oid graph_oid, Param *params);
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, uint32 graph_oid,
+                                        char *graph_name, Oid graph_oid,
                                         Param *params);
 
 
@@ -308,7 +308,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     Node *arg3 = NULL;
     Name graph_name = NULL;
     char *graph_name_str = NULL;
-    uint32 graph_oid;
+    Oid graph_oid = InvalidOid;
     const char *query_str = NULL;
     int query_loc = -1;
     Param *params = NULL;
@@ -620,7 +620,7 @@ static int get_query_location(const int location, const char *source_str)
 
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, uint32 graph_oid, Param *params)
+                             char *graph_name, Oid graph_oid, Param *params)
 {
     cypher_clause *clause;
     ListCell *lc;
@@ -699,7 +699,7 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, uint32 graph_oid,
+                                        char *graph_name, Oid graph_oid,
                                         Param *params)
 {
     ParseState *pstate;

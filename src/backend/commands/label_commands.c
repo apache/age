@@ -693,7 +693,9 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
         label_id = (int32) nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
         if (!label_id_exists(graph_oid, label_id))
-            return (int32)label_id;
+        {
+            return (int32) label_id;
+        }
     }
 
     ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),

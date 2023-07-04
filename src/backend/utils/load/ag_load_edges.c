@@ -61,14 +61,14 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
 
     size_t i, n_fields;
     int64 start_id_int;
-    graphid start_vertex_graph_oid;
+    graphid start_vertex_graph_id;
     int start_vertex_type_id;
 
     int64 end_id_int;
-    graphid end_vertex_graph_oid;
+    graphid end_vertex_graph_id;
     int end_vertex_type_id;
 
-    graphid object_graph_oid;
+    graphid object_graph_id;
 
     agtype* props = NULL;
 
@@ -81,7 +81,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
         cr->header_len = (size_t* )malloc(sizeof(size_t *) * cr->cur_field);
         cr->header = malloc((sizeof (char*) * cr->cur_field));
 
-        for ( i = 0; i<cr->cur_field; i++)
+        for (i = 0; i<cr->cur_field; i++)
         {
             cr->header_len[i] = cr->fields_len[i];
             cr->header[i] = strndup(cr->fields[i], cr->header_len[i]);
@@ -89,22 +89,22 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     }
     else
     {
-        object_graph_oid = make_graphid(cr->object_id, (int64)cr->row);
+        object_graph_id = make_graphid(cr->object_id, (int64)cr->row);
 
         start_id_int = strtol(cr->fields[0], NULL, 10);
         start_vertex_type_id = get_label_id(cr->fields[1], cr->graph_oid);
         end_id_int = strtol(cr->fields[2], NULL, 10);
         end_vertex_type_id = get_label_id(cr->fields[3], cr->graph_oid);
 
-        start_vertex_graph_oid = make_graphid(start_vertex_type_id, start_id_int);
-        end_vertex_graph_oid = make_graphid(end_vertex_type_id, end_id_int);
+        start_vertex_graph_id = make_graphid(start_vertex_type_id, start_id_int);
+        end_vertex_graph_id = make_graphid(end_vertex_type_id, end_id_int);
 
         props = create_agtype_from_list_i(cr->header, cr->fields,
                                           n_fields, 3);
 
         insert_edge_simple(cr->graph_oid, cr->object_name,
-                           object_graph_oid, start_vertex_graph_oid,
-                           end_vertex_graph_oid, props);
+                           object_graph_id, start_vertex_graph_id,
+                           end_vertex_graph_id, props);
 
     }
 

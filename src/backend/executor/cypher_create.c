@@ -106,7 +106,7 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
             if (!CYPHER_TARGET_NODE_INSERT_ENTITY(cypher_node->flags))
                 continue;
 
-            // Open relation and aquire a row exclusive lock.
+            // Open relation and acquire a row exclusive lock.
             rel = table_open(cypher_node->relid, RowExclusiveLock);
 
             // Initialize resultRelInfo for the vertex
