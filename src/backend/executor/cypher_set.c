@@ -139,9 +139,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
         result = table_tuple_update(resultRelInfo->ri_RelationDesc,
                                     &tuple->t_self, elemTupleSlot,
-                                    cid,
-                                    //estate->es_output_cid,
-                                    estate->es_snapshot,// NULL,
+                                    cid, estate->es_snapshot,
                                     estate->es_crosscheck_snapshot,
                                     true /* wait for commit */ ,
                                     &hufd, &lockmode, &update_indexes);

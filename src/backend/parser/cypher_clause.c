@@ -279,15 +279,15 @@ static cypher_target_node *get_referenced_variable(ParseState *pstate,
 
 //call...[yield]
 static Query *transform_cypher_call_stmt(cypher_parsestate *cpstate,
-                                      cypher_clause *clause);
+                                         cypher_clause *clause);
 static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
-                                          cypher_clause *clause);
+                                             cypher_clause *clause);
 
 //call...[yield]
 static Query *transform_cypher_call_stmt(cypher_parsestate *cpstate,
-                                      cypher_clause *clause);
+                                         cypher_clause *clause);
 static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
-                                          cypher_clause *clause);
+                                             cypher_clause *clause);
 
 // transform
 #define PREV_CYPHER_CLAUSE_ALIAS AGE_DEFAULT_ALIAS_PREFIX"previous_cypher_clause"
