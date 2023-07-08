@@ -10,6 +10,12 @@ AGType parser and driver support for [Apache AGE](https://age.apache.org/), grap
 * over Go 1.18 / 1.19
 * This module runs on golang standard api [database/sql](https://golang.org/pkg/database/sql/) and [antlr4-python3](https://github.com/antlr/antlr4/tree/master/runtime/Go/antlr)
 
+### Installation (From source)
+Run (Windows): install.bat
+Run (Linux & OSX):
+```
+sh install.sh
+```
 
 ### Go get  
 ``` 
@@ -25,7 +31,7 @@ Check [latest version](https://github.com/apache/age/releases)
 
 ### For more information about [Apache AGE](https://age.apache.org/)
 * Apache Age : https://age.apache.org/
-* Github : https://github.com/apache/age
+* GitHub : https://github.com/apache/age
 * Document : https://age.apache.org/docs/
 
 ### Check AGE loaded on your PostgreSQL

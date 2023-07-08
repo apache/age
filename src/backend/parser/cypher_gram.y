@@ -32,6 +32,7 @@
 #include "nodes/cypher_nodes.h"
 #include "parser/ag_scanner.h"
 #include "parser/cypher_gram.h"
+#include "parser/cypher_parse_node.h"
 
 // override the default action for locations
 #define YYLLOC_DEFAULT(current, rhs, n) \
@@ -183,8 +184,11 @@
 
 %{
 //
+// internal alias check
+static bool has_internal_default_prefix(char *str);
+
 // unique name generation
-#define UNIQUE_NAME_NULL_PREFIX "_unique_null_prefix"
+#define UNIQUE_NAME_NULL_PREFIX AGE_DEFAULT_PREFIX"unique_null_prefix"
 static char *create_unique_name(char *prefix_name);
 static unsigned long get_a_unique_number(void);
 
@@ -464,7 +468,6 @@ yield_item:
         }
     ;
 
-
 semicolon_opt:
     /* empty */
     | ';'
@@ -627,8 +630,11 @@ cypher_range_idx:
 
 cypher_range_idx_opt:
                         cypher_range_idx
-                        | /* EMPTY */                   { $$ = NULL; }
-                ;
+    | /* EMPTY */
+        {
+            $$ = NULL;
+        }
+    ;
 
 Iconst: INTEGER
 
@@ -1111,6 +1117,7 @@ path:
 
             p = (cypher_path *)$3;
             p->var_name = $1;
+            p->location = @1;
 
             $$ = (Node *)p;
         }
@@ -1176,8 +1183,9 @@ path_node:
             n = make_ag_node(cypher_node);
             n->name = $2;
             n->label = $3;
+            n->parsed_label = $3;
             n->props = $4;
-            n->location = @1;
+            n->location = @2;
 
             $$ = (Node *)n;
         }
@@ -1221,6 +1229,7 @@ path_relationship_body:
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->label = $3;
+            n->parsed_label = $3;
             n->varlen = $4;
             n->props = $5;
 
@@ -1234,6 +1243,7 @@ path_relationship_body:
             n = make_ag_node(cypher_relationship);
             n->name = NULL;
             n->label = NULL;
+            n->parsed_label = NULL;
             n->varlen = NULL;
             n->props = NULL;
 
@@ -1435,7 +1445,7 @@ expr:
         }
     /*
      * This is a catch all grammar rule that allows us to avoid some
-     * shift/reduce errors between expression indirection rules by colapsing
+     * shift/reduce errors between expression indirection rules by collapsing
      * those rules into one generic rule. We can then inspect the expressions to
      * decide what specific rule needs to be applied and then construct the
      * required result.
@@ -1827,6 +1837,15 @@ property_key_name:
 
 var_name:
     symbolic_name
+    {
+        if (has_internal_default_prefix($1))
+        {
+            ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("%s is only for internal use", AGE_DEFAULT_PREFIX),
+                        ag_scanner_errposition(@1, scanner)));
+        }
+    }
     ;
 
 var_name_opt:
@@ -2139,25 +2158,27 @@ static Node *make_function_expr(List *func_name, List *exprs, int location)
          * functions. We may want to find a better way to do this, as there
          * could be many.
          */
-        if (pg_strcasecmp(name, "rand") == 0)
-            funcname = SystemFuncName("random");
-        else if (pg_strcasecmp(name, "pi") == 0)
-            funcname = SystemFuncName("pi");
-        else if (pg_strcasecmp(name, "count") == 0)
+        if (pg_strcasecmp(name, "count") == 0)
+        {
             funcname = SystemFuncName("count");
+        }
         else
+        {
             /*
              * We don't qualify AGE functions here. This is done in the
              * transform layer and allows us to know which functions are ours.
              */
             funcname = func_name;
+        }
 
         /* build the function call */
         fnode = makeFuncCall(funcname, exprs, location);
     }
     /* all other functions are passed as is */
     else
+    {
         fnode = makeFuncCall(func_name, exprs, location);
+    }
 
     /* return the node */
     return (Node *)fnode;
@@ -2185,7 +2206,7 @@ static char *create_unique_name(char *prefix_name)
         prefix = prefix_name;
     }
 
-    /* get the length of the combinded string */
+    /* get the length of the combined string */
     nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_number);
 
     /* allocate the space */
@@ -2201,6 +2222,12 @@ static char *create_unique_name(char *prefix_name)
     }
 
     return name;
+}
+
+/* function to check if given string has internal alias as prefix */
+static bool has_internal_default_prefix(char *str)
+{
+    return strncmp(AGE_DEFAULT_PREFIX, str, strlen(AGE_DEFAULT_PREFIX)) == 0;
 }
 
 /* function to return a unique unsigned long number */
@@ -2222,6 +2249,7 @@ static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
     n->all_or_distinct = all_or_distinct;
     n->larg = (List *) larg;
     n->rarg = (List *) rarg;
+
     return (Node *) n;
 }
 
@@ -2415,7 +2443,7 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
         (cnl->name == NULL && cnr->label != NULL) ||
         (cnl->name == NULL && cnr->props != NULL))
     {
-        cnl->name = create_unique_name("_vle_function_start_var");
+        cnl->name = create_unique_name(AGE_DEFAULT_PREFIX"vle_function_start_var");
     }
 
     /* add in the start vertex as a ColumnRef if necessary */
@@ -2447,7 +2475,7 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
     if (cnr->name == NULL &&
         (cnr->label != NULL || cnr->props != NULL))
     {
-        cnr->name = create_unique_name("_vle_function_end_var");
+        cnr->name = create_unique_name(AGE_DEFAULT_PREFIX"vle_function_end_var");
     }
     /*
      * We need a NULL for the target vertex in the VLE match to

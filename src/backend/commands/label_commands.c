@@ -279,6 +279,12 @@ void create_label(char *graph_name, char *label_name, char label_type,
                         errmsg("label name is invalid")));
     }
 
+    if (!is_valid_label(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
+
     cache_data = search_graph_name_cache(graph_name);
     if (!cache_data)
     {
@@ -535,7 +541,7 @@ static FuncCall *build_id_default_func_expr(char *graph_name, char *label_name,
     nextval_func = makeFuncCall(nextval_func_name, nextval_func_args, -1);
 
     /*
-     * Build a node that contructs the graphid from the label id function
+     * Build a node that constructs the graphid from the label id function
      * and the next val function for the given sequence.
      */
     graphid_func_name = list_make2(makeString("ag_catalog"),
@@ -687,7 +693,9 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
         label_id = (int32) nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
         if (!label_id_exists(graph_oid, label_id))
-            return (int32)label_id;
+        {
+            return (int32) label_id;
+        }
     }
 
     ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
@@ -802,7 +810,7 @@ static void remove_relation(List *qname)
                                 rel->schemaname, rel->relname)));
     }
 
-    // concurent is false
+    // concurrent is false
 
     ObjectAddressSet(address, RelationRelationId, rel_oid);
 

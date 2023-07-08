@@ -106,7 +106,7 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
             if (!CYPHER_TARGET_NODE_INSERT_ENTITY(cypher_node->flags))
                 continue;
 
-            // Open relation and aquire a row exclusive lock.
+            // Open relation and acquire a row exclusive lock.
             rel = table_open(cypher_node->relid, RowExclusiveLock);
 
             // Initialize resultRelInfo for the vertex
@@ -127,6 +127,12 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
                 cypher_node->id_expr_state =
                     ExecInitExpr(cypher_node->id_expr, (PlanState *)node);
             }
+
+            if (cypher_node->prop_expr != NULL)
+            {
+                cypher_node->prop_expr_state = ExecInitExpr(cypher_node->prop_expr,
+                                                            (PlanState *)node);
+            }
         }
     }
 
@@ -138,7 +144,9 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
      * that have modified the command id.
      */
     if (estate->es_output_cid == 0)
+    {
         estate->es_output_cid = estate->es_snapshot->curcid;
+    }
 
     Increment_Estate_CommandId(estate);
 }
@@ -208,15 +216,19 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
         Increment_Estate_CommandId(estate)
+
         /* break when there are no tuples */
         if (TupIsNull(slot))
         {
             break;
         }
+
         /* setup the scantuple that the process_pattern needs */
         econtext->ecxt_scantuple =
             node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
+
         process_pattern(css);
+
         /*
          * This may not be necessary. If we have an empty pattern, nothing was
          * inserted and the current command Id was not used. So, only flag it
@@ -228,6 +240,7 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
             used = true;
         }
     } while (terminal);
+
     /*
      * If the current command Id wasn't used, nothing was inserted and we're
      * done.
@@ -236,8 +249,10 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
     {
         return NULL;
     }
+
     /* update the current command Id */
     CommandCounterIncrement();
+
     /* if this was a terminal CREATE just return NULL */
     if (terminal)
     {
@@ -254,19 +269,25 @@ static void end_cypher_create(CustomScanState *node)
         (cypher_create_custom_scan_state *)node;
     ListCell *lc;
 
+    // increment the command counter
+    CommandCounterIncrement();
+
     ExecEndNode(node->ss.ps.lefttree);
 
     foreach (lc, css->pattern)
     {
         cypher_create_path *path = lfirst(lc);
         ListCell *lc2;
+
         foreach (lc2, path->target_nodes)
         {
             cypher_target_node *cypher_node =
                 (cypher_target_node *)lfirst(lc2);
 
             if (!CYPHER_TARGET_NODE_INSERT_ENTITY(cypher_node->flags))
+            {
                 continue;
+            }
 
             // close all indices for the node
             ExecCloseIndices(cypher_node->resultRelInfo);
@@ -281,7 +302,7 @@ static void end_cypher_create(CustomScanState *node)
 static void rescan_cypher_create(CustomScanState *node)
 {
     ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                    errmsg("cypher create clause cannot be rescaned"),
+                    errmsg("cypher create clause cannot be rescanned"),
                     errhint("its unsafe to use joins in a query with a Cypher CREATE clause")));
 }
 
@@ -505,8 +526,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             scantuple = ps->ps_ExprContext->ecxt_scantuple;
 
             // make the vertex agtype
-            result = make_vertex(
-                id, CStringGetDatum(node->label_name),
+            result = make_vertex(id, CStringGetDatum(node->label_name),
                 PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
 
             // append to the path list
@@ -545,9 +565,11 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         v = get_ith_agtype_value_from_container(&a->root, 0);
 
         if (v->type != AGTV_VERTEX)
+        {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("agtype must resolve to a vertex")));
+        }
 
         // extract the id agtype field
         id_value = GET_AGTYPE_VALUE_OBJECT_VALUE(v, "id");
@@ -569,10 +591,12 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
             if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
+            {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                      errmsg("vertex assigned to variable %s was deleted",
                             node->variable_name)));
+            }
         }
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

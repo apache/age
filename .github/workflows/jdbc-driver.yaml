@@ -2,19 +2,14 @@ name: JDBC Driver Tests
 
 on:
   push:
-    branches: [ "PG12" ]
-      
+    branches: [ "master", "PG12" ]
+
   pull_request:
-    branches: [ "PG12" ]
+    branches: [ "master", "PG12" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        distributions: ['zulu', 'temurin', 'microsoft']
-
     defaults:
       run:
         working-directory: drivers/jdbc
@@ -25,8 +20,26 @@ jobs:
     - name: Set up Java
       uses: actions/setup-java@v3
       with:
-        distribution: ${{ matrix.distributions }}
+        distribution: 'zulu'
         java-version: '17'
 
+    - name: Set tag based on branch
+      run: |
+        if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+            echo "TAG=latest" >> $GITHUB_ENV
+          elif [[ "$GITHUB_REF" == "refs/heads/PG12" ]]; then
+            echo "TAG=PG12_latest" >> $GITHUB_ENV
+          fi
+        elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+          if [[ "$GITHUB_BASE_REF" == "master" ]]; then
+            echo "TAG=latest" >> $GITHUB_ENV
+          elif [[ "$GITHUB_BASE_REF" == "PG12" ]]; then
+            echo "TAG=PG12_latest" >> $GITHUB_ENV
+          fi
+        fi
+
     - name: Build and Test
-      run: gradle build
+      run: |
+        export TAG=$TAG
+        gradle build

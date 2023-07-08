@@ -28,10 +28,10 @@ NOTICE:  graph "graph" has been created
  
 (1 row)
 
-SELECT * FROM ag_graph WHERE name = 'graph';
- graphid | name  | namespace 
----------+-------+-----------
-   17595 | graph | graph
+SELECT name, namespace FROM ag_graph WHERE name = 'graph';
+ name  | namespace 
+-------+-----------
+ graph | graph
 (1 row)
 
 -- create a label to test drop_label()

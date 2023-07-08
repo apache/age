@@ -57,17 +57,11 @@ const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      exec_cypher_merge,
                                                      end_cypher_merge,
                                                      rescan_cypher_merge,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL};
+                                                     NULL, NULL, NULL, NULL,
+                                                     NULL, NULL, NULL, NULL};
 
 /*
- * Initializes the MERGE Execution Node at the begginning of the execution
+ * Initializes the MERGE Execution Node at the beginning of the execution
  * phase.
  */
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
@@ -75,8 +69,8 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
 {
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
-    ListCell *lc;
-    Plan *subplan;
+    ListCell *lc = NULL;
+    Plan *subplan = NULL;
 
     Assert(list_length(css->cs->custom_plans) == 1);
 
@@ -84,6 +78,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     subplan = linitial(css->cs->custom_plans);
     node->ss.ps.lefttree = ExecInitNode(subplan, estate, eflags);
 
+    /* TODO is this necessary? Removing it seems to not have an impact */
     ExecAssignExprContext(estate, &node->ss.ps);
 
     ExecInitScanTupleSlot(estate, &node->ss,
@@ -109,7 +104,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     {
         cypher_target_node *cypher_node =
             (cypher_target_node *)lfirst(lc);
-        Relation rel;
+        Relation rel = NULL;
 
         /*
          * This entity is references an entity that is already declared. Either
@@ -122,7 +117,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
             continue;
         }
 
-        // Open relation and aquire a row exclusive lock.
+        // Open relation and acquire a row exclusive lock.
         rel = table_open(cypher_node->relid, RowExclusiveLock);
 
         // Initialize resultRelInfo for the vertex
@@ -148,8 +143,8 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
 
         if (cypher_node->prop_expr != NULL)
         {
-            cypher_node->prop_expr_state =
-                ExecInitExpr(cypher_node->prop_expr, (PlanState *)node);
+            cypher_node->prop_expr_state = ExecInitExpr(cypher_node->prop_expr,
+                                                        (PlanState *)node);
         }
     }
 
@@ -180,7 +175,7 @@ static bool check_path(cypher_merge_custom_scan_state *css,
                        TupleTableSlot *slot)
 {
     cypher_create_path *path = css->path;
-    ListCell *lc;
+    ListCell *lc = NULL;
 
     foreach(lc, path->target_nodes)
     {
@@ -202,27 +197,25 @@ static bool check_path(cypher_merge_custom_scan_state *css,
              */
             if (slot->tts_isnull[node->tuple_position - 1])
             {
+
                 return true;
             }
         }
-
     }
-
     return false;
 }
 
 static void process_path(cypher_merge_custom_scan_state *css)
 {
     cypher_create_path *path = css->path;
-
     ListCell *lc = list_head(path->target_nodes);
 
     /*
      * Create the first vertex. The create_vertex function will
      * create the rest of the path, if necessary.
      */
-    merge_vertex(css, lfirst(lc), lnext(lc));
 
+    merge_vertex(css, lfirst(lc), lnext(lc));
 
     /*
      * If this path is a variable, take the list that was accumulated
@@ -234,11 +227,27 @@ static void process_path(cypher_merge_custom_scan_state *css)
         ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
         TupleTableSlot *scantuple = econtext->ecxt_scantuple;
         Datum result;
+        int tuple_position = path->path_attr_num - 1;
+        bool debug_flag = false;
 
-        result = make_path(css->path_values);
+        /*
+         * We need to make sure that the tuple_position is within the
+         * boundaries of the tuple's number of attributes. Otherwise, it
+         * will corrupt memory. The cases where it doesn't fit within are
+         * usually due to a variable that is specified but there isn't a RETURN
+         * clause. In these cases we just don't bother to store the
+         * value.
+         */
+         if (!debug_flag &&
+             (tuple_position < scantuple->tts_tupleDescriptor->natts ||
+              scantuple->tts_tupleDescriptor->natts != 1))
+        {
+            result = make_path(css->path_values);
 
-        scantuple->tts_values[path->path_attr_num - 1] = result;
-        scantuple->tts_isnull[path->path_attr_num - 1] = false;
+            /* store the result */
+            scantuple->tts_values[tuple_position] = result;
+            scantuple->tts_isnull[tuple_position] = false;
+        }
     }
 }
 
@@ -250,7 +259,7 @@ static void process_simple_merge(CustomScanState *node)
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
     EState *estate = css->css.ss.ps.state;
-    TupleTableSlot *slot;
+    TupleTableSlot *slot = NULL;
 
     /*Process the subtree first */
     Decrement_Estate_CommandId(estate)
@@ -260,9 +269,13 @@ static void process_simple_merge(CustomScanState *node)
     if (TupIsNull(slot))
     {
         ExprContext *econtext = node->ss.ps.ps_ExprContext;
+        SubqueryScanState *sss = (SubqueryScanState *)node->ss.ps.lefttree;
+
+        /* our child execution node should be a subquery */
+        Assert(IsA(sss, SubqueryScanState));
 
         /* setup the scantuple that the process_path needs */
-        econtext->ecxt_scantuple = node->ss.ps.lefttree->ps_ResultTupleSlot;
+        econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;
 
         process_path(css);
     }
@@ -293,7 +306,7 @@ static void mark_tts_isnull(TupleTableSlot *slot)
 /*
  * Function that is called mid-execution. This function will call
  * its subtree in the execution tree, and depending on the results
- * create the new path, and depending on the the context of the MERGE
+ * create the new path, and depending on the context of the MERGE
  * within the query pass data to the parent execution node.
  *
  * Returns a TupleTableSlot with the next tuple to it parent or
@@ -305,7 +318,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
         (cypher_merge_custom_scan_state *)node;
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
-    TupleTableSlot *slot;
+    TupleTableSlot *slot = NULL;
     bool terminal = CYPHER_CLAUSE_IS_TERMINAL(css->flags);
 
     /*
@@ -321,7 +334,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
         /*
          * Case 1: MERGE is not the first clause in the cypher query.
          *
-         * For this case, we need to process all tuples give to us by the
+         * For this case, we need to process all tuples given to us by the
          * previous clause. When we receive a tuple from the previous clause:
          * check to see if the left lateral join found the pattern already. If
          * it did, we don't need to create the pattern. If the lateral join did
@@ -364,7 +377,6 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             return NULL;
         }
 
-        //return ExecProject(node->ss.ps.ps_ProjInfo);
         econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
         return ExecProject(node->ss.ps.ps_ProjInfo);
 
@@ -476,7 +488,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             Assert(css->found_a_path == false);
 
             /*
-             * This block of sub-case 1 should only be executued once. To
+             * This block of sub-case 1 should only be executed once. To
              * create the single path if the path does not exist. If we find
              * ourselves here again, the internal state of the MERGE execution
              * node was incorrectly altered.
@@ -538,7 +550,7 @@ static void end_cypher_merge(CustomScanState *node)
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
     cypher_create_path *path = css->path;
-    ListCell *lc;
+    ListCell *lc = NULL;
 
     // increment the command counter
     CommandCounterIncrement();
@@ -547,11 +559,12 @@ static void end_cypher_merge(CustomScanState *node)
 
     foreach (lc, path->target_nodes)
     {
-        cypher_target_node *cypher_node =
-            (cypher_target_node *)lfirst(lc);
+        cypher_target_node *cypher_node = (cypher_target_node *)lfirst(lc);
 
         if (!CYPHER_TARGET_NODE_INSERT_ENTITY(cypher_node->flags))
+        {
             continue;
+        }
 
         // close all indices for the node
         ExecCloseIndices(cypher_node->resultRelInfo);
@@ -569,9 +582,10 @@ static void end_cypher_merge(CustomScanState *node)
  */
 static void rescan_cypher_merge(CustomScanState *node)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                    errmsg("cypher merge clause cannot be rescaned"),
-                    errhint("its unsafe to use joins in a query with a Cypher MERGE clause")));
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("cypher merge clause cannot be rescanned"),
+                     errhint("its unsafe to use joins in a query with a Cypher MERGE clause")));
 }
 
 /*
@@ -584,8 +598,8 @@ Node *create_cypher_merge_plan_state(CustomScan *cscan)
     cypher_merge_custom_scan_state *cypher_css =
         palloc0(sizeof(cypher_merge_custom_scan_state));
     cypher_merge_information *merge_information;
-    char *serialized_data;
-    Const *c;
+    char *serialized_data = NULL;
+    Const *c = NULL;
 
     cypher_css->cs = cscan;
 
@@ -636,6 +650,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     {
         ResultRelInfo *old_estate_es_result_relation_info = NULL;
         Datum prop;
+
         /*
          * Set estate's result relation to the vertex's result
          * relation.
@@ -716,8 +731,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
             Datum result;
 
             /* make the vertex agtype */
-            result = make_vertex(
-                id, CStringGetDatum(node->label_name), prop);
+            result = make_vertex(id, CStringGetDatum(node->label_name), prop);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
@@ -732,42 +746,57 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
              */
             if (CYPHER_TARGET_NODE_IS_VARIABLE(node->flags))
             {
-                scanTupleSlot->tts_values[node->tuple_position - 1] = result;
-                scanTupleSlot->tts_isnull[node->tuple_position - 1] = false;
+                bool debug_flag = false;
+                int tuple_position = node->tuple_position - 1;
+
+                /*
+                 * We need to make sure that the tuple_position is within the
+                 * boundaries of the tuple's number of attributes. Otherwise, it
+                 * will corrupt memory. The cases where it doesn't fall within
+                 * are usually due to a variable that is specified but there
+                 * isn't a RETURN clause. In these cases we just don't bother to
+                 * store the value.
+                 */
+                if (!debug_flag &&
+                    (tuple_position < scanTupleSlot->tts_tupleDescriptor->natts ||
+                     scanTupleSlot->tts_tupleDescriptor->natts != 1))
+                {
+                    /* store the result */
+                    scanTupleSlot->tts_values[tuple_position] = result;
+                    scanTupleSlot->tts_isnull[tuple_position] = false;
+                }
             }
         }
     }
     else
     {
-        agtype *a;
+        agtype *a = NULL;
         Datum d;
-        agtype_value *v;
-        agtype_value *id_value;
-        TupleTableSlot *scantuple;
-        PlanState *ps;
+        agtype_value *v = NULL;
+        agtype_value *id_value = NULL;
 
-        ps = css->css.ss.ps.lefttree;
-        scantuple = ps->ps_ExprContext->ecxt_scantuple;
-
-        if (scantuple->tts_isnull[node->tuple_position - 1])
+        /* check that the variable isn't NULL */
+        if (scanTupleSlot->tts_isnull[node->tuple_position - 1])
         {
             ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("Existing variable %s cannot be NULL in MERGE clause",
-                 node->variable_name)));
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("Existing variable %s cannot be NULL in MERGE clause",
+                            node->variable_name)));
         }
 
         /* get the vertex agtype in the scanTupleSlot */
-        d = scantuple->tts_values[node->tuple_position - 1];
+        d = scanTupleSlot->tts_values[node->tuple_position - 1];
         a = DATUM_GET_AGTYPE_P(d);
 
         /* Convert to an agtype value */
         v = get_ith_agtype_value_from_container(&a->root, 0);
 
         if (v->type != AGTV_VERTEX)
+        {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("agtype must resolve to a vertex")));
+        }
 
         /* extract the id agtype field */
         id_value = GET_AGTYPE_VALUE_OBJECT_VALUE(v, "id");
@@ -915,8 +944,8 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
     {
         Datum result;
 
-        result = make_edge(
-            id, start_id, end_id, CStringGetDatum(node->label_name), prop);
+        result = make_edge(id, start_id, end_id,
+                           CStringGetDatum(node->label_name), prop);
 
         // add the Datum to the list of entities for creating the path variable
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
@@ -929,9 +958,25 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
         if (CYPHER_TARGET_NODE_IS_VARIABLE(node->flags))
         {
             TupleTableSlot *scantuple = econtext->ecxt_scantuple;
+            bool debug_flag = false;
+            int tuple_position = node->tuple_position - 1;
 
-            scantuple->tts_values[node->tuple_position - 1] = result;
-            scantuple->tts_isnull[node->tuple_position - 1] = false;
+            /*
+             * We need to make sure that the tuple_position is within the
+             * boundaries of the tuple's number of attributes. Otherwise, it
+             * will corrupt memory. The cases where it doesn't fall within are
+             * usually due to a variable that is specified but there isn't a
+             * RETURN clause. In these cases we just don't bother to store the
+             * value.
+             */
+             if (!debug_flag &&
+                 (tuple_position < scantuple->tts_tupleDescriptor->natts ||
+                  scantuple->tts_tupleDescriptor->natts != 1))
+            {
+                /* store the result */
+                scantuple->tts_values[tuple_position] = result;
+                scantuple->tts_isnull[tuple_position] = false;
+            }
         }
     }
 }

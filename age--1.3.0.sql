@@ -24,7 +24,6 @@
 -- catalog tables
 --
 
-
 CREATE TABLE ag_graph (
   graphid oid NOT NULL,
   name name NOT NULL,
@@ -56,8 +55,8 @@ CREATE TABLE ag_label (
   relation regclass NOT NULL,
   seq_name name NOT NULL,
   CONSTRAINT fk_graph_oid
-    FOREIGN KEY(graph)
-    REFERENCES ag_graph(graphid)
+  FOREIGN KEY(graph)
+  REFERENCES ag_graph(graphid)
 );
 
 -- include content of the ag_label table into the pg_dump output
@@ -3088,7 +3087,6 @@ CREATE CAST (agtype AS graphid)
 WITH FUNCTION ag_catalog.agtype_to_graphid(agtype)
 AS IMPLICIT;
 
-
 --
 -- agtype - path
 --
@@ -3162,15 +3160,14 @@ AS 'MODULE_PATHNAME';
 -- functions we need. Wrap the function with this to
 -- prevent that from happening
 --
-CREATE FUNCTION ag_catalog.agtype_volatile_wrapper(agt agtype)
-RETURNS agtype AS $return_value$
-BEGIN
-	RETURN agt;
-END;
-$return_value$ LANGUAGE plpgsql
+
+CREATE FUNCTION ag_catalog.agtype_volatile_wrapper("any")
+RETURNS agtype
+LANGUAGE c
 VOLATILE
 CALLED ON NULL INPUT
-PARALLEL SAFE;
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
 
 --
 -- agtype - list literal (`[expr, ...]`)
@@ -3786,6 +3783,19 @@ IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.age_pi()
+RETURNS agtype
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_rand()
+RETURNS agtype
+LANGUAGE c
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.age_exp(variadic "any")
 RETURNS agtype
 LANGUAGE c
@@ -4031,6 +4041,13 @@ IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.agtype_typecast_bool(variadic "any")
+RETURNS agtype
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.agtype_typecast_vertex(variadic "any")
 RETURNS agtype
 LANGUAGE c
@@ -4187,20 +4204,23 @@ STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name, nodes int, edge_label name, node_label name = NULL)
+CREATE FUNCTION ag_catalog.create_complete_graph(graph_name name,
+                                                 nodes int,
+                                                 edge_label name,
+                                                 node_label name = NULL)
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name, 
-                                                graph_size int, 
-                                                bridge_size int,
-                                                node_label name = NULL,
-                                                node_properties agtype = NULL,
-                                                edge_label name = NULL,
-                                                edge_properties agtype = NULL)
+CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name,
+                                                    graph_size int,
+                                                    bridge_size int,
+                                                    node_label name = NULL,
+                                                    node_properties agtype = NULL,
+                                                    edge_label name = NULL,
+                                                    edge_properties agtype = NULL)
 RETURNS void
 LANGUAGE c
 CALLED ON NULL INPUT
