@@ -1002,6 +1002,263 @@ $$) AS r(result agtype);
  3.14
 (1 row)
 
+/*
+ * ?, ?|, ?& key existence operators
+ */
+SELECT create_graph('jsonb_operators');
+NOTICE:  graph "jsonb_operators" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$CREATE ({list:['a', 'b', 'c'], json:{a:1, b:['a', 'b'], c:{d:'a'}}})$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- Exists (?)
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? 'list' $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ? 'a' $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.list ? 'c' $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ? 'a' $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ? 'd' $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? 'a' $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ? 'd' $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.list ? 'd' $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ? 'c' $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ? 'e' $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? [] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? ['d'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? {d: 'e'} $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+-- Exists (?|)
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list', 'd'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['json', 'a'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list', 'json'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a', 'b'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d', 'e'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['a', 'b'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| [] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['c'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [['list']] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+-- errors out
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| 'list' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| n $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+-- Exists (?&)
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& ['list', 'json'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& ['a', 'b'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& [] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b', 'c'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d', 'e'] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [['list']] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+-- errors out
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+--
+-- clean up
+--
+SELECT drop_graph('jsonb_operators', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table jsonb_operators._ag_label_vertex
+drop cascades to table jsonb_operators._ag_label_edge
+NOTICE:  graph "jsonb_operators" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS transform logic
 --

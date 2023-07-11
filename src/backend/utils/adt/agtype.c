@@ -175,7 +175,7 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
 static agtype_iterator *get_next_object_key(agtype_iterator *it,
                                             agtype_container *agtc,
                                             agtype_value *key);
-static agtype_iterator *get_next_list_element(agtype_iterator *it,
+agtype_iterator *get_next_list_element(agtype_iterator *it,
                                               agtype_container *agtc,
                                               agtype_value *elem);
 static int extract_variadic_args_min(FunctionCallInfo fcinfo,
@@ -3436,6 +3436,59 @@ Datum agtype_array_element_text(PG_FUNCTION_ARGS)
     return agtype_array_element_impl(fcinfo, true);
 }
 
+/*
+ * Returns properties
+ */
+agtype_value *extract_entity_properties(agtype *object, bool error_on_scalar)
+{
+    agtype_value *scalar_value = NULL;
+    agtype_value *return_value = NULL;
+
+    if (!AGT_ROOT_IS_SCALAR(object))
+    {
+        ereport(ERROR,(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                       errmsg("expected a scalar value")));
+    }
+
+    /* unpack the scalar */
+    scalar_value = get_ith_agtype_value_from_container(&object->root, 0);
+
+    /* get the properties depending on the type or fail */
+    if (scalar_value->type == AGTV_VERTEX)
+    {
+        return_value = &scalar_value->val.object.pairs[2].value;
+    }
+    else if (scalar_value->type == AGTV_EDGE)
+    {
+        return_value = &scalar_value->val.object.pairs[4].value;
+    }
+    else if (scalar_value->type == AGTV_PATH)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("cannot extract properties from an agtype path")));
+    }
+    else if (error_on_scalar)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("scalar object must be a vertex or edge")));
+    }
+    else
+    {
+        return_value = scalar_value;
+    }
+
+    /* if the properties are NULL, return NULL */
+    if (return_value == NULL || return_value->type == AGTV_NULL)
+    {
+        return NULL;
+    }
+
+    /* set the object_value to the property_value. */
+    return return_value;
+}
+
 PG_FUNCTION_INFO_V1(agtype_access_operator);
 /*
  * Execution function for object.property, object["property"],
@@ -5865,7 +5918,7 @@ Datum age_tostring(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
-static agtype_iterator *get_next_list_element(agtype_iterator *it,
+agtype_iterator *get_next_list_element(agtype_iterator *it,
                            agtype_container *agtc, agtype_value *elem)
 {
     agtype_iterator_token itok;

@@ -803,24 +803,93 @@ SELECT agtype_contains('{"id": 1}','{"id": 2}');
 SELECT '{"id": 1}'::agtype @> '{"id": 1}';
 SELECT '{"id": 1}'::agtype @> '{"id": 2}';
 
-SELECT agtype_exists('{"id": 1}','id');
-SELECT agtype_exists('{"id": 1}','not_id');
+--
+-- Agtype exists operator
+--
 
-SELECT '{"id": 1}'::agtype ? 'id';
-SELECT '{"id": 1}'::agtype ? 'not_id';
+-- exists (?)
 
+-- should return 't'
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"n"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"a"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"b"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"d"';
+SELECT '["1","2"]'::agtype ? '"1"';
+SELECT '["hello", "world"]'::agtype ? '"hello"';
+SELECT agtype_exists('{"id": 1}','id'::text);
+SELECT '{"id": 1}'::agtype ? 'id'::text;
+
+-- should return 'f'
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"e"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"e1"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"1"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '1';
+SELECT '["hello", "world"]'::agtype ? '"hell"';
+SELECT agtype_exists('{"id": 1}','not_id'::text);
+SELECT '{"id": 1}'::agtype ? 'not_id'::text;
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1", "n"]';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["n"]';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["n", "a", "e"]';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '{"n": null}';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '{"n": null, "b": true}';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1"]';
+
+--errors out
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e';
+
+-- Exists any (?|)
+
+-- should return 't'
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["a","b"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["b","a"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","a"]';
+SELECT '{"1":null, "b":"qq"}'::agtype ?| '["c","1"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["a","a", "b", "b", "b"]'::agtype;
 SELECT agtype_exists_any('{"id": 1}', array['id']);
-SELECT agtype_exists_any('{"id": 1}', array['not_id']);
-
 SELECT '{"id": 1}'::agtype ?| array['id'];
+
+
+-- should return 'f'
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["1","2"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","1"]'; 
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '[]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]'::agtype;
+SELECT '[null]'::agtype ?| '[null]'::agtype;
+SELECT agtype_exists_any('{"id": 1}', array['not_id']);
 SELECT '{"id": 1}'::agtype ?| array['not_id'];
 
+-- errors out
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ?| '"b"';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ?| '"d"';
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '{"a", "b"}';
 
+-- Exists all (?&)
+
+-- should return 't'
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","b"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["b","a"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","a", "b", "b", "b"]'::agtype;
+SELECT '[null]'::agtype ?& '[null]'::agtype;
 SELECT agtype_exists_all('{"id": 1}', array['id']);
-SELECT agtype_exists_all('{"id": 1}', array['not_id']);
-
 SELECT '{"id": 1}'::agtype ?& array['id'];
+
+-- should return 'f'
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["c","a"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","b", "c"]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["c","d"]'::agtype;
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '[]';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '[["a"]]';
+SELECT agtype_exists_all('{"id": 1}', array['not_id']);
 SELECT '{"id": 1}'::agtype ?& array['not_id'];
+
+-- errors out
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"d"';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"a"';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '" "';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '""';
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"null"';
 
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS

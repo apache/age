@@ -481,6 +481,80 @@ RETURN [
 ][1].array[2]["float"]
 $$) AS r(result agtype);
 
+/*
+ * ?, ?|, ?& key existence operators
+ */
+
+SELECT create_graph('jsonb_operators');
+
+SELECT * FROM cypher('jsonb_operators',$$CREATE ({list:['a', 'b', 'c'], json:{a:1, b:['a', 'b'], c:{d:'a'}}})$$) as (a agtype);
+
+-- Exists (?)
+
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? 'list' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ? 'a' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.list ? 'c' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ? 'a' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ? 'd' $$) as (a agtype);
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? 'a' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ? 'd' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.list ? 'd' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ? 'c' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ? 'e' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? [] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? ['d'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ? {d: 'e'} $$) as (a agtype);
+
+-- Exists (?|)
+
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list', 'd'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['json', 'a'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['list', 'json'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a', 'b'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d', 'e'] $$) as (a agtype);
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['a', 'b'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| [] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['c'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [['list']] $$) as (a agtype);
+
+-- errors out
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| 'list' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| n $$) as (a agtype);
+
+-- Exists (?&)
+
+-- should return true
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& ['list', 'json'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d'] $$) as (a agtype);
+
+-- should return false
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& ['a', 'b'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& [] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b', 'c'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d', 'e'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [['list']] $$) as (a agtype);
+
+-- errors out
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
+
+--
+-- clean up
+--
+SELECT drop_graph('jsonb_operators', true);
+
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS transform logic
 --

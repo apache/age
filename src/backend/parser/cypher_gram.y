@@ -76,6 +76,7 @@
 
 /* operators that have more than 1 character */
 %token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE
+%token ANY_EXISTS ALL_EXISTS
 
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
@@ -169,6 +170,7 @@
 %left XOR
 %right NOT
 %left '=' NOT_EQ '<' LT_EQ '>' GT_EQ
+%left '|' '&' '?' ANY_EXISTS ALL_EXISTS
 %left '+' '-'
 %left '*' '/' '%'
 %left '^'
@@ -1282,7 +1284,6 @@ properties_opt:
 /*
  * expression
  */
-
 expr:
     expr OR expr
         {
@@ -1323,6 +1324,18 @@ expr:
     | expr GT_EQ expr
         {
             $$ = build_comparison_expression($1, $3, ">=", @2);
+        }
+    | expr '?' expr  %prec '.'
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?", $1, $3, @2);
+        }
+    | expr ANY_EXISTS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?|", $1, $3, @2);
+        }
+    | expr ALL_EXISTS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?&", $1, $3, @2);
         }
     | expr '+' expr
         {

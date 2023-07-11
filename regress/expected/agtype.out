@@ -2762,28 +2762,181 @@ SELECT '{"id": 1}'::agtype @> '{"id": 2}';
  f
 (1 row)
 
-SELECT agtype_exists('{"id": 1}','id');
- agtype_exists 
----------------
- t
-(1 row)
-
-SELECT agtype_exists('{"id": 1}','not_id');
- agtype_exists 
----------------
- f
-(1 row)
-
-SELECT '{"id": 1}'::agtype ? 'id';
+--
+-- Agtype exists operator
+--
+-- exists (?)
+-- should return 't'
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"n"';
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT '{"id": 1}'::agtype ? 'not_id';
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"a"';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"b"';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"d"';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["1","2"]'::agtype ? '"1"';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["hello", "world"]'::agtype ? '"hello"';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT agtype_exists('{"id": 1}','id'::text);
+ agtype_exists 
+---------------
+ t
+(1 row)
+
+SELECT '{"id": 1}'::agtype ? 'id'::text;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- should return 'f'
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"e"';
  ?column? 
 ----------
  f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"e1"';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '"1"';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '1';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '["hello", "world"]'::agtype ? '"hell"';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists('{"id": 1}','not_id'::text);
+ agtype_exists 
+---------------
+ f
+(1 row)
+
+SELECT '{"id": 1}'::agtype ? 'not_id'::text;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1", "n"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["n"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["n", "a", "e"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '{"n": null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '{"n": null, "b": true}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+--errors out
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
+ERROR:  invalid input syntax for type agtype
+LINE 1: ...a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
+                                                                  ^
+DETAIL:  Expected agtype value, but found "e1".
+CONTEXT:  agtype data, line 1: e1
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e';
+ERROR:  invalid input syntax for type agtype
+LINE 1: ..."a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e';
+                                                                   ^
+DETAIL:  Expected agtype value, but found "e".
+CONTEXT:  agtype data, line 1: e
+-- Exists any (?|)
+-- should return 't'
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["a","b"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["b","a"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","a"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"1":null, "b":"qq"}'::agtype ?| '["c","1"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["a","a", "b", "b", "b"]'::agtype;
+ ?column? 
+----------
+ t
 (1 row)
 
 SELECT agtype_exists_any('{"id": 1}', array['id']);
@@ -2792,16 +2945,53 @@ SELECT agtype_exists_any('{"id": 1}', array['id']);
  t
 (1 row)
 
-SELECT agtype_exists_any('{"id": 1}', array['not_id']);
- agtype_exists_any 
--------------------
- f
-(1 row)
-
 SELECT '{"id": 1}'::agtype ?| array['id'];
  ?column? 
 ----------
  t
+(1 row)
+
+-- should return 'f'
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["1","2"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","1"]'; 
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '[]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[null]'::agtype ?| '[null]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists_any('{"id": 1}', array['not_id']);
+ agtype_exists_any 
+-------------------
+ f
 (1 row)
 
 SELECT '{"id": 1}'::agtype ?| array['not_id'];
@@ -2810,16 +3000,47 @@ SELECT '{"id": 1}'::agtype ?| array['not_id'];
  f
 (1 row)
 
+-- errors out
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ?| '"b"';
+ERROR:  invalid agtype value for right operand
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ?| '"d"';
+ERROR:  invalid agtype value for right operand
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '{"a", "b"}';
+ERROR:  invalid input syntax for type agtype
+LINE 1: SELECT '{"a":null, "b":"qq"}'::agtype ?| '{"a", "b"}';
+                                                 ^
+DETAIL:  Expected ":", but found ",".
+CONTEXT:  agtype data, line 1: {"a",...
+-- Exists all (?&)
+-- should return 't'
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","b"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["b","a"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","a", "b", "b", "b"]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[null]'::agtype ?& '[null]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
 SELECT agtype_exists_all('{"id": 1}', array['id']);
  agtype_exists_all 
 -------------------
  t
-(1 row)
-
-SELECT agtype_exists_all('{"id": 1}', array['not_id']);
- agtype_exists_all 
--------------------
- f
 (1 row)
 
 SELECT '{"id": 1}'::agtype ?& array['id'];
@@ -2828,12 +3049,60 @@ SELECT '{"id": 1}'::agtype ?& array['id'];
  t
 (1 row)
 
+-- should return 'f'
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["c","a"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["a","b", "c"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '["c","d"]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '[]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '[["a"]]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT agtype_exists_all('{"id": 1}', array['not_id']);
+ agtype_exists_all 
+-------------------
+ f
+(1 row)
+
 SELECT '{"id": 1}'::agtype ?& array['not_id'];
  ?column? 
 ----------
  f
 (1 row)
 
+-- errors out
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"d"';
+ERROR:  invalid agtype value for right operand
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"a"';
+ERROR:  invalid agtype value for right operand
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '" "';
+ERROR:  invalid agtype value for right operand
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '""';
+ERROR:  invalid agtype value for right operand
+SELECT '{"a":null, "b":"qq"}'::agtype ?& '"null"';
+ERROR:  invalid agtype value for right operand
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS
 --
