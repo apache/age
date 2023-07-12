@@ -1761,7 +1761,7 @@ SELECT * FROM age_replace('Hello', 'e', 1);
 SELECT * FROM age_replace('Hello', 1, 'E');
 
 --
--- sin, cos, tan, cot
+-- sin, cos, tan, cot, sec
 --
 SELECT sin = results FROM cypher('expr', $$
     RETURN sin(3.1415)
@@ -1775,10 +1775,14 @@ $$) AS (results agtype), tan(3.1415);
 SELECT cot = results FROM cypher('expr', $$
     RETURN cot(3.1415)
 $$) AS (results agtype), cot(3.1415);
+SELECT (1 / cos) = results FROM cypher('expr', $$
+    RETURN sec(3.1415)
+$$) AS (results agtype), cos(3.1415);
 SELECT sin = age_sin FROM sin(3.1415), age_sin(3.1415);
 SELECT cos = age_cos FROM cos(3.1415), age_cos(3.1415);
 SELECT tan = age_tan FROM tan(3.1415), age_tan(3.1415);
 SELECT cot = age_cot FROM cot(3.1415), age_cot(3.1415);
+SELECT (1 / cos) = age_sec FROM cos(3.1415), age_sec(3.1415);
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN sin(null)
@@ -1792,10 +1796,14 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN cot(null)
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN sec(null)
+$$) AS (results agtype);
 SELECT * FROM age_sin(null);
 SELECT * FROM age_cos(null);
 SELECT * FROM age_tan(null);
 SELECT * FROM age_cot(null);
+SELECT * FROM age_sec(null);
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN sin("0")
@@ -1810,6 +1818,9 @@ SELECT * FROM cypher('expr', $$
     RETURN cot("0")
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
+    RETURN sec("0")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
     RETURN sin()
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
@@ -1821,14 +1832,19 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN cot()
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN sec()
+$$) AS (results agtype);
 SELECT * FROM age_sin('0');
 SELECT * FROM age_cos('0');
 SELECT * FROM age_tan('0');
 SELECT * FROM age_cot('0');
+SELECT * FROM age_sec('0');
 SELECT * FROM age_sin();
 SELECT * FROM age_cos();
 SELECT * FROM age_tan();
 SELECT * FROM age_cot();
+SELECT * FROM age_sec();
 
 --
 -- Arc functions: asin, acos, atan, & atan2

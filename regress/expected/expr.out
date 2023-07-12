@@ -4091,7 +4091,7 @@ ERROR:  replace() unsupported argument type 23
 SELECT * FROM age_replace('Hello', 1, 'E');
 ERROR:  replace() unsupported argument type 23
 --
--- sin, cos, tan, cot
+-- sin, cos, tan, cot, sec
 --
 SELECT sin = results FROM cypher('expr', $$
     RETURN sin(3.1415)
@@ -4125,6 +4125,14 @@ $$) AS (results agtype), cot(3.1415);
  t
 (1 row)
 
+SELECT (1 / cos) = results FROM cypher('expr', $$
+    RETURN sec(3.1415)
+$$) AS (results agtype), cos(3.1415);
+ ?column? 
+----------
+ t
+(1 row)
+
 SELECT sin = age_sin FROM sin(3.1415), age_sin(3.1415);
  ?column? 
 ----------
@@ -4144,6 +4152,12 @@ SELECT tan = age_tan FROM tan(3.1415), age_tan(3.1415);
 (1 row)
 
 SELECT cot = age_cot FROM cot(3.1415), age_cot(3.1415);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT (1 / cos) = age_sec FROM cos(3.1415), age_sec(3.1415);
  ?column? 
 ----------
  t
@@ -4182,6 +4196,14 @@ $$) AS (results agtype);
  
 (1 row)
 
+SELECT * FROM cypher('expr', $$
+    RETURN sec(null)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
 SELECT * FROM age_sin(null);
  age_sin 
 ---------
@@ -4206,6 +4228,12 @@ SELECT * FROM age_cot(null);
  
 (1 row)
 
+SELECT * FROM age_sec(null);
+ age_sec 
+---------
+ 
+(1 row)
+
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN sin("0")
@@ -4223,6 +4251,10 @@ SELECT * FROM cypher('expr', $$
     RETURN cot("0")
 $$) AS (results agtype);
 ERROR:  cot() unsupported argument agtype 1
+SELECT * FROM cypher('expr', $$
+    RETURN sec("0")
+$$) AS (results agtype);
+ERROR:  sec() unsupported argument agtype 1
 SELECT * FROM cypher('expr', $$
     RETURN sin()
 $$) AS (results agtype);
@@ -4251,6 +4283,13 @@ ERROR:  function ag_catalog.age_cot() does not exist
 LINE 2:     RETURN cot()
                    ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN sec()
+$$) AS (results agtype);
+ERROR:  function ag_catalog.age_sec() does not exist
+LINE 2:     RETURN sec()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT * FROM age_sin('0');
 ERROR:  sin() unsupported argument type 25
 SELECT * FROM age_cos('0');
@@ -4259,6 +4298,8 @@ SELECT * FROM age_tan('0');
 ERROR:  tan() unsupported argument type 25
 SELECT * FROM age_cot('0');
 ERROR:  cot() unsupported argument type 25
+SELECT * FROM age_sec('0');
+ERROR:  sec() unsupported argument type 25
 SELECT * FROM age_sin();
 ERROR:  function age_sin() does not exist
 LINE 1: SELECT * FROM age_sin();
@@ -4277,6 +4318,11 @@ HINT:  No function matches the given name and argument types. You might need to 
 SELECT * FROM age_cot();
 ERROR:  function age_cot() does not exist
 LINE 1: SELECT * FROM age_cot();
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM age_sec();
+ERROR:  function age_sec() does not exist
+LINE 1: SELECT * FROM age_sec();
                       ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 --

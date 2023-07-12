@@ -7581,6 +7581,53 @@ Datum age_cot(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+PG_FUNCTION_INFO_V1(age_sec);
+
+Datum age_sec(PG_FUNCTION_ARGS)
+{
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    agtype_value agtv_result;
+    float8 angle;
+    float8 result;
+    bool is_null = true;
+
+    /* extract argument values */
+    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+    /* check number of args */
+    if (nargs != 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("sec() invalid number of arguments")));
+
+    /* check for a null input */
+    if (nargs < 0 || nulls[0])
+        PG_RETURN_NULL();
+
+    /*
+     * sec() supports integer, float, and numeric or the agtype integer, float,
+     * and numeric for the angle
+     */
+
+    angle = get_float_compatible_arg(args[0], types[0], "sec", &is_null);
+
+    /* check for a agtype null input */
+    if (is_null)
+        PG_RETURN_NULL();
+
+    /* We need the numeric input as a float8 so that we can pass it off to PG */
+    result = DatumGetFloat8(DirectFunctionCall2(float8div, Float8GetDatum(1), DirectFunctionCall1(dcos,
+                                                Float8GetDatum(angle))));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
 PG_FUNCTION_INFO_V1(age_asin);
 
 Datum age_asin(PG_FUNCTION_ARGS)
