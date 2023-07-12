@@ -394,6 +394,66 @@ SELECT * FROM cypher('expr', $$
 RETURN false XOR false
 $$) AS r(result boolean);
 
+SELECT * FROM cypher('expr', $$
+RETURN false OR 1::bool    
+$$) AS (result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN false AND NOT 1::bool
+$$) AS (result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN NOT 1::bool::int::bool    
+$$) AS (result boolean);
+
+-- Invalid operands for AND, OR, NOT, XOR
+SELECT * FROM cypher('expr', $$
+RETURN 1 AND true
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN true AND 0
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN false OR 1
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN 0 OR true 
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN NOT 1    
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN true XOR 0
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN 1 XOR 0
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN NOT ((1 OR 0) AND (0 OR 1))
+$$) AS r(result boolean);
+
+SELECT * FROM cypher('expr', $$
+RETURN 1.0 AND true
+$$) AS (result agtype);
+
+SELECT * FROM cypher('expr', $$
+RETURN false OR 'string'
+$$) AS (result agtype);
+
+SELECT * FROM cypher('expr', $$
+RETURN false XOR 1::numeric
+$$) AS (result agtype);
+
+SELECT * FROM cypher('expr', $$
+RETURN false OR 1::bool::int    
+$$) AS (result boolean);
 --
 -- Test indirection transform logic for object.property, object["property"],
 -- and array[element]
@@ -484,7 +544,7 @@ MATCH (n:Person) WHERE n.name =~ 'J.*' RETURN n
 $$) AS r(result agtype);
 
 --
---Coearce to Postgres 3 int types (smallint, int, bigint)
+--Coerce to Postgres 3 int types (smallint, int, bigint)
 --
 SELECT create_graph('type_coercion');
 SELECT * FROM cypher('type_coercion', $$
@@ -515,6 +575,14 @@ SELECT * FROM cypher('type_coercion', $$
 	RETURN '1'
 $$) AS (i bigint);
 
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
+$$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+	RETURN true
+$$) AS (i int);
+
 --Invalid String Format
 SELECT * FROM cypher('type_coercion', $$
 	RETURN '1.0'
@@ -530,9 +598,6 @@ SELECT * FROM cypher('type_coercion', $$
 $$) AS (i int);
 
 --Invalid types
-SELECT * FROM cypher('type_coercion', $$
-	RETURN true
-$$) AS (i bigint);
 
 SELECT * FROM cypher('type_coercion', $$
 	RETURN {key: 1}
@@ -541,6 +606,10 @@ $$) AS (i bigint);
 SELECT * FROM cypher('type_coercion', $$
 	RETURN [1]
 $$) AS (i bigint);
+
+SELECT * FROM cypher('type_coercion', $$
+    RETURN 1
+$$) AS (i bool);
 
 SELECT * FROM cypher('type_coercion', $$CREATE ()-[:edge]->()$$) AS (result agtype);
 SELECT * FROM cypher('type_coercion', $$
@@ -585,6 +654,12 @@ SELECT * FROM cypher('expr', $$
 RETURN 2.71::numeric::int
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
+RETURN true::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN false::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
 RETURN ([0, {one: 1.0, pie: 3.1415927, e: 2::numeric}, 2, null][1].one)::int
 $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
@@ -620,7 +695,29 @@ $$) AS r(result agtype);
 SELECT * FROM cypher('expr', $$
 RETURN 'infinity'::float::int
 $$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ''::int
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'false_'::int
+$$) AS r(result agtype);
+--
+-- Test from an agtype value to agtype int
+--
+SELECT * FROM cypher('expr', $$
+RETURN 0::bool
+$$) AS r(result agtype);
 
+-- these should fail
+SELECT * FROM cypher('expr', $$
+RETURN 1.23::bool
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ''::bool
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'false_'::bool
+$$) AS r(result agtype);
 -- Test from an agtype value to an agtype numeric
 --
 SELECT * FROM cypher('expr', $$
@@ -749,6 +846,66 @@ SELECT * FROM cypher('expr', $$
 RETURN (['NaN'::float, {one: 'inf'::float, pie: 3.1415927, e: 2.718281::numeric}, 2::numeric, null])
 $$) AS r(result agtype);
 SELECT agtype_in('[NaN, {"e": 2.718281::numeric, "one": Infinity, "pie": 3.1415927}, 2::numeric, null]');
+
+--
+-- Test typecast ::pg_float8
+--
+SELECT * FROM cypher('expr', $$
+RETURN 0::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '2.71'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 2.71::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1, pie: 3.1415927, e: 2::numeric}, 2, null][1].one)::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1::pg_float8, pie: 3.1415927, e: 2.718281::numeric}, 2, null][1].one)
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1::pg_float8, pie: 3.1415927, e: 2.718281::numeric}, 2, null][1].one)::float
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1, pie: 3.1415927, e: 2.718281::numeric}, 2, null][3])::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN (['NaN'::pg_float8, {one: 'inf'::pg_float8, pie: 3.1415927, e: 2.718281::numeric}, 2::numeric, null])
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN ([0, {one: 1, pie: 3.1415927, e: 2.718281::numeric}, 2, null][1].e)::pg_float8
+$$) AS r(result agtype);
+-- test NaN, Infinity and -Infinity
+SELECT * FROM cypher('expr', $$
+RETURN 'NaN'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'inf'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '-inf'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'infinity'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '-infinity'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN null::pg_float8
+$$) AS r(result agtype);
+-- these should fail
+SELECT * FROM cypher('expr', $$
+RETURN ''::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN '2:71'::pg_float8
+$$) AS r(result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN 'infi'::pg_float8
+$$) AS r(result agtype);
 
 --
 -- Test typecast :: transform and execution logic for object (vertex & edge)
@@ -1100,7 +1257,7 @@ SELECT * FROM cypher('expr', $$
 $$) AS (toBoolean agtype);
 -- should return null
 SELECT * FROM cypher('expr', $$
-    RETURN toBoolean("falze")
+    RETURN toBoolean("false_")
 $$) AS (toBoolean agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toBoolean(null)
@@ -1130,7 +1287,7 @@ SELECT * FROM cypher('expr', $$
 $$) AS (toFloat agtype);
 -- should return null
 SELECT * FROM cypher('expr', $$
-    RETURN toFloat("falze")
+    RETURN toFloat("false_")
 $$) AS (toFloat agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toFloat(null)
@@ -1160,7 +1317,7 @@ SELECT * FROM cypher('expr', $$
 $$) AS (toInteger agtype);
 -- should return null
 SELECT * FROM cypher('expr', $$
-    RETURN toInteger("falze")
+    RETURN toInteger("false_")
 $$) AS (toInteger agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toInteger(null)
@@ -2101,6 +2258,9 @@ SELECT * from cypher('expr', $$
     RETURN pg_catalog.sqrt(25::pg_float8)
 $$) as (result agtype);
 SELECT * from cypher('expr', $$
+    RETURN pg_catalog.sqrt("25"::pg_float8)
+$$) as (result agtype);
+SELECT * from cypher('expr', $$
     RETURN ag_catalog.age_sqrt(25)
 $$) as (result agtype);
 -- should return null
@@ -2110,9 +2270,6 @@ $$) as (result agtype);
 -- should fail
 SELECT * from cypher('expr', $$
     RETURN pg_catalog.sqrt()
-$$) as (result agtype);
-SELECT * from cypher('expr', $$
-    RETURN pg_catalog.sqrt("1"::pg_float8)
 $$) as (result agtype);
 SELECT * from cypher('expr', $$
     RETURN pg_catalog.sqrt(-1::pg_float8)
@@ -2229,7 +2386,7 @@ AS (gpa1 agtype, gpa2 agtype);
 SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN collect(u.zip), collect(u.zip) $$)
 AS (zip1 agtype, zip2 agtype);
 SELECT * FROM cypher('UCSC', $$ RETURN collect(5) $$) AS (result agtype);
--- should return an empty aray
+-- should return an empty array
 SELECT * FROM cypher('UCSC', $$ RETURN collect(NULL) $$) AS (empty agtype);
 SELECT * FROM cypher('UCSC', $$ MATCH (u) WHERE u.name =~ "doesn't exist" RETURN collect(u.name) $$) AS (name agtype);
 
@@ -2306,6 +2463,23 @@ SELECT * FROM cypher('case_statement', $$CREATE ({i: true, j: false})$$) AS (res
 SELECT * FROM cypher('case_statement', $$CREATE ({i: [], j: [0,1,2]})$$) AS (result agtype);
 SELECT * FROM cypher('case_statement', $$CREATE ({i: {}, j: {i:1}})$$) AS (result agtype);
 
+--standalone case & edge cases
+--base case
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN true THEN true END) $$) as (a agtype);
+--should return 1 empty row
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN false THEN true END) $$) as (a agtype);
+--should return 'false'
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN true THEN false END) $$) as (a agtype);
+--invalid case (WHEN should be boolean)
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN 1 THEN 'fail' END) $$) as (a agtype);
+
+-- booleans + logic gates
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN true THEN (true AND true) END) $$) as (a agtype);
+-- invalid mixed logic gate
+SELECT * FROM cypher('case_statement', $$ RETURN (CASE WHEN true THEN (true AND 1) END) $$) as (a agtype);
+
+
+
 --CASE WHEN condition THEN result END
 SELECT * FROM cypher('case_statement', $$
 	MATCH (n)
@@ -2346,6 +2520,12 @@ SELECT * FROM cypher('opt_forms', $$MATCH (u) CREATE (u)-[:edge]->() RETURN *$$)
 SELECT * FROM cypher('opt_forms', $$MATCH (u)-->()<--(v) RETURN *$$) AS (col1 agtype, col2 agtype);
 
 -- Added typecasts ::pg_bigint and ::pg_float8
+SELECT * FROM cypher('expr', $$
+RETURN true::pg_bigint
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+RETURN "1.0"::pg_float8
+$$) AS (result agtype);
 SELECT * from cypher('expr', $$
 RETURN pg_catalog.sqrt(pg_catalog.sqrt(pg_catalog.sqrt(256::pg_bigint)))
 $$) as (result agtype);
@@ -2448,6 +2628,87 @@ SELECT * from cypher('list', $$MATCH (u) RETURN labels(u), u$$) as (Labels agtyp
 SELECT * from cypher('list', $$RETURN labels(NULL)$$) as (Labels agtype);
 -- should return an error
 SELECT * from cypher('list', $$RETURN labels("string")$$) as (Labels agtype);
+
+-- Issue 989: Impossible to create an object with an array field of more than
+--            100 elements.
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99] }) RETURN any_vertex $$) AS (u agtype);
+SELECT * FROM cypher('list', $$ CREATE (any_vertex: test_label { `largeArray`: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99] }) RETURN any_vertex $$) AS (u agtype);
+-- should return 7 rows with counts: 0, 1, 100, 101, 200, 400, 800
+SELECT * FROM cypher('list', $$ MATCH (u:test_label) RETURN size(u.largeArray) $$) AS (u agtype);
+-- nested cases
+SELECT * FROM cypher('list',$$ CREATE (n:xyz {array:[0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                                                10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                                                10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                100], 100]}) return n $$) as (a agtype);
+SELECT * FROM cypher('list',$$ MATCH (n:xyz) CREATE (m:xyz {array:[0,1,2,3,n.array,5,6,7,8,9,
+                                                           10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                           20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                           30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                           40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                           50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                           60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                           70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                           80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                           90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                           100]}) return m $$) as (a agtype);
+SELECT * FROM cypher('list',$$ MATCH (n:xyz) CREATE (m:xyz {array:[n.array,[n.array,[n.array]]]}) return m $$) as (a agtype);
+-- SET
+SELECT * FROM cypher('list',$$ CREATE (n:xyz)-[e:KNOWS {array:[0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                                                           10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                           20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                           30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                           40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                           50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                           60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                           70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                           80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                           90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                           100]}]->(m:xyz) $$) as (a agtype);
+SELECT * FROM cypher('list',$$ MATCH p=(n:xyz)-[e]->() SET n.array=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                                                           10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                           20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                           30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                           40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                           50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                           60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                           70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                           80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                           90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                           100] return n,e $$) as (a agtype, b agtype);
+SELECT * FROM cypher('list',$$ MATCH p=(n:xyz)-[e]->() SET n.array=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                                                           10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                                           20,21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                           30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                                           40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                                                           50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                                                           60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                                                           70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                                                           80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                                                           90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+                                                           e.array, 100] return n,e $$) as (a agtype, b agtype);
+
 --
 -- Cleanup
 --

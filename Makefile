@@ -18,7 +18,6 @@
 MODULE_big = age
 
 
-
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \

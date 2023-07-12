@@ -101,7 +101,7 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
     agtype *props = NULL;
     size_t i, n_fields;
-    graphid object_graph_oid;
+    graphid object_graph_id;
     int64 label_id_int;
 
     n_fields = cr->cur_field;
@@ -131,12 +131,12 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
             label_id_int = (int64)cr->row;
         }
 
-        object_graph_oid = make_graphid(cr->object_id, label_id_int);
+        object_graph_id = make_graphid(cr->object_id, label_id_int);
 
         props = create_agtype_from_list(cr->header, cr->fields,
                                         n_fields, label_id_int);
         insert_vertex_simple(cr->graph_oid, cr->object_name,
-                             object_graph_oid, props);
+                             object_graph_id, props);
     }
 
 

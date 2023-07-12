@@ -512,6 +512,18 @@ static void initialize_label_caches(void)
     // ag_label.relation
     ag_cache_scan_key_init(&label_relation_scan_keys[0],
                            Anum_ag_label_relation, F_OIDEQ);
+    
+    // ag_label.seq_name, ag_label.graph
+    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0], Anum_ag_label_seq_name,
+                           F_NAMEEQ);
+    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[1], Anum_ag_label_graph,
+                           F_OIDEQ);
+
+    // ag_label.seq_name, ag_label.graph
+    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0],
+                           Anum_ag_label_seq_name, F_NAMEEQ);
+    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[1],
+                           Anum_ag_label_graph, F_OIDEQ);
 
     // ag_label.seq_name, ag_label.graph
     ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0],
@@ -538,7 +550,6 @@ static void create_label_caches(void)
     create_label_graph_oid_cache();
     create_label_relation_cache();
     create_label_seq_name_graph_cache();
-
 }
 
 static void create_label_name_graph_cache(void)

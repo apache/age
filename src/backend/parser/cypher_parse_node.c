@@ -131,10 +131,23 @@ RangeTblEntry *find_rte(cypher_parsestate *cpstate, char *varname)
  */
 char *get_next_default_alias(cypher_parsestate *cpstate)
 {
+    ParseState *pstate = (ParseState *)cpstate;
+    cypher_parsestate *parent_cpstate = (cypher_parsestate *)pstate->parentParseState;
     char *alias_name;
     int nlen = 0;
 
-    /* get the length of the combinded string */
+    /*
+     * Every clause transformed as a subquery has its own cpstate which is being
+     * freed after it is transformed. The root cpstate is the one that has the
+     * default alias number initialized. So we need to reach the root cpstate to
+     * get the next correct default alias number.
+     */
+    if (parent_cpstate)
+    {
+        return get_next_default_alias(parent_cpstate);
+    }
+
+    /* get the length of the combined string */
     nlen = snprintf(NULL, 0, "%s%d", AGE_DEFAULT_ALIAS_PREFIX,
                     cpstate->default_alias_num);
 

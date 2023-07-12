@@ -72,8 +72,9 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, uint32 graph_oid,
+                                        char *graph_name, Oid graph_oid,
                                         Param *params);
+
 
 void post_parse_analyze_init(void)
 {
@@ -307,7 +308,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     Node *arg3 = NULL;
     Name graph_name = NULL;
     char *graph_name_str = NULL;
-    uint32 graph_oid;
+    Oid graph_oid = InvalidOid;
     const char *query_str = NULL;
     int query_loc = -1;
     Param *params = NULL;
@@ -359,7 +360,6 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
      *   may differ from what they are shown. This will confuse users.
      * * In the case above, the error position may not be accurate.
      */
-
     query_str = expr_get_const_cstring(arg2, pstate->p_sourcetext);
 
     /*
@@ -470,7 +470,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     }
 
     /*
-     * Check to see if the cypher function had a third parameters passed to it,
+     * Check to see if the cypher function had a third parameter passed to it,
      * if so make sure Postgres parsed the second argument to a Param node.
      */
     if (list_length(funcexpr->args) == 3)

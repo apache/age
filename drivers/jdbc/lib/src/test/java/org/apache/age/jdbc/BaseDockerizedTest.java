@@ -50,6 +50,11 @@ public class BaseDockerizedTest {
     @BeforeAll
     public void beforeAll() throws Exception {
         String CORRECT_DB_PASSWORDS = "postgres";
+        String imageTag = System.getenv("TAG");
+
+        if (imageTag == null) {
+            imageTag = "latest";
+        }
         agensGraphContainer = new GenericContainer<>(DockerImageName
             .parse("apache/age:PG12_latest"))
             .withEnv("POSTGRES_PASSWORD", CORRECT_DB_PASSWORDS)
@@ -60,9 +65,13 @@ public class BaseDockerizedTest {
         String jdbcUrl = String
             .format("jdbc:postgresql://%s:%d/%s", "localhost", mappedPort, "postgres");
 
-        connection = DriverManager.getConnection(jdbcUrl, "postgres", CORRECT_DB_PASSWORDS)
-            .unwrap(PgConnection.class);
-        connection.addDataType("agtype", Agtype.class);
+        try {
+            this.connection = DriverManager.getConnection(jdbcUrl, "postgres", CORRECT_DB_PASSWORDS)
+                         .unwrap(PgConnection.class);
+            this.connection.addDataType("agtype", Agtype.class);
+        } catch (Exception e) {
+            System.out.println(e);
+        }
         try (Statement statement = connection.createStatement()) {
             statement.execute("CREATE EXTENSION IF NOT EXISTS age;");
             statement.execute("LOAD 'age'");
