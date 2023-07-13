@@ -18,12 +18,12 @@
    "prereqs": {
       "runtime": {
          "requires": {
-            "PostgreSQL": "12.0.0"
+            "PostgreSQL": "14.0.0"
          }
       }
    },
    "resources": {
-      "homepage": "https://github.com/apache/age/tree/master",
+      "homepage": "https://github.com/apache/age/tree/PG14",
       "bugtracker": {
          "web": "https://github.com/apache/age/issues"
       },
