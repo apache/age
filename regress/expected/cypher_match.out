@@ -2410,6 +2410,33 @@ SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETU
 ---
 (0 rows)
 
+--
+-- property acces from entity in array (issue #1033)
+--
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].years LIMIT 1 $$) as (a agtype);
+ a 
+---
+ 4
+(1 row)
+
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].relationship LIMIT 1 $$) as (a agtype);
+     a     
+-----------
+ "enemies"
+(1 row)
+
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].years, x[0].relationship LIMIT 1 $$) as (a agtype, b agtype);
+ a |     b     
+---+-----------
+ 4 | "enemies"
+(1 row)
+
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].whatever LIMIT 1 $$) as (a agtype);
+ a 
+---
+ 
+(1 row)
+
 -- these should fail due to multiple labels for a variable
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(x)-[]->(x:R) RETURN p, x $$) AS (p agtype, x agtype);
 ERROR:  multiple labels for variable 'x' are not supported

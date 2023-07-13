@@ -705,6 +705,14 @@ SELECT agtype_access_operator(
 					     $$label_name$$, agtype_build_map('key', 'other_value'))),
         '"edge"');
 
+SELECT agtype_access_operator(
+        agtype_build_map(
+            'edge', _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+				       $$label_name$$, agtype_build_map('key', 'value')),
+            'other_edge', _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
+					     $$label_name$$, agtype_build_map('key', 'other_value'))),
+        '"edge"', '"key"');
+
 --Edge in a list
 SELECT agtype_build_list(
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
@@ -718,6 +726,13 @@ SELECT agtype_access_operator(
                                      agtype_build_map('id', 3)),
 		_agtype_build_edge('2'::graphid, '2'::graphid, '3'::graphid, $$label_name$$,
                                      agtype_build_map('id', 4))), '0');
+
+SELECT agtype_access_operator(
+	agtype_build_list(
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid, $$label_name$$,
+                                     agtype_build_map('id', 3)),
+		_agtype_build_edge('2'::graphid, '2'::graphid, '3'::graphid, $$label_name$$,
+                                     agtype_build_map('id', 4))), '0','"id"');
 
 -- Path
 SELECT _agtype_build_path(

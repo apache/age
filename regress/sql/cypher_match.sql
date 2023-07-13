@@ -1073,6 +1073,14 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationsh
 
 SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETURN 0 $$) as (a agtype);
 
+--
+-- property acces from entity in array (issue #1033)
+--
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].years LIMIT 1 $$) as (a agtype);
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].relationship LIMIT 1 $$) as (a agtype);
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].years, x[0].relationship LIMIT 1 $$) as (a agtype, b agtype);
+SELECT * FROM cypher('cypher_match',$$ MATCH ()<-[x *]-() RETURN x[0].whatever LIMIT 1 $$) as (a agtype);
+
 -- these should fail due to multiple labels for a variable
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(x)-[]->(x:R) RETURN p, x $$) AS (p agtype, x agtype);
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(x:r)-[]->(x:R) RETURN p, x $$) AS (p agtype, x agtype);
