@@ -7581,6 +7581,53 @@ Datum age_cot(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+PG_FUNCTION_INFO_V1(age_cosec);
+
+Datum age_cosec(PG_FUNCTION_ARGS)
+{
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    agtype_value agtv_result;
+    float8 angle;
+    float8 result;
+    bool is_null = true;
+
+    /* extract argument values */
+    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+    /* check number of args */
+    if (nargs != 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("cosec() invalid number of arguments")));
+
+    /* check for a null input */
+    if (nargs < 0 || nulls[0])
+        PG_RETURN_NULL();
+
+    /*
+     * cosec() supports integer, float, and numeric or the agtype integer, float,
+     * and numeric for the angle
+     */
+
+    angle = get_float_compatible_arg(args[0], types[0], "cosec", &is_null);
+
+    /* check for a agtype null input */
+    if (is_null)
+        PG_RETURN_NULL();
+
+    /* We need the numeric input as a float8 so that we can pass it off to PG */
+    result = DatumGetFloat8(DirectFunctionCall2(float8div, Float8GetDatum(1), DirectFunctionCall1(dsin,
+                                                Float8GetDatum(angle))));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
 PG_FUNCTION_INFO_V1(age_asin);
 
 Datum age_asin(PG_FUNCTION_ARGS)
@@ -7776,6 +7823,109 @@ Datum age_atan2(PG_FUNCTION_ARGS)
     angle = DatumGetFloat8(DirectFunctionCall2(datan2,
                                                Float8GetDatum(y),
                                                Float8GetDatum(x)));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = angle;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_acosec);
+
+Datum age_acosec(PG_FUNCTION_ARGS)
+{
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    agtype_value agtv_result;
+    float8 x;
+    float8 angle;
+    bool is_null = true;
+
+    /* extract argument values */
+    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+    /* check number of args */
+    if (nargs != 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("acosec() invalid number of arguments")));
+
+    /* check for a null input */
+    if (nargs < 0 || nulls[0])
+        PG_RETURN_NULL();
+
+    /*
+     * acosec() supports integer, float, and numeric or the agtype integer, float,
+     * and numeric for the input expression.
+     */
+
+    x = get_float_compatible_arg(args[0], types[0], "acosec", &is_null);
+
+    /* verify that x is within range */
+    if (!((x >= 1) || (x <= -1)))
+        PG_RETURN_NULL();
+
+    /* check for a agtype null input */
+    if (is_null)
+        PG_RETURN_NULL();
+
+    /* We need the numeric input as a float8 so that we can pass it off to PG */
+    angle = DatumGetFloat8(DirectFunctionCall1(dasin,
+    DirectFunctionCall2(float8div, Float8GetDatum(1), Float8GetDatum(x))));
+
+    /* build the result */
+    agtv_result.type = AGTV_FLOAT;
+    agtv_result.val.float_value = angle;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_asec);
+
+Datum age_asec(PG_FUNCTION_ARGS)
+{
+    int nargs;
+    Datum *args;
+    bool *nulls;
+    Oid *types;
+    agtype_value agtv_result;
+    float8 x;
+    float8 angle;
+    bool is_null = true;
+
+    /* extract argument values */
+    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+    /* check number of args */
+    if (nargs != 1)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("asec() invalid number of arguments")));
+
+    /* check for a null input */
+    if (nargs < 0 || nulls[0])
+        PG_RETURN_NULL();
+
+    /*
+     * asec() supports integer, float, and numeric or the agtype integer, float,
+     * and numeric for the input expression.
+     */
+
+    x = get_float_compatible_arg(args[0], types[0], "asec", &is_null);
+
+    /* verify that x is within range */
+    if (!((x >= 1) || (x <= -1)))
+        PG_RETURN_NULL();
+
+    /* check for a agtype null input */
+    if (is_null)
+        PG_RETURN_NULL();
+
+    /* We need the numeric input as a float8 so that we can pass it off to PG */
+    angle = DatumGetFloat8(DirectFunctionCall1(dacos,
+    DirectFunctionCall2(float8div, Float8GetDatum(1), 
+    Float8GetDatum(x))));
 
     /* build the result */
     agtv_result.type = AGTV_FLOAT;

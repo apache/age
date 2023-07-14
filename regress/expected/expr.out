@@ -4091,7 +4091,7 @@ ERROR:  replace() unsupported argument type 23
 SELECT * FROM age_replace('Hello', 1, 'E');
 ERROR:  replace() unsupported argument type 23
 --
--- sin, cos, tan, cot
+-- sin, cos, tan, cot, cosec
 --
 SELECT sin = results FROM cypher('expr', $$
     RETURN sin(3.1415)
@@ -4125,6 +4125,14 @@ $$) AS (results agtype), cot(3.1415);
  t
 (1 row)
 
+SELECT (1 / sin) = results FROM cypher('expr', $$
+    RETURN cosec(3.1415)
+$$) AS (results agtype), sin(3.1415);
+ ?column? 
+----------
+ t
+(1 row)
+
 SELECT sin = age_sin FROM sin(3.1415), age_sin(3.1415);
  ?column? 
 ----------
@@ -4144,6 +4152,12 @@ SELECT tan = age_tan FROM tan(3.1415), age_tan(3.1415);
 (1 row)
 
 SELECT cot = age_cot FROM cot(3.1415), age_cot(3.1415);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT (1 / sin) = age_cosec FROM sin(3.1415), age_cosec(3.1415);
  ?column? 
 ----------
  t
@@ -4182,6 +4196,14 @@ $$) AS (results agtype);
  
 (1 row)
 
+SELECT * FROM cypher('expr', $$
+    RETURN cosec(null)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
 SELECT * FROM age_sin(null);
  age_sin 
 ---------
@@ -4206,6 +4228,12 @@ SELECT * FROM age_cot(null);
  
 (1 row)
 
+SELECT * FROM age_cosec(null);
+ age_cosec 
+-----------
+ 
+(1 row)
+
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN sin("0")
@@ -4223,6 +4251,10 @@ SELECT * FROM cypher('expr', $$
     RETURN cot("0")
 $$) AS (results agtype);
 ERROR:  cot() unsupported argument agtype 1
+SELECT * FROM cypher('expr', $$
+    RETURN cosec("0")
+$$) AS (results agtype);
+ERROR:  cosec() unsupported argument agtype 1
 SELECT * FROM cypher('expr', $$
     RETURN sin()
 $$) AS (results agtype);
@@ -4251,6 +4283,13 @@ ERROR:  function ag_catalog.age_cot() does not exist
 LINE 2:     RETURN cot()
                    ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN cosec()
+$$) AS (results agtype);
+ERROR:  function ag_catalog.age_cosec() does not exist
+LINE 2:     RETURN cosec()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT * FROM age_sin('0');
 ERROR:  sin() unsupported argument type 25
 SELECT * FROM age_cos('0');
@@ -4259,6 +4298,8 @@ SELECT * FROM age_tan('0');
 ERROR:  tan() unsupported argument type 25
 SELECT * FROM age_cot('0');
 ERROR:  cot() unsupported argument type 25
+SELECT * FROM age_cosec('0');
+ERROR:  cosec() unsupported argument type 25
 SELECT * FROM age_sin();
 ERROR:  function age_sin() does not exist
 LINE 1: SELECT * FROM age_sin();
@@ -4279,8 +4320,13 @@ ERROR:  function age_cot() does not exist
 LINE 1: SELECT * FROM age_cot();
                       ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM age_cosec();
+ERROR:  function age_cosec() does not exist
+LINE 1: SELECT * FROM age_cosec();
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 --
--- Arc functions: asin, acos, atan, & atan2
+-- Arc functions: asin, acos, atan, atan2, acosec & asec
 --
 SELECT * FROM cypher('expr', $$
     RETURN asin(1)*2
@@ -4314,6 +4360,22 @@ $$) AS (results agtype);
  3.14159265358979
 (1 row)
 
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(1)*2
+$$) AS (results agtype);
+     results      
+------------------
+ 3.14159265358979
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN asec(1)*2
+$$) AS (results agtype);
+ results 
+---------
+ 0.0
+(1 row)
+
 SELECT * FROM asin(1), age_asin(1);
       asin       |    age_asin     
 -----------------+-----------------
@@ -4336,6 +4398,18 @@ SELECT * FROM atan2(1, 1), age_atan2(1, 1);
        atan2       |     age_atan2     
 -------------------+-------------------
  0.785398163397448 | 0.785398163397448
+(1 row)
+
+SELECT * FROM asin(float8div(1, 1)) AS acosec, age_acosec(1);
+     acosec      |   age_acosec    
+-----------------+-----------------
+ 1.5707963267949 | 1.5707963267949
+(1 row)
+
+SELECT * FROM acos(float8div(1, 2)) AS asec, age_asec(2);
+      asec       |    age_asec     
+-----------------+-----------------
+ 1.0471975511966 | 1.0471975511966
 (1 row)
 
 -- should return null
@@ -4419,6 +4493,54 @@ $$) AS (results agtype);
  
 (1 row)
 
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(0.1)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN asec(0.1)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(-0.1)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN asec(-0.1)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(null)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN asec(null)
+$$) AS (results agtype);
+ results 
+---------
+ 
+(1 row)
+
 SELECT * FROM age_asin(null);
  age_asin 
 ----------
@@ -4455,6 +4577,18 @@ SELECT * FROM age_atan2(null, 1);
  
 (1 row)
 
+SELECT * FROM age_acosec(null);
+ age_acosec 
+------------
+ 
+(1 row)
+
+SELECT * FROM age_asec(null);
+ age_asec 
+----------
+ 
+(1 row)
+
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN asin("0")
@@ -4476,6 +4610,14 @@ SELECT * FROM cypher('expr', $$
     RETURN atan2(0, "1")
 $$) AS (results agtype);
 ERROR:  atan2() unsupported argument agtype 1
+SELECT * FROM cypher('expr', $$
+    RETURN acosec("0")
+$$) AS (results agtype);
+ERROR:  acosec() unsupported argument agtype 1
+SELECT * FROM cypher('expr', $$
+    RETURN asec("0")
+$$) AS (results agtype);
+ERROR:  asec() unsupported argument agtype 1
 SELECT * FROM cypher('expr', $$
     RETURN asin()
 $$) AS (results agtype);
@@ -4508,6 +4650,20 @@ SELECT * FROM cypher('expr', $$
     RETURN atan2(null)
 $$) AS (results agtype);
 ERROR:  atan2() invalid number of arguments
+SELECT * FROM cypher('expr', $$
+    RETURN acosec()
+$$) AS (results agtype);
+ERROR:  function ag_catalog.age_acosec() does not exist
+LINE 2:     RETURN acosec()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN asec()
+$$) AS (results agtype);
+ERROR:  function ag_catalog.age_asec() does not exist
+LINE 2:     RETURN asec()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT * FROM age_asin('0');
 ERROR:  asin() unsupported argument type 25
 SELECT * FROM age_acos('0');
@@ -4518,6 +4674,10 @@ SELECT * FROM age_atan2('0', 1);
 ERROR:  atan2() unsupported argument type 25
 SELECT * FROM age_atan2(1, '0');
 ERROR:  atan2() unsupported argument type 25
+SELECT * FROM age_acosec('0');
+ERROR:  acosec() unsupported argument type 25
+SELECT * FROM age_asec('0');
+ERROR:  asec() unsupported argument type 25
 SELECT * FROM age_asin();
 ERROR:  function age_asin() does not exist
 LINE 1: SELECT * FROM age_asin();
@@ -4540,6 +4700,16 @@ LINE 1: SELECT * FROM age_atan2();
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT * FROM age_atan2(1);
 ERROR:  atan2() invalid number of arguments
+SELECT * FROM age_acosec();
+ERROR:  function age_acosec() does not exist
+LINE 1: SELECT * FROM age_acosec();
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM age_asec();
+ERROR:  function age_asec() does not exist
+LINE 1: SELECT * FROM age_asec();
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 --
 -- pi
 --

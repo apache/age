@@ -1761,7 +1761,7 @@ SELECT * FROM age_replace('Hello', 'e', 1);
 SELECT * FROM age_replace('Hello', 1, 'E');
 
 --
--- sin, cos, tan, cot
+-- sin, cos, tan, cot, cosec
 --
 SELECT sin = results FROM cypher('expr', $$
     RETURN sin(3.1415)
@@ -1775,10 +1775,14 @@ $$) AS (results agtype), tan(3.1415);
 SELECT cot = results FROM cypher('expr', $$
     RETURN cot(3.1415)
 $$) AS (results agtype), cot(3.1415);
+SELECT (1 / sin) = results FROM cypher('expr', $$
+    RETURN cosec(3.1415)
+$$) AS (results agtype), sin(3.1415);
 SELECT sin = age_sin FROM sin(3.1415), age_sin(3.1415);
 SELECT cos = age_cos FROM cos(3.1415), age_cos(3.1415);
 SELECT tan = age_tan FROM tan(3.1415), age_tan(3.1415);
 SELECT cot = age_cot FROM cot(3.1415), age_cot(3.1415);
+SELECT (1 / sin) = age_cosec FROM sin(3.1415), age_cosec(3.1415);
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN sin(null)
@@ -1792,10 +1796,14 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN cot(null)
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN cosec(null)
+$$) AS (results agtype);
 SELECT * FROM age_sin(null);
 SELECT * FROM age_cos(null);
 SELECT * FROM age_tan(null);
 SELECT * FROM age_cot(null);
+SELECT * FROM age_cosec(null);
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN sin("0")
@@ -1810,6 +1818,9 @@ SELECT * FROM cypher('expr', $$
     RETURN cot("0")
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
+    RETURN cosec("0")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
     RETURN sin()
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
@@ -1821,17 +1832,22 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN cot()
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN cosec()
+$$) AS (results agtype);
 SELECT * FROM age_sin('0');
 SELECT * FROM age_cos('0');
 SELECT * FROM age_tan('0');
 SELECT * FROM age_cot('0');
+SELECT * FROM age_cosec('0');
 SELECT * FROM age_sin();
 SELECT * FROM age_cos();
 SELECT * FROM age_tan();
 SELECT * FROM age_cot();
+SELECT * FROM age_cosec();
 
 --
--- Arc functions: asin, acos, atan, & atan2
+-- Arc functions: asin, acos, atan, atan2, acosec & asec
 --
 SELECT * FROM cypher('expr', $$
     RETURN asin(1)*2
@@ -1845,10 +1861,18 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN atan2(1, 1)*4
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(1)*2
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec(1)*2
+$$) AS (results agtype);
 SELECT * FROM asin(1), age_asin(1);
 SELECT * FROM acos(0), age_acos(0);
 SELECT * FROM atan(1), age_atan(1);
 SELECT * FROM atan2(1, 1), age_atan2(1, 1);
+SELECT * FROM asin(float8div(1, 1)) AS acosec, age_acosec(1);
+SELECT * FROM acos(float8div(1, 2)) AS asec, age_asec(2);
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN asin(1.1)
@@ -1880,12 +1904,32 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN atan2(1, null)
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(0.1)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec(0.1)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(-0.1)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec(-0.1)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN acosec(null)
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec(null)
+$$) AS (results agtype);
 SELECT * FROM age_asin(null);
 SELECT * FROM age_acos(null);
 SELECT * FROM age_atan(null);
 SELECT * FROM age_atan2(null, null);
 SELECT * FROM age_atan2(1, null);
 SELECT * FROM age_atan2(null, 1);
+SELECT * FROM age_acosec(null);
+SELECT * FROM age_asec(null);
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN asin("0")
@@ -1903,6 +1947,12 @@ SELECT * FROM cypher('expr', $$
     RETURN atan2(0, "1")
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
+    RETURN acosec("0")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec("0")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
     RETURN asin()
 $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
@@ -1917,16 +1967,26 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN atan2(null)
 $$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN acosec()
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN asec()
+$$) AS (results agtype);
 SELECT * FROM age_asin('0');
 SELECT * FROM age_acos('0');
 SELECT * FROM age_atan('0');
 SELECT * FROM age_atan2('0', 1);
 SELECT * FROM age_atan2(1, '0');
+SELECT * FROM age_acosec('0');
+SELECT * FROM age_asec('0');
 SELECT * FROM age_asin();
 SELECT * FROM age_acos();
 SELECT * FROM age_atan();
 SELECT * FROM age_atan2();
 SELECT * FROM age_atan2(1);
+SELECT * FROM age_acosec();
+SELECT * FROM age_asec();
 
 --
 -- pi
