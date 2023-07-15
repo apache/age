@@ -78,7 +78,9 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
              * use token.value.s instead of keyword->name to preserve
              * case sensitivity
              */
-            lvalp->keyword = token.value.s;
+            ident = pstrdup(token.value.s);
+            truncate_identifier(ident, strlen(ident), true);
+            lvalp->string = ident;
             *llocp = token.location;
             return keyword->value;
         }
