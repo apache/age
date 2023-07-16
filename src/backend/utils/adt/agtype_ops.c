@@ -1049,6 +1049,7 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
             }
             else
             {
+
                 PG_RETURN_BOOL(false);
             }
         }
@@ -1106,6 +1107,7 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("invalid agtype value for right operand")));
     }
+
 
     PG_RETURN_BOOL(true);
 }
