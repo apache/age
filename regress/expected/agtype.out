@@ -3654,7 +3654,7 @@ SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1"
  f
 (1 row)
 
---errors out
+-- errors out
 SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
 ERROR:  invalid input syntax for type agtype
 LINE 1: ...a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
@@ -3863,6 +3863,426 @@ SELECT '{"a":null, "b":"qq"}'::agtype ?& '""';
 ERROR:  invalid agtype value for right operand
 SELECT '{"a":null, "b":"qq"}'::agtype ?& '"null"';
 ERROR:  invalid agtype value for right operand
+--Concat ||
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || '[0, 1]'::agtype as i) a;
+      i       | pg_typeof 
+--------------+-----------
+ [0, 1, 0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '2'::agtype || '[0, 1]'::agtype as i) a;
+     i     | pg_typeof 
+-----------+-----------
+ [2, 0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || '2'::agtype as i) a;
+     i     | pg_typeof 
+-----------+-----------
+ [0, 1, 2] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '{"a": 1}'::agtype || '[0, 1]'::agtype as i) a;
+        i         | pg_typeof 
+------------------+-----------
+ [{"a": 1}, 0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || '{"a": 1}'::agtype as i) a;
+        i         | pg_typeof 
+------------------+-----------
+ [0, 1, {"a": 1}] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[]'::agtype || '[0, 1]'::agtype as i) a;
+   i    | pg_typeof 
+--------+-----------
+ [0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || '[]'::agtype as i) a;
+   i    | pg_typeof 
+--------+-----------
+ [0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT 'null'::agtype || '[0, 1]'::agtype as i) a;
+      i       | pg_typeof 
+--------------+-----------
+ [null, 0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || 'null'::agtype as i) a;
+      i       | pg_typeof 
+--------------+-----------
+ [0, 1, null] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[null]'::agtype || '[0, 1]'::agtype as i) a;
+      i       | pg_typeof 
+--------------+-----------
+ [null, 0, 1] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || '[null]'::agtype as i) a;
+      i       | pg_typeof 
+--------------+-----------
+ [0, 1, null] | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT NULL || '[0, 1]'::agtype as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT i, pg_typeof(i) FROM (SELECT '[0, 1]'::agtype || NULL as i) a;
+ i | pg_typeof 
+---+-----------
+   | agtype
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '{"cq":"l", "b":"g", "fg":false}';
+                  ?column?                   
+---------------------------------------------
+ {"b": "g", "aa": 1, "cq": "l", "fg": false}
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '{"aq":"l"}';
+               ?column?                
+---------------------------------------
+ {"b": 2, "aa": 1, "aq": "l", "cq": 3}
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '{"aa":"l"}';
+           ?column?           
+------------------------------
+ {"b": 2, "aa": "l", "cq": 3}
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '[{"aa":"l"}]';
+                 ?column?                  
+-------------------------------------------
+ [{"b": 2, "aa": 1, "cq": 3}, {"aa": "l"}]
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '[{"aa":"l", "aa": "k"}]';
+                 ?column?                  
+-------------------------------------------
+ [{"b": 2, "aa": 1, "cq": 3}, {"aa": "k"}]
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3}'::agtype || '{}';
+          ?column?          
+----------------------------
+ {"b": 2, "aa": 1, "cq": 3}
+(1 row)
+
+SELECT '{"aa":1 , "b":2, "cq":3, "cj": {"fg": true}}'::agtype || '{"cq":"l", "b":"g", "fg":false}';
+                            ?column?                             
+-----------------------------------------------------------------
+ {"b": "g", "aa": 1, "cj": {"fg": true}, "cq": "l", "fg": false}
+(1 row)
+
+SELECT '["a", "b"]'::agtype || '["c"]';
+    ?column?     
+-----------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT '["a", "b"]'::agtype || '["c", "d"]';
+       ?column?       
+----------------------
+ ["a", "b", "c", "d"]
+(1 row)
+
+SELECT '["a", "b"]'::agtype || '["c", "d", "d"]';
+         ?column?          
+---------------------------
+ ["a", "b", "c", "d", "d"]
+(1 row)
+
+SELECT '["c"]' || '["a", "b"]'::agtype;
+    ?column?     
+-----------------
+ ["c", "a", "b"]
+(1 row)
+
+SELECT '["a", "b"]'::agtype || '"c"';
+    ?column?     
+-----------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT '"c"' || '["a", "b"]'::agtype;
+    ?column?     
+-----------------
+ ["c", "a", "b"]
+(1 row)
+
+SELECT '[]'::agtype || '{}'::agtype;
+ ?column? 
+----------
+ [{}]
+(1 row)
+
+SELECT '[]'::agtype || '[]'::agtype;
+ ?column? 
+----------
+ []
+(1 row)
+
+SELECT '{}'::agtype || '{}'::agtype;
+ ?column? 
+----------
+ {}
+(1 row)
+
+SELECT null::agtype || null::agtype;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{}'::agtype || '[null]'::agtype;
+  ?column?  
+------------
+ [{}, null]
+(1 row)
+
+SELECT '{"a": 13}'::agtype || 'null'::agtype;
+     ?column?      
+-------------------
+ [{"a": 13}, null]
+(1 row)
+
+SELECT '[null]'::agtype || '{"a": null}'::agtype;
+      ?column?       
+---------------------
+ [null, {"a": null}]
+(1 row)
+
+SELECT '{"a": 13}'::agtype || '{"a": 13}'::agtype;
+ ?column?  
+-----------
+ {"a": 13}
+(1 row)
+
+SELECT '{"a": 13}'::agtype || '[{"a": 13}]'::agtype;
+        ?column?        
+------------------------
+ [{"a": 13}, {"a": 13}]
+(1 row)
+
+SELECT '[]'::agtype || '["a"]'::agtype;
+ ?column? 
+----------
+ ["a"]
+(1 row)
+
+SELECT '[]'::agtype || '"a"'::agtype;
+ ?column? 
+----------
+ ["a"]
+(1 row)
+
+SELECT '"b"'::agtype || '"a"'::agtype;
+  ?column?  
+------------
+ ["b", "a"]
+(1 row)
+
+SELECT '{}'::agtype || '{"a":"b"}'::agtype;
+  ?column?  
+------------
+ {"a": "b"}
+(1 row)
+
+SELECT '[]'::agtype || '{"a":"b"}'::agtype;
+   ?column?   
+--------------
+ [{"a": "b"}]
+(1 row)
+
+SELECT '{"a":"b"}'::agtype || '[]'::agtype;
+   ?column?   
+--------------
+ [{"a": "b"}]
+(1 row)
+
+SELECT '"a"'::agtype || '{"a":1}';
+    ?column?     
+-----------------
+ ["a", {"a": 1}]
+(1 row)
+
+SELECT '{"a":1}' || '"a"'::agtype;
+    ?column?     
+-----------------
+ [{"a": 1}, "a"]
+(1 row)
+
+SELECT '[3]'::agtype || '{}'::agtype;
+ ?column? 
+----------
+ [3, {}]
+(1 row)
+
+SELECT '3'::agtype || '[]'::agtype;
+ ?column? 
+----------
+ [3]
+(1 row)
+
+SELECT '3'::agtype || '4'::agtype;
+ ?column? 
+----------
+ [3, 4]
+(1 row)
+
+SELECT '3'::agtype || '[4]';
+ ?column? 
+----------
+ [3, 4]
+(1 row)
+
+SELECT '3'::agtype || '{}'::agtype;
+ ?column? 
+----------
+ [3, {}]
+(1 row)
+
+SELECT '3::numeric'::agtype || '[[]]'::agtype;
+     ?column?     
+------------------
+ [3::numeric, []]
+(1 row)
+
+SELECT '""'::agtype || '[]'::agtype;
+ ?column? 
+----------
+ [""]
+(1 row)
+
+SELECT '["a", "b"]'::agtype || '{"c":1}';
+       ?column?       
+----------------------
+ ["a", "b", {"c": 1}]
+(1 row)
+
+SELECT '{"c": 1}'::agtype || '["a", "b"]';
+       ?column?       
+----------------------
+ [{"c": 1}, "a", "b"]
+(1 row)
+
+SELECT '{}'::agtype || '{"cq":"l", "b":"g", "fg":false}';
+              ?column?              
+------------------------------------
+ {"b": "g", "cq": "l", "fg": false}
+(1 row)
+
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || true::agtype;
+                      ?column?                       
+-----------------------------------------------------
+ [{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}, true]
+(1 row)
+
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || 'true'::agtype;
+                      ?column?                       
+-----------------------------------------------------
+ [{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}, true]
+(1 row)
+
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || age_agtype_sum('1', '2');
+                     ?column?                     
+--------------------------------------------------
+ [{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}, 3]
+(1 row)
+
+SELECT '{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b" : true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge'::agtype || '"id"';
+                                                                                                                          ?column?                                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge, "id"]
+(1 row)
+
+SELECT '{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b" : true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge'::agtype || '"m"';
+                                                                                                                         ?column?                                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge, "m"]
+(1 row)
+
+SELECT '{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b" : true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge'::agtype || '{"m": []}';
+                                                                                                                            ?column?                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge, {"m": []}]
+(1 row)
+
+SELECT '{}'::agtype || '{}'::agtype || '[{}]'::agtype;
+ ?column? 
+----------
+ [{}, {}]
+(1 row)
+
+SELECT ('{"a": "5"}'::agtype || '{"a": {}}'::agtype) || '5'::agtype;
+    ?column?    
+----------------
+ [{"a": {}}, 5]
+(1 row)
+
+SELECT '{"y": {}}'::agtype || '{"b": "5"}'::agtype || '{"a": {}}'::agtype || '{"z": []}'::agtype;
+               ?column?                
+---------------------------------------
+ {"a": {}, "b": "5", "y": {}, "z": []}
+(1 row)
+
+SELECT '{"y": {}}'::agtype || '{"b": "5"}'::agtype || '{"a": {}}'::agtype || '{"z": []}'::agtype || '[]'::agtype;
+                ?column?                 
+-----------------------------------------
+ [{"a": {}, "b": "5", "y": {}, "z": []}]
+(1 row)
+
+SELECT '{"y": {}}'::agtype || '{"b": "5"}'::agtype || '{"a": {}}'::agtype || '{"z": []}'::agtype || '[]'::agtype || '{}';
+                  ?column?                   
+---------------------------------------------
+ [{"a": {}, "b": "5", "y": {}, "z": []}, {}]
+(1 row)
+
+SELECT '"e"'::agtype || '1'::agtype || '{}'::agtype;
+   ?column?   
+--------------
+ ["e", 1, {}]
+(1 row)
+
+SELECT ('"e"'::agtype || '1'::agtype) || '{"[]": "p"}'::agtype;
+       ?column?        
+-----------------------
+ ["e", 1, {"[]": "p"}]
+(1 row)
+
+SELECT '{"{}": {"a": []}}'::agtype || '{"{}": {"[]": []}}'::agtype || '{"{}": {}}'::agtype;
+  ?column?  
+------------
+ {"{}": {}}
+(1 row)
+
+SELECT '{}'::agtype || '{}'::agtype || '[{}]'::agtype || '[{}]'::agtype || '{}'::agtype;
+     ?column?     
+------------------
+ [{}, {}, {}, {}]
+(1 row)
+
+-- should give an error
+SELECT '3'::agtype || 4;
+ERROR:  operator does not exist: agtype || integer
+LINE 1: SELECT '3'::agtype || 4;
+                           ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+SELECT '3'::agtype || true;
+ERROR:  operator does not exist: agtype || boolean
+LINE 1: SELECT '3'::agtype || true;
+                           ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS
 --

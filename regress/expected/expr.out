@@ -1003,7 +1003,7 @@ $$) AS r(result agtype);
 (1 row)
 
 /*
- * ?, ?|, ?& key existence operators
+ * ?, ?|, ?& key existence, concat operators
  */
 SELECT create_graph('jsonb_operators');
 NOTICE:  graph "jsonb_operators" has been created
@@ -1246,6 +1246,109 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a 
 ERROR:  invalid agtype value for right operand
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
 ERROR:  invalid agtype value for right operand
+-- concat ||
+SELECT * FROM cypher('jsonb_operators', $$ RETURN [1,2] || 2 $$) AS (result agtype);
+  result   
+-----------
+ [1, 2, 2]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false $$) AS (result agtype);
+    result     
+---------------
+ [true, false]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false || {a: 'string'} $$) AS (result agtype);
+             result             
+--------------------------------
+ [true, false, {"a": "string"}]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false || {a: 'string'} || true $$) AS (result agtype);
+                result                
+--------------------------------------
+ [true, false, {"a": "string"}, true]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ WITH [1,2,3] AS m WITH m, m || 'string' AS n RETURN n $$) AS (result agtype);
+       result        
+---------------------
+ [1, 2, 3, "string"]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ WITH [1,2,3] AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+            result            
+------------------------------
+ [1, 2, 3, {"a": 1::numeric}]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ WITH {a: [1,2,3]} AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+      result       
+-------------------
+ {"a": 1::numeric}
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ WITH {b: [1,2,3]} AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+              result               
+-----------------------------------
+ {"a": 1::numeric, "b": [1, 2, 3]}
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ WITH 'b' AS m WITH m, m || {a: 1} AS n RETURN n $$) AS (result agtype);
+     result      
+-----------------
+ ["b", {"a": 1}]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH(n) RETURN n || 1 || 'string' $$) AS (result agtype);
+                                                                          result                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex, 1, "string"]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH(n) RETURN n || {list: [true, null]} $$) AS (result agtype);
+                                                                               result                                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex, {"list": [true, null]}]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) MATCH(m) RETURN n || m $$) AS (result agtype);
+                                                                                                                                         result                                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex, {"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.list || [1, 2, 3] $$) AS (result agtype);
+          result          
+--------------------------
+ ["a", "b", "c", 1, 2, 3]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || [1, 2, 3] $$) AS (result agtype);
+                        result                         
+-------------------------------------------------------
+ [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, 1, 2, 3]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || 1 $$) AS (result agtype);
+                     result                      
+-------------------------------------------------
+ [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, 1]
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n.json $$) AS (result agtype);
+                   result                   
+--------------------------------------------
+ {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n $$) AS (result agtype);
+                                                                                         result                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, {"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex]
+(1 row)
+
 /*
  * access operator ->
  */

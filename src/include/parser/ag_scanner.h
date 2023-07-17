@@ -48,6 +48,7 @@ typedef enum ag_token_type
     AG_TOKEN_EQ_TILDE,
     AG_TOKEN_ANY_EXISTS,
     AG_TOKEN_ALL_EXISTS,
+    AG_TOKEN_CONCAT,
     AG_TOKEN_CHAR
 } ag_token_type;
 

@@ -76,7 +76,7 @@
 
 /* operators that have more than 1 character */
 %token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE
-%token ACCESS ANY_EXISTS ALL_EXISTS
+%token ACCESS ANY_EXISTS ALL_EXISTS CONCAT
 
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
@@ -171,7 +171,7 @@
 %right NOT
 %left '=' NOT_EQ '<' LT_EQ '>' GT_EQ
 %left '|' '&' '?' ANY_EXISTS ALL_EXISTS
-%left '+' '-'
+%left '+' '-' CONCAT
 %left '*' '/' '%'
 %left '^'
 %nonassoc IN IS
@@ -1336,6 +1336,10 @@ expr:
     | expr ALL_EXISTS expr
         {
             $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?&", $1, $3, @2);
+        }
+    | expr CONCAT expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "||", $1, $3, @2);
         }
     | expr '+' expr
         {

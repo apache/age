@@ -229,6 +229,7 @@ param \${id}
  */
 any_exists "?|"
 all_exists "?&"
+concat     "||"
 lt_gt      "<>"
 lt_eq      "<="
 gt_eq      ">="
@@ -655,6 +656,14 @@ ag_token token;
 {all_exists} {
     update_location();
     token.type = AG_TOKEN_ALL_EXISTS;
+    token.value.s = yytext;
+    token.location = get_location();
+    return token;
+}
+
+{concat} {
+    update_location();
+    token.type = AG_TOKEN_CONCAT;
     token.value.s = yytext;
     token.location = get_location();
     return token;

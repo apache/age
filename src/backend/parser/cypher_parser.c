@@ -48,7 +48,8 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         PLUS_EQ,
         EQ_TILDE,
         ANY_EXISTS,
-        ALL_EXISTS
+        ALL_EXISTS,
+        CONCAT
     };
 
     ag_token token;
@@ -102,6 +103,7 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         break;
     case AG_TOKEN_ALL_EXISTS:
     case AG_TOKEN_ANY_EXISTS:
+    case AG_TOKEN_CONCAT:
     break;
     case AG_TOKEN_CHAR:
         *llocp = token.location;

@@ -482,7 +482,7 @@ RETURN [
 $$) AS r(result agtype);
 
 /*
- * ?, ?|, ?& key existence operators
+ * ?, ?|, ?& key existence, concat operators
  */
 
 SELECT create_graph('jsonb_operators');
@@ -549,6 +549,25 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [['list']] $$) as
 -- errors out
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
+
+-- concat ||
+SELECT * FROM cypher('jsonb_operators', $$ RETURN [1,2] || 2 $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false || {a: 'string'} $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ RETURN true || false || {a: 'string'} || true $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ WITH [1,2,3] AS m WITH m, m || 'string' AS n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ WITH [1,2,3] AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ WITH {a: [1,2,3]} AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ WITH {b: [1,2,3]} AS m WITH m, m || {a: 1::numeric} AS n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ WITH 'b' AS m WITH m, m || {a: 1} AS n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH(n) RETURN n || 1 || 'string' $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH(n) RETURN n || {list: [true, null]} $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) MATCH(m) RETURN n || m $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.list || [1, 2, 3] $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || [1, 2, 3] $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || 1 $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n.json $$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n $$) AS (result agtype);
 
 /*
  * access operator ->
