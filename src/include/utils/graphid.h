@@ -57,9 +57,6 @@ typedef int64 graphid;
 #define GRAPHIDOID get_GRAPHIDOID()
 #define GRAPHIDARRAYOID get_GRAPHIDARRAYOID()
 
-#define GET_LABEL_ID(id) \
-       (((uint64)id) >> ENTRY_ID_BITS)
-
 graphid make_graphid(const int32 label_id, const int64 entry_id);
 int32 get_graphid_label_id(const graphid gid);
 int64 get_graphid_entry_id(const graphid gid);

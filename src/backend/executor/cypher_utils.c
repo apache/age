@@ -183,7 +183,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
      * Extract the label id from the graph id and get the table name
      * the entity is part of.
      */
-    label = search_label_graph_oid_cache(graph_oid, GET_LABEL_ID(id));
+    label = search_label_graph_oid_cache(graph_oid, get_graphid_label_id(id));
 
     // Setup the scan key to be the graphid
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
