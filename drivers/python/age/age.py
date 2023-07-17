@@ -20,6 +20,7 @@ from psycopg2 import extensions as ext
 from psycopg2 import sql
 from .exceptions import *
 from .builder import ResultHandler , parseAgeValue, newResultHandler
+from .agesql import *
 
 
 _EXCEPTION_NoConnection = NoConnection()
@@ -29,8 +30,8 @@ WHITESPACE = re.compile('\s')
 
 def setUpAge(conn:ext.connection, graphName:str):
     with conn.cursor() as cursor:
-        cursor.execute("LOAD 'age';")
-        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+        cursor.execute(SQL_LoadAge())
+        cursor.execute(SQL_Set_Searchpath_to_ag_catalog())
 
         cursor.execute("SELECT typelem FROM pg_type WHERE typname='_agtype'")
         oid = cursor.fetchone()[0]
@@ -48,15 +49,15 @@ def setUpAge(conn:ext.connection, graphName:str):
 # Create the graph, if it does not exist
 def checkGraphCreated(conn:ext.connection, graphName:str):
     with conn.cursor() as cursor:
-        cursor.execute(sql.SQL("SELECT count(*) FROM ag_graph WHERE name={graphName}").format(graphName=sql.Literal(graphName)))
+        cursor.execute(SQL_CountGraph(graphName))
         if cursor.fetchone()[0] == 0:
-            cursor.execute(sql.SQL("SELECT create_graph({graphName});").format(graphName=sql.Literal(graphName)))
+            cursor.execute(SQL_Create_graph(graphName))
             conn.commit()
 
 
 def deleteGraph(conn:ext.connection, graphName:str):
     with conn.cursor() as cursor:
-        cursor.execute(sql.SQL("SELECT drop_graph({graphName}, true);").format(graphName=sql.Literal(graphName)))
+        cursor.execute(SQL_Delete_graph(graphName))
         conn.commit()
 
 
