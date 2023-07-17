@@ -200,6 +200,35 @@ class Age:
     def cypher(self, cursor:ext.cursor, cypherStmt:str, cols:list=None, params:tuple=None) -> ext.cursor :
         return cypher(cursor, self.graphName, cypherStmt, cols=cols, params=params)
 
+
+    def getOidOfGraph(self, graphName: str = None) -> int:
+        """
+        Retrieve the Object ID (OID) of a graph from the ag_catalog.ag_graph table.
+
+        Args:
+            graphName (str, optional): Name of the graph to get the OID for. If not provided,
+                                    the function will return the OID of the default graph.
+
+        Returns:
+            int: The Object ID (OID) of the specified graph. If the graphName is not found
+                in the ag_graph table, or if no graphName is provided and there is no default graph,
+                the function will return None
+        """
+        connection = self.connection
+        if graphName == None:
+            graphName = self.graphName
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql.SQL("""
+                            SELECT graphid FROM ag_catalog.ag_graph 
+                            WHERE name='%s' ;
+                        """ % (graphName)))
+                oid = cursor.fetchone()[0]
+                return oid
+        except:
+            return None
+
     # def execSql(self, stmt:str, commit:bool=False, params:tuple=None) -> ext.cursor :
     #     return execSql(self.connection, stmt, commit, params)
 
