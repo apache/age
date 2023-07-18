@@ -5475,6 +5475,54 @@ ERROR:  schema "contains" does not exist
 LINE 2:     RETURN contains.age_sqrt(25)
                                     ^
 --
+-- sqr()
+--
+SELECT * from cypher('expr', $$
+    RETURN sqr(5)
+$$) as (result agtype);
+ result 
+--------
+ 25.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN sqr(1)
+$$) as (result agtype);
+ result 
+--------
+ 1.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN sqr(0)
+$$) as (result agtype);
+ result 
+--------
+ 0.0
+(1 row)
+
+-- should return null
+SELECT * from cypher('expr', $$
+    RETURN sqr(null)
+$$) as (result agtype);
+ result 
+--------
+ 
+(1 row)
+
+-- should fail
+SELECT * from cypher('expr', $$
+    RETURN sqr()
+$$) as (result agtype);
+ERROR:  function ag_catalog.age_sqr() does not exist
+LINE 2:     RETURN sqr()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * from cypher('expr', $$
+    RETURN sqr("1")
+$$) as (result agtype);
+ERROR:  sqr() unsupported argument agtype 1
+--
 -- aggregate functions avg(), sum(), count(), & count(*)
 --
 SELECT create_graph('UCSC');

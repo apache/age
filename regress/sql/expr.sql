@@ -2350,6 +2350,30 @@ SELECT * from cypher('expr', $$
 $$) as (result agtype);
 
 --
+-- sqr()
+--
+SELECT * from cypher('expr', $$
+    RETURN sqr(5)
+$$) as (result agtype);
+SELECT * from cypher('expr', $$
+    RETURN sqr(1)
+$$) as (result agtype);
+SELECT * from cypher('expr', $$
+    RETURN sqr(0)
+$$) as (result agtype);
+-- should return null
+SELECT * from cypher('expr', $$
+    RETURN sqr(null)
+$$) as (result agtype);
+-- should fail
+SELECT * from cypher('expr', $$
+    RETURN sqr()
+$$) as (result agtype);
+SELECT * from cypher('expr', $$
+    RETURN sqr("1")
+$$) as (result agtype);
+
+--
 -- aggregate functions avg(), sum(), count(), & count(*)
 --
 SELECT create_graph('UCSC');
