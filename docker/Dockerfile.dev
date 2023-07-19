@@ -16,7 +16,8 @@
 # limitations under the License.
 #
 
-FROM postgres:12
+
+FROM postgres:12-buster
 
 RUN apt-get update
 RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
@@ -26,8 +27,16 @@ RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
   postgresql-server-dev-12
 
 COPY . /age
-RUN cd /age && make install
 
-COPY docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
+# Set current working directory to /age/ and build.
+WORKDIR /age
+RUN make install
+
+RUN chown -R postgres /age
+USER postgres
+
+RUN make installcheck
+
+COPY docker/docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
 CMD ["postgres", "-c", "shared_preload_libraries=age"]
