@@ -1299,6 +1299,39 @@ $$) AS (toFloat agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toFloat()
 $$) AS (toFloat agtype);
+-- toFloatList()
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([1.3])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([1.2, '4.654'])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList(['1.9432', 8.6222, '9.4111212', 344.22])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList(['999.2'])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([1.20002])
+$$) AS (toFloatList agtype);
+-- should return null
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList(['true'])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([null])
+$$) AS (toFloatList agtype);
+-- should fail
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([failed])
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList("failed")
+$$) AS (toFloatList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList(555)
+$$) AS (toFloatList agtype);
 -- toInteger()
 SELECT * FROM cypher('expr', $$
     RETURN toInteger(1)
@@ -1329,6 +1362,36 @@ $$) AS (toInteger agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toInteger()
 $$) AS (toInteger agtype);
+-- toIntegerList()
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList([1, 7.8, 9.0, '88'])
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList([4.2, '123', '8', 8])
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList(['41', '12', 2])
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList([1, 2, 3, '10.2'])
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList([0000])
+$$) AS (toIntegerList agtype);
+-- should return null
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList(["false_", 'asdsad', '123k1kdk1'])
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList([null, '123false', 'one'])
+$$) AS (toIntegerList agtype);
+-- should fail
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList(123, '123')
+$$) AS (toIntegerList agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toIntegerList(32[])
+$$) AS (toIntegerList agtype);
 -- length() of a path
 SELECT * FROM cypher('expr', $$
     RETURN length([{id: 0, label: "vertex 0", properties: {}}::vertex, {id: 2, label: "edge 0", end_id: 1, start_id: 0, properties: {}}::edge, {id: 1, label: "vertex 1", properties: {}}::vertex]::path)
