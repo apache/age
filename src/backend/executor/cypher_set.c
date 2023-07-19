@@ -113,10 +113,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     Buffer buffer;
     bool update_indexes;
     TM_Result   result;
-    CommandId cid = GetCurrentCommandId(true);
-    ResultRelInfo *saved_resultRelInfo = estate->es_result_relation_info;
 
-    estate->es_result_relation_info = resultRelInfo;
+    CommandId cid = GetCurrentCommandId(true);
+    ResultRelInfo **saved_resultRelsInfo  = estate->es_result_relations;
+    estate->es_result_relations = &resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
 
@@ -155,7 +155,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
             }
 
             ExecCloseIndices(resultRelInfo);
-            estate->es_result_relation_info = saved_resultRelInfo;
+            estate->es_result_relations = saved_resultRelsInfo;
 
             return tuple;
         }
@@ -169,7 +169,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         // Insert index entries for the tuple
         if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
         {
-          ExecInsertIndexTuples(elemTupleSlot, estate, false, NULL, NIL);
+          ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false, false, NULL, NIL);
         }
 
         ExecCloseIndices(resultRelInfo);
@@ -191,7 +191,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
     ReleaseBuffer(buffer);
 
-    estate->es_result_relation_info = saved_resultRelInfo;
+    estate->es_result_relations = saved_resultRelsInfo;
 
     return tuple;
 }
@@ -613,12 +613,12 @@ static void process_update_list(CustomScanState *node)
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
-    ResultRelInfo *saved_resultRelInfo;
+    ResultRelInfo **saved_resultRelsInfo;
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *slot;
 
-    saved_resultRelInfo = estate->es_result_relation_info;
+    saved_resultRelsInfo = estate->es_result_relations;
 
     //Process the subtree first
     Decrement_Estate_CommandId(estate);
@@ -635,7 +635,7 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 
     if (CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
-        estate->es_result_relation_info = saved_resultRelInfo;
+        estate->es_result_relations = saved_resultRelsInfo;
 
         process_all_tuples(node);
 
@@ -650,7 +650,7 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
     /* increment the command counter to reflect the updates */
     CommandCounterIncrement();
 
-    estate->es_result_relation_info = saved_resultRelInfo;
+    estate->es_result_relations = saved_resultRelsInfo;
 
     econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
 
