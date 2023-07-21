@@ -541,7 +541,7 @@ static FuncCall *build_id_default_func_expr(char *graph_name, char *label_name,
     nextval_func = makeFuncCall(nextval_func_name, nextval_func_args, COERCE_SQL_SYNTAX, -1);
 
     /*
-     * Build a node that contructs the graphid from the label id function
+     * Build a node that constructs the graphid from the label id function
      * and the next val function for the given sequence.
      */
     graphid_func_name = list_make2(makeString("ag_catalog"),
@@ -815,7 +815,7 @@ static void remove_relation(List *qname)
                                 rel->schemaname, rel->relname)));
     }
 
-    // concurent is false
+    // concurrent is false
 
     ObjectAddressSet(address, RelationRelationId, rel_oid);
 

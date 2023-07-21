@@ -113,9 +113,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     Buffer buffer;
     bool update_indexes;
     TM_Result   result;
-
     CommandId cid = GetCurrentCommandId(true);
     ResultRelInfo **saved_resultRelsInfo  = estate->es_result_relations;
+
     estate->es_result_relations = &resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);

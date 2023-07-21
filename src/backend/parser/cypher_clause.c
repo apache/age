@@ -237,10 +237,6 @@ static Node * transform_cypher_union_tree(cypher_parsestate *cpstate,
                                           cypher_clause *clause,
                                           bool isTopLevel,
                                           List **targetlist);
-static Query *transform_cypher_call_stmt(cypher_parsestate *cpstate,
-                                         cypher_clause *clause);
-static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
-                                             cypher_clause *clause);
 
 Query *cypher_parse_sub_analyze_union(cypher_clause *clause,
                                       cypher_parsestate *cpstate,
@@ -325,7 +321,6 @@ static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
                                               RangeTblEntry *rte);
 static List *make_target_list_from_join(ParseState *pstate,
                                         RangeTblEntry *rte);
-static Expr *add_volatile_wrapper(Expr *node);
 static FuncExpr *make_clause_func_expr(char *function_name,
                                        Node *clause_information);
 /* for VLE support */
@@ -6108,17 +6103,9 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
     get_res_cols(pstate, l_nsitem, r_nsitem, &res_colnames, &res_colvars);
 
     // make the RTE for the join
-    jnsitem = addRangeTableEntryForJoin(pstate,
-                                        res_colnames,
-                                        NULL,
-                                        j->jointype,
-                                        0,
-                                        res_colvars,
-                                        NIL,
-                                        NIL,
-                                        j->alias,
-                                        NULL,
-                                        true);
+    jnsitem = addRangeTableEntryForJoin(pstate, res_colnames, NULL, j->jointype,
+                                        0, res_colvars, NIL, NIL, j->alias,
+                                        NULL, true);
 
     j->rtindex = jnsitem->p_rtindex;
 

@@ -57,14 +57,8 @@ const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      exec_cypher_merge,
                                                      end_cypher_merge,
                                                      rescan_cypher_merge,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL};
+                                                     NULL, NULL, NULL, NULL,
+                                                     NULL, NULL, NULL, NULL};
 
 /*
  * Initializes the MERGE Execution Node at the beginning of the execution
@@ -656,6 +650,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     {
         ResultRelInfo **old_estate_es_result_relations_info = NULL;
         Datum prop;
+
         /*
          * Set estate's result relation to the vertex's result
          * relation.

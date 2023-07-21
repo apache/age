@@ -48,6 +48,7 @@
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 
+
 int64 get_nextval_internal(graph_cache_data* graph_cache,
                            label_cache_data* label_cache);
 /*
