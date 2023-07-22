@@ -2270,6 +2270,15 @@ ERROR:  function ag_catalog.age_id() does not exist
 LINE 2:     RETURN id()
                    ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-- randomuuid()
+SELECT * FROM cypher('expr', $$
+    RETURN randomuuid() IS NULL
+$$) AS (is_null agtype);
+ is_null 
+---------
+ false
+(1 row)
+
 -- start_id()
 SELECT * FROM cypher('expr', $$
     MATCH ()-[e]-() RETURN start_id(e)

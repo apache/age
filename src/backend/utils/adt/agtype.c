@@ -59,6 +59,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/typcache.h"
+#include "pg_config.h"
 
 #include "utils/age_vle.h"
 #include "utils/agtype.h"
@@ -5795,6 +5796,32 @@ Datum age_size(PG_FUNCTION_ARGS)
     /* build the result */
     agtv_result.type = AGTV_INTEGER;
     agtv_result.val.int_value = result;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_randomuuid);
+/*
+ * randomuuid() returns a random UUID. It is only compatible with
+ * PostgreSQL 13 or higher, since gen_random_uuid() was
+ * introduced in PostgreSQL 13.
+ */
+Datum age_randomuuid(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    char *str_uuid = NULL;
+
+    if (PG_MAJORVERSION_NUM < 13)
+        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("randomuuid() not supported in this version of PostgreSQL")));
+
+    str_uuid = DatumGetCString(DirectFunctionCall1(uuid_out,
+        DirectFunctionCall1(gen_random_uuid, 0)));
+
+    // Build the result
+    agtv_result.type = AGTV_STRING;
+    agtv_result.val.string.val = str_uuid;
+    agtv_result.val.string.len = strlen(str_uuid);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
