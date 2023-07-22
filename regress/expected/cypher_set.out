@@ -92,6 +92,23 @@ SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5}}::vertex
 (3 rows)
 
+--Test assigning properties to rand() and pi()
+SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = rand() RETURN n.i < 1 AND n.i >= 0$$) AS (a agtype);
+  a   
+------
+ true
+ true
+ true
+(3 rows)
+
+SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = pi() RETURN n$$) AS (a agtype);
+                                                   a                                                   
+-------------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "v", "properties": {"i": 3.141592653589793}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 3.141592653589793}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3.141592653589793, "j": 5}}::vertex
+(3 rows)
+
 --Handle Inheritance
 SELECT * FROM cypher('cypher_set', $$CREATE ()$$) AS (a agtype);
  a 
@@ -404,7 +421,7 @@ SELECT set_test();
 (10 rows)
 
 --
--- Updating multiple fieds
+-- Updating multiple fields
 --
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3, n.j = 5 RETURN n $$) AS (a agtype);
                                                          a                                                         
@@ -814,7 +831,7 @@ $$) AS (p agtype);
  {"id": 1970324836974593, "label": "Juan", "properties": {}}::vertex
 (1 row)
 
--- test assigning non-map to an enitity
+-- test assigning non-map to an entity
 SELECT * FROM cypher('cypher_set_1', $$
     MATCH (p {name: 'Peter'})
     SET p = "Peter"
@@ -850,6 +867,26 @@ $$) AS (p agtype);
                                                         p                                                        
 -----------------------------------------------------------------------------------------------------------------
  {"id": 2251799813685249, "label": "Robert", "properties": {"age": 47, "city": "London", "name": "Rob"}}::vertex
+(1 row)
+
+--
+-- Check passing mismatched types with SET
+-- Issue 899
+--
+SELECT * FROM cypher('cypher_set_1', $$
+    CREATE (x) SET x.n0 = (true OR true) RETURN x
+$$) AS (p agtype);
+                                    p                                     
+--------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"n0": true}}::vertex
+(1 row)
+
+SELECT * FROM cypher('cypher_set_1', $$
+    CREATE (x) SET x.n0 = (true OR false), x.n1 = (false AND false), x.n2 = (false = false) RETURN x
+$$) AS (p agtype);
+                                                 p                                                 
+---------------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"n0": true, "n1": false, "n2": true}}::vertex
 (1 row)
 
 --

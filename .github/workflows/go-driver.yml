@@ -13,6 +13,7 @@ jobs:
     strategy:
       matrix:
         go-version: [ '1.18', '1.19' ]
+
     defaults:
       run:
         working-directory: drivers/golang/age/
@@ -27,6 +28,9 @@ jobs:
       uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go-version }}
+
+    - name: Generate
+      run: go generate ./../...
 
     - name: Build
       run: go build -v ./...

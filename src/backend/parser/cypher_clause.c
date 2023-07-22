@@ -142,12 +142,12 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 static Expr *transform_cypher_node(cypher_parsestate *cpstate,
                                    cypher_node *node, List **target_list,
                                    bool output_node, bool valid_label);
+static bool match_check_valid_label(cypher_match *match,
+                                    cypher_parsestate *cpstate);
 static Node *make_vertex_expr(cypher_parsestate *cpstate,
-                              ParseNamespaceItem *pnsi,
-                              char *label);
+                              ParseNamespaceItem *pnsi);
 static Node *make_edge_expr(cypher_parsestate *cpstate,
-                            ParseNamespaceItem *pnsi,
-                            char *label);
+                            ParseNamespaceItem *pnsi);
 static Node *make_qual(cypher_parsestate *cpstate,
                            transform_entity *entity, char *name);
 static TargetEntry *
@@ -206,6 +206,7 @@ static Expr *cypher_create_properties(cypher_parsestate *cpstate,
                                       enum transform_entity_type type);
 static Expr *add_volatile_wrapper(Expr *node);
 static bool variable_exists(cypher_parsestate *cpstate, char *name);
+static void add_volatile_wrapper_to_target_entry(List *target_list, int resno);
 static int get_target_entry_resno(List *target_list, char *name);
 static void handle_prev_clause(cypher_parsestate *cpstate, Query *query,
                                cypher_clause *clause, bool first_rte);
@@ -237,11 +238,6 @@ static Node * transform_cypher_union_tree(cypher_parsestate *cpstate,
                                           cypher_clause *clause,
                                           bool isTopLevel,
                                           List **targetlist);
-static Query *transform_cypher_call_stmt(cypher_parsestate *cpstate,
-                                         cypher_clause *clause);
-static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
-                                             cypher_clause *clause);
-
 Query *cypher_parse_sub_analyze_union(cypher_clause *clause,
                                       cypher_parsestate *cpstate,
                                       CommonTableExpr *parentCTE,
@@ -278,16 +274,19 @@ static cypher_clause *convert_merge_to_match(cypher_merge *merge);
 static void
 transform_cypher_merge_mark_tuple_position(List *target_list,
                                            cypher_create_path *path);
+static cypher_target_node *get_referenced_variable(ParseState *pstate,
+                                                   Node *node,
+                                                   List *transformed_path);
 
 //call...[yield]
 static Query *transform_cypher_call_stmt(cypher_parsestate *cpstate,
-                                      cypher_clause *clause);
+                                         cypher_clause *clause);
 static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
-                                          cypher_clause *clause);
+                                             cypher_clause *clause);
 
 // transform
-#define PREV_CYPHER_CLAUSE_ALIAS    "_"
-#define CYPHER_OPT_RIGHT_ALIAS      "_R"
+#define PREV_CYPHER_CLAUSE_ALIAS AGE_DEFAULT_ALIAS_PREFIX"previous_cypher_clause"
+#define CYPHER_OPT_RIGHT_ALIAS AGE_DEFAULT_ALIAS_PREFIX"cypher_optional_right"
 #define transform_prev_cypher_clause(cpstate, prev_clause, add_rte_to_query) \
     transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, \
                                         prev_clause, NULL, add_rte_to_query)
@@ -322,7 +321,6 @@ static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
                                               RangeTblEntry *rte);
 static List *make_target_list_from_join(ParseState *pstate,
                                         RangeTblEntry *rte);
-static Expr *add_volatile_wrapper(Expr *node);
 static FuncExpr *make_clause_func_expr(char *function_name,
                                        Node *clause_information);
 /* for VLE support */
@@ -331,8 +329,8 @@ static ParseNamespaceItem *transform_RangeFunction(cypher_parsestate *cpstate,
 static Node *transform_VLE_Function(cypher_parsestate *cpstate, Node *n,
                                     RangeTblEntry **top_rte, int *top_rti,
                                     List **namespace);
-static ParseNamespaceItem
-*append_VLE_Func_to_FromClause(cypher_parsestate *cpstate, Node *n);
+static ParseNamespaceItem *append_VLE_Func_to_FromClause(cypher_parsestate *cpstate,
+                                                         Node *n);
 static void setNamespaceLateralState(List *namespace, bool lateral_only,
                                      bool lateral_ok);
 static bool isa_special_VLE_case(cypher_path *path);
@@ -829,7 +827,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
 
         /*
          * If we find ourselves processing a recursive CTE here something
-         * went horribly wrong. That is an SQL contruct with no parallel in
+         * went horribly wrong. That is an SQL construct with no parallel in
          * cypher.
          */
         if (isTopLevel &&
@@ -1420,7 +1418,6 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
         }
 
         resno = get_target_entry_resno(query->targetList, val->val.str);
-
         if (resno == -1)
         {
             ereport(ERROR,
@@ -1429,6 +1426,8 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
                             val->val.str),
                      parser_errposition(pstate, col->location)));
         }
+
+        add_volatile_wrapper_to_target_entry(query->targetList, resno);
 
         pos = makeInteger(resno);
 
@@ -1545,7 +1544,7 @@ cypher_update_information *transform_cypher_remove_item_list(
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("REMOVE clause does not support adding propereties from maps"),
+                     errmsg("REMOVE clause does not support adding properties from maps"),
                      parser_errposition(pstate, set_item->location)));
         }
         set_item->is_add = false;
@@ -1578,9 +1577,9 @@ cypher_update_information *transform_cypher_remove_item_list(
 
         variable_name = variable_node->val.str;
         item->var_name = variable_name;
+
         item->entity_position = get_target_entry_resno(query->targetList,
                                                        variable_name);
-
         if (item->entity_position == -1)
         {
             ereport(ERROR,
@@ -1589,6 +1588,9 @@ cypher_update_information *transform_cypher_remove_item_list(
                             variable_name),
                      parser_errposition(pstate, set_item->location)));
         }
+
+        add_volatile_wrapper_to_target_entry(query->targetList,
+                                             item->entity_position);
 
         // extract property name
         if (list_length(ind->indirection) != 1)
@@ -1723,8 +1725,7 @@ cypher_update_information *transform_cypher_set_item_list(
                 ereport(
                     ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg(
-                         "SET clause doesnt not support updating maps or lists in a property"),
+                     errmsg("SET clause doesn't not support updating maps or lists in a property"),
                      parser_errposition(pstate, set_item->location)));
             }
 
@@ -1753,9 +1754,9 @@ cypher_update_information *transform_cypher_set_item_list(
 
         variable_name = variable_node->val.str;
         item->var_name = variable_name;
+
         item->entity_position = get_target_entry_resno(query->targetList,
                                                        variable_name);
-
         if (item->entity_position == -1)
         {
             ereport(ERROR,
@@ -1764,6 +1765,9 @@ cypher_update_information *transform_cypher_set_item_list(
                             variable_name),
                             parser_errposition(pstate, set_item->location)));
         }
+
+        add_volatile_wrapper_to_target_entry(query->targetList,
+                                             item->entity_position);
 
         // set keep_null property
         if (is_ag_node(set_item->expr, cypher_map))
@@ -2318,11 +2322,9 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
 
         if (!is_ag_node(self, cypher_match))
         {
-            where_qual = transform_cypher_expr(cpstate, where,
-                                                        EXPR_KIND_WHERE);
+            where_qual = transform_cypher_expr(cpstate, where, EXPR_KIND_WHERE);
 
-            where_qual = coerce_to_boolean(pstate, where_qual,
-                                            "WHERE");
+            where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
         }
 
         query->jointree = makeFromExpr(pstate->p_joinlist, where_qual);
@@ -2362,7 +2364,7 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
     }
 
     return transform_cypher_clause_with_where(
-        cpstate, transform_cypher_match_pattern, clause, 
+        cpstate, transform_cypher_match_pattern, clause,
         match_self->where);
 }
 
@@ -2808,7 +2810,7 @@ static void setNamespaceLateralState(List *namespace, bool lateral_only,
  * to add in the VLE function as a FROM clause entry.
  */
 static ParseNamespaceItem *append_VLE_Func_to_FromClause(cypher_parsestate *cpstate,
-                                                    Node *n)
+                                                         Node *n)
 {
     ParseState *pstate = &cpstate->pstate;
     RangeTblEntry *rte = NULL;
@@ -2992,7 +2994,7 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
         {
             /*
              * coerce the WHERE clause to a boolean before AND with the property
-             * contraints, otherwise there could be evaluation issues.
+             * constraints, otherwise there could be evaluation issues.
              */
             where_qual = (Expr *)coerce_to_boolean(pstate, (Node *)where_qual,
                                                    "WHERE");
@@ -3172,7 +3174,7 @@ static List *make_join_condition_for_edge(cypher_parsestate *cpstate,
          * When the previous node is not in the join tree, but there is a vle
          * edge before that join, then we need to compare this vle's start node
          * against the previous vle's end node. No need to check the next edge,
-         * because that would be redundent.
+         * because that would be redundant.
          */
         if (!prev_node->in_join_tree &&
             prev_edge != NULL &&
@@ -3531,9 +3533,9 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
 }
 
 /*
- * Creates the Contains operator to process property contraints for a vertex/
- * edge in a MATCH clause. creates the agtype @> with the entity's properties
- * on the right and the contraints in the MATCH clause on the left.
+ * Creates the Contains operator to process property constraints for a vertex/
+ * edge in a MATCH clause. Creates the agtype @> with the entity's properties
+ * on the right and the constraints in the MATCH clause on the left.
  */
 static Node *create_property_constraints(cypher_parsestate *cpstate,
                                          transform_entity *entity,
@@ -3589,6 +3591,7 @@ static Node *create_property_constraints(cypher_parsestate *cpstate,
 static List *transform_match_path(cypher_parsestate *cpstate, Query *query,
                                   cypher_path *path)
 {
+    ParseState *pstate = (ParseState *)cpstate;
     List *qual = NIL;
     List *entities = NIL;
     FuncCall *duplicate_edge_qual;
@@ -3601,6 +3604,15 @@ static List *transform_match_path(cypher_parsestate *cpstate, Query *query,
     if (path->var_name != NULL)
     {
         TargetEntry *path_te;
+
+        if (findTarget(query->targetList, path->var_name) != NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                    errmsg("variable \"%s\" already exists",
+                            path->var_name),
+                    parser_errposition(pstate, path->location)));
+        }
 
         path_te = transform_match_create_path_variable(cpstate, path,
                                                        entities);
@@ -3674,19 +3686,56 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     Assert(pnsi != NULL);
 
     /* Get the var node for the VLE functions column name. */
-    Assert(pnsi != NULL);
     var = scanNSItemForColumn(pstate, pnsi, 0, "edges", -1);
     Assert(var != NULL);
 
     /*
      * If we have a variable name (rel name), make the target entry. Otherwise,
-     * there isn't a reason to create one.
+     * there isn't a reason to create one. Additionally, verify that it is not
+     * reused.
      */
     if (rel->name != NULL)
     {
         FuncExpr *fexpr;
         List *args = list_make1(var);
         Oid func_oid = InvalidOid;
+        transform_entity *entity = NULL;
+
+        te = findTarget(query->targetList, rel->name);
+        entity = find_variable(cpstate, rel->name);
+
+        /* If the variable already exists, error out */
+        if (te && entity)
+        {
+            if (entity->type == ENT_VERTEX)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for a vertex", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+            else if (entity->type == ENT_EDGE)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for an edge", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+            else
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("duplicate variable '%s'", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+        }
+        else if (te && !entity)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                     errmsg("variable '%s' already exists", rel->name),
+                     parser_errposition(pstate, rel->location)));
+        }
 
         /*
          * Get the oid for the materialize function that returns a list of
@@ -3834,11 +3883,22 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
              */
             if (node->name != NULL)
             {
+                Node *expr;
+
+                if (path->var_name && strcmp(node->name, path->var_name) == 0)
+                {
+                    ereport(ERROR,
+                           (errcode(ERRCODE_DUPLICATE_ALIAS),
+                            errmsg("variable \"%s\" is for a path",
+                                    node->name),
+                            parser_errposition(pstate, node->location)));
+                }
+                
                 /*
                  * Checks the previous clauses to see if the variable already
                  * exists.
                  */
-                Node *expr = colNameToVar(pstate, node->name, false,
+                expr = colNameToVar(pstate, node->name, false,
                                           node->location);
                 if (expr != NULL)
                 {
@@ -3857,6 +3917,13 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 
             entity = make_transform_entity(cpstate, ENT_VERTEX, (Node *)node,
                                            expr);
+
+            /*
+             * We want to add transformed entity to entities before transforming props
+             * so that props referencing currently transformed entity can be resolved.
+             */
+            cpstate->entities = lappend(cpstate->entities, entity);
+            entities = lappend(entities, entity);
 
             /* transform the properties if they exist */
             if (node->props)
@@ -3925,9 +3992,6 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                     lappend(cpstate->property_constraint_quals, n);
             }
 
-            cpstate->entities = lappend(cpstate->entities, entity);
-            entities = lappend(entities, entity);
-
             prev_entity = entity;
         }
         /* odd increments of i are edges */
@@ -3936,6 +4000,16 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             cypher_relationship *rel = NULL;
 
             rel = lfirst(lc);
+
+            if (rel->name && path->var_name &&
+                strcmp(rel->name, path->var_name) == 0)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable \"%s\" is for a path",
+                                rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
 
             /*
              * There are 2 edge cases - 1) a regular edge and 2) a VLE edge.
@@ -3974,7 +4048,12 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                 entity = make_transform_entity(cpstate, ENT_EDGE, (Node *)rel,
                                                expr);
 
+                /*
+                 * We want to add transformed entity to entities before transforming props
+                 * so that props referencing currently transformed entity can be resolved.
+                 */
                 cpstate->entities = lappend(cpstate->entities, entity);
+                entities = lappend(entities, entity);
 
                 if (rel->props)
                 {
@@ -4035,13 +4114,12 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                     }
 
                     ((cypher_map*)rel->props)->keep_null = true;
-                    r = create_property_constraints(cpstate, entity, rel->props, prop_expr);
+                    r = create_property_constraints(cpstate, entity, rel->props,
+                                                    prop_expr);
 
                     cpstate->property_constraint_quals =
                         lappend(cpstate->property_constraint_quals, r);
                 }
-
-                entities = lappend(entities, entity);
 
                 prev_entity = entity;
             }
@@ -4052,7 +4130,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 
                 /*
                  * Check to see if the previous node was originally created
-                 * in a predecessing clause. If it was, then remove the id field
+                 * in a preceding clause. If it was, then remove the id field
                  * from the column ref. Just reference the agtype vertex
                  * variable that the prev clause created and the vle will handle
                  * extracting the id.
@@ -4317,40 +4395,153 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
                                    bool valid_label)
 {
     ParseState *pstate = (ParseState *)cpstate;
-    char *schema_name;
-    char *rel_name;
-    RangeVar *label_range_var;
-    Alias *alias;
-    int resno;
-    TargetEntry *te;
-    Expr *expr;
-    ParseNamespaceItem *pnsi;
+    char *schema_name = NULL;
+    char *rel_name = NULL;
+    RangeVar *label_range_var = NULL;
+    Alias *alias = NULL;
+    int resno = -1;
+    TargetEntry *te = NULL;
+    transform_entity *entity = NULL;
+    cypher_relationship *cr = NULL;
+    Node *expr = NULL;
+    bool refs_var = false;
+    ParseNamespaceItem *pnsi = NULL;
 
-    if (!rel->label)
+    /*
+     * If we have an edge name, get any potential variable or column
+     * references. Additionally, verify that they are for edges.
+     */
+    if (rel->name != NULL)
     {
-        rel->label = AG_DEFAULT_LABEL_EDGE;
+        te = findTarget(*target_list, rel->name);
+        entity = find_variable(cpstate, rel->name);
+        expr = colNameToVar(pstate, rel->name, false, rel->location);
+
+        /*
+         * If we have a valid entity and te for this rel name, go ahead and get
+         * the cypher relationship as we will need this for later and flag that
+         * we have a variable reference.
+         */
+        if (te != NULL && entity != NULL)
+        {
+            cr = (cypher_relationship *)entity->entity.rel;
+            refs_var = true;
+        }
+
+        /* If the variable already exists, verify that it is for an edge */
+        if (refs_var)
+        {
+            if (entity->type == ENT_VERTEX)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for a vertex", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+            else if (entity->type == ENT_VLE_EDGE)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for a VLE edge", rel->name),
+                        parser_errposition(pstate, rel->location)));
+            }
+        }
+
+        else if (te && !entity)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                     errmsg("variable '%s' already exists", rel->name),
+                     parser_errposition(pstate, rel->location)));
+        }
     }
-    else if(!valid_label)
+
+    /*
+     * If we do not have a label for this edge, we either need to find one
+     * from a referenced variable or we need to set it to the default label.
+     */
+    if (rel->label == NULL)
+    {
+        /* if there is a variable for this rel name */
+        if (refs_var)
+        {
+            /*
+             * If the referenced var has a non NULL label, copy it. This is
+             * usually the case when it uses a variable that is already defined.
+             * Fx -
+             *
+             *     MATCH (u:people)-[e:knows]->(v:people), (v)-[e]->(u) RETURN e
+             *     MATCH (u:people)-[]->()-[]->(u) RETURN u
+             *
+             * We copy it so that we know what label it is referencing.
+             */
+            if (cr->parsed_label != NULL)
+            {
+                rel->parsed_label = cr->parsed_label;
+                rel->label = cr->label;
+            }
+            else
+            {
+                rel->label = AG_DEFAULT_LABEL_EDGE;
+            }
+        }
+        /* otherwise, just give it the default label */
+        else
+        {
+            rel->label = AG_DEFAULT_LABEL_EDGE;
+        }
+    }
+    /* if we do have a label, is it valid */
+    else if (!valid_label)
     {
         /*
          *  XXX: Need to determine proper rules, for when label does not exist
-         *  or is for an edge. Maybe labels and edges should share names, like
+         *  or is for an vertex. Maybe labels and edges should share names, like
          *  in openCypher. But these are stand in errors, to prevent
          *  segmentation faults, and other errors.
          *
          *  Update: Nonexistent and mismatched labels now return a NULL value to
-         *  prevent segmentation faults, and other errors. We can also consider 
+         *  prevent segmentation faults, and other errors. We can also consider
          *  if an all-purpose label would be useful.
          */
         rel->label = NULL;
-
     }
 
+    /*
+     * Variables for edges are not allowed to be used multiple times within the
+     * same clause.
+     */
+    if (expr == NULL && refs_var)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_DUPLICATE_ALIAS),
+                 errmsg("duplicate edge variable '%s' within a clause",
+                        rel->name),
+                 parser_errposition(pstate, rel->location)));
+    }
+
+    /*
+     * If this edge uses a variable that already exists, verify that the label
+     * names are the same.
+     */
+    if (refs_var &&
+        (cr->parsed_label != NULL || rel->parsed_label != NULL) &&
+        (cr->parsed_label == NULL || rel->parsed_label == NULL ||
+        (strcmp(cr->parsed_label, rel->parsed_label) != 0)))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("multiple labels for variable '%s' are not supported",
+                        rel->name),
+                 parser_errposition(pstate, rel->location)));
+    }
+
+    /*
+     * Now we need to do a few checks and either return the existing var or
+     * or build a new edge.
+     */
     if (rel->name != NULL)
     {
-        TargetEntry *te;
-        Node *expr;
-
         /*
          * If we are in a WHERE clause transform, we don't want to create new
          * variables, we want to use the existing ones. So, error if otherwise.
@@ -4363,11 +4554,12 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
              *  If expr_kind is WHERE, the expressions are in the parent's
              *  parent's parsestate, due to the way we transform sublinks.
              */
-            transform_entity *entity = find_variable(parent_cpstate, rel->name);
+            transform_entity *tentity = find_variable(parent_cpstate,
+                                                      rel->name);
 
-            if (entity != NULL)
+            if (tentity != NULL)
             {
-                return get_relative_expr(entity, 2);
+                return get_relative_expr(tentity, 2);
             }
             else
             {
@@ -4378,47 +4570,20 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
             }
         }
 
-        te = findTarget(*target_list, rel->name);
-        /* also search for a variable from a previous transform */
-        expr = colNameToVar(pstate, rel->name, false, rel->location);
-
-        if (expr != NULL)
+        /* if this vertex is referencing an existing te var, return its expr */
+        if (refs_var)
         {
-            return (Expr*)expr;
+            return te->expr;
         }
 
-        if (te != NULL)
+        /* if this vertex is referencing an existing col var, return its expr */
+        if (expr != NULL)
         {
-            transform_entity *entity = find_variable(cpstate, rel->name);
-
-            /*
-             * If the variable already exists, verify that it is for an edge.
-             * You cannot have the same edge repeated in a path.
-             * You cannot have an variable that is for a vertex.
-             */
-            if (entity != NULL)
-            {
-                if (entity->type == ENT_EDGE)
-                {
-                    ereport(ERROR,
-                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                             errmsg("duplicate edge variable '%s' within a clause",
-                                    rel->name),
-                             parser_errposition(pstate, rel->location)));
-                }
-                if (entity->type == ENT_VERTEX)
-                {
-                    ereport(ERROR,
-                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                             errmsg("variable '%s' is for a vertex", rel->name),
-                             parser_errposition(pstate, rel->location)));
-                }
-            }
-
-            return te->expr;
+            return (Expr *)expr;
         }
     }
 
+    /* if we aren't using a variable, build the edge */
     if (!rel->name)
     {
         rel->name = get_next_default_alias(cpstate);
@@ -4452,20 +4617,20 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 
     if (valid_label)
     {
-        expr = (Expr *)make_edge_expr(cpstate, pnsi, rel->label);
+        expr = make_edge_expr(cpstate, pnsi);
     }
     else
     {
-        expr = (Expr*)makeNullConst(AGTYPEOID, -1, InvalidOid);
+        expr = (Node *)makeNullConst(AGTYPEOID, -1, InvalidOid);
     }
 
     if (rel->name)
     {
-        te = makeTargetEntry(expr, resno, rel->name, false);
+        te = makeTargetEntry((Expr *)expr, resno, rel->name, false);
         *target_list = lappend(*target_list, te);
     }
 
-    return expr;
+    return (Expr *)expr;
 }
 
 static Expr *transform_cypher_node(cypher_parsestate *cpstate,
@@ -4473,19 +4638,101 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
                                    bool output_node, bool valid_label)
 {
     ParseState *pstate = (ParseState *)cpstate;
-    char *schema_name;
-    char *rel_name;
-    RangeVar *label_range_var;
-    Alias *alias;
-    int resno;
-    TargetEntry *te;
-    Expr *expr;
+    char *schema_name = NULL;
+    char *rel_name = NULL;
+    RangeVar *label_range_var = NULL;
+    Alias *alias = NULL;
+    int resno = -1;
+    TargetEntry *te = NULL;
+    Expr *expr = NULL;
+    transform_entity *entity = NULL;
+    cypher_node *cn = NULL;
+    bool refs_var = false;
     ParseNamespaceItem *pnsi;
 
-    if (!node->label)
+    /* if we have a node name, get any potential variable references */
+    if (node->name != NULL)
     {
-        node->label = AG_DEFAULT_LABEL_VERTEX;
+        te = findTarget(*target_list, node->name);
+        entity = find_variable(cpstate, node->name);
+
+        /*
+         * If we have a valid entity and te for this rel name, go ahead and get
+         * the cypher relationship as we will need this for later and flag that
+         * we have a variable reference.
+         */
+        if (te != NULL && entity != NULL)
+        {
+            cn = (cypher_node *)entity->entity.node;
+            refs_var = true;
+        }
+
+        /* If the variable already exists, verify that it is for a vertex */
+        if (refs_var)
+        {
+            if (entity->type == ENT_EDGE)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for an edge", node->name),
+                        parser_errposition(pstate, node->location)));
+            }
+            else if (entity->type == ENT_VLE_EDGE)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("variable '%s' is for a VLE edge", node->name),
+                        parser_errposition(pstate, node->location)));
+            }
+        }
+
+        /* If their is a te but no entity, it implies that their is
+         * some variable that exists but not an edge,vle or a vertex
+         */
+        else if (te && !entity)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                     errmsg("variable '%s' already exists", node->name),
+                     parser_errposition(pstate, node->location)));
+        }
     }
+
+    /*
+     * If we do not have a label for this vertex, we either need to find one
+     * from a referenced variable or we need to set it to the default label.
+     */
+    if (node->label == NULL)
+    {
+        if (refs_var)
+        {
+            /*
+             * If the referenced var has a non NULL label, copy it. This is
+             * usually the case when it uses a variable that is already defined.
+             * Fx -
+             *
+             *     MATCH (u:people)-[e:knows]->(v:people), (v)-[e]->(u) RETURN e
+             *     MATCH (u:people)-[]->()-[]->(u) RETURN u
+             *
+             * We copy it so that we know what label it is referencing.
+             */
+            if (cn->parsed_label != NULL)
+            {
+                node->parsed_label = cn->parsed_label;
+                node->label = cn->label;
+            }
+            else
+            {
+                node->label = AG_DEFAULT_LABEL_VERTEX;
+            }
+        }
+        /* otherwise, just give it the default label */
+        else
+        {
+            node->label = AG_DEFAULT_LABEL_VERTEX;
+        }
+    }
+    /* if we do have a label, is it valid */
     else if (!valid_label)
     {
         /*
@@ -4499,18 +4746,37 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
          *  if an all-purpose label would be useful.
          */
         node->label = NULL;
-
     }
 
+    /*
+     * If this vertex uses a variable that already exists, verify that the label
+     * being used is of the same name.
+     */
+    if (refs_var &&
+        (cn->parsed_label != NULL || node->parsed_label != NULL) &&
+        (cn->parsed_label == NULL || node->parsed_label == NULL ||
+        (strcmp(cn->parsed_label, node->parsed_label) != 0)))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("multiple labels for variable '%s' are not supported",
+                        node->name),
+                 parser_errposition(pstate, node->location)));
+    }
+
+    /* if it is not an output node, just return null */
     if (!output_node)
     {
         return NULL;
     }
 
+    /*
+     * Now we need to do a few checks and either return the existing var or
+     * or build a new vertex.
+     */
     if (node->name != NULL)
     {
-        TargetEntry *te;
-        Node *expr;
+        Node *expr = NULL;
 
         /*
          * If we are in a WHERE clause transform, we don't want to create new
@@ -4524,11 +4790,12 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
              *  If expr_kind is WHERE, the expressions are in the parent's
              *  parent's parsestate, due to the way we transform sublinks.
              */
-            transform_entity *entity = find_variable(parent_cpstate, node->name);
+            transform_entity *tentity = NULL;
 
-            if (entity != NULL)
+            tentity = find_variable(parent_cpstate, node->name);
+            if (tentity != NULL)
             {
-                return get_relative_expr(entity, 2);
+                return get_relative_expr(tentity, 2);
             }
             else
             {
@@ -4539,54 +4806,17 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
             }
         }
 
-        te = findTarget(*target_list, node->name);
-        /* also search for the variable from a previous transforms */
-        expr = colNameToVar(pstate, node->name, false, node->location);
+        /* if this vertex is referencing an existing te var, return its expr */
+        if (refs_var)
+        {
+            return te->expr;
+        }
 
+        /* if this vertex is referencing an existing col var, return its expr */
+        expr = colNameToVar(pstate, node->name, false, node->location);
         if (expr != NULL)
         {
             return (Expr*)expr;
-        }
-
-        if (te != NULL)
-        {
-            transform_entity *entity = find_variable(cpstate, node->name);
-
-            /* If the variable already exists, verify that it is for a vertex */
-            if (entity != NULL && (entity->type != ENT_VERTEX))
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("variable '%s' is for a edge", node->name),
-                         parser_errposition(pstate, node->location)));
-            }
-
-            /*
-             * If the variable already exists, verify that any label specified
-             * is of the same name or scope. Reject those that aren't.
-             */
-            if (entity != NULL)
-            {
-                cypher_node *cnode = (cypher_node *)entity->entity.node;
-
-
-
-                if (!node->label ||
-                    (cnode != NULL &&
-                    node != NULL &&
-                    /* allow node using a default label against resolved var */
-                    pg_strcasecmp(node->label, AG_DEFAULT_LABEL_VERTEX) != 0 &&
-                    /* allow labels with the same name */
-                    pg_strcasecmp(cnode->label, node->label) != 0))
-                {
-                    ereport(ERROR,
-                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                             errmsg("multiple labels for variable '%s' are not supported", node->name),
-                             parser_errposition(pstate, node->location)));
-                }
-            }
-
-            return te->expr;
         }
     }
     else
@@ -4594,6 +4824,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
         node->name = get_next_default_alias(cpstate);
     }
 
+    /* now build a new vertex */
     schema_name = get_graph_namespace_name(cpstate->graph_name);
 
     if (valid_label)
@@ -4623,7 +4854,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
 
     if (valid_label)
     {
-        expr = (Expr *)make_vertex_expr(cpstate, pnsi, node->label);
+        expr = (Expr *)make_vertex_expr(cpstate, pnsi);
     }
     else
     {
@@ -4637,8 +4868,8 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     return expr;
 }
 
-static Node *make_edge_expr(cypher_parsestate *cpstate, ParseNamespaceItem *pnsi,
-                            char *label)
+static Node *make_edge_expr(cypher_parsestate *cpstate,
+                            ParseNamespaceItem *pnsi)
 {
     ParseState *pstate = (ParseState *)cpstate;
     Oid label_name_func_oid;
@@ -4684,8 +4915,8 @@ static Node *make_edge_expr(cypher_parsestate *cpstate, ParseNamespaceItem *pnsi
 
     return (Node *)func_expr;
 }
-static Node *make_vertex_expr(cypher_parsestate *cpstate, ParseNamespaceItem *pnsi,
-                              char *label)
+static Node *make_vertex_expr(cypher_parsestate *cpstate,
+                              ParseNamespaceItem *pnsi)
 {
     ParseState *pstate = (ParseState *)cpstate;
     Oid label_name_func_oid;
@@ -4718,7 +4949,8 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate, ParseNamespaceItem *pn
                                         InvalidOid, COERCE_EXPLICIT_CALL);
     label_name_func_expr->location = -1;
 
-    props = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_PROPERTIES, -1);
+    props = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_PROPERTIES,
+                                -1);
 
     args = list_make3(id, label_name_func_expr, props);
 
@@ -4800,8 +5032,9 @@ static List *transform_cypher_create_pattern(cypher_parsestate *cpstate,
     {
         cypher_create_path *transformed_path;
 
-        transformed_path = transform_cypher_create_path(
-            cpstate, &query->targetList, lfirst(lc));
+        transformed_path = transform_cypher_create_path(cpstate,
+                                                        &query->targetList,
+                                                        lfirst(lc));
 
         transformed_pattern = lappend(transformed_pattern, transformed_path);
     }
@@ -4821,6 +5054,18 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
 
     ccp->path_attr_num = InvalidAttrNumber;
 
+    if (in_path)
+    {
+        if (findTarget(*target_list, path->var_name) != NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_DUPLICATE_ALIAS),
+                     errmsg("variable \"%s\" already exists",
+                            path->var_name),
+                     parser_errposition(pstate, path->location)));
+        }
+    }
+
     foreach (lc, path->path)
     {
         if (is_ag_node(lfirst(lc), cypher_node))
@@ -4832,7 +5077,17 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
                 transform_create_cypher_node(cpstate, target_list, node);
 
             if (in_path)
+            {
+                if (node->name && strcmp(node->name, path->var_name) == 0)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_DUPLICATE_ALIAS),
+                             errmsg("variable \"%s\" already exists",
+                                    path->var_name),
+                             parser_errposition(pstate, path->location)));
+                }
                 rel->flags |= CYPHER_TARGET_NODE_IN_PATH_VAR;
+            }
 
             transformed_path = lappend(transformed_path, rel);
 
@@ -4850,7 +5105,17 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
                 transform_create_cypher_edge(cpstate, target_list, edge);
 
             if (in_path)
+            {
+                if (edge->name && strcmp(edge->name, path->var_name) == 0)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_DUPLICATE_ALIAS),
+                             errmsg("variable \"%s\" already exists",
+                                    path->var_name),
+                             parser_errposition(pstate, path->location)));
+                }
                 rel->flags |= CYPHER_TARGET_NODE_IN_PATH_VAR;
+            }
 
             transformed_path = lappend(transformed_path, rel);
 
@@ -4911,10 +5176,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
     if (edge->label)
     {
-        label_cache_data *lcd =
-            search_label_name_graph_cache(edge->label, cpstate->graph_oid);
-
-        if (lcd && lcd->kind != LABEL_KIND_EDGE)
+        if (get_label_kind(edge->label, cpstate->graph_oid) == LABEL_KIND_VERTEX)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4934,11 +5196,16 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
          * Variables can be declared in a CREATE clause, but not used if
          * it already exists.
          */
-        if (variable_exists(cpstate, edge->name))
+        transform_entity *entity;
+
+        entity = find_variable(cpstate, edge->name);
+
+        if ((entity && entity->type != ENT_EDGE) || variable_exists(cpstate, edge->name))
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("variable %s already exists", edge->name)));
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("variable %s already exists", edge->name),
+                         parser_errposition(pstate, edge->location)));
         }
 
         rel->variable_name = edge->name;
@@ -5031,7 +5298,7 @@ static bool variable_exists(cypher_parsestate *cpstate, char *name)
     {
         return false;
     }
-    
+
     pnsi = find_pnsi(cpstate, PREV_CYPHER_CLAUSE_ALIAS);
     if (pnsi)
     {
@@ -5052,10 +5319,7 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     if (node->label)
     {
-        label_cache_data *lcd =
-            search_label_name_graph_cache(node->label, cpstate->graph_oid);
-
-        if (lcd && lcd->kind != LABEL_KIND_VERTEX)
+        if (get_label_kind(node->label, cpstate->graph_oid) == LABEL_KIND_EDGE)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                             errmsg("label %s is for edges, not vertices",
@@ -5072,9 +5336,16 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
     {
         transform_entity *entity;
 
+        TargetEntry *te = findTarget(*target_list, node->name);
         entity = find_variable(cpstate, node->name);
 
-        if (entity)
+        /*
+         * If we find an entity as well as a target Entry with same name,
+         * that means that the variable is either vertex, edge or vle.
+         * but if we find a target entry but not an entity that means
+         * that the variable can be other than vertex, edge or vle e.g path.
+         */
+        if (entity && te)
         {
             if (entity->type != ENT_VERTEX)
             {
@@ -5086,6 +5357,16 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
             return transform_create_cypher_existing_node(cpstate, target_list,
                                                          entity->declared_in_current_clause, node);
+        }
+        else if (te)
+        {
+            /*
+             * Here we are not sure if the te is a vertex, path or something
+             * else. So we will let it pass and the execution stage will catch
+             * the error if variable was not vertex.
+             */
+            return transform_create_cypher_existing_node(cpstate, target_list,
+                                                         te, node);
         }
     }
 
@@ -5106,12 +5387,37 @@ static int get_target_entry_resno(List *target_list, char *name)
         TargetEntry *te = (TargetEntry *)lfirst(lc);
         if (!strcmp(te->resname, name))
         {
-            te->expr = add_volatile_wrapper(te->expr);
             return te->resno;
         }
     }
 
     return -1;
+}
+
+/* adds the volatile wrapper to the specified target entry */
+static void add_volatile_wrapper_to_target_entry(List *target_list, int resno)
+{
+    ListCell *lc;
+
+    Assert(target_list != NULL);
+    Assert(resno >= 0);
+
+    /* find the resource */
+    foreach (lc, target_list)
+    {
+        TargetEntry *te = (TargetEntry *)lfirst(lc);
+        if (te->resno == resno)
+        {
+            /* wrap it */
+            te->expr = add_volatile_wrapper(te->expr);
+            return;
+        }
+    }
+
+    /* if we didn't find anything, there was a problem */
+    ereport(ERROR,
+            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+             errmsg("add_volatile_wrapper_to_target_entry: resno not found")));
 }
 
 /*
@@ -5124,24 +5430,26 @@ static cypher_target_node *transform_create_cypher_existing_node(
     cypher_node *node)
 {
     cypher_target_node *rel = make_ag_node(cypher_target_node);
+    ParseState *pstate = (ParseState *)cpstate;
 
     rel->type = LABEL_KIND_VERTEX;
     rel->flags = CYPHER_TARGET_NODE_FLAG_NONE;
     rel->resultRelInfo = NULL;
     rel->variable_name = node->name;
 
-
     if (node->props)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("previously declared nodes in a create clause cannot have properties")));
+                 errmsg("previously declared nodes in a create clause cannot have properties"),
+                 parser_errposition(pstate, node->location)));
     }
     if (node->label)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("previously declared variables cannot have a label")));
+                 errmsg("previously declared variables cannot have a label"),
+                 parser_errposition(pstate, node->location)));
     }
     /*
      * When the variable is declared in the same clause this vertex is a part of
@@ -5157,6 +5465,8 @@ static cypher_target_node *transform_create_cypher_existing_node(
      * later.
      */
     rel->tuple_position = get_target_entry_resno(*target_list, node->name);
+
+    add_volatile_wrapper_to_target_entry(*target_list, rel->tuple_position);
 
     return rel;
 }
@@ -5497,13 +5807,25 @@ static TargetEntry *findTarget(List *targetList, char *resname)
 
 /*
  * Wrap the expression with a volatile function, to prevent the optimizer from
- * elimating the expression.
+ * eliminating the expression.
  */
 static Expr *add_volatile_wrapper(Expr *node)
 {
     Oid oid;
 
-    oid = get_ag_func_oid("agtype_volatile_wrapper", 1, AGTYPEOID);
+    /* if the passed Expr node is NULL it will cause a crash, so notify us */
+    if (node == NULL)
+    {
+        ereport(ERROR, (errmsg_internal("add_volatile_wrapper: NULL expr")));
+    }
+
+    oid = get_ag_func_oid("agtype_volatile_wrapper", 1, ANYOID);
+
+    /* if the passed Expr node is already wrapped, just return it */
+    if (IsA(node, FuncExpr) && oid == ((FuncExpr*)node)->funcid)
+    {
+        return node;
+    }
 
     return (Expr *)makeFuncExpr(oid, AGTYPEOID, list_make1(node), InvalidOid,
                                 InvalidOid, COERCE_EXPLICIT_CALL);
@@ -5514,10 +5836,10 @@ static Expr *add_volatile_wrapper(Expr *node)
  * Modified entry point for recursively analyzing a sub-statement in union.
  */
 Query *cypher_parse_sub_analyze_union(cypher_clause *clause,
-                                cypher_parsestate *cpstate,
-                                CommonTableExpr *parentCTE,
-                                bool locked_from_parent,
-                                bool resolve_unknowns)
+                                      cypher_parsestate *cpstate,
+                                      CommonTableExpr *parentCTE,
+                                      bool locked_from_parent,
+                                      bool resolve_unknowns)
 {
     cypher_parsestate *state = make_cypher_parsestate(cpstate);
     Query *query;
@@ -5577,7 +5899,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * The second query will be for the path that this MERGE clause defines. The
  * two subqueries will be joined together using a LATERAL LEFT JOIN with the
  * previous query on the left and the MERGE path subquery on the right. Like
- * case 1 the targetList will have all the decalred variables and a FuncExpr
+ * case 1 the targetList will have all the declared variables and a FuncExpr
  * that represents the MERGE clause with its needed metadata information, that
  * will be caught in the planner phase and converted into a path.
  *
@@ -5598,7 +5920,7 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * for one tuple the path exists (or there is multiple paths that exist and all
  * paths must be emitted) and for another the path does not exist. This is
  * similar to OPTIONAL MATCH, however with the added feature of creating the
- * path if not there, rather than just emiting NULL.
+ * path if not there, rather than just emitting NULL.
  */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)
@@ -5639,7 +5961,10 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     else
     {
         // make the merge node into a match node
-        cypher_clause *merge_clause_as_match = convert_merge_to_match(self);
+
+        // TODO this is called above and appears redundant but needs to be
+        // looked into
+        //cypher_clause *merge_clause_as_match = convert_merge_to_match(self);
 
         /*
          * Create the metadata needed for creating missing paths.
@@ -5739,7 +6064,7 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
      * transform the previous clause
      */
     j->larg = transform_clause_for_join(cpstate, clause->prev, &l_rte,
-                                            &l_nsitem, l_alias);
+                                        &l_nsitem, l_alias);
     pstate->p_namespace = lappend(pstate->p_namespace, l_nsitem);
 
     /*
@@ -5776,15 +6101,8 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
     get_res_cols(pstate, l_nsitem, r_nsitem, &res_colnames, &res_colvars);
 
     // make the RTE for the join
-    jnsitem = addRangeTableEntryForJoin(pstate,
-                                        res_colnames,
-                                        NULL,
-                                        j->jointype,
-                                        0,
-                                        res_colvars,
-                                        NIL,
-                                        NIL,
-                                        j->alias,
+    jnsitem = addRangeTableEntryForJoin(pstate, res_colnames, NULL, j->jointype,
+                                        0, res_colvars, NIL, NIL, j->alias,
                                         true);
 
     j->rtindex = jnsitem->p_rtindex;
@@ -5871,6 +6189,134 @@ transform_cypher_merge_mark_tuple_position(List *target_list,
 }
 
 /*
+ * Helper function to return a shallow copy of an existing, already transformed,
+ * matching variable. The copy returned will be flagged as such. If none are
+ * found, it will return NULL. If it finds a mismatched type, it will error
+ * stating that.
+ */
+static cypher_target_node *get_referenced_variable(ParseState *pstate,
+                                                   Node *node,
+                                                   List *transformed_path)
+{
+    ListCell *lc = NULL;
+    char *node_name = NULL;
+    char *node_label = NULL;
+    char node_type = 0;
+    int node_loc = -1;
+
+    /* passed node should only be a vertex or an edge */
+    Assert(is_ag_node(node, cypher_node) ||
+           is_ag_node(node, cypher_relationship));
+
+    /* set up our search based on our input type */
+    if (is_ag_node(node, cypher_node))
+    {
+        node_name = ((cypher_node *)node)->name;
+        node_label = ((cypher_node *)node)->label;
+        node_loc = ((cypher_node *)node)->location;
+        node_type = 'v';
+    }
+    else
+    {
+        node_name = ((cypher_relationship *)node)->name;
+        node_label = ((cypher_relationship *)node)->label;
+        node_loc = ((cypher_relationship *)node)->location;
+        node_type = 'e';
+    }
+
+    /* look through the list of previously transformed nodes and edges */
+    foreach (lc, transformed_path)
+    {
+        cypher_target_node *ctn = NULL;
+        bool is_name = false;
+        bool is_label = false;
+
+        /* list items should be of type cypher_target_node */
+        Assert(is_ag_node(lfirst(lc), cypher_target_node));
+        ctn = lfirst(lc);
+
+        /* do they have names? if so, do they match? */
+        is_name = (node_name == NULL || ctn->variable_name == NULL) ?
+            false : strcmp(node_name, ctn->variable_name) == 0;
+
+        /* do they have labels? if so, do they match? */
+        is_label = (ctn->label_name != NULL) ?
+            ((node_label == NULL) ? true : strcmp(ctn->label_name, node_label) == 0)
+            : false;
+
+        /* if the types don't match, error or skip */
+        if (node_type != ctn->type)
+        {
+            /* is the name a match, generate an error. otherwise, skip it. */
+            if (is_name)
+            {
+                if (node_type == 'v')
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                             errmsg("variable \"%s\" is for a edge",
+                                    node_name),
+                             parser_errposition(pstate, node_loc)));
+                }
+                else
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                             errmsg("variable \"%s\" is for an vertex",
+                                    node_name),
+                             parser_errposition(pstate, node_loc)));
+                }
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        if (is_name && !is_label)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                             errmsg("multiple labels for variable '%s' are not supported",
+                                    node_name),
+                             parser_errposition(pstate, node_loc)));
+        }
+
+        /*
+         * If this is a match, make a shallow copy of it, modify the copy to be
+         * flagged as a previously declared variable, and then return it.
+         */
+        if (is_name && is_label)
+        {
+            cypher_target_node *_cpy = make_ag_node(cypher_target_node);
+
+            /* make a shallow copy */
+            _cpy->type = ctn->type;
+            _cpy->flags = ctn->flags;
+            _cpy->dir = ctn->dir;
+            _cpy->id_expr = ctn->id_expr;
+            _cpy->id_expr_state = ctn->id_expr_state;
+            _cpy->prop_expr = ctn->prop_expr;
+            _cpy->prop_expr_state = ctn->prop_expr_state;
+            _cpy->prop_attr_num = ctn->prop_attr_num;
+            _cpy->resultRelInfo = ctn->resultRelInfo;
+            _cpy->elemTupleSlot = ctn->elemTupleSlot;
+            _cpy->relid = ctn->relid;
+            _cpy->label_name = ctn->label_name;
+            _cpy->variable_name = ctn->variable_name;
+            _cpy->tuple_position = ctn->tuple_position;
+
+            /* set it to a declared variable */
+            _cpy->flags &= 0xfffffffe;
+            _cpy->flags |= EXISTING_VARIABLE_DECLARED_SAME_CLAUSE;
+
+            return _cpy;
+        }
+    }
+    return NULL;
+}
+
+/*
  * Creates the target nodes for a merge path. If MERGE has a path that doesn't
  * exist then in the MERGE clause we act like a CREATE clause. This function
  * sets up the metadata needed for that process.
@@ -5879,6 +6325,7 @@ static cypher_create_path *
 transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
                             cypher_path *path)
 {
+    ParseState *pstate = (ParseState *)cpstate;
     ListCell *lc;
     List *transformed_path = NIL;
     cypher_create_path *ccp = make_ag_node(cypher_create_path);
@@ -5891,9 +6338,30 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
         if (is_ag_node(lfirst(lc), cypher_node))
         {
             cypher_node *node = lfirst(lc);
+            cypher_target_node *rel = NULL;
 
-            cypher_target_node *rel =
-                transform_merge_cypher_node(cpstate, target_list, node);
+            if (path->var_name != NULL && node->name != NULL &&
+                strcmp(path->var_name, node->name) == 0)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                         errmsg("variable \"%s\" is for a path", node->name),
+                         parser_errposition(pstate, node->location)));
+            }
+
+            /*
+             * If the variable was already transformed, get a referenced copy of
+             * it. This copy will make sure the executor phase doesn't create a
+             * new node from it.
+             */
+            rel = get_referenced_variable(pstate, (Node *)node,
+                                          transformed_path);
+
+            /* if there wasn't a transformed variable, transform the node */
+            if (rel == NULL)
+            {
+                rel = transform_merge_cypher_node(cpstate, target_list, node);
+            }
 
             if (in_path)
             {
@@ -5904,10 +6372,37 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
         }
         else if (is_ag_node(lfirst(lc), cypher_relationship))
         {
-            cypher_relationship *edge = lfirst(lc);
+            cypher_relationship *edge = NULL;
+            cypher_target_node *rel = NULL;
 
-            cypher_target_node *rel =
-                transform_merge_cypher_edge(cpstate, target_list, edge);
+            edge = lfirst(lc);
+
+            if (path->var_name != NULL && edge->name != NULL &&
+                strcmp(path->var_name, edge->name) == 0)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                         errmsg("variable \"%s\" is for a path", edge->name),
+                         parser_errposition(pstate, edge->location)));
+            }
+
+            /*
+             * Get a referenced edge variable. This should not happen as edges
+             * can not be duplicated within a path.
+            */
+            rel = get_referenced_variable(pstate, (Node *)edge,
+                                          transformed_path);
+            if (rel != NULL)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                                 errmsg("a duplicate edge variable \"%s\" is not permitted within a path",
+                                        edge->name),
+                                 parser_errposition(pstate, edge->location)));
+            }
+
+            /* transform the edge */
+            rel = transform_merge_cypher_edge(cpstate, target_list, edge);
 
             if (in_path)
             {
@@ -6015,6 +6510,21 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     rv = makeRangeVar(cpstate->graph_name, edge->label, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
+    /*
+     * TODO
+     * It is possible for a vertex label to be retrieved, instead of an edge,
+     * due to the above logic. So, we need to check if it is a vertex label.
+     * This whole section needs to be fixed because it could be a relation that
+     * isn't either and has the correct number of columns. However, for now,
+     * we just check the number of columns.
+     */
+    if (label_relation->rd_att->natts == 2) // TODO temporarily hardcoded
+    {
+        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("Expecting edge label, found existing vertex label"),
+                        parser_errposition(&cpstate->pstate, edge->location)));
+    }
+
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
 
@@ -6052,10 +6562,8 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     if (node->name != NULL)
     {
-
         transform_entity *entity = find_transform_entity(cpstate, node->name,
                                                          ENT_VERTEX);
-
         /*
          *  the vertex was previously declared, we do not need to do any setup
          *  to create the node.
@@ -6121,6 +6629,21 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     rv = makeRangeVar(cpstate->graph_name, node->label, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+
+    /*
+     * TODO
+     * It is possible for an edge label to be retrieved, instead of a vertex,
+     * due to the above logic. So, we need to check if it is an edge label.
+     * This whole section needs to be fixed because it could be a relation that
+     * isn't either and has the correct number of columns. However, for now,
+     * we just check the number of columns.
+     */
+    if (label_relation->rd_att->natts == 4) // TODO temporarily hardcoded
+    {
+        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("Expecting vertex label, found existing edge label"),
+                        parser_errposition(&cpstate->pstate, node->location)));
+    }
 
     // Store the relid
     rel->relid = RelationGetRelid(label_relation);
@@ -6235,7 +6758,6 @@ static void handle_prev_clause(cypher_parsestate *cpstate, Query *query,
                                cypher_clause *clause, bool first_rte)
 {
     ParseState *pstate = (ParseState *) cpstate;
-
     int rtindex;
     ParseNamespaceItem *pnsi;
 
