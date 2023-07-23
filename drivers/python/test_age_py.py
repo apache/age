@@ -43,22 +43,27 @@ class TestAgeBasic(unittest.TestCase):
     def testExec(self):
 
         print("\n---------------------------------------------------")
-        print("Test 1: Checking single and multi column Returns.....")
+        print("Test 1: Testing Cypher Execution.....")
         print("---------------------------------------------------\n")
 
-        ag = self.ag
         # Create and Return single column
+        print('Testing on single column Returns...')
+        ag = self.ag
         cursor = ag.execCypher("CREATE (n:Person {name: %s, title: 'Developer'}) RETURN n", params=('Andy',))
+        ag.commit()
         for row in cursor:
-            print("Vertex: %s , Type: %s " % (Vertex, type(row[0])))
+            self.assertEqual( Vertex, type(row[0]))
 
         
         # Create and Return multi columns
+        print('Testing on multi column Returns...')
         cursor = ag.execCypher("CREATE (n:Person {name: %s, title: %s}) RETURN id(n), n.name", cols=['id','name'], params=('Jack','Manager'))
-        row = cursor.fetchone()
-        print("Id: %s , Name: %s" % (row[0], row[1]))
-        self.assertEqual(int, type(row[0]))
         ag.commit()
+        row = cursor.fetchone()
+        self.assertEqual(int, type(row[0]))
+        self.assertEqual(str, type(row[1]))
+        self.assertEqual(844424930131970, row[0])
+        self.assertEqual('Jack', row[1])
         print("\nTest 1 Successful....")
 
 
