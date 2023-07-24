@@ -1115,6 +1115,7 @@ path:
 
             p = (cypher_path *)$3;
             p->var_name = $1;
+            p->location = @1;
 
             $$ = (Node *)p;
         }
@@ -1182,7 +1183,7 @@ path_node:
             n->label = $3;
             n->parsed_label = $3;
             n->props = $4;
-            n->location = @1;
+            n->location = @2;
 
             $$ = (Node *)n;
         }
@@ -1442,7 +1443,7 @@ expr:
         }
     /*
      * This is a catch all grammar rule that allows us to avoid some
-     * shift/reduce errors between expression indirection rules by colapsing
+     * shift/reduce errors between expression indirection rules by collapsing
      * those rules into one generic rule. We can then inspect the expressions to
      * decide what specific rule needs to be applied and then construct the
      * required result.
@@ -2197,7 +2198,7 @@ static char *create_unique_name(char *prefix_name)
         prefix = prefix_name;
     }
 
-    /* get the length of the combinded string */
+    /* get the length of the combined string */
     nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_number);
 
     /* allocate the space */

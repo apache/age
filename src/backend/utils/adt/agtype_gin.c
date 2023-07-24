@@ -33,6 +33,7 @@
 #include "access/stratnum.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
+#include "utils/float.h"
 #include "utils/builtins.h"
 #include "utils/varlena.h"
 
@@ -47,7 +48,6 @@ typedef struct PathHashStack
 static Datum make_text_key(char flag, const char *str, int len);
 static Datum make_scalar_key(const agtype_value *scalar_val, bool is_key);
 
-#define MAXINT8LEN        25
 
 /*
  *

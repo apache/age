@@ -41,6 +41,7 @@
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "utils/builtins.h"
+#include "utils/float.h"
 #include "utils/int8.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
@@ -48,6 +49,7 @@
 #include "commands/label_commands.h"
 #include "nodes/cypher_nodes.h"
 #include "parser/cypher_expr.h"
+#include "parser/cypher_item.h"
 #include "parser/cypher_parse_node.h"
 #include "parser/cypher_transform_entity.h"
 #include "utils/ag_func.h"
@@ -92,8 +94,8 @@ static Node *transform_CoalesceExpr(cypher_parsestate *cpstate,
                                     CoalesceExpr *cexpr);
 static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink);
 static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn);
-static Node *transform_WholeRowRef(ParseState *pstate, RangeTblEntry *rte,
-                                   int location);
+static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
+                                   int location, int sublevels_up);
 static ArrayExpr *make_agtype_array_expr(List *args);
 
 /* transform a cypher expression */
@@ -147,21 +149,22 @@ static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
             ereport(ERROR, (errmsg_internal("unrecognized A_Expr kind: %d",
                                             a->kind)));
         }
+        break;
     }
     case T_BoolExpr:
         return transform_BoolExpr(cpstate, (BoolExpr *)expr);
     case T_NullTest:
     {
         NullTest *n = (NullTest *)expr;
-        NullTest *tranformed_expr = makeNode(NullTest);
+        NullTest *transformed_expr = makeNode(NullTest);
 
-        tranformed_expr->arg = (Expr *)transform_cypher_expr_recurse(cpstate,
+        transformed_expr->arg = (Expr *)transform_cypher_expr_recurse(cpstate,
                                                          (Node *)n->arg);
-        tranformed_expr->nulltesttype = n->nulltesttype;
-        tranformed_expr->argisrow = type_is_rowtype(exprType((Node *)tranformed_expr->arg));
-        tranformed_expr->location = n->location;
+        transformed_expr->nulltesttype = n->nulltesttype;
+        transformed_expr->argisrow = type_is_rowtype(exprType((Node *)transformed_expr->arg));
+        transformed_expr->location = n->location;
 
-        return (Node *) tranformed_expr;
+        return (Node *) transformed_expr;
     }
     case T_CaseExpr:
         return transform_CaseExpr(cpstate, (CaseExpr *) expr);
@@ -259,15 +262,18 @@ static Node *transform_A_Const(cypher_parsestate *cpstate, A_Const *ac)
  * Private function borrowed from PG's transformWholeRowRef.
  * Construct a whole-row reference to represent the notation "relation.*".
  */
-static Node *transform_WholeRowRef(ParseState *pstate, RangeTblEntry *rte,
-                                   int location)
+static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
+                                   int location, int sublevels_up)
 {
     Var *result;
     int vnum;
-    int sublevels_up;
+    RangeTblEntry *rte;
+
+    Assert(pnsi->p_rte != NULL);
+    rte = pnsi->p_rte;
 
     /* Find the RTE's rangetable location */
-    vnum = RTERangeTablePosn(pstate, rte, &sublevels_up);
+    vnum = pnsi->p_rtindex;
 
     /*
      * Build the appropriate referencing node.  Note that if the RTE is a
@@ -295,13 +301,13 @@ static Node *transform_WholeRowRef(ParseState *pstate, RangeTblEntry *rte,
 static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
 {
     ParseState *pstate = (ParseState *)cpstate;
-    RangeTblEntry *rte = NULL;
     Node *field1 = NULL;
     Node *field2 = NULL;
     char *colname = NULL;
     char *nspname = NULL;
     char *relname = NULL;
     Node *node = NULL;
+    ParseNamespaceItem *pnsi = NULL;
     int levels_up;
 
     switch (list_length(cref->fields))
@@ -344,11 +350,12 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                  * PostQUEL-inspired syntax.  The preferred form now is
                  * "rel.*".
                  */
-                rte = refnameRangeTblEntry(pstate, NULL, colname,
+                pnsi = refnameNamespaceItem(pstate, NULL, colname,
                                            cref->location, &levels_up);
-                if (rte)
+                if (pnsi)
                 {
-                    node = transform_WholeRowRef(pstate, rte, cref->location);
+                    node = transform_WholeRowRef(pstate, pnsi, cref->location,
+                                                 levels_up);
                 }
                 else
                 {
@@ -361,7 +368,8 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 if (node == NULL)
                 {
                     ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
-                            errmsg("unable to transform whole row for %s", colname),
+                            errmsg("unable to transform whole row for %s",
+                                   colname),
                              parser_errposition(pstate, cref->location)));
                 }
 
@@ -384,9 +392,10 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 }
 
                 /* locate the referenced RTE */
-                rte = refnameRangeTblEntry(pstate, nspname, relname,
+                pnsi = refnameNamespaceItem(pstate, nspname, relname,
                                            cref->location, &levels_up);
-                if (rte == NULL)
+
+                if (pnsi == NULL)
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_UNDEFINED_COLUMN),
@@ -402,15 +411,17 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                  */
                 if (IsA(field2, A_Star))
                 {
-                    node = transform_WholeRowRef(pstate, rte, cref->location);
+                    node = transform_WholeRowRef(pstate, pnsi, cref->location,
+                                                 levels_up);
                     break;
                 }
 
                 Assert(IsA(field2, String));
 
                 /* try to identify as a column of the RTE */
-                node = scanRTEForColumn(pstate, rte, colname, cref->location, 0,
-                                        NULL);
+                node = scanNSItemForColumn(pstate, pnsi, 0, colname,
+                                           cref->location);
+
                 if (node == NULL)
                 {
                     ereport(ERROR,
@@ -619,9 +630,9 @@ static Node *transform_cypher_map(cypher_parsestate *cpstate, cypher_map *cm)
         Const *newkey;
 
         key = lfirst(le);
-        le = lnext(le);
+        le = lnext(cm->keyvals, le);
         val = lfirst(le);
-        le = lnext(le);
+        le = lnext(cm->keyvals, le);
 
         newval = transform_cypher_expr_recurse(cpstate, val);
 
@@ -655,34 +666,107 @@ static Node *transform_cypher_map(cypher_parsestate *cpstate, cypher_map *cm)
     return (Node *)fexpr;
 }
 
+/*
+ * Helper function to transform a cypher list into an agtype list. The function
+ * will use agtype_add to concatenate lists when the number of parameters
+ * exceeds 100, a PG limitation.
+ */
 static Node *transform_cypher_list(cypher_parsestate *cpstate, cypher_list *cl)
 {
-    List *newelems = NIL;
-    ListCell *le;
-    FuncExpr *fexpr;
-    Oid func_oid;
+    List *abl_args = NIL;
+    ListCell *le = NULL;
+    FuncExpr *aa_lhs_arg = NULL;
+    FuncExpr *fexpr = NULL;
+    Oid abl_func_oid = InvalidOid;
+    Oid aa_func_oid = InvalidOid;
+    int nelems = 0;
+    int i = 0;
 
-    foreach (le, cl->elems)
+    /* determine which build function we need */
+    nelems = list_length(cl->elems);
+    if (nelems == 0)
     {
-        Node *newv;
-
-        newv = transform_cypher_expr_recurse(cpstate, lfirst(le));
-
-        newelems = lappend(newelems, newv);
-    }
-
-    if (list_length(newelems) == 0)
-    {
-        func_oid = get_ag_func_oid("agtype_build_list", 0);
+        abl_func_oid = get_ag_func_oid("agtype_build_list", 0);
     }
     else
     {
-        func_oid = get_ag_func_oid("agtype_build_list", 1, ANYOID);
+        abl_func_oid = get_ag_func_oid("agtype_build_list", 1, ANYOID);
     }
 
-    fexpr = makeFuncExpr(func_oid, AGTYPEOID, newelems, InvalidOid, InvalidOid,
-                         COERCE_EXPLICIT_CALL);
+    /* get the concat function oid, if necessary */
+    if (nelems > 100)
+    {
+        aa_func_oid = get_ag_func_oid("agtype_add", 2, AGTYPEOID, AGTYPEOID);
+    }
+
+    /* iterate through the list of elements */
+    foreach (le, cl->elems)
+    {
+        Node *texpr = NULL;
+
+        /* transform the argument */
+        texpr = transform_cypher_expr_recurse(cpstate, lfirst(le));
+
+        /*
+         * If we have more than 100 elements we will need to add in the list
+         * concatenation function.
+         */
+        if (i >= 100)
+        {
+            /* build the list function node argument for concatenate */
+            fexpr = makeFuncExpr(abl_func_oid, AGTYPEOID, abl_args, InvalidOid,
+                                 InvalidOid, COERCE_EXPLICIT_CALL);
+            fexpr->location = cl->location;
+
+            /* initial case, set up for concatenating 2 lists */
+            if (aa_lhs_arg == NULL)
+            {
+                aa_lhs_arg = fexpr;
+            }
+            /*
+             * For every other case, concatenate the list on to the previous
+             * concatenate operation.
+             */
+            else
+            {
+                List *aa_args = list_make2(aa_lhs_arg, fexpr);
+
+                fexpr = makeFuncExpr(aa_func_oid, AGTYPEOID, aa_args,
+                                     InvalidOid, InvalidOid,
+                                     COERCE_EXPLICIT_CALL);
+                fexpr->location = cl->location;
+
+                /* set the lhs to the concatenation operation */
+                aa_lhs_arg = fexpr;
+            }
+
+            /* reset */
+            abl_args = NIL;
+            i = 0;
+            fexpr = NULL;
+        }
+
+        /* now add the latest transformed expression to the list */
+        abl_args = lappend(abl_args, texpr);
+        i++;
+    }
+
+    /* now build the final list function */
+    fexpr = makeFuncExpr(abl_func_oid, AGTYPEOID, abl_args, InvalidOid,
+                         InvalidOid, COERCE_EXPLICIT_CALL);
     fexpr->location = cl->location;
+
+    /*
+     * If there was a previous concatenation or list function, build a final
+     * concatenation function node
+     */
+    if (aa_lhs_arg != NULL)
+    {
+        List *aa_args = list_make2(aa_lhs_arg, fexpr);
+
+        fexpr = makeFuncExpr(aa_func_oid, AGTYPEOID, aa_args, InvalidOid,
+                             InvalidOid, COERCE_EXPLICIT_CALL);
+    }
 
     return (Node *)fexpr;
 }

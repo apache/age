@@ -64,6 +64,21 @@ $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_set', $$
         MATCH (n {j: 5})
+        SET n.y = 53
+        SET n.y = 50
+        SET n.z = 99
+        SET n.arr = [n.y, n.z]
+        RETURN n
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH (n {j: 5})
+        REMOVE n.arr
+        RETURN n
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH (n {j: 5})
         RETURN n
 $$) AS (a agtype);
 
@@ -96,6 +111,32 @@ SELECT * FROM cypher('cypher_set', $$
         RETURN n
 $$) AS (a agtype);
 
+-- Test that SET works with nodes(path) and relationships(path)
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        WITH nodes(p) AS ns
+        WITH ns[0] AS n
+        SET n.k = 99
+        SET n.k = 999
+        RETURN n
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        WITH relationships(p) AS rs
+        WITH rs[0] AS r
+        SET r.l = 99
+        SET r.l = 999
+        RETURN r
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_set', $$
+        MATCH p=(n)-[e:e {j:34}]->()
+        REMOVE n.k, e.l
+        RETURN p
+$$) AS (a agtype);
+
 SELECT * FROM cypher('cypher_set', $$MATCH (n)-[]->(n) SET n.y = 99 RETURN n$$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) MATCH (n)-[]->(m) SET n.t = 150 RETURN n$$) AS (a agtype);
@@ -126,7 +167,7 @@ SELECT set_test();
 SELECT set_test();
 
 --
--- Updating multiple fieds
+-- Updating multiple fields
 --
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3, n.j = 5 RETURN n $$) AS (a agtype);
 
@@ -247,7 +288,7 @@ SELECT * FROM cypher('cypher_set_1', $$
     RETURN p
 $$) AS (p agtype);
 
--- test assigning non-map to an enitity
+-- test assigning non-map to an entity
 SELECT * FROM cypher('cypher_set_1', $$
     MATCH (p {name: 'Peter'})
     SET p = "Peter"

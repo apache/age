@@ -7,7 +7,7 @@
 
 <h3 align="center">
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
-        <img src="https://age.apache.org/age-manual/master/_static/logo.png"" height="25" height="30% alt="Apache AGE">
+        <img src="https://age.apache.org/age-manual/master/_static/logo.png" height="25" height="30% alt="Apache AGE style="margin: 0 0 -3px 0">
     </a>
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
@@ -33,9 +33,9 @@
     <img src="https://img.shields.io/badge/Release-v1.3.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
-  <a href="https://www.postgresql.org/docs/11/index.html">
-    <img src="https://img.shields.io/badge/Version-PostgreSQL 11-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/11/index.html"/>
-  </a>   
+  <a href="https://www.postgresql.org/docs/13/index.html">
+    <img src="https://img.shields.io/badge/Version-PostgreSQL 13-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/13/index.html"/>
+  </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
     <img src="https://img.shields.io/github/issues/apache/age"/>
@@ -128,13 +128,13 @@ sudo apt-get install build-essential libreadline-dev zlib1g-dev flex bison
 Apache AGE is intended to be simple to install and run. It can be installed with Docker and other traditional ways. 
 
 <h4><a><img width="20" src="/img/pg.svg"></a>
-&nbsp;Install PosgtreSQL
+&nbsp;Install PostgreSQL
 </h4>
 
-You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12 & 13. Supporting the latest versions is on AGE roadmap. 
+You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, & 13. Supporting the latest versions is on AGE roadmap. 
      
 <h4>
-&nbsp;Install From Package Manager
+&nbsp;Installation via Package Manager
 </h4>
 
 You can use a <a href="https://www.postgresql.org/download/">package management </a> that your OS provides to download AGE.
@@ -146,19 +146,19 @@ sudo apt install postgresql
 
 ```
 <h4>
-&nbsp;Install From Source Code
+&nbsp;Installation From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">official Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/13/installation.html">official Postgres Website.</a>
 
 
 
 <h4><img width="20" src="/img/tux.svg"><img width="20" src="/img/apple.svg"> &nbsp;Install AGE on Linux and MacOS
 </h4>
 
-Clone the <a href="https://github.com/apache/age">github repository</a> or download the<a href="https://github.com/apache/age/releases">download an official release.
+Clone the <a href="https://github.com/apache/age">github repository</a> or download the <a href="https://github.com/apache/age/releases">download an official release.
 </a>
-Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12 & 13 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12 or 13.
+Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, & 13 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, or 13.
 <br>
     
 ```bash
@@ -332,7 +332,7 @@ Starting with Apache AGE is very simple. You can easily select your platform and
 Join the AGE community for help, questions, discussions, and contributions. 
 
 - Check our [website](https://age.apache.org/)
-- Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
+- Join the Live Chat on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
 - Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
 - Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
