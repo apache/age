@@ -5475,6 +5475,117 @@ ERROR:  schema "contains" does not exist
 LINE 2:     RETURN contains.age_sqrt(25)
                                     ^
 --
+-- cbrt()
+--
+SELECT * from cypher('expr', $$
+    RETURN cbrt(27)
+$$) as (result agtype);
+ result 
+--------
+ 3.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN cbrt(1)
+$$) as (result agtype);
+ result 
+--------
+ 1.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN cbrt(0)
+$$) as (result agtype);
+ result 
+--------
+ 0.0
+(1 row)
+
+-- should return null
+SELECT * from cypher('expr', $$
+    RETURN cbrt(null)
+$$) as (result agtype);
+ result 
+--------
+ 
+(1 row)
+
+-- should fail
+SELECT * from cypher('expr', $$
+    RETURN cbrt()
+$$) as (result agtype);
+ERROR:  function ag_catalog.age_cbrt() does not exist
+LINE 2:     RETURN cbrt()
+                   ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * from cypher('expr', $$
+    RETURN cbrt("1")
+$$) as (result agtype);
+ERROR:  cbrt() unsupported argument agtype 1
+--
+-- user defined function expressions - using pg functions for these tests
+--
+SELECT * from cypher('expr', $$
+    RETURN pg_catalog.cbrt(27::pg_float8)
+$$) as (result agtype);
+ result 
+--------
+ 3.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN pg_catalog.cbrt("27"::pg_float8)
+$$) as (result agtype);
+ result 
+--------
+ 3.0
+(1 row)
+
+SELECT * from cypher('expr', $$
+    RETURN ag_catalog.age_cbrt(27)
+$$) as (result agtype);
+ result 
+--------
+ 3.0
+(1 row)
+
+-- should return null
+SELECT * from cypher('expr', $$
+    RETURN pg_catalog.cbrt(null::pg_float8)
+$$) as (result agtype);
+ result 
+--------
+ 
+(1 row)
+
+-- should fail
+SELECT * from cypher('expr', $$
+    RETURN pg_catalog.cbrt()
+$$) as (result agtype);
+ERROR:  function pg_catalog.cbrt() does not exist
+LINE 2:     RETURN pg_catalog.cbrt()
+                              ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * from cypher('expr', $$
+    RETURN something.pg_catalog.cbrt("1"::pg_float8)
+$$) as (result agtype);
+ERROR:  invalid indirection syntax
+LINE 2:     RETURN something.pg_catalog.cbrt("1"::pg_float8)
+                   ^
+-- should fail do to schema but using a reserved_keyword
+SELECT * from cypher('expr', $$
+    RETURN distinct.age_cbrt(27)
+$$) as (result agtype);
+ERROR:  schema "distinct" does not exist
+LINE 2:     RETURN distinct.age_cbrt(27)
+                                    ^
+SELECT * from cypher('expr', $$
+    RETURN contains.age_cbrt(27)
+$$) as (result agtype);
+ERROR:  schema "contains" does not exist
+LINE 2:     RETURN contains.age_cbrt(27)
+                                    ^
+--
 -- aggregate functions avg(), sum(), count(), & count(*)
 --
 SELECT create_graph('UCSC');
