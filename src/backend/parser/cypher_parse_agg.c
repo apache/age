@@ -27,7 +27,7 @@
 #include "catalog/pg_constraint.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
-#include "optimizer/var.h"
+#include "optimizer/optimizer.h"
 #include "parser/cypher_parse_agg.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
@@ -125,7 +125,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
 
         if (gset_common)
         {
-            for_each_cell(l, lnext(list_head(gsets)))
+            for_each_cell(l, gsets, lnext(gsets, list_head(gsets)))
             {
                 gset_common = list_intersection_int(gset_common, lfirst(l));
                 if (!gset_common)
@@ -192,7 +192,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
         root->planner_cxt = CurrentMemoryContext;
         root->hasJoinRTEs = true;
 
-        groupClauses = (List *) flatten_join_alias_vars(root,
+        groupClauses = (List *) flatten_join_alias_vars((Query*)root,
                                                         (Node *) groupClauses);
     }
 
@@ -236,7 +236,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
     finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
-        clause = flatten_join_alias_vars(root, clause);
+        clause = flatten_join_alias_vars((Query*)root, clause);
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
@@ -245,7 +245,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
     finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
-        clause = flatten_join_alias_vars(root, clause);
+        clause = flatten_join_alias_vars((Query*)root, clause);
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
@@ -562,7 +562,7 @@ static bool finalize_grouping_exprs_walker(Node *node,
                 Index ref = 0;
 
                 if (context->root)
-                    expr = flatten_join_alias_vars(context->root, expr);
+                    expr = flatten_join_alias_vars((Query*)context->root, expr);
 
                 /*
                  * Each expression must match a grouping entry at the current
@@ -807,7 +807,8 @@ static List * expand_grouping_sets(List *groupingSets, int limit)
         result = lappend(result, list_union_int(NIL, (List *) lfirst(lc)));
     }
 
-    for_each_cell(lc, lnext(list_head(expanded_groups)))
+    for_each_cell(lc, expanded_groups, 
+                  lnext(expanded_groups, list_head(expanded_groups)))
     {
         List *p = lfirst(lc);
         List *new_result = NIL;

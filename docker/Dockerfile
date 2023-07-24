@@ -16,19 +16,18 @@
 # limitations under the License.
 #
 
+FROM postgres:13
 
-FROM postgres:11-buster
-
-RUN apt-get update 
+RUN apt-get update
 RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
   bison \
   build-essential \
   flex \
-  postgresql-server-dev-11 
+  postgresql-server-dev-13
 
-COPY . /age 
-RUN cd /age && make install 
+COPY . /age
+RUN cd /age && make install
 
-COPY docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
+COPY docker/docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
 CMD ["postgres", "-c", "shared_preload_libraries=age"]

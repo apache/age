@@ -49,26 +49,25 @@
 #include "utils/load/ag_load_labels.h"
 
 
-int64 get_nextval_internal(graph_cache_data* graph_cache, 
+int64 get_nextval_internal(graph_cache_data* graph_cache,
                            label_cache_data* label_cache);
 /*
  * Auxiliary function to get the next internal value in the graph,
  * so a new object (node or edge) graph id can be composed.
  */
 
-int64 get_nextval_internal(graph_cache_data* graph_cache, 
-                           label_cache_data* label_cache) 
+int64 get_nextval_internal(graph_cache_data* graph_cache,
+                           label_cache_data* label_cache)
 {
     Oid obj_seq_id;
     char* label_seq_name_str;
 
     label_seq_name_str = NameStr(label_cache->seq_name);
-    obj_seq_id = get_relname_relid(label_seq_name_str, 
+    obj_seq_id = get_relname_relid(label_seq_name_str,
                                    graph_cache->namespace);
-    
+
     return nextval_internal(obj_seq_id, true);
 }
-
 
 PG_FUNCTION_INFO_V1(create_complete_graph);
 
@@ -82,8 +81,8 @@ PG_FUNCTION_INFO_V1(create_complete_graph);
 */
 
 Datum create_complete_graph(PG_FUNCTION_ARGS)
-{   
-    Oid graph_id;
+{
+    Oid graph_oid;
     Name graph_name;
 
     int64 no_vertices;
@@ -119,7 +118,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     Name edge_seq_name;
     char *edge_seq_name_str;
 
-    int64 lid; 
+    int64 lid;
 
     if (PG_ARGISNULL(0))
     {
@@ -130,13 +129,13 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(1))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                errmsg("number of nodes can not be NULL")));
+                        errmsg("number of nodes can not be NULL")));
     }
-    
+
     if (PG_ARGISNULL(2))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                errmsg("edge label can not be NULL")));
+                        errmsg("edge label can not be NULL")));
     }
 
     // assigning arguments variables; setting defaults to non obligatory ones.
@@ -157,7 +156,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     {
         vtx_label_name = PG_GETARG_NAME(4);
         vtx_name_str = NameStr(*vtx_label_name);
-        
+
         // Check if vertex and edge label are same
         if (strcmp(vtx_name_str, edge_name_str) == 0)
         {
@@ -171,7 +170,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     {
         DirectFunctionCall1(create_graph, CStringGetDatum(graph_name));
     }
-    graph_id = get_graph_oid(graph_name_str);
+    graph_oid = get_graph_oid(graph_name_str);
 
     // asserting the edge_properties argument
     if(!PG_ARGISNULL(3))
@@ -183,9 +182,11 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     if (!PG_ARGISNULL(4))
     {
         // Check if label with the input name already exists
-        if (!label_exists(vtx_name_str, graph_id))
+        if (!label_exists(vtx_name_str, graph_oid))
         {
-            DirectFunctionCall2(create_vlabel, CStringGetDatum(graph_name), CStringGetDatum(vtx_label_name));
+            DirectFunctionCall2(create_vlabel,
+                                CStringGetDatum(graph_name),
+                                CStringGetDatum(vtx_label_name));
         }
     }
 
@@ -195,17 +196,19 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
         node_properties = (agtype*)PG_GETARG_ARRAYTYPE_P(5);
     }
 
-    if (!label_exists(edge_name_str, graph_id))
+    if (!label_exists(edge_name_str, graph_oid))
     {
-        DirectFunctionCall2(create_elabel, CStringGetDatum(graph_name), CStringGetDatum(edge_label_name));   
+        DirectFunctionCall2(create_elabel,
+                            CStringGetDatum(graph_name),
+                            CStringGetDatum(edge_label_name));
     }
 
-    vtx_label_id = get_label_id(vtx_name_str, graph_id);
-    edge_label_id = get_label_id(edge_name_str, graph_id);
+    vtx_label_id = get_label_id(vtx_name_str, graph_oid);
+    edge_label_id = get_label_id(edge_name_str, graph_oid);
 
     graph_cache = search_graph_name_cache(graph_name_str);
-    vertex_cache = search_label_name_graph_cache(vtx_name_str,graph_id);
-    edge_cache = search_label_name_graph_cache(edge_name_str,graph_id);
+    vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
+    edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
 
     nsp_id = graph_cache->namespace;
     vtx_seq_name = &(vertex_cache->seq_name);
@@ -218,32 +221,32 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
   
     /* Creating vertices*/
-    for (i=(int64)1;i<=no_vertices;i++)
-    {   
+    for (i=(int64)1; i<=no_vertices; i++)
+    {
         vid = nextval_internal(vtx_seq_id, true);
         object_graph_id = make_graphid(vtx_label_id, vid);
         insert_vertex_simple(
-            graph_id,
+            graph_oid,
             vtx_name_str,
             object_graph_id,
             node_properties);
     }
 
     lid = vid;
-    
+
     /* Creating edges*/
-    for (i = 1;i<=no_vertices-1;i++)
-    {   
+    for (i = 1; i<=no_vertices-1; i++)
+    {
         start_vid = lid-no_vertices+i;
-        for(j=i+1;j<=no_vertices;j++)
-        {  
+        for(j=i+1; j<=no_vertices; j++)
+        {
             end_vid = lid-no_vertices+j;
             eid = nextval_internal(edge_seq_id, true);
             object_graph_id = make_graphid(edge_label_id, eid);
 
             start_vertex_graph_id = make_graphid(vtx_label_id, start_vid);
             end_vertex_graph_id = make_graphid(vtx_label_id, end_vid);
-            insert_edge_simple(graph_id, edge_name_str,
+            insert_edge_simple(graph_oid, edge_name_str,
                             object_graph_id, start_vertex_graph_id,
                             end_vertex_graph_id, edge_properties);
         }
@@ -254,18 +257,18 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(age_create_barbell_graph);
 
-/* 
+/*
  * The barbell graph is two complete graphs connected by a bridge path
  * Syntax:
  * ag_catalog.age_create_barbell_graph(graph_name Name,
  *                                     m int,
- *                                     n int, 
+ *                                     n int,
  *                                     vertex_label_name Name DEFAULT = NULL,
  *                                     vertex_properties agtype DEFAULT = NULL,
- *                                     edge_label_name Name DEAULT = NULL,
+ *                                     edge_label_name Name DEFAULT = NULL,
  *                                     edge_properties agtype DEFAULT = NULL)
  * Input:
- * 
+ *
  * graph_name - Name of the graph to be created.
  * m - number of vertices in one complete graph.
  * n - number of vertices in the bridge path.
@@ -273,11 +276,11 @@ PG_FUNCTION_INFO_V1(age_create_barbell_graph);
  * vertex_properties - Property values to assign each vertex. Default is NULL
  * edge_label_name - Name of the label to assign each edge to.
  * edge_properties - Property values to assign each edge. Default is NULL
- * 
+ *
  * https://en.wikipedia.org/wiki/Barbell_graph
  */
 
-Datum age_create_barbell_graph(PG_FUNCTION_ARGS) 
+Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
 {
     Oid graph_oid;
     Name graph_name;
@@ -292,7 +295,7 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     Name edge_label_name;
     int32 edge_label_id;
     char* edge_label_str;
-    
+
     graphid object_graph_id;
     graphid start_node_graph_id;
     graphid end_node_graph_id;
@@ -303,13 +306,14 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     agtype* edge_properties = NULL;
     agtype* node_properties = NULL;
 
-    // Checking for possible NULL arguments 
+    // Checking for possible NULL arguments
     // Name graph_name
     if (PG_ARGISNULL(0))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Graph name cannot be NULL")));
     }
+
     graph_name = PG_GETARG_NAME(0);
     graph_name_str = NameStr(*graph_name);
 
@@ -319,11 +323,11 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("Graph size cannot be NULL or lower than 3")));
     }
-    
+
     /*
      * int64 bridge_size: currently only stays at zero.
      * to do: implement bridge with variable number of nodes.
-    */ 
+     */
     if (PG_ARGISNULL(2) || PG_GETARG_INT32(2) < 0 )
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -331,11 +335,11 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     }
 
     // node label: if null, gets default label, which is "_ag_label_vertex"
-    if (PG_ARGISNULL(3)) 
+    if (PG_ARGISNULL(3))
     {
         namestrcpy(node_label_name, AG_DEFAULT_LABEL_VERTEX);
     }
-    else 
+    else
     {
         node_label_name = PG_GETARG_NAME(3);
     }
@@ -359,6 +363,7 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("edge label can not be NULL")));
     }
+
     edge_label_name = PG_GETARG_NAME(5);
     edge_label_str = NameStr(*edge_label_name);
 
@@ -376,7 +381,7 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     DirectFunctionCall6(
         create_complete_graph, 
         CStringGetDatum(graph_name_str),
-        fcinfo->arg[1],                    // number of nodes
+        PG_GETARG_INT32(1),                    // number of nodes
         CStringGetDatum(edge_label_str),   // edge label
         CStringGetDatum(edge_properties),  // edge properties
         CStringGetDatum(node_label_str),   // node label
@@ -384,7 +389,7 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     DirectFunctionCall6(
         create_complete_graph, 
         CStringGetDatum(graph_name_str),
-        fcinfo->arg[1],                    // number of nodes
+        PG_GETARG_INT32(1),                    // number of nodes
         CStringGetDatum(edge_label_str),   // edge label
         CStringGetDatum(edge_properties),  // edge properties
         CStringGetDatum(node_label_str),   // node label
@@ -397,13 +402,13 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     /*
      * Fetching caches to get next values for graph id's, and access nodes
      * to be connected with edges.
-     */ 
+     */
     graph_cache = search_graph_name_cache(graph_name_str);
     edge_cache = search_label_name_graph_cache(edge_label_str,graph_oid);
 
     // connect a node from each graph
     start_node_index = 1; // first created node, from the first complete graph
-    end_node_index = fcinfo->arg[1]*2; // last created node, second graph
+    end_node_index = PG_GETARG_INT32(1)*2; // last created node, second graph
 
     // next index to be assigned to a node or edge
     nextval = get_nextval_internal(graph_cache, edge_cache);

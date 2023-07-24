@@ -260,8 +260,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * new table and sequence. Returns the oid from the new tuple in
  * ag_catalog.ag_label.
  */
-Oid create_label(char *graph_name, char *label_name, char label_type,
-                 List *parents)
+void create_label(char *graph_name, char *label_name, char label_type,
+                  List *parents)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -272,7 +272,12 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     RangeVar *seq_range_var;
     int32 label_id;
     Oid relation_id;
-    Oid label_oid;
+
+    if (!is_valid_label(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
 
     if (!is_valid_label(label_name, label_type))
     {
@@ -314,12 +319,10 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
 
-    label_oid = insert_label(label_name, graph_oid, label_id, label_type,
-                             relation_id,seq_name);
+    insert_label(label_name, graph_oid, label_id, label_type,
+                 relation_id, seq_name);
 
     CommandCounterIncrement();
-
-    return label_oid;
 }
 
 // CREATE TABLE `schema_name`.`rel_name` (
@@ -538,7 +541,7 @@ static FuncCall *build_id_default_func_expr(char *graph_name, char *label_name,
     nextval_func = makeFuncCall(nextval_func_name, nextval_func_args, -1);
 
     /*
-     * Build a node that contructs the graphid from the label id function
+     * Build a node that constructs the graphid from the label id function
      * and the next val function for the given sequence.
      */
     graphid_func_name = list_make2(makeString("ag_catalog"),
@@ -616,6 +619,7 @@ static void change_label_id_default(char *graph_name, char *label_name,
     AlterTableCmd *tbl_cmd;
     RangeVar *rv;
     FuncCall *func_call;
+    AlterTableUtilityContext atuc;
 
     func_call = build_id_default_func_expr(graph_name, label_name, schema_name,
                                            seq_name);
@@ -636,7 +640,11 @@ static void change_label_id_default(char *graph_name, char *label_name,
 
     tbl_stmt->cmds = list_make1(tbl_cmd);
 
-    AlterTable(relid, AccessExclusiveLock, tbl_stmt);
+    atuc.relid = relid;
+    atuc.queryEnv = pstate->p_queryEnv;
+    atuc.queryString = pstate->p_sourcetext;
+
+    AlterTable(tbl_stmt, AccessExclusiveLock, &atuc);
 
     CommandCounterIncrement();
 }
@@ -684,13 +692,15 @@ static int32 get_new_label_id(Oid graph_oid, Oid nsp_id)
 
     for (cnt = LABEL_ID_MIN; cnt <= LABEL_ID_MAX; cnt++)
     {
-        int64 label_id;
+        int32 label_id;
 
         // the data type of the sequence is integer (int4)
-        label_id = nextval_internal(seq_id, true);
+        label_id = (int32) nextval_internal(seq_id, true);
         Assert(label_id_is_valid(label_id));
         if (!label_id_exists(graph_oid, label_id))
-            return (int32)label_id;
+        {
+            return (int32) label_id;
+        }
     }
 
     ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
@@ -805,7 +815,7 @@ static void remove_relation(List *qname)
                                 rel->schemaname, rel->relname)));
     }
 
-    // concurent is false
+    // concurrent is false
 
     ObjectAddressSet(address, RelationRelationId, rel_oid);
 
