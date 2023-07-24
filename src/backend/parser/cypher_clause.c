@@ -1344,10 +1344,12 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
         ereport(ERROR,
                 (errcode(ERRCODE_DUPLICATE_ALIAS),
                         errmsg("duplicate variable \"%s\"", self->target->name),
-                        parser_errposition((ParseState *) cpstate, target_syntax_loc)));
+                        parser_errposition((ParseState *) cpstate,
+                                           target_syntax_loc)));
     }
 
-    expr = transform_cypher_expr(cpstate, self->target->val, EXPR_KIND_SELECT_TARGET);
+    expr = transform_cypher_expr(cpstate, self->target->val,
+                                 EXPR_KIND_SELECT_TARGET);
 
     unwind = makeFuncCall(list_make1(makeString("age_unnest")), NIL,
                           COERCE_SQL_SYNTAX, -1);
@@ -3169,7 +3171,8 @@ static List *make_join_condition_for_edge(cypher_parsestate *cpstate,
             args = list_make3(left_id, right_id, entity->expr);
 
             // add to quals
-            quals = lappend(quals, makeFuncCall(qualified_func_name, args, COERCE_EXPLICIT_CALL, -1));
+            quals = lappend(quals, makeFuncCall(qualified_func_name, args,
+                                                COERCE_EXPLICIT_CALL, -1));
         }
 
         /*
@@ -4358,7 +4361,8 @@ static Node *make_qual(cypher_parsestate *cpstate,
 
 
         args = list_make1(entity->expr);
-        node = (Node *)makeFuncCall(qualified_name, args, COERCE_EXPLICIT_CALL, -1);
+        node = (Node *)makeFuncCall(qualified_name, args, COERCE_EXPLICIT_CALL,
+                                    -1);
     }
     else
     {

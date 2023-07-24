@@ -21,3 +21,8 @@ Apache AGE 0.0.0 - Release Notes
 
 NOTE: This is an initial release of PG14. There are no upgrade
       scripts to this release.
+
+**************************************************************
+***** THIS IS THE MASTER BRANCH TEMPLATE FOR THE RELEASE *****
+***** FILE. MODIFY AS NECESSARY FOR THE SPECIFIC RELEASE *****
+**************************************************************
