@@ -22,29 +22,55 @@ LOAD 'age';
 
 SET search_path = ag_catalog;
 
-SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
+-- TESTS FOR COMPLETE GRAPH GENERATION
+
+SELECT * FROM create_complete_graph(
+    'gp1', 5,
+    'edges', '{"edge_property":"test"}'::agtype,
+    'vertices', '{"node_property":"test"}'::agtype);
 
 SELECT COUNT(*) FROM gp1."edges";
 SELECT COUNT(*) FROM gp1."vertices";
 
-SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+SELECT * FROM cypher('gp1', $$MATCH (a) RETURN a$$) as (vertexes agtype);
+SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (edges agtype);
 
-SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
+SELECT * FROM create_complete_graph(
+    'gp1', 5,
+    'edges', '{"type":"edge","connection":"strong"}'::agtype,
+    'vertices', '{"type":"node"}'::agtype);
 
 SELECT COUNT(*) FROM gp1."edges";
 SELECT COUNT(*) FROM gp1."vertices";
 
-SELECT * FROM create_complete_graph('gp2',5,'edges');
+SELECT * FROM create_complete_graph(
+    'gp2',7,
+    'edges', '{"type":"edge"}'::agtype,
+    'vertices', '{"type":"node"}'::agtype);
+
 
 -- SHOULD FAIL
-SELECT * FROM create_complete_graph('gp3',5, NULL);
 
-SELECT * FROM create_complete_graph('gp4',NULL,NULL);
-
+-- NULL graph name
 SELECT * FROM create_complete_graph(NULL,NULL,NULL);
 
+-- NULL number of nodes
+SELECT * FROM create_complete_graph(
+    'gp3',NULL,
+    'edges','{"prop":"any"}'::agtype,
+    'vertices', '{"prop":"any"}'::agtype);
+
+-- NULL edge label
+SELECT * FROM create_complete_graph(
+    'gp4',5, 
+    NULL,'{"prop":"any"}'::agtype,
+    'vertices', '{"prop":"any"}'::agtype);
+
 -- Should error out because same labels are used for both vertices and edges
-SELECT * FROM create_complete_graph('gp5',5,'label','label');
+SELECT * FROM create_complete_graph(
+    'gp5',5,
+    'label','{"edge_prop":"any"}'::agtype,
+    'label','{"node_prop":"any"}'::agtype);
 
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
@@ -52,31 +78,47 @@ SELECT drop_graph('gp2', true);
 
 
 -- Tests for barbell graph generation
-SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
+
+SELECT * FROM age_create_barbell_graph(
+    'gp1',5,0,
+    'vertices', '{"node_property":"test"}'::agtype,
+    'edges', '{"edge_property":"test"}'::agtype);
 
 SELECT COUNT(*) FROM gp1."edges";
 SELECT COUNT(*) FROM gp1."vertices";
 
 SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 
-SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
+SELECT * FROM age_create_barbell_graph(
+    'gp1',5,0,
+    'vertices', '{"node_property":"test"}'::agtype,
+    'edges', '{"edge_property":"test"}'::agtype);
 
 SELECT COUNT(*) FROM gp1."edges";
 SELECT COUNT(*) FROM gp1."vertices";
 
-SELECT * FROM age_create_barbell_graph('gp2',5,10,'vertices',NULL,'edges',NULL);
+SELECT * FROM age_create_barbell_graph(
+    'gp1',5,10,
+    'vertices', '{"node_property":"test"}'::agtype,
+    'edges', '{"edge_property":"test"}'::agtype);
 
 -- SHOULD FAIL
+
+-- NULL graph name
 SELECT * FROM age_create_barbell_graph(NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+
+-- NULL graph size
 SELECT * FROM age_create_barbell_graph('gp2',NULL,0,'vertices',NULL,'edges',NULL); 
+
+-- NULL bridge size
 SELECT * FROM age_create_barbell_graph('gp3',5,NULL,'vertices',NULL,'edges',NULL);
-SELECT * FROM age_create_barbell_graph('gp4',NULL,0,'vertices',NULL,'edges',NULL);
-SELECT * FROM age_create_barbell_graph('gp5',5,0,'vertices',NULL,NULL,NULL);
+
+-- graph size lesser than 3
+SELECT * FROM age_create_barbell_graph('gp4',2,0,'vertices',NULL,'edges',NULL);
+SELECT * FROM age_create_barbell_graph('gp5',0,0,'vertices',NULL,NULL,NULL);
 
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
-SELECT drop_graph('gp2', true);
-
