@@ -32,7 +32,6 @@ function connect() {
     body: JSON.stringify(conn),
   })
     .then((response) => {
-      s;
 
       // Store the cookies from the response
       cookies = response.headers.raw()['set-cookie'];
@@ -59,6 +58,7 @@ function queryMetadata() {
       return response.json();
     })
     .then((data) => {
+      console.log(data); 
       // visualize the data in formatted ways
     })
     .catch((error) => {
@@ -69,7 +69,7 @@ function queryMetadata() {
 function query() {
   const payload = {
     query:
-      "SELECT * FROM cypher('demo_graph', $$ MATCH (v) RETURN v $$) as (v agtype);",
+      "SELECT * from cypher('test_graph', $$ MATCH (V)-[R]-(V2) RETURN V,R,V2 $$) as (V agtype, R agtype, V2 agtype);      ",
   };
 
   fetch('http://localhost:8080/query', {
@@ -83,7 +83,9 @@ function query() {
     .then((response) => {
       return response.json();
     })
-    .then((data) => {})
+    .then((data) => {
+      console.log("Query result: ", JSON.stringify(data, null, 2));
+    })
     .catch((error) => {
       console.error(error);
     });
