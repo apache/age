@@ -2,10 +2,10 @@ name: Go Driver Tests
 
 on:
   push:
-    branches: [ "master", "PG14" ]
+    branches: [ "master", "latest_test" ]
 
   pull_request:
-    branches: [ "master", "PG14" ]
+    branches: [ "master", "latest_test" ]
 
 jobs:
   build:
@@ -26,14 +26,14 @@ jobs:
         if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
           if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
             echo "TAG=latest" >> $GITHUB_ENV
-          elif [[ "$GITHUB_REF" == "refs/heads/PG14" ]]; then
-            echo "TAG=PG14_latest" >> $GITHUB_ENV
+          elif [[ "$GITHUB_REF" == "refs/heads/latest_test" ]]; then
+            echo "TAG=latest_test" >> $GITHUB_ENV
           fi
         elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
           if [[ "$GITHUB_BASE_REF" == "master" ]]; then
             echo "TAG=latest" >> $GITHUB_ENV
-          elif [[ "$GITHUB_BASE_REF" == "PG14" ]]; then
-            echo "TAG=PG14_latest" >> $GITHUB_ENV
+          elif [[ "$GITHUB_BASE_REF" == "latest_test" ]]; then
+            echo "TAG=latest_test" >> $GITHUB_ENV
           fi
         fi
 
