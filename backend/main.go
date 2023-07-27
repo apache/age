@@ -24,16 +24,16 @@ func main() {
 	gob.Register(models.Connection{})
 	app.Use(session.UserSessions())
 
-	app.POST("/connect", routes.ConnectToDb)
-	app.GET("/status", routes.StatusDB)
-	app.POST("/disconnect", routes.DisconnectFromDb)
-	cypher := app.Group("/query", routes.CypherMiddleWare)
+	app.POST("/api/connect", routes.ConnectToDb)
+	app.GET("/api/status", routes.StatusDB)
+	app.POST("/api/disconnect", routes.DisconnectFromDb)
+	cypher := app.Group("/api/query", routes.CypherMiddleWare)
 	cypher.Use(validateContentTypeMiddleware)
 	cypher.POST("/metadata", routes.GraphMetaData)
 	cypher.POST("", routes.Cypher)
 	app.Use(loggingMiddleware)
 
-	app.Start(":8080")
+	app.Start(":8081")
 }
 
 func validateContentTypeMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
