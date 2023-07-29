@@ -2279,6 +2279,15 @@ $$) AS (is_null agtype);
  false
 (1 row)
 
+-- should return 36
+SELECT  LENGTH(uuid) FROM cypher('expr', $$
+    RETURN randomuuid()
+$$) AS (uuid TEXT);
+ length 
+--------
+     36
+(1 row)
+
 -- start_id()
 SELECT * FROM cypher('expr', $$
     MATCH ()-[e]-() RETURN start_id(e)
