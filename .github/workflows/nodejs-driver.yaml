@@ -13,7 +13,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: drivers/nodejs/
+        working-directory: drivers/nodejs
 
     steps:
     - uses: actions/checkout@v3
