@@ -129,7 +129,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     if (!graph_exists(graph_name_str))
     {
-        DirectFunctionCall1(create_graph, CStringGetDatum(graph_name));
+        DirectFunctionCall1(create_graph, CStringGetDatum(graph_name->data));
     }
 
     graph_oid = get_graph_oid(graph_name_str);
@@ -140,16 +140,16 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
         if (!label_exists(vtx_name_str, graph_oid))
         {
             DirectFunctionCall2(create_vlabel,
-                                CStringGetDatum(graph_name),
-                                CStringGetDatum(vtx_label_name));
+                                CStringGetDatum(graph_name->data),
+                                CStringGetDatum(vtx_label_name->data));
         }
     }
 
     if (!label_exists(edge_name_str, graph_oid))
     {
         DirectFunctionCall2(create_elabel,
-                            CStringGetDatum(graph_name),
-                            CStringGetDatum(edge_label_name));
+                            CStringGetDatum(graph_name->data),
+                            CStringGetDatum(edge_label_name->data));
     }
 
     vtx_label_id = get_label_id(vtx_name_str, graph_oid);
