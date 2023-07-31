@@ -18,6 +18,7 @@ import psycopg2
 from psycopg2 import errors
 from psycopg2 import extensions as ext
 from psycopg2 import sql
+from typing import List
 from .exceptions import *
 from .builder import ResultHandler , parseAgeValue, newResultHandler
 
@@ -212,3 +213,59 @@ class Age:
 
     # def queryCypher(self, cypherStmt:str, columns:list=None , params:tuple=None) -> ext.cursor :
     #     return queryCypher(self.connection, self.graphName, cypherStmt, columns, params)
+
+    def getOidOfGraph(self) -> int:
+        """Returns oid of a graph"""
+        if (self.connection == None):
+            raise NoConnection
+        if (self.graphName == None):
+            raise GraphNotSet
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(sql.SQL("""
+                            SELECT graphid FROM ag_catalog.ag_graph WHERE name='%s' ;
+                        """ % (self.graphName)))
+                oid = cursor.fetchone()[0]
+                return oid
+        except Exception as e:
+            print(e)
+
+    def get_vlabel(self):
+        if (self.connection == None):
+            raise NoConnection
+        if (self.graphName == None):
+            raise GraphNotSet
+        node_label_list = []
+        oid = self.getOidOfGraph()
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT name FROM ag_catalog.ag_label WHERE kind='v' AND graph=%s;""" % oid)
+                for row in cursor:
+                    node_label_list.append(row[0])
+        except Exception as ex:
+            print(type(ex), ex)
+        return node_label_list
+
+
+    def create_vlabel(self, node_label_list: List):
+        """create_vlabels from list if not exist"""
+        if (self.connection == None):
+            raise NoConnection
+        if (self.graphName == None):
+            raise GraphNotSet
+        try:
+            node_label_set = set(self.get_vlabel())
+            crete_label_statement = ''
+            for label in node_label_list:
+                if label in node_label_set:
+                    continue
+                crete_label_statement += """SELECT create_vlabel('%s','%s');\n""" % (
+                    self.graphName, label)
+            if crete_label_statement != '':
+                with self.connection.cursor() as cursor:
+                    cursor.execute(crete_label_statement)
+                    self.connection.commit()
+        except Exception as e:
+            raise Exception(e)
+
