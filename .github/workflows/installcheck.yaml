@@ -1,10 +1,10 @@
-name: Build / Regression
+name: PG12 Regression
 
 on:
   push:
-    branches: [ 'master', 'PG12' ]
+    branches: [ 'PG12' ]
   pull_request:
-    branches: [ 'master', 'PG12' ]
+    branches: [ 'PG12' ]
 
 jobs:
   build:
