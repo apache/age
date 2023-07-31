@@ -1,5 +1,6 @@
 *.o
 *.so
+.gitignore
 build.sh
 .idea
 .deps

@@ -65,4 +65,3 @@ class AGTypeError(Exception):
         self.msg = msg
         self.cause = cause
         super().__init__(msg, cause)
-

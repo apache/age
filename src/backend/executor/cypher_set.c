@@ -112,10 +112,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     TM_Result lock_result;
     Buffer buffer;
     bool update_indexes;
-    TM_Result   result;
-
+    TM_Result result;
     CommandId cid = GetCurrentCommandId(true);
     ResultRelInfo *saved_resultRelInfo = estate->es_result_relation_info;
+
     estate->es_result_relation_info = resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
@@ -140,9 +140,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
         result = table_tuple_update(resultRelInfo->ri_RelationDesc,
                                     &tuple->t_self, elemTupleSlot,
-                                    cid,
-                                    //estate->es_output_cid,
-                                    estate->es_snapshot,// NULL,
+                                    cid, estate->es_snapshot,
                                     estate->es_crosscheck_snapshot,
                                     true /* wait for commit */ ,
                                     &hufd, &lockmode, &update_indexes);
@@ -273,7 +271,7 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
 
         elem = &path->val.array.elems[i];
 
-        // something unexpected happended, throw an error.
+        // something unexpected happened, throw an error.
         if (elem->type != AGTV_VERTEX && elem->type != AGTV_EDGE)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -671,7 +669,7 @@ static void rescan_cypher_set(CustomScanState *node)
 
      ereport(ERROR,
              (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                      errmsg("cypher %s clause cannot be rescaned",
+                      errmsg("cypher %s clause cannot be rescanned",
                              clause_name),
                       errhint("its unsafe to use joins in a query with a Cypher %s clause", clause_name)));
 }

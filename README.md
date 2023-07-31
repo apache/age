@@ -7,7 +7,7 @@
 
 <h3 align="center">
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
-        <img src="https://age.apache.org/age-manual/master/_static/logo.png"" height="25" height="30% alt="Apache AGE">
+        <img src="https://age.apache.org/age-manual/master/_static/logo.png" height="25" height="30% alt="Apache AGE style="margin: 0 0 -3px 0">
     </a>
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
@@ -69,7 +69,7 @@
 
 </br>
 
-Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust databases features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational background who require graph data analytics can use this extension with minimal effort because they can use existing data without having to go through migration. 
+Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust database features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational database background who require graph data analytics can use this extension with minimal effort because they can use existing data without going through migration. 
 
 There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 
@@ -79,7 +79,7 @@ There is a strong need for cohesive, easy-to-implement multi-model databases. As
 Apache AGE is : 
 
 - **Powerful**: adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
-- **Flexible**: allows you to perform openCypher queries, which makes complex queries much easier to write. It also enables multiple graphs at the same time.
+- **Flexible**: allows you to perform openCypher queries, which makes complex queries much easier to write. It also enables querying multiple graphs at the same time.
 - **Intelligent**: allows you to perform graph queries that are the basis for many next-level web services such as fraud detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management, and more.
 
 <h2><img height="30" src="/img/features.svg">&nbsp;&nbsp;Features</h2>
@@ -128,13 +128,13 @@ sudo apt-get install build-essential libreadline-dev zlib1g-dev flex bison
 Apache AGE is intended to be simple to install and run. It can be installed with Docker and other traditional ways. 
 
 <h4><a><img width="20" src="/img/pg.svg"></a>
-&nbsp;Install PosgtreSQL
+&nbsp;Install PostgreSQL
 </h4>
 
-You will need to install an AGE compatible version of Postgres<a>, AGE supports Postgres 11, 12 and 13. Supporting the latest versions is on AGE roadmap. 
+You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, 13, & 14. Supporting the latest versions is on AGE roadmap. 
      
 <h4>
-&nbsp;Install From Package Manager
+&nbsp;Installation via Package Manager
 </h4>
 
 You can use a <a href="https://www.postgresql.org/download/">package management </a> that your OS provides to download AGE.
@@ -146,19 +146,19 @@ sudo apt install postgresql
 
 ```
 <h4>
-&nbsp;Install From Source Code
+&nbsp;Installation From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/11/installation.html">official Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/13/installation.html">official Postgres Website.</a>
 
 
 
 <h4><img width="20" src="/img/tux.svg"><img width="20" src="/img/apple.svg"> &nbsp;Install AGE on Linux and MacOS
 </h4>
 
-Clone the <a href="https://github.com/apache/age">github repository</a> or download the<a href="https://github.com/apache/age/releases">download an official release.
+Clone the <a href="https://github.com/apache/age">github repository</a> or download the <a href="https://github.com/apache/age/releases">download an official release.
 </a>
-Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12 and 13 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, or 13.
+Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, & 14 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, or 14.
 <br>
     
 ```bash
@@ -244,12 +244,22 @@ FROM cypher('graph_name', $$
 $$) as (v agtype);
 ```
 
+To create a single vertex with label and properties, use the CREATE clause.
+
+```bash
+SELECT * 
+FROM cypher('graph_name', $$
+    CREATE (:label {property:value})
+$$) as (v agtype);
+```
+
 To query the graph, you can use the MATCH clause.  
 
 ```bash
-SELECT * FROM cypher('graph_name', $$
-MATCH (v)
-RETURN v
+SELECT * 
+FROM cypher('graph_name', $$
+    MATCH (v)
+    RETURN v
 $$) as (v agtype);
 ```
 
@@ -294,7 +304,7 @@ $$) as (e agtype);
 
 <h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
 
-Starting with Apache AGE is very simple. You can easily select your platform and incorporate the relevant SDK into your code.
+Starting with Apache AGE is very simple. You can easily select your platform and incorporate the relevant SDK into your code.
 </br>
 </br>
 
@@ -322,7 +332,7 @@ Starting with Apache AGE is very simple. You can easily select your platform a
 Join the AGE community for help, questions, discussions, and contributions. 
 
 - Check our [website](https://age.apache.org/)
-- Chat live with us on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
+- Join the Live Chat on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
 - Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
 - Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org

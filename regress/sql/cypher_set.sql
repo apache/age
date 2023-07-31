@@ -38,6 +38,10 @@ SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3 RETURN n$$) AS (a agtype);
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
 
+--Test assigning properties to rand() and pi()
+SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = rand() RETURN n.i < 1 AND n.i >= 0$$) AS (a agtype);
+SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = pi() RETURN n$$) AS (a agtype);
+
 --Handle Inheritance
 SELECT * FROM cypher('cypher_set', $$CREATE ()$$) AS (a agtype);
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3 RETURN n$$) AS (a agtype);
@@ -163,7 +167,7 @@ SELECT set_test();
 SELECT set_test();
 
 --
--- Updating multiple fieds
+-- Updating multiple fields
 --
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3, n.j = 5 RETURN n $$) AS (a agtype);
 
@@ -284,7 +288,7 @@ SELECT * FROM cypher('cypher_set_1', $$
     RETURN p
 $$) AS (p agtype);
 
--- test assigning non-map to an enitity
+-- test assigning non-map to an entity
 SELECT * FROM cypher('cypher_set_1', $$
     MATCH (p {name: 'Peter'})
     SET p = "Peter"
@@ -310,6 +314,18 @@ SELECT * FROM cypher('cypher_set_1', $$
     MATCH (p {name: 'Rob'})
     SET p += {}
     RETURN p
+$$) AS (p agtype);
+
+--
+-- Check passing mismatched types with SET
+-- Issue 899
+--
+SELECT * FROM cypher('cypher_set_1', $$
+    CREATE (x) SET x.n0 = (true OR true) RETURN x
+$$) AS (p agtype);
+
+SELECT * FROM cypher('cypher_set_1', $$
+    CREATE (x) SET x.n0 = (true OR false), x.n1 = (false AND false), x.n2 = (false = false) RETURN x
 $$) AS (p agtype);
 
 --
