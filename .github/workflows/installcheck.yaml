@@ -2,9 +2,9 @@ name: Build / Regression
 
 on:
   push:
-    branches: [ 'master', 'PG11' ]
+    branches: [ 'PG11' ]
   pull_request:
-    branches: [ 'master', 'PG11' ]
+    branches: [ 'PG11' ]
 
 jobs:
   build:
@@ -42,7 +42,7 @@ jobs:
         run: |
           make PG_CONFIG=$HOME/pg11/bin/pg_config installcheck
         continue-on-error: true
-          
+
       - name: Dump regression test errors
         if: steps.regression_tests.outcome != 'success'
         run: |
