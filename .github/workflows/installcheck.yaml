@@ -2,9 +2,9 @@ name: Build / Regression
 
 on:
   push:
-    branches: [ 'master', 'PG13' ]
+    branches: [ 'PG13' ]
   pull_request:
-    branches: [ 'master', 'PG13' ]
+    branches: [ 'PG13' ]
 
 jobs:
   build:
