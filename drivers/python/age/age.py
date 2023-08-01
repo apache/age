@@ -187,6 +187,13 @@ class Age:
         checkGraphCreated(self.connection, graph)
         self.graphName = graph
         return self
+    
+    def deleteGraph(self, graph:str = None):
+        if (graph == None):
+            graph = self.graphName
+        if (graph == None):
+            raise GraphNotSet
+        deleteGraph(self.connection, self.graphName)
 
     def commit(self):
         self.connection.commit()
