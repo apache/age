@@ -47,6 +47,7 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         TYPECAST,
         PLUS_EQ,
         EQ_TILDE,
+        ACCESS_PATH,
         ANY_EXISTS,
         ALL_EXISTS,
         CONCAT
@@ -103,6 +104,7 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         break;
     case AG_TOKEN_ALL_EXISTS:
     case AG_TOKEN_ANY_EXISTS:
+    case AG_TOKEN_ACCESS_PATH:
     case AG_TOKEN_CONCAT:
     break;
     case AG_TOKEN_CHAR:

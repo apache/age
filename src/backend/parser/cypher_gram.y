@@ -76,7 +76,7 @@
 
 /* operators that have more than 1 character */
 %token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE
-%token ACCESS ANY_EXISTS ALL_EXISTS CONCAT
+%token ACCESS ACCESS_PATH ANY_EXISTS ALL_EXISTS CONCAT
 
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
@@ -178,7 +178,7 @@
 %right UNARY_MINUS
 %nonassoc CONTAINS ENDS EQ_TILDE STARTS
 %left '[' ']' '(' ')'
-%left '.'
+%left '.' ACCESS_PATH
 %left TYPECAST
 
 /*set operations*/
@@ -1546,6 +1546,10 @@ expr:
     | expr '-' '>' expr %prec '.'
         {
             $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "->", $1, $4, @2);
+        }
+    | expr ACCESS_PATH expr
+        {
+	        $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "#>", $1, $3, @2);
         }
     | expr TYPECAST symbolic_name
         {

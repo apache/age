@@ -41,6 +41,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen);
 static char *get_string_from_agtype_value(agtype_value *agtv, int *length);
+static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text);
 
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen)
@@ -235,6 +236,230 @@ Datum agtype_add(PG_FUNCTION_ARGS)
                         errmsg("Invalid input parameter types for agtype_add")));
 
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(agtype_extract_path);
+Datum agtype_extract_path(PG_FUNCTION_ARGS)
+{
+    return get_agtype_path_all(fcinfo, false);
+}
+
+PG_FUNCTION_INFO_V1(agtype_extract_path_text);
+Datum agtype_extract_path_text(PG_FUNCTION_ARGS)
+{
+    return get_agtype_path_all(fcinfo, true);
+}
+
+static Datum
+get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
+{
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    agtype *path = AG_GET_ARG_AGTYPE_P(1);
+    agtype *res;
+    int npath;
+    int i;
+    bool have_object = false, have_array = false;
+    agtype_value *agtvp = NULL;
+    agtype_value tv;
+    agtype_container *container;
+
+    if (AGT_ROOT_IS_SCALAR(path) || AGT_ROOT_IS_OBJECT(path))
+    {
+        ereport(ERROR,(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                       errmsg("right operand must be an array")));
+    }
+
+    if (AGT_ROOT_IS_SCALAR(agt))
+    {
+        agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
+    }
+
+    npath = AGT_ROOT_COUNT(path);
+    container = &agt->root;
+
+    /* Identify whether we have object, array, or scalar at top-level */
+    if (AGT_ROOT_IS_OBJECT(agt))
+    {
+        have_object = true;
+    }
+    else if (AGT_ROOT_IS_ARRAY(agt) && !AGT_ROOT_IS_SCALAR(agt))
+    {
+        have_array = true;
+    }
+    else
+    {
+        Assert(AGT_ROOT_IS_ARRAY(agt) && AGT_ROOT_IS_SCALAR(agt));
+        /* Extract the scalar value, if it is what we'll return */
+        if (npath <= 0)
+        {
+            agtvp = get_ith_agtype_value_from_container(container, 0);
+        }
+    }
+
+    /*
+     * If the array is empty, return the entire LHS object, on the grounds
+     * that we should do zero field or element extractions.  For the
+     * non-scalar case we can just hand back the object without much work. For
+     * the scalar case, fall through and deal with the value below the loop.
+     * (This inconsistency arises because there's no easy way to generate a
+     * agtype_value directly for root-level containers.)
+     */
+    if (npath <= 0 && agtvp == NULL)
+    {
+        if (as_text)
+        {
+            PG_RETURN_TEXT_P(cstring_to_text(agtype_to_cstring(NULL, container,
+                                                               VARSIZE(agt))));
+        }
+        else
+        {
+            /* not text mode - just hand back the agtype */
+            AG_RETURN_AGTYPE_P(agt);
+        }
+    }
+
+    for (i = 0; i < npath; i++)
+    {
+        agtype_value *cur_key = get_ith_agtype_value_from_container(
+                                                                &path->root,
+                                                                i);
+
+        if (have_object && cur_key->type == AGTV_STRING)
+        {
+            agtvp = find_agtype_value_from_container(container,
+                                                     AGT_FOBJECT,
+                                                     cur_key);
+        }
+        else if (have_array)
+        {
+            long lindex;
+            uint32 index;
+            /*
+             * for array on left hand side, 
+             * an integer or a valid integer string on right hand side
+             * is a valid index
+             */
+            if (cur_key->type == AGTV_INTEGER)
+            {
+                lindex = cur_key->val.int_value;
+            }
+            else if (cur_key->type == AGTV_STRING)
+            {
+                /*
+                 * extract the int from the string, 
+                 * if character other than digit is found, return null
+                 */
+                char* str = NULL;
+                lindex = strtol(cur_key->val.string.val, &str, 10);
+                
+                if (strcmp(str, ""))
+                {
+                    PG_RETURN_NULL();
+                }
+            }
+            else 
+            {
+                PG_RETURN_NULL();
+            }
+
+            if (lindex > INT_MAX || lindex < INT_MIN)
+            {
+                PG_RETURN_NULL();
+            }
+
+            if (lindex >= 0)
+            {
+                index = (uint32) lindex;
+            }
+            else
+            {
+                /* Handle negative subscript */
+                uint32 nelements;
+
+                /* Container must be array, but make sure */
+                if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+                {
+                    elog(ERROR, "not an agtype array");
+                }
+
+                nelements = AGTYPE_CONTAINER_SIZE(container);
+
+                if (-lindex > nelements)
+                {
+                    PG_RETURN_NULL();
+                }
+                else
+                {
+                    index = nelements + lindex;
+                }
+            }
+
+            agtvp = get_ith_agtype_value_from_container(container, index);
+        }
+        else
+        {
+            /* scalar, extraction yields a null */
+            PG_RETURN_NULL();
+        }
+
+        if (agtvp == NULL)
+        {
+            PG_RETURN_NULL();
+        }
+        else if (i == npath - 1)
+        {
+            break;
+        }
+
+        if (agtvp->type == AGTV_BINARY)
+        {
+            agtype_iterator *it = agtype_iterator_init(
+                                                    (agtype_container *) 
+                                                    agtvp->val.binary.data
+                                                    );
+            agtype_iterator_token r;
+
+            r = agtype_iterator_next(&it, &tv, true);
+            container = (agtype_container *) agtvp->val.binary.data;
+            have_object = r == WAGT_BEGIN_OBJECT;
+            have_array = r == WAGT_BEGIN_ARRAY;
+        }
+        else
+        {
+            have_object = agtvp->type == AGTV_OBJECT;
+            have_array = agtvp->type == AGTV_ARRAY;
+        }
+    }
+
+    if (as_text)
+    {
+        /* special-case outputs for string and null values */
+        if (agtvp->type == AGTV_STRING)
+        {
+            PG_RETURN_TEXT_P(cstring_to_text_with_len(agtvp->val.string.val,
+                                                      agtvp->val.string.len));
+        }
+        if (agtvp->type == AGTV_NULL)
+        {
+            PG_RETURN_NULL();
+        }
+    }
+
+        res = agtype_value_to_agtype(agtvp);
+
+    if (as_text)
+    {
+            PG_RETURN_TEXT_P(cstring_to_text(agtype_to_cstring(
+                                                            NULL, 
+                                                            &res->root,
+                                                            VARSIZE(res))
+                                                            ));
+    }
+    else
+    {
+        /* not text mode - just hand back the jsonb */
+        AG_RETURN_AGTYPE_P(res);
+    }
 }
 
 PG_FUNCTION_INFO_V1(agtype_any_add);

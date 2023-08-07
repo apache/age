@@ -670,6 +670,108 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) WITH n->'list' AS lst RETURN 
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) WITH n->'list' AS lst RETURN lst->(size(lst)-1) $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) WITH n->'list' AS lst RETURN lst->(size(lst)) $$) as (a agtype);
 
+/*
+ * nested path extraction operator (#>)
+ */
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> []     
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> ['json', 'c', 'd']
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> ['json', 'c', 'd', -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> ['json', 'c', 'd', -1, -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> ['list', "-1"]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', ['c', 'd']]} AS map
+    RETURN map #> ['list', "-1", "-1"]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', ['c', 'd']]} AS map
+    RETURN map #> ['list', "-1", -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list                                                        
+    RETURN list #> []               
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list
+    RETURN list #> [0]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list
+    RETURN list #> [-1, -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list
+    RETURN list #> [-1, -1, -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list
+    RETURN list #> [{}]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [null] AS list
+    RETURN list #> []
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [null] AS list
+    RETURN list #> [-1, -1, -1]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [] AS list
+    RETURN list #> []
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [] AS list
+    RETURN list #> ["a", 1]
+$$) AS (result agtype);
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> []$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["jsonb"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "a"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "a", 0]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "b"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "b", -1]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "b", "-1"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "b", -1, 0]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "c"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "c", "d"]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ["json", "c", "d", -1]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ['list', -1]$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> ['list', 4]$$) as (a agtype);
+
+-- errors out
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) RETURN n #> "json"$$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
+    RETURN map #> 'jsonb'
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH [[-3, 1]] AS list
+    RETURN list #> 0 
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH 3 AS elem
+    RETURN elem #> [0]
+$$) AS (result agtype);
+SELECT * FROM cypher('jsonb_operators', $$
+    WITH 'string' AS elem
+    RETURN elem #> [0]
+$$) AS (result agtype);
+
 --
 -- clean up
 --
