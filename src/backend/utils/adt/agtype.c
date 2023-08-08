@@ -31,6 +31,7 @@
 #include "postgres.h"
 
 #include <math.h>
+#include <float.h>
 
 #include "access/genam.h"
 #include "access/heapam.h"
@@ -6194,6 +6195,105 @@ Datum age_tostring(PG_FUNCTION_ARGS)
     agtv_result.val.string.len = strlen(string);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_tostringlist);
+/*
+ * toStringList() converts a list of values and returns a list of String values. 
+ * If any values are not convertible to string point they will be null in the list returned.
+ */
+Datum age_tostringlist(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_in_state agis_result;
+    agtype_value *elem;
+    agtype_value string_elem;
+    int count;
+    int i;
+    float float_num;
+    char buffer[64];
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for an array */
+    if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toStringList() argument must resolve to a list or null")));
+
+    count = AGT_ROOT_COUNT(agt_arg);
+
+    /* if we have an empty list or only one element in the list, return null */
+    if (count == 0)
+        PG_RETURN_NULL();
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* iterate through the list */
+    for (i = 0; i < count; i++)
+    {
+        // TODO: check element's type, it's value, and convert it to string if possible.
+        elem = get_ith_agtype_value_from_container(&agt_arg->root, i);
+        string_elem.type = AGTV_STRING;
+
+        switch (elem->type)
+        {
+        case AGTV_STRING:
+
+            if(!elem)
+            {
+                string_elem.type = AGTV_NULL;
+
+                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &string_elem);
+            }
+
+            string_elem.val.string.val = elem->val.string.val;
+            string_elem.val.string.len = elem->val.string.len;
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &string_elem);
+
+            break;
+
+        case AGTV_FLOAT:
+
+            float_num = elem->val.float_value;
+            sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
+            string_elem.val.string.val = pstrdup(buffer);
+            string_elem.val.string.len = strlen(buffer);
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &string_elem);
+
+            break; 
+
+        case AGTV_INTEGER:
+
+            sprintf(buffer, "%d", elem->val.int_value);
+            string_elem.val.string.val = pstrdup(buffer);
+            string_elem.val.string.len = strlen(buffer);
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &string_elem);
+
+            break;
+
+        default:
+
+            string_elem.type = AGTV_NULL;
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &string_elem);
+
+            break;
+        }
+    }
+    agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_END_ARRAY, NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
 }
 
 static agtype_iterator *get_next_list_element(agtype_iterator *it,

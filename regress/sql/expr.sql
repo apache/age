@@ -1441,6 +1441,33 @@ SELECT * FROM age_toString(agtype_in(null));
 -- should fail
 SELECT * FROM age_toString();
 SELECT * FROM cypher('expr', $$ RETURN toString() $$) AS (results agtype);
+-- toStringList() --
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([5, 10, 7.8, 9, 1.3]) 
+$$) AS (toStringList agtype);
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList(['test', 89, 'again', 7.1, 9]) 
+$$) AS (toStringList agtype);
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([null, false, true, 'string']) 
+$$) AS (toStringList agtype);
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([9.123456789, 5.123, 1.12345, 0.123123]) 
+$$) AS (toStringList agtype);
+-- should return null
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([null]) 
+$$) AS (toStringList agtype);
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([true, false, true, true]) 
+$$) AS (toStringList agtype);
+-- should fail
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([['a', b]]) 
+$$) AS (toStringList agtype);
+SELECT * FROM cypher('expr', $$ 
+    RETURN toStringList([test]) 
+$$) AS (toStringList agtype);
 
 --
 -- reverse(string)
