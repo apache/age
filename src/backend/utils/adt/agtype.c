@@ -6149,8 +6149,6 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
     agtype_value string_elem;
     int count;
     int i;
-    float float_num;
-    int float_size;
     char buffer[64];
 
     /* check for null */
@@ -6204,7 +6202,6 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_FLOAT:
 
-            float_num = elem->val.float_value;
             sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
@@ -6215,7 +6212,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_INTEGER:
 
-            sprintf(buffer, "%d", elem->val.int_value);
+            sprintf(buffer, "%ld", elem->val.int_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
 
