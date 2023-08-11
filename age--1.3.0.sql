@@ -367,7 +367,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog._label_name(graph_oid oid, graphid)
 RETURNS cstring
 LANGUAGE c
-STABLE
+IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -3106,7 +3106,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, cstring, agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -3114,10 +3114,11 @@ AS 'MODULE_PATHNAME';
 --
 -- agtype - edge
 --
-CREATE FUNCTION ag_catalog._agtype_build_edge(graphid, graphid, graphid, cstring, agtype)
+CREATE FUNCTION ag_catalog._agtype_build_edge(graphid, graphid, graphid,
+                                              cstring, agtype)
 RETURNS agtype
 LANGUAGE c
-STABLE
+IMMUTABLE
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
