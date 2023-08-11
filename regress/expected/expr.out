@@ -2917,9 +2917,9 @@ $$) AS (toFloatList agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toFloatList(['1.9432', 8.6222, '9.4111212', 344.22])
 $$) AS (toFloatList agtype);
-               tofloatlist               
------------------------------------------
- [1.9432, 8.6222, 9.4111212, 344.220001]
+             tofloatlist             
+-------------------------------------
+ [1.9432, 8.6222, 9.4111212, 344.22]
 (1 row)
 
 SELECT * FROM cypher('expr', $$
