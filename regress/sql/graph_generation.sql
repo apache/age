@@ -80,3 +80,39 @@ SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 SELECT drop_graph('gp1', true);
 SELECT drop_graph('gp2', true);
 
+
+-- Tests for watts-strogatz graph generation
+SELECT * FROM age_create_watts_strogatz_graph('gp1',8,2,0.0,'vertices',NULL,'edges',NULL,true);
+
+SELECT COUNT(*) FROM gp1."edges";
+SELECT COUNT(*) FROM gp1."vertices";
+
+SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+
+SELECT * FROM age_create_watts_strogatz_graph('gp1',8,3,0.5,'vertices',NULL,'edges',NULL);
+
+SELECT COUNT(*) FROM gp1."edges";
+SELECT COUNT(*) FROM gp1."vertices";
+
+SELECT * FROM age_create_watts_strogatz_graph('gp2',8,5,0.5,'vertices','{"probability":0.5}','edges','{"type":"edge", "strong":true}',false);
+
+SELECT COUNT(*) FROM gp2."edges";
+SELECT COUNT(*) FROM gp2."vertices";
+
+SELECT * FROM cypher('gp2', $$MATCH (a)-[e]->(b) RETURN properties(a), properties(e)$$) as (start_vertex_props agtype, edge_props agtype);
+
+-- SHOULD FAIL
+SELECT * FROM age_create_watts_strogatz_graph(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+SELECT * FROM age_create_watts_strogatz_graph('gp2',NULL,2,0.5,'vertices',NULL,'edges',NULL);
+SELECT * FROM age_create_watts_strogatz_graph('gp3',5,NULL,0.5,'vertices',NULL,'edges',NULL);
+SELECT * FROM age_create_watts_strogatz_graph('gp3',5,2,NULL,'vertices',NULL,'edges',NULL,false);
+SELECT * FROM age_create_watts_strogatz_graph('gp4',NULL,0,0.5,'vertices',NULL,'edges',NULL,false);
+SELECT * FROM age_create_watts_strogatz_graph('gp5',5,2,0.5,'vertices',NULL,NULL,NULL,false);
+
+-- Should error out because same labels are used for both vertices and edges
+SELECT * FROM age_create_watts_strogatz_graph('gp6',10,5,0.5,'label',NULL,'label',NULL,true);
+
+-- DROPPING GRAPHS
+SELECT drop_graph('gp1', true);
+SELECT drop_graph('gp2', true);
+
