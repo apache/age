@@ -53,6 +53,7 @@
 #include "parser/parse_coerce.h"
 #include "nodes/pg_list.h"
 #include "utils/builtins.h"
+#include "utils/datetime.h"
 #include "utils/float.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
@@ -4414,7 +4415,7 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
                  errmsg("typecast object is not a vertex")));
 
     /*
-     * The 3 key/value pairs need to each exist and their names need to match
+     * The 3 key/value pairs need to DirectFunctionCall1each exist and their names need to match
      * the names used for a vertex.
      */
     agtv_key.type = AGTV_STRING;
@@ -11135,4 +11136,27 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
 
     /* otherwise, just pass it through */
     PG_RETURN_POINTER(PG_GETARG_DATUM(0));
+}
+
+/*
+ * Temporal functions.
+ */
+
+PG_FUNCTION_INFO_V1(age_date);
+
+Datum age_date(PG_FUNCTION_ARGS)
+{
+    agtype_value agtv_result;
+    struct pg_tm tm;
+    char date[MAXDATELEN + 1];
+
+    GetCurrentDateTime(&tm);
+    EncodeDateOnly(&tm, USE_ISO_DATES, date);
+
+    // Build the result
+    agtv_result.type = AGTV_STRING;
+    agtv_result.val.string.len = strlen(date);
+    agtv_result.val.string.val = date;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
