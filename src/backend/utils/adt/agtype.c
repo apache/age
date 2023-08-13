@@ -4644,7 +4644,7 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
                  errmsg("typecast object is not a vertex")));
 
     /*
-     * The 3 key/value pairs need to DirectFunctionCall1each exist and their names need to match
+     * The 3 key/value pairs need to each exist and their names need to match
      * the names used for a vertex.
      */
     agtv_key.type = AGTV_STRING;
