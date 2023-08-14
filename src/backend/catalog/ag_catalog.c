@@ -39,10 +39,10 @@ static bool prev_object_hook_is_set;
 
 static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
                           int sub_id, void *arg);
-void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
+void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
                             ProcessUtilityContext context, ParamListInfo params,
                             QueryEnvironment *queryEnv, DestReceiver *dest,
-                            char *completionTag);
+                            QueryCompletion *qc);
 
 static bool is_age_drop(PlannedStmt *pstmt);
 static void drop_age_extension(DropStmt *stmt);
@@ -86,19 +86,19 @@ void process_utility_hook_fini(void)
  * from being thrown, we need to disable the object_access_hook before dropping
  * the extension.
  */
-void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
+void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
                              ProcessUtilityContext context, ParamListInfo params,
                              QueryEnvironment *queryEnv, DestReceiver *dest,
-                             char *completionTag)
+                             QueryCompletion *qc)
 {
     if (is_age_drop(pstmt))
         drop_age_extension((DropStmt *)pstmt->utilityStmt);
     else if (prev_process_utility_hook)
-        (*prev_process_utility_hook) (pstmt, queryString, context, params,
-                                      queryEnv, dest, completionTag);
+        (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree, context, params,
+                                      queryEnv, dest, qc);
     else
-        standard_ProcessUtility(pstmt, queryString, context, params, queryEnv,
-                                dest, completionTag);
+        standard_ProcessUtility(pstmt, queryString, readOnlyTree, context, params, queryEnv,
+                                dest, qc);
 }
 
 static void drop_age_extension(DropStmt *stmt)

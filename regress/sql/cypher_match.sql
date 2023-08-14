@@ -68,6 +68,22 @@ SELECT * FROM cypher('cypher_match', $$
     MATCH p=()-[e]-() RETURN e
 $$) AS (a agtype);
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v1)-[e]-() RETURN e
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v1)-[e]-(:v1) RETURN e
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH ()-[]-()-[e]-(:v1) RETURN e
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (a)-[]-()-[]-(:v1) RETURN a
+$$) AS (a agtype);
+
 -- Right Path Test
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[:e1]->(b:v1)-[:e1]->(c:v1) RETURN a, b, c
@@ -91,6 +107,18 @@ $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_match', $$
 	MATCH ()-[b:e1]-()-[]->() RETURN b
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v1)-[e]->() RETURN e
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH ()-[e]->(:v1) RETURN e
+$$) AS (a agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v1)-[e]->(:v1) RETURN e
 $$) AS (a agtype);
 
 --Left Path Test
@@ -118,6 +146,10 @@ SELECT * FROM cypher('cypher_match', $$
 	MATCH ()<-[b:e1]-()-[]-() RETURN b
 $$) AS (a agtype);
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v1)<-[e]-(:v1) RETURN e
+$$) AS (a agtype);
+
 --Divergent Path Tests
 SELECT * FROM cypher('cypher_match', $$
 	CREATE (:v2 {id:'initial'})<-[:e2]-(:v2 {id:'middle'})-[:e2]->(:v2 {id:'end'})
@@ -140,6 +172,18 @@ SELECT * FROM cypher('cypher_match', $$
 	RETURN n
 $$) AS (i agtype);
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v2)<-[]-(:v2)-[]->(:v2)
+    MATCH p=()-[]->()
+    RETURN p
+$$) AS (i agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+    MATCH ()<-[]-(:v2)-[]->()
+	MATCH p=()-[]->()
+    RETURN p
+$$) AS (i agtype);
+
 --Convergent Path Tests
 SELECT * FROM cypher('cypher_match', $$
 	CREATE (:v3 {id:'initial'})-[:e3]->(:v3 {id:'middle'})<-[:e3]-(:v3 {id:'end'})
@@ -150,6 +194,10 @@ SELECT * FROM cypher('cypher_match', $$
 	RETURN b
 $$) AS (i agtype);
 
+SELECT * FROM cypher('cypher_match', $$
+    MATCH (:v3)-[b:e3]->()
+    RETURN b
+$$) AS (i agtype);
 
 SELECT * FROM cypher('cypher_match', $$
 	MATCH ()-[]->(n:v1)<-[]-()
@@ -180,6 +228,12 @@ SELECT * FROM cypher('cypher_match', $$
 	where b.id = 'initial'
 	RETURN div_path
 $$) AS (div_path agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a)-[]->(:v3)<-[]-(b)
+	where a.id = 'initial'
+	RETURN b       
+$$) AS (con_path agtype);
 
 --Patterns
 SELECT * FROM cypher('cypher_match', $$
@@ -219,6 +273,12 @@ SELECT * FROM cypher('cypher_match', $$
 	MATCH (b:v1)-[]-(c)
 	RETURN a.i, b.id, c.id
 $$) AS (i agtype, b agtype, c agtype);
+
+SELECT * FROM cypher('cypher_match', $$
+	MATCH (a:v)
+	MATCH (:v1)-[]-(c)
+	RETURN a.i, c.id
+$$) AS (i agtype,  c agtype);
 
 --
 -- Property constraints
@@ -293,12 +353,122 @@ $$) AS (a agtype);
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a) MATCH (a:invalid_label) RETURN a
 $$) AS (a agtype);
-
---Valid variable reuse, although why would you want to do it this way?
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[]-()-[a]-() RETURN a
 $$) AS (a agtype);
 
+-- valid variable reuse for edge labels across clauses
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0]->() MATCH ()-[r0]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->() MATCH ()-[r0:e1]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e2]->() MATCH ()-[r0:e2]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->()-[r1]->() RETURN r0,r1
+$$) AS (r0 agtype, r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH p0=()-[:e1]->() MATCH p1=()-[:e2]->() RETURN p1
+$$) AS (p1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->()-[r1]->() MATCH ()-[r0:e1]->()-[r1]->() RETURN r0,r1
+$$) AS (r0 agtype, r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[]->() MATCH ()-[r1:e2]->() RETURN r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->() MATCH ()-[r1:e2]->() RETURN r0,r1
+$$) AS (r0 agtype, r1 agtype);
+
+-- valid variable reuse for vertex labels across clauses
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid), (r1:invalid) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1), (r1) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid), (r1) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid), (r1), (r1), (r1:invalid) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid)-[]->(r1)-[]->(r1:invalid)-[]->(r1) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid)-[]->()-[]->()-[]->(r1:invalid) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->()-[r1]->() MATCH ()-[r0:e1]->()-[r0]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->() MATCH ()-[r0]->() RETURN r0
+$$) AS (r0 agtype);
+
+-- invalid variable reuse for vertex
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid)-[]->(r1)-[]->(r1)-[]->(r1:invalids) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid)-[]->(r1)-[]->(r1)-[]->(r1)-[r1]->() return r1
+$$) AS (r1 agtype);
+
+-- invalid variable reuse for labels across clauses
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:e1), (r1:e2) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:invalid), (r1:e2) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:e1), (r1:invalid) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+         MATCH (r1:e1), (r1), (r1:invalid) return r1
+$$) AS (r1 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (r0)-[r0]->() MATCH ()-[]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (r0)-[]->() MATCH ()-[r0]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0]->() MATCH ()-[]->(r0) RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->() MATCH ()-[r0:e2]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0]->() MATCH ()-[r0:e2]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->() MATCH ()-[r0:e2]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->()-[r0]->() MATCH ()-[r0:e2]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH ()-[r0:e1]->()-[r1]->() MATCH ()-[r1:e1]->()-[r0]->() RETURN r0
+$$) AS (r0 agtype);
+
+-- Labels that don't exist but do match
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (r0)-[r1:related]->() MATCH ()-[r1:related]->() RETURN r0
+$$) AS (r0 agtype);
+
+-- Labels that don't exist and don't match
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (r0)-[r1]->() MATCH ()-[r1:related]->() RETURN r0
+$$) AS (r0 agtype);
+SELECT * FROM cypher('cypher_match', $$
+        MATCH (r0)-[r1:related]->() MATCH ()-[r1:relateds]->() RETURN r0
+$$) AS (r0 agtype);
+
+--Valid variable reuse, although why would you want to do it this way?
 SELECT * FROM cypher('cypher_match', $$
 	MATCH (a:v1)-[]-()-[]-(a {id:'will_not_fail'}) RETURN a
 $$) AS (a agtype);
@@ -374,12 +544,6 @@ AS (u agtype, e agtype, v agtype);
 -- Exists checks for a loop. There should be one.
 SELECT * FROM cypher('cypher_match',
  $$MATCH (u)-[e]->(v) WHERE EXISTS((v)-[e]->(v)) RETURN u, e, v $$)
-AS (u agtype, e agtype, v agtype);
-
--- Exists checks for a loop. There should be none because of edge uniqueness
--- requirement.
-SELECT * FROM cypher('cypher_match',
- $$MATCH (u)-[e]->(v) WHERE EXISTS((u)-[e]->(u)-[e]->(u)) RETURN u, e, v $$)
 AS (u agtype, e agtype, v agtype);
 
 -- Multiple exists
@@ -693,6 +857,27 @@ $$) AS (a agtype, r agtype);
 SELECT * FROM cypher('test_retrieve_var', $$
     MATCH (a:A)-[r:incs]->() WITH a, r
     OPTIONAL MATCH (a)-[r]->(c)
+    WHERE EXISTS((:A)<-[]-(c))
+    RETURN a, r
+$$) AS (a agtype, r agtype);
+
+SELECT * FROM cypher('test_retrieve_var', $$
+    MATCH (a:A)-[r:incs]->() WITH a, r
+    OPTIONAL MATCH (a)-[r]->(c)
+    WHERE EXISTS((c)<-[]-(:A))
+    RETURN a, r
+$$) AS (a agtype, r agtype);
+
+SELECT * FROM cypher('test_retrieve_var', $$
+    MATCH (a:A)-[r:incs]->() WITH a, r
+    OPTIONAL MATCH (a)-[r]->(c)
+    WHERE EXISTS((:C)<-[]-(:A))
+    RETURN a, r
+$$) AS (a agtype, r agtype);
+
+SELECT * FROM cypher('test_retrieve_var', $$
+    MATCH (a:A)-[r:incs]->() WITH a, r
+    OPTIONAL MATCH (a)-[r]->(c)
     WHERE EXISTS(()<-[r]-(c))
     RETURN a, r
 $$) AS (a agtype, r agtype);
@@ -837,10 +1022,43 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "Dave"})-[]->()-[]->(a
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name: "John"})-[]->()-[]->(a) RETURN p $$)as (p agtype);
 
 -- these are illegal and should fail
-SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b]->()-[b]->(a) RETURN p $$)as (p agtype);
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b]->()-[b:knows]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b]->()-[b]->(a) RETURN p $$)as (p agtype);
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b:knows]->()-[b:knows]->(a) RETURN p $$)as (p agtype);
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[b:knows]->()-[b]->(a) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(p) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(p)-[]->() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[p]->() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=() MATCH (p) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=() MATCH (p)-[]->() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=() MATCH ()-[p]->() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH (p) MATCH p=() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH ()-[p]->() MATCH p=() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH ()-[p *]-()-[p]-() RETURN 0 $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ CREATE (p) WITH p MATCH p=() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ CREATE p=() WITH p MATCH (p) RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ CREATE ()-[p:knows]->() WITH p MATCH p=() RETURN p $$)as (p agtype);
+SELECT * FROM cypher('cypher_match', $$ CREATE p=() WITH p MATCH ()-[p]->() RETURN p $$)as (p agtype);
+
+
+
+--
+-- Default alias check (issue #883)
+--
+SELECT * FROM cypher('cypher_match', $$ MATCH (_) RETURN _ $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN 0 $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN _ $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH (my_age_default_{name: "Dave"}) RETURN my_age_default_$$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (my_age_default_{name: "Dave"}) RETURN my_age_default_$$) as (a agtype);
+
+-- these should fail as they are prefixed with _age_default_ which is only for internal use
+SELECT * FROM cypher('cypher_match', $$ MATCH (_age_default_) RETURN _age_default_ $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH (_age_default_a) RETURN _age_default_a $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH (_age_default_whatever) RETURN 0 $$) as (a agtype);
+
+-- issue 876
+SELECT * FROM cypher('cypher_match', $$ MATCH ({name: "Dave"}) MATCH ({name: "Dave"}) MATCH ({name: "Dave"}) RETURN 0 $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$MATCH ({n0:0}) MATCH ()-[]->() MATCH ({n1:0})-[]-() RETURN 0 AS n2$$) as (a agtype);
 
 --
 -- self referencing property constraints (issue #898)
@@ -854,6 +1072,10 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relation
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationship: u.relationship}]->(b {age:b.age}) RETURN p $$) as (a agtype);
 
 SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETURN 0 $$) as (a agtype);
+
+-- these should fail due to multiple labels for a variable
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(x)-[]->(x:R) RETURN p, x $$) AS (p agtype, x agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(x:r)-[]->(x:R) RETURN p, x $$) AS (p agtype, x agtype);
 
 --
 -- Clean up

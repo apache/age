@@ -25,14 +25,20 @@
 
 #include "nodes/cypher_nodes.h"
 
-#define AGE_DEFAULT_ALIAS_PREFIX "_age_default_alias_"
-#define AGE_DEFAULT_VARNAME_PREFIX "_age_varname_"
+/*
+ * Every internal alias or variable name should be prefixed
+ * with AGE_DEFAULT_PREFIX. Grammer restricts variables
+ * prefixed with _age_default_ in user query to be used.
+ */
+#define AGE_DEFAULT_PREFIX "_age_default_"
+#define AGE_DEFAULT_ALIAS_PREFIX AGE_DEFAULT_PREFIX"alias_"
+#define AGE_DEFAULT_VARNAME_PREFIX AGE_DEFAULT_PREFIX"varname_"
 
 typedef struct cypher_parsestate
 {
     ParseState pstate;
     char *graph_name;
-    Oid graph_oid;
+    uint32 graph_oid;
     Param *params;
     int default_alias_num;
     List *entities;
@@ -62,7 +68,6 @@ void free_cypher_parsestate(cypher_parsestate *cpstate);
 void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate,
                       int query_loc);
 void cancel_errpos_ecb(errpos_ecb_state *ecb_state);
-RangeTblEntry *find_rte(cypher_parsestate *cpstate, char *varname);
 char *get_next_default_alias(cypher_parsestate *cpstate);
 
 #endif

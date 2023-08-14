@@ -32,13 +32,13 @@
 #include "parser/parse_node.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
-#include "parser/parsetree.h"
 #include "utils/builtins.h"
 
 #include "catalog/ag_graph.h"
 #include "nodes/ag_nodes.h"
 #include "parser/cypher_analyze.h"
 #include "parser/cypher_clause.h"
+#include "parser/cypher_item.h"
 #include "parser/cypher_parse_node.h"
 #include "parser/cypher_parser.h"
 #include "utils/ag_func.h"
@@ -59,7 +59,7 @@ static void build_explain_query(Query *query, Node *explain_node);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
-static void post_parse_analyze(ParseState *pstate, Query *query);
+static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *jstate);
 static bool convert_cypher_walker(Node *node, ParseState *pstate);
 static bool is_rte_cypher(RangeTblEntry *rte);
 static bool is_func_cypher(FuncExpr *funcexpr);
@@ -69,11 +69,11 @@ static const char *expr_get_const_cstring(Node *expr, const char *source_str);
 static int get_query_location(const int location, const char *source_str);
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params);
+                             char *graph_name, uint32 graph_oid, Param *params);
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, uint32 graph_oid,
                                         Param *params);
 
 
@@ -88,11 +88,11 @@ void post_parse_analyze_fini(void)
     post_parse_analyze_hook = prev_post_parse_analyze_hook;
 }
 
-static void post_parse_analyze(ParseState *pstate, Query *query)
+static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *jstate)
 {
     if (prev_post_parse_analyze_hook)
     {
-        prev_post_parse_analyze_hook(pstate, query);
+        prev_post_parse_analyze_hook(pstate, query, jstate);
     }
 
     /*
@@ -212,7 +212,7 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * QTW_IGNORE_JOINALIASES
          *     We are not interested in this.
          */
-        flags = QTW_EXAMINE_RTES | QTW_IGNORE_RT_SUBQUERIES |
+        flags = QTW_EXAMINE_RTES_BEFORE | QTW_IGNORE_RT_SUBQUERIES |
                 QTW_IGNORE_JOINALIASES;
 
         /* recurse on query */
@@ -512,7 +512,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     if (extra_node == NULL)
     {
         extra_node = llast(stmt);
-        list_delete_ptr(stmt, extra_node);
+        stmt = list_delete_ptr(stmt, extra_node);
     }
     else
     {
@@ -522,7 +522,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("too many extra_nodes passed from parser")));
 
-        list_delete_ptr(stmt, temp);
+        stmt = list_delete_ptr(stmt, temp);
     }
 
     cancel_errpos_ecb(&ecb_state);
@@ -621,7 +621,7 @@ static int get_query_location(const int location, const char *source_str)
 
 static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
                              const char *query_str, int query_loc,
-                             char *graph_name, Oid graph_oid, Param *params)
+                             char *graph_name, uint32 graph_oid, Param *params)
 {
     cypher_clause *clause;
     ListCell *lc;
@@ -700,14 +700,14 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
 static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                                         ParseState *parent_pstate,
                                         const char *query_str, int query_loc,
-                                        char *graph_name, Oid graph_oid,
+                                        char *graph_name, uint32 graph_oid,
                                         Param *params)
 {
     ParseState *pstate;
     Query *query;
     const bool lateral = false;
     Query *subquery;
-    RangeTblEntry *rte;
+    ParseNamespaceItem *pnsi;
     int rtindex;
     ListCell *lt;
     ListCell *lc1;
@@ -754,13 +754,21 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
                  parser_errposition(pstate, exprLocation(rtfunc->funcexpr))));
     }
 
-    rte = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
+    pnsi = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
                                         lateral, true);
+
     rtindex = list_length(pstate->p_rtable);
     Assert(rtindex == 1); // rte is the only RangeTblEntry in pstate
-    addRTEtoQuery(pstate, rte, true, true, true);
+    if (rtindex !=1 )
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_DATATYPE_MISMATCH),
+                 errmsg("invalid value for rtindex")));
+    }
 
-    query->targetList = expandRelAttrs(pstate, rte, rtindex, 0, -1);
+
+    addNSItemToQuery(pstate, pnsi, true, true, true);
+    query->targetList = expandNSItemAttrs(pstate, pnsi, 0, -1);
 
     markTargetListOrigins(pstate, query->targetList);
 
@@ -810,9 +818,9 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
             te->expr = (Expr *)new_expr;
         }
 
-        lc1 = lnext(lc1);
-        lc2 = lnext(lc2);
-        lc3 = lnext(lc3);
+        lc1 = lnext(rtfunc->funccolnames, lc1);
+        lc2 = lnext(rtfunc->funccoltypes, lc2);
+        lc3 = lnext(rtfunc->funccoltypmods, lc3);
     }
 
     query->rtable = pstate->p_rtable;
