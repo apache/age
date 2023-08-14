@@ -167,6 +167,21 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
                      parser_errposition(pstate, exprLocation((Node *)funcexpr))));
         }
 
+        /*
+         * From PG -
+         * SQLValueFunction - parameterless functions with special grammar
+         *                    productions.
+         *
+         * These are a special case that needs to be ignored.
+         *
+         * TODO: This likely needs to be done with XmlExpr types, and maybe
+         *       a few others too.
+         */
+        if (IsA(funcexpr, SQLValueFunction))
+        {
+            return false;
+        }
+
         return expression_tree_walker((Node *)funcexpr->args,
                                       convert_cypher_walker, pstate);
     }
@@ -296,6 +311,21 @@ static bool is_rte_cypher(RangeTblEntry *rte)
  */
 static bool is_func_cypher(FuncExpr *funcexpr)
 {
+    /*
+     * From PG -
+     * SQLValueFunction - parameterless functions with special grammar
+     *                    productions.
+     *
+     * These are a special case that needs to be ignored.
+     *
+     *  TODO: This likely needs to be done with XmlExpr types, and maybe
+     *        a few others too.
+     */
+    if (IsA(funcexpr, SQLValueFunction))
+    {
+        return false;
+    }
+
     return is_oid_ag_func(funcexpr->funcid, "cypher");
 }
 
@@ -756,8 +786,16 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
 
     pnsi = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
                                         lateral, true);
+
     rtindex = list_length(pstate->p_rtable);
     Assert(rtindex == 1); // rte is the only RangeTblEntry in pstate
+    if (rtindex !=1 )
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_DATATYPE_MISMATCH),
+                 errmsg("invalid value for rtindex")));
+    }
+
 
     addNSItemToQuery(pstate, pnsi, true, true, true);
     query->targetList = expandNSItemAttrs(pstate, pnsi, 0, -1);
