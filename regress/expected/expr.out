@@ -6968,9 +6968,79 @@ SELECT * FROM cypher('graph_395', $$ MATCH (p:Project)-[:Has]->(t:Task)-[:Assign
  {"pn": "Project B", "tasks": [{"tn": "Task C", "users": [{"id": 1407374883553282, "label": "Person", "properties": {"age": 43, "name": "Bob"}}::vertex]}]}
 (2 rows)
 
+---
+--- Fix: Segmentation fault when using specific names for tables #1124
+---
+--- The following are just a few commands to test SQLValueFunction types
+---
+SELECT count(*) FROM CURRENT_ROLE;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM CURRENT_USER;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM USER;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM SESSION_USER;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM CURRENT_CATALOG;
+  current_catalog   
+--------------------
+ contrib_regression
+(1 row)
+
+SELECT * FROM CURRENT_SCHEMA;
+ current_schema 
+----------------
+ ag_catalog
+(1 row)
+
+SELECT * FROM create_graph('issue_1124');
+NOTICE:  graph "issue_1124" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT results, pg_typeof(user) FROM cypher('issue_1124', $$ CREATE (u) RETURN u $$) AS (results agtype), user;
+                            results                             | pg_typeof 
+----------------------------------------------------------------+-----------
+ {"id": 281474976710657, "label": "", "properties": {}}::vertex | name
+(1 row)
+
+SELECT results, pg_typeof(user) FROM cypher('issue_1124', $$ MATCH (u) RETURN u $$) AS (results agtype), user;
+                            results                             | pg_typeof 
+----------------------------------------------------------------+-----------
+ {"id": 281474976710657, "label": "", "properties": {}}::vertex | name
+(1 row)
+
 --
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_1124', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table issue_1124._ag_label_vertex
+drop cascades to table issue_1124._ag_label_edge
+NOTICE:  graph "issue_1124" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT * FROM drop_graph('graph_395', true);
 NOTICE:  drop cascades to 7 other objects
 DETAIL:  drop cascades to table graph_395._ag_label_vertex
