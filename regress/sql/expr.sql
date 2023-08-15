@@ -2835,9 +2835,27 @@ SELECT * FROM cypher('graph_395', $$ MATCH (p:Project)-[:Has]->(t:Task)-[:Assign
                                      WITH p, collect(task) AS tasks
                                      WITH {pn: p.name, tasks:tasks} AS project
                                      RETURN project $$) AS (p agtype);
+
+---
+--- Fix: Segmentation fault when using specific names for tables #1124
+---
+--- The following are just a few commands to test SQLValueFunction types
+---
+
+SELECT count(*) FROM CURRENT_ROLE;
+SELECT count(*) FROM CURRENT_USER;
+SELECT count(*) FROM USER;
+SELECT count(*) FROM SESSION_USER;
+SELECT * FROM CURRENT_CATALOG;
+SELECT * FROM CURRENT_SCHEMA;
+SELECT * FROM create_graph('issue_1124');
+SELECT results, pg_typeof(user) FROM cypher('issue_1124', $$ CREATE (u) RETURN u $$) AS (results agtype), user;
+SELECT results, pg_typeof(user) FROM cypher('issue_1124', $$ MATCH (u) RETURN u $$) AS (results agtype), user;
+
 --
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_1124', true);
 SELECT * FROM drop_graph('graph_395', true);
 SELECT * FROM drop_graph('chained', true);
 SELECT * FROM drop_graph('VLE', true);
