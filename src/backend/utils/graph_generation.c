@@ -210,13 +210,13 @@ static void assert_complete_graph_null_arguments(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(1))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                errmsg("number of nodes can not be NULL")));
+                        errmsg("number of nodes can not be NULL")));
     }
-    
+
     if (PG_ARGISNULL(2))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                errmsg("edge label can not be NULL")));
+                        errmsg("edge label can not be NULL")));
     }
 }
 

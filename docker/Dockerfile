@@ -16,14 +16,14 @@
 # limitations under the License.
 #
 
-FROM postgres:14
+FROM postgres:15
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --no-install-suggests \
        bison \
        build-essential \
        flex \
-       postgresql-server-dev-14 \
+       postgresql-server-dev-15 \
        locales
 
 ENV LANG=en_US.UTF-8
