@@ -1363,7 +1363,7 @@ Datum agtype_any_ge(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(agtype_contains);
 /*
- * <@ operator for agtype. Returns true if the right agtype path/value entries
+ * @> operator for agtype. Returns true if the right agtype path/value entries
  * contained at the top level within the left agtype value
  */
 Datum agtype_contains(PG_FUNCTION_ARGS)
@@ -1379,8 +1379,16 @@ Datum agtype_contains(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
-    constraint_it = agtype_iterator_init(&constraints->root);
+    if (AGT_ROOT_IS_SCALAR(properties)  && AGTE_IS_AGTYPE(properties->root.children[0]))
+    {
+        properties = agtype_value_to_agtype(extract_entity_properties(properties, false));
+    }
+    if (AGT_ROOT_IS_SCALAR(constraints)  && AGTE_IS_AGTYPE(constraints->root.children[0]))
+    {
+        constraints = agtype_value_to_agtype(extract_entity_properties(constraints, false));
+    }
     property_it = agtype_iterator_init(&properties->root);
+    constraint_it = agtype_iterator_init(&constraints->root);
 
     PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it));
 }
@@ -1404,6 +1412,14 @@ Datum agtype_contained_by(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
+    if (AGT_ROOT_IS_SCALAR(properties) && AGTE_IS_AGTYPE(properties->root.children[0]))
+    {
+        properties = agtype_value_to_agtype(extract_entity_properties(properties, false));
+    }
+    if (AGT_ROOT_IS_SCALAR(constraints)  && AGTE_IS_AGTYPE(constraints->root.children[0]))
+    {
+        constraints = agtype_value_to_agtype(extract_entity_properties(constraints, false));
+    }
     constraint_it = agtype_iterator_init(&constraints->root);
     property_it = agtype_iterator_init(&properties->root);
 

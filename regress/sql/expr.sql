@@ -772,6 +772,130 @@ SELECT * FROM cypher('jsonb_operators', $$
     RETURN elem #> [0]
 $$) AS (result agtype);
 
+/*
+ * @> and <@ contains operators
+ */
+-- left contains @> operator
+--returns results
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n @> {json: {a: 1, b: ["a", "b"], c: {d: "a"}}, list: ["a", "b", "c"]}
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.json @> {c: {d: "a"}} 
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.json @> {c: {}}
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.json @> {b: ["a"]}                                  
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.list @> []        
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.list[2] @> "c"
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n @> {} 
+    RETURN n
+$$) as (a agtype);
+
+SELECT *                                                                      
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    RETURN properties(n).json @> {c: {d: "a"}}                                  
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    RETURN properties(n).json @> {c: {d: "b"}}
+$$) as (a agtype);
+
+--returns no results
+ SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.json @> {b: ["e"]}
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE n.list[2] @> []
+    RETURN n
+$$) as (a agtype);
+
+-- right contains <@ operator 
+-- returns result
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    RETURN  {c: {d: "a"}} <@ properties(n).json
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    RETURN  {c: {d: "a"}} <@ properties(n).json
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE {c: {d: "a"}} <@ n.json                                               
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE []  <@ n.list
+    RETURN n
+$$) as (a agtype);
+
+-- returns no result
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE {c: {d: "b"}} <@ n.json
+    RETURN n
+$$) as (a agtype);
+
+SELECT *
+FROM cypher('jsonb_operators', $$
+    MATCH (n)
+    WHERE [] <@ n.json
+    RETURN n
+$$) as (a agtype);
+
 --
 -- clean up
 --

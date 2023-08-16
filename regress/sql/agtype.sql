@@ -1070,11 +1070,74 @@ SELECT age_id(agtype_in('null'));
 SELECT age_start_id(agtype_in('null'));
 SELECT age_end_id(agtype_in('null'));
 
+-- 
+-- Agtype contains (@> and <@) operator 
+-- 
+-- left contains @> operator 
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b"}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "c":null}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "g":null}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"g":null}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"c"}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "c":"q"}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '[]';
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":["qui"]}';
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":[]}';
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":{}}';
+
+SELECT '[1,2]'::agtype @> '[1,2,2]'::agtype;
+SELECT '[1,1,2]'::agtype @> '[1,2,2]'::agtype;
+SELECT '[1,1,2]'::agtype @> '[1,2,[2]]'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[1,2,2]]'::agtype;
+SELECT '[1,2,2]'::agtype @> '[]'::agtype;
+SELECT '[1,2,2]'::agtype @> '{}'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[]]'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[{}]]'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[1,2,2], []]'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[1,2,2, []], []]'::agtype;
+SELECT '[[1,2]]'::agtype @> '[[1,2,2, []], [[]]]'::agtype;
+
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"name": "A"}';
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
+
+-- right contains <@ operator 
+SELECT '[1,2,2]'::agtype <@ '[1,2]'::agtype;
+SELECT '[1,2,2]'::agtype <@ '[1,1,2]'::agtype;
+SELECT '[[1,2,2]]'::agtype <@ '[[1,2]]'::agtype;
+SELECT '[]'::agtype <@ '[1,2,2]'::agtype;
+SELECT '[1,2,2]'::agtype <@ '[]'::agtype;
+
+SELECT '{"a":"b"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+SELECT '{"a":"b", "c":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+SELECT '{"a":"b", "g":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+SELECT '{"g":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+SELECT '{"a":"c"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+SELECT '{"a":"b", "c":"q"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+
+SELECT '{"name": "A"}' <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype;     
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "B"}}::vertex';
+
+-- Raw scalar may contain another raw scalar, array may contain a raw scalar
+SELECT '[5]'::agtype @> '[5]';
+SELECT '5'::agtype @> '5';
+SELECT '[5]'::agtype @> '5';
+
+-- But a raw scalar cannot contain an array
+SELECT '5'::agtype @> '[5]';
+
+-- In general, one thing should always contain itself. Test array containment:
+SELECT '["9", ["7", "3"], 1]'::agtype @> '["9", ["7", "3"], 1]'::agtype;
+SELECT '["9", ["7", "3"], ["1"]]'::agtype <@ '["9", ["7", "3"], ["1"]]'::agtype;
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "b":1, "c":null}';
+SELECT '{"a":"b", "b":1, "c":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+
+-- array containment string matching confusion bug
+SELECT '{ "name": "Bob", "tags": [ "enim", "qui"]}'::agtype @> '{"tags":["qu"]}';
+
 SELECT agtype_contains('{"id": 1}','{"id": 1}');
 SELECT agtype_contains('{"id": 1}','{"id": 2}');
-
-SELECT '{"id": 1}'::agtype @> '{"id": 1}';
-SELECT '{"id": 1}'::agtype @> '{"id": 2}';
 
 --
 -- Agtype exists operator

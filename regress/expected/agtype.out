@@ -4039,6 +4039,297 @@ SELECT age_end_id(agtype_in('null'));
  
 (1 row)
 
+-- 
+-- Agtype contains (@> and <@) operator 
+-- 
+-- left contains @> operator 
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b"}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "g":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"g":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"c"}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "c":"q"}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '[]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":["qui"]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":[]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"name": "Bob", "tags": ["enim", "qui"]}'::agtype @> '{"tags":{}}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[1,2]'::agtype @> '[1,2,2]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,1,2]'::agtype @> '[1,2,2]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,1,2]'::agtype @> '[1,2,[2]]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[1,2,2]]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,2,2]'::agtype @> '[]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,2,2]'::agtype @> '{}'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[]]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[{}]]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[1,2,2], []]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[1,2,2, []], []]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[[1,2]]'::agtype @> '[[1,2,2, []], [[]]]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"name": "A"}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
+ ?column? 
+----------
+ t
+(1 row)
+
+-- right contains <@ operator 
+SELECT '[1,2,2]'::agtype <@ '[1,2]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,2,2]'::agtype <@ '[1,1,2]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[[1,2,2]]'::agtype <@ '[[1,2]]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[]'::agtype <@ '[1,2,2]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[1,2,2]'::agtype <@ '[]'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "c":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "g":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"g":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"c"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":"b", "c":"q"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"name": "A"}' <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype;     
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "B"}}::vertex';
+ ?column? 
+----------
+ f
+(1 row)
+
+-- Raw scalar may contain another raw scalar, array may contain a raw scalar
+SELECT '[5]'::agtype @> '[5]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '5'::agtype @> '5';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[5]'::agtype @> '5';
+ ?column? 
+----------
+ t
+(1 row)
+
+-- But a raw scalar cannot contain an array
+SELECT '5'::agtype @> '[5]';
+ ?column? 
+----------
+ f
+(1 row)
+
+-- In general, one thing should always contain itself. Test array containment:
+SELECT '["9", ["7", "3"], 1]'::agtype @> '["9", ["7", "3"], 1]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["9", ["7", "3"], ["1"]]'::agtype <@ '["9", ["7", "3"], ["1"]]'::agtype;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":"b", "b":1, "c":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+-- array containment string matching confusion bug
+SELECT '{ "name": "Bob", "tags": [ "enim", "qui"]}'::agtype @> '{"tags":["qu"]}';
+ ?column? 
+----------
+ f
+(1 row)
+
 SELECT agtype_contains('{"id": 1}','{"id": 1}');
  agtype_contains 
 -----------------
@@ -4048,18 +4339,6 @@ SELECT agtype_contains('{"id": 1}','{"id": 1}');
 SELECT agtype_contains('{"id": 1}','{"id": 2}');
  agtype_contains 
 -----------------
- f
-(1 row)
-
-SELECT '{"id": 1}'::agtype @> '{"id": 1}';
- ?column? 
-----------
- t
-(1 row)
-
-SELECT '{"id": 1}'::agtype @> '{"id": 2}';
- ?column? 
-----------
  f
 (1 row)
 

@@ -373,6 +373,55 @@ $$) as (n agtype);
  {"id": 1407374883553281, "label": "Country", "properties": {"gdp": 20.94::numeric, "name": "United States", "country_code": "US", "life_expectancy": 78.79}}::vertex
 (1 row)
 
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City {country_code: "US"})
+    RETURN c
+$$) as (n agtype);
+ count 
+-------
+     4
+(1 row)
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c @> {country_code: "US"}
+    RETURN c
+$$) as (n agtype);
+ count 
+-------
+     4
+(1 row)
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ? 'country_code'
+    RETURN c
+$$) as (n agtype);
+ count 
+-------
+    10
+(1 row)
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ?& ['country_code']
+    RETURN c
+$$) as (n agtype);
+ count 
+-------
+    10
+(1 row)
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ?| ['country_code']
+    RETURN c
+$$) as (n agtype);
+ count 
+-------
+    10
+(1 row)
+
 DROP INDEX cypher_index.load_city_gin_idx;
 DROP INDEX cypher_index.load_country_gin_idx;
 --
@@ -380,24 +429,27 @@ DROP INDEX cypher_index.load_country_gin_idx;
 --
 SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
-    WHERE a.country_code = 'RS'
+    WHERE a.country_code = 'US'
     RETURN a
 $$) as (n agtype);
  count 
 -------
-     0
+     4
 (1 row)
 
 CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
 (ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
-SELECT COUNT(*) FROM cypher('agload_test_graph', $$
+SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
-    WHERE a.country_code = 'RS'
+    WHERE a.country_code = 'US'
     RETURN a
 $$) as (n agtype);
-ERROR:  graph "agload_test_graph" does not exist
-LINE 1: SELECT COUNT(*) FROM cypher('agload_test_graph', $$
-                                    ^
+ count 
+-------
+     4
+(1 row)
+
+DROP INDEX cypher_index.cntry_ode_idx;
 --
 -- General Cleanup
 --
@@ -415,5 +467,3 @@ NOTICE:  graph "cypher_index" has been dropped
  
 (1 row)
 
-SELECT drop_graph('agload_test_graph', true);
-ERROR:  graph "agload_test_graph" does not exist

@@ -227,7 +227,6 @@ ON cypher_index."City" USING gin (properties);
 CREATE INDEX load_country_gin_idx
 ON cypher_index."Country" USING gin (properties);
 
-
 SELECT * FROM cypher('cypher_index', $$
     MATCH (c:City {city_id: 1})
     RETURN c
@@ -253,28 +252,61 @@ SELECT * FROM cypher('cypher_index', $$
     RETURN c
 $$) as (n agtype);
 
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City {country_code: "US"})
+    RETURN c
+$$) as (n agtype);
+
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c @> {country_code: "US"}
+    RETURN c
+$$) as (n agtype);
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ? 'country_code'
+    RETURN c
+$$) as (n agtype);
+
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ?& ['country_code']
+    RETURN c
+$$) as (n agtype);
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    MATCH (c:City)
+    WHERE c ?| ['country_code']
+    RETURN c
+$$) as (n agtype);
+
 DROP INDEX cypher_index.load_city_gin_idx;
 DROP INDEX cypher_index.load_country_gin_idx;
+
 --
 -- Section 4: Index use with WHERE clause
 --
 SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
-    WHERE a.country_code = 'RS'
+    WHERE a.country_code = 'US'
     RETURN a
 $$) as (n agtype);
 
 CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
 (ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
 
-SELECT COUNT(*) FROM cypher('agload_test_graph', $$
+SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:City)
-    WHERE a.country_code = 'RS'
+    WHERE a.country_code = 'US'
     RETURN a
 $$) as (n agtype);
+
+DROP INDEX cypher_index.cntry_ode_idx;
 
 --
 -- General Cleanup
 --
 SELECT drop_graph('cypher_index', true);
-SELECT drop_graph('agload_test_graph', true);
