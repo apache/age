@@ -1210,7 +1210,6 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
     agtype *key = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *aval;
     agtype_value *v = NULL;
-    char *str = NULL;
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
@@ -1232,12 +1231,21 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     }
 
-    str = get_string_from_agtype_value(aval, &aval->val.string.len);
-    aval = string_to_agtype_value(str);
+    if (AGT_ROOT_IS_OBJECT(agt) &&
+        aval->type == AGTV_STRING)
+    {
+        v = find_agtype_value_from_container(&agt->root,
+                                            AGT_FOBJECT,
+                                            aval);
+    }
+    else if (AGT_ROOT_IS_ARRAY(agt) &&
+                !aval->type == AGTV_NULL)
+    {
+        v = find_agtype_value_from_container(&agt->root,
+                                            AGT_FARRAY,
+                                            aval);
+    }
 
-    v = find_agtype_value_from_container(&agt->root,
-                                         AGT_FOBJECT | AGT_FARRAY,
-                                         aval);
 
     PG_RETURN_BOOL(v != NULL);
 }
@@ -1259,23 +1267,31 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
         agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
     }
 
-    if (!AGT_ROOT_IS_SCALAR(keys))
+    if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
     {
         while ((it = get_next_list_element(it, &keys->root, &elem)))
         {
-            //check for null
-            if (IS_A_AGTYPE_SCALAR(&elem) && !(&elem)->type == AGTV_NULL)
+            if (IS_A_AGTYPE_SCALAR(&elem))
             {
-                if (find_agtype_value_from_container(&agt->root,
-                                                     AGT_FOBJECT | AGT_FARRAY,
-                                                     &elem))
+                if (AGT_ROOT_IS_OBJECT(agt) &&
+                    (&elem)->type == AGTV_STRING && 
+                    find_agtype_value_from_container(&agt->root,
+                                                         AGT_FOBJECT,
+                                                         &elem))
+                {
+                    PG_RETURN_BOOL(true);
+                }
+                else if (AGT_ROOT_IS_ARRAY(agt) &&
+                         !(&elem)->type == AGTV_NULL &&
+                         find_agtype_value_from_container(&agt->root,
+                                                           AGT_FARRAY,
+                                                           &elem))
                 {
                     PG_RETURN_BOOL(true);
                 }
             }
             else
             {
-
                 PG_RETURN_BOOL(false);
             }
         }
@@ -1308,15 +1324,32 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
         agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
     }
 
-    if (!AGT_ROOT_IS_SCALAR(keys))
+    if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
     {
         while ((it = get_next_list_element(it, &keys->root, &elem)))
         {
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
-                if (!find_agtype_value_from_container(&agt->root,
-                                                      AGT_FOBJECT | AGT_FARRAY,
-                                                      &elem))
+                if ((&elem)->type == AGTV_NULL)
+                {
+                    continue;
+                }
+                else if (AGT_ROOT_IS_OBJECT(agt) &&
+                    (&elem)->type == AGTV_STRING && 
+                    find_agtype_value_from_container(&agt->root,
+                                                         AGT_FOBJECT,
+                                                         &elem))
+                {
+                    continue;
+                }
+                else if (AGT_ROOT_IS_ARRAY(agt) &&
+                         find_agtype_value_from_container(&agt->root,
+                                                           AGT_FARRAY,
+                                                           &elem))
+                {
+                    continue;
+                }
+                else
                 {
                     PG_RETURN_BOOL(false);
                 }

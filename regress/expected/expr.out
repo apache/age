@@ -1148,6 +1148,24 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d', 'e']
  true
 (1 row)
 
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| keys(n) $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?| keys(n.json) $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return [n.json ?| keys(n.json)] ?| [true] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
 -- should return false
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [] $$) as (a agtype);
    a   
@@ -1179,10 +1197,38 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [['list']] $$) as
  false
 (1 row)
 
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| keys(n.json) $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?| keys(n) $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return [n.json ?| keys(n.json)] ?| [false] $$) as (a agtype);
+   a   
+-------
+ false
+(1 row)
+
 -- errors out
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| 'list' $$) as (a agtype);
 ERROR:  invalid agtype value for right operand
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| n $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 1 $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '1' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '{}' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n.json $$) as (a agtype);
 ERROR:  invalid agtype value for right operand
 -- Exists (?&)
 -- should return true
@@ -1199,6 +1245,18 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b']
 (1 row)
 
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d'] $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& keys(n) $$) as (a agtype);
+  a   
+------
+ true
+(1 row)
+
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?& keys(n.json) $$) as (a agtype);
   a   
 ------
  true
@@ -1244,7 +1302,17 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [['list']] $$) as
 -- errors out
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a agtype);
 ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 1 $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '1' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '{}' $$) as (a agtype);
+ERROR:  invalid agtype value for right operand
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n.json $$) as (a agtype);
 ERROR:  invalid agtype value for right operand
 -- concat ||
 SELECT * FROM cypher('jsonb_operators', $$ RETURN [1,2] || 2 $$) AS (result agtype);

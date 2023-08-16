@@ -519,6 +519,9 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a'] $$) 
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| ['a', 'b'] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d'] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['d', 'e'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| keys(n) $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?| keys(n.json) $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return [n.json ?| keys(n.json)] ?| [true] $$) as (a agtype);
 
 -- should return false
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [] $$) as (a agtype);
@@ -526,10 +529,19 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| ['a', 'b'] $$) as
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?| [] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?| ['c'] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| [['list']] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| keys(n.json) $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?| keys(n) $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return [n.json ?| keys(n.json)] ?| [false] $$) as (a agtype);
 
 -- errors out
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| 'list' $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| n $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 1 $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '1' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '{}' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n.json $$) as (a agtype);
+
 
 -- Exists (?&)
 
@@ -537,6 +549,8 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?| n $$) as (a agtyp
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& ['list', 'json'] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.b ?& ['a', 'b'] $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json.c ?& ['d'] $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& keys(n) $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n.json ?& keys(n.json) $$) as (a agtype);
 
 -- should return false
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [] $$) as (a agtype);
@@ -548,7 +562,12 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& [['list']] $$) as
 
 -- errors out
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 'list' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& 1 $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '1' $$) as (a agtype);
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& '{}' $$) as (a agtype);
+SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n ?& n.json $$) as (a agtype);
 
 -- concat ||
 SELECT * FROM cypher('jsonb_operators', $$ RETURN [1,2] || 2 $$) AS (result agtype);
