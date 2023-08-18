@@ -1002,6 +1002,46 @@ $$) AS r(result agtype);
  3.14
 (1 row)
 
+SELECT *
+FROM cypher('expr', $$
+    WITH {bool_val: false, int_val: 3, float_val: 3.14, array: [1, 2, 3]} as a
+    RETURN a - 'array'
+$$) as (a agtype);
+                          a                           
+------------------------------------------------------
+ {"int_val": 3, "bool_val": false, "float_val": 3.14}
+(1 row)
+
+SELECT *
+FROM cypher('expr', $$
+    WITH {bool_val: false, int_val: 3, float_val: 3.14, array: [1, 2, 3]} as a
+    RETURN a - 'int_val'
+$$) as (a agtype);
+                             a                              
+------------------------------------------------------------
+ {"array": [1, 2, 3], "bool_val": false, "float_val": 3.14}
+(1 row)
+
+SELECT *
+FROM cypher('expr', $$
+    WITH {bool_val: false, int_val: 3, float_val: 3.14, array: [1, 2, 3]} as a
+    RETURN a.array - 1
+$$) as (a agtype);
+   a    
+--------
+ [1, 3]
+(1 row)
+
+SELECT *
+FROM cypher('expr', $$
+    WITH {bool_val: false, int_val: 3, float_val: 3.14, array: [1, 2, 3]} as a
+    RETURN a.array + 1
+$$) as (a agtype);
+      a       
+--------------
+ [1, 2, 3, 1]
+(1 row)
+
 /*
  * ?, ?|, ?& key existence, concat operators
  */
@@ -1363,12 +1403,6 @@ SELECT * FROM cypher('jsonb_operators', $$ WITH {b: [1,2,3]} AS m WITH m, m || {
  {"a": 1::numeric, "b": [1, 2, 3]}
 (1 row)
 
-SELECT * FROM cypher('jsonb_operators', $$ WITH 'b' AS m WITH m, m || {a: 1} AS n RETURN n $$) AS (result agtype);
-     result      
------------------
- ["b", {"a": 1}]
-(1 row)
-
 SELECT * FROM cypher('jsonb_operators', $$ MATCH(n) RETURN n || 1 || 'string' $$) AS (result agtype);
                                                                           result                                                                          
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1399,12 +1433,6 @@ SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || [1, 2, 3] 
  [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, 1, 2, 3]
 (1 row)
 
-SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || 1 $$) AS (result agtype);
-                     result                      
--------------------------------------------------
- [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, 1]
-(1 row)
-
 SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n.json $$) AS (result agtype);
                    result                   
 --------------------------------------------
@@ -1417,6 +1445,11 @@ SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || n $$) AS (
  [{"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, {"id": 281474976710657, "label": "", "properties": {"json": {"a": 1, "b": ["a", "b"], "c": {"d": "a"}}, "list": ["a", "b", "c"]}}::vertex]
 (1 row)
 
+-- errors out
+SELECT * FROM cypher('jsonb_operators', $$ WITH 'b' AS m WITH m, m || {a: 1} AS n RETURN n $$) AS (result agtype);
+ERROR:  invalid left operand for agtype concatenation
+SELECT * FROM cypher('jsonb_operators', $$ MATCH (n) RETURN n.json || 1 $$) AS (result agtype);
+ERROR:  invalid right operand for agtype concatenation
 /*
  * access operator ->
  */

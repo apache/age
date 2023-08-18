@@ -108,6 +108,8 @@ SELECT agtype_sub('-1.0', '-1.0');
 SELECT agtype_sub('1', '-1.0::numeric');
 SELECT agtype_sub('1.0', '-1.0::numeric');
 SELECT agtype_sub('1::numeric', '-1.0::numeric');
+SELECT agtype_sub('[1, 2, 3]', '1');
+SELECT agtype_sub('{"a": 1, "b": 2, "c": 3}', '"a"');
 
 
 SELECT agtype_neg('-1');
@@ -228,6 +230,124 @@ SELECT '3'::agtype + '3.14'::agtype;
 SELECT '3'::agtype + '3.14::numeric'::agtype;
 SELECT '3.14'::agtype + '3.14::numeric'::agtype;
 SELECT '3.14::numeric'::agtype + '3.14::numeric'::agtype;
+
+--
+-- Test operator - for extended functionality
+--
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '"a"';
+SELECT '{"a":null , "b":2, "c":3}'::agtype - '"a"';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '"b"';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '"c"';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '"d"';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '""';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '"1"';
+SELECT '{"a":1 , "b":2, "c":3, "1": 4}'::agtype - '"1"';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - age_tostring('a');
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - age_tostring(1);
+SELECT '{"a":1 , "b":2, "c":3, "1": 4}'::agtype - age_tostring(1);
+SELECT '{}'::agtype - '"a"';
+
+SELECT '["a","b","c"]'::agtype - 3;
+SELECT '["a","b","c"]'::agtype - 2;
+SELECT '["a","b","c"]'::agtype - 1;
+SELECT '["a","b","c"]'::agtype - 0;
+SELECT '["a","b","c"]'::agtype - -1;
+SELECT '["a","b","c"]'::agtype - -2;
+SELECT '["a","b","c"]'::agtype - -3;
+SELECT '["a","b","c"]'::agtype - -4;
+SELECT '["a","b","c"]'::agtype - '2';
+SELECT '["a","b","c"]'::agtype - -(true::int);
+SELECT '[]'::agtype - 1;
+
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["b"]'::agtype;
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]'::agtype;
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '[]'::agtype;
+SELECT '["a","b","c"]'::agtype - '[]';
+SELECT '["a","b","c"]'::agtype - '[1]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[9]';
+SELECT '["a","b","c"]'::agtype - '[1, -1]';
+SELECT '["a","b","c"]'::agtype - '[1, -1, 3, 4]';
+SELECT '["a","b","c"]'::agtype - '[1, -1, 3, 4, 0]';
+SELECT '["a","b","c"]'::agtype - '[-1, 1, 3, 4, 1]';
+SELECT '["a","b","c"]'::agtype - '[-1, 1, 3, 4, 0]';
+SELECT '["a","b","c"]'::agtype - '[1, 1]';
+SELECT '["a","b","c"]'::agtype - '[1, 1, 1]';
+SELECT '["a","b","c"]'::agtype - '[1, 1, -1]';
+SELECT '["a","b","c"]'::agtype - '[1, 1, -1, -1]';
+SELECT '["a","b","c"]'::agtype - '[-2, -4, -5, -1]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[0, 4, 3, 2]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[0, 4, 3, 2, -1]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[3, 3, 4, 4, 6, 8, 9]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[8, 9, -7, -6]';
+
+-- multiple sub operations
+SELECT '{"a":1 , "b":2, "c":3, "1": 4}'::agtype - age_tostring(1) - age_tostring(1);
+SELECT '{"a":1 , "b":2, "c":3, "1": 4}'::agtype - age_tostring(1) - age_tostring('a');
+SELECT '{"a":1 , "b":2, "c":3, "1": 4}'::agtype - age_tostring(1) - age_tostring('a') - age_tostring('e') - age_tostring('c');
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '["a"]';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '["e"]' - '["a"]';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '[]';
+SELECT '["a","b","c"]'::agtype - '[-1]' - '[-1]';
+SELECT '["a","b","c"]'::agtype - '[-1]' - '[-2]' - '[-2]';
+SELECT '["a","b","c"]'::agtype - '[-1]' - '[]' - '[-2]';
+SELECT '["a","b","c"]'::agtype - '[-1]' - '[4]' - '[-2]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[8, 9, -7, -6]' - '1';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[8, 9, -7, -6]' - '[1, 0]';
+SELECT '[1, 2, 3, 4, 5, 6]'::agtype - '[8, 9, -7, -6]' - 3 - '[]';
+
+-- errors out
+SELECT '["a","b","c"]'::agtype - '["1"]';
+SELECT '["a","b","c"]'::agtype - '[null]';
+SELECT '["a","b","c"]'::agtype - '"1"';
+SELECT '["a","b","c"]'::agtype - 'null';
+SELECT '["a","b","c"]'::agtype - '[-1]' - '["-2"]' - '[-2]';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '[1]';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '[null]';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '1';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - 'null';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '[1]' - '["a"]';
+SELECT 'null'::agtype - '1';
+SELECT 'null'::agtype - '[1]';
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '"a"';
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '["a"]';
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[1]';
+SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype - '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype;
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[]';
+
+--
+-- Test operator + for extended functionality
+--
+SELECT '[1, 2, 3]'::agtype + '[4, 5]'::agtype;
+SELECT '[1, 2, true, "string", 1.4::numeric]'::agtype + '[4.5, -5::numeric, {"a": true}]'::agtype;
+SELECT '[{"a":1 , "b":2, "c":3}]'::agtype + '[]';
+SELECT '[{"a":1 , "b":2, "c":3}]'::agtype + '[{"d": 4}]';
+
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '["b", 2, {"d": 4}]'::agtype;
+SELECT '["b", 2, {"d": 4}]'::agtype + '{"a":1 , "b":2, "c":3}'::agtype;
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype + '[1]';
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '[1, "e", true]';
+SELECT '[]'::agtype + '{}';
+SELECT '[]'::agtype + '{"a": 1}';
+
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '{"b": 2}';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '{"": 2}';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '{"a":1 , "b":2, "c":3}';
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '{}';
+SELECT '{}'::agtype + '{}';
+
+SELECT '1'::agtype + '[{"a":1 , "b":2, "c":3}]'::agtype;
+
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"d": 4}';
+
+SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
+SELECT '[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype + ' [{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype;
+SELECT '[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype;
+SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype + '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype;
+SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
+
+-- errors out
+SELECT '1'::agtype + '{"a":1 , "b":2, "c":3}'::agtype;
+SELECT '{"a":1 , "b":2, "c":3}'::agtype + '"string"';
 
 --
 -- Test overloaded agytype any operators +, -, *, /, %
@@ -1342,7 +1462,6 @@ SELECT '[]'::agtype || '[]'::agtype;
 SELECT '{}'::agtype || '{}'::agtype;
 SELECT null::agtype || null::agtype;
 SELECT '{}'::agtype || '[null]'::agtype;
-SELECT '{"a": 13}'::agtype || 'null'::agtype;
 SELECT '[null]'::agtype || '{"a": null}'::agtype;
 SELECT '{"a": 13}'::agtype || '{"a": 13}'::agtype;
 SELECT '{"a": 13}'::agtype || '[{"a": 13}]'::agtype;
@@ -1354,9 +1473,6 @@ SELECT '"b"'::agtype || '"a"'::agtype;
 SELECT '{}'::agtype || '{"a":"b"}'::agtype;
 SELECT '[]'::agtype || '{"a":"b"}'::agtype;
 SELECT '{"a":"b"}'::agtype || '[]'::agtype;
-
-SELECT '"a"'::agtype || '{"a":1}';
-SELECT '{"a":1}' || '"a"'::agtype;
 
 SELECT '[3]'::agtype || '{}'::agtype;
 SELECT '3'::agtype || '[]'::agtype;
@@ -1370,9 +1486,6 @@ SELECT '["a", "b"]'::agtype || '{"c":1}';
 SELECT '{"c": 1}'::agtype || '["a", "b"]';
 
 SELECT '{}'::agtype || '{"cq":"l", "b":"g", "fg":false}';
-SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || true::agtype;
-SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || 'true'::agtype;
-SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || age_agtype_sum('1', '2');
 
 SELECT '{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b" : true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge'::agtype || '"id"';
 SELECT '{"id": 1688849860263937, "label": "EDGE", "end_id": 1970324836974593, "start_id": 1407374883553281, "properties": {"a": "xyz", "b" : true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::edge'::agtype || '"m"';
@@ -1391,6 +1504,12 @@ SELECT '{}'::agtype || '{}'::agtype || '[{}]'::agtype || '[{}]'::agtype || '{}':
 -- should give an error
 SELECT '3'::agtype || 4;
 SELECT '3'::agtype || true;
+SELECT '{"a": 13}'::agtype || 'null'::agtype;
+SELECT '"a"'::agtype || '{"a":1}';
+SELECT '{"a":1}' || '"a"'::agtype;
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || true::agtype;
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || 'true'::agtype;
+SELECT '{"b": [1, 2, {"[{}, {}]": "a"}, {"1": {}}]}'::agtype || age_agtype_sum('1', '2');
 
 --
 -- Test STARTS WITH, ENDS WITH, and CONTAINS
