@@ -4,6 +4,5 @@ build.sh
 .idea
 .deps
 .DS_Store
-.vscode
 *.tokens
 *.interp
