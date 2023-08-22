@@ -228,3 +228,147 @@ NOTICE:  graph "gp2" has been dropped
  
 (1 row)
 
+-- Tests for watts-strogatz graph generation
+SELECT * FROM age_create_watts_strogatz_graph('gp1',8,2,0.0,'vertices',NULL,'edges',NULL,true);
+NOTICE:  graph "gp1" has been created
+NOTICE:  VLabel "vertices" has been created
+NOTICE:  ELabel "edges" has been created
+ age_create_watts_strogatz_graph 
+---------------------------------
+ 
+(1 row)
+
+SELECT COUNT(*) FROM gp1."edges";
+ count 
+-------
+    16
+(1 row)
+
+SELECT COUNT(*) FROM gp1."vertices";
+ count 
+-------
+     8
+(1 row)
+
+SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+                                                             n                                                              
+----------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842626, "label": "edges", "end_id": 844424930131969, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842639, "label": "edges", "end_id": 844424930131969, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842625, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842628, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131971, "properties": {}}::edge
+ {"id": 1125899906842630, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131972, "properties": {}}::edge
+ {"id": 1125899906842627, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842629, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
+ {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131973, "properties": {}}::edge
+ {"id": 1125899906842634, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131974, "properties": {}}::edge
+ {"id": 1125899906842631, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
+ {"id": 1125899906842636, "label": "edges", "end_id": 844424930131974, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842633, "label": "edges", "end_id": 844424930131974, "start_id": 844424930131973, "properties": {}}::edge
+ {"id": 1125899906842638, "label": "edges", "end_id": 844424930131975, "start_id": 844424930131976, "properties": {}}::edge
+ {"id": 1125899906842635, "label": "edges", "end_id": 844424930131975, "start_id": 844424930131974, "properties": {}}::edge
+ {"id": 1125899906842640, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842637, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131975, "properties": {}}::edge
+(16 rows)
+
+SELECT * FROM age_create_watts_strogatz_graph('gp1',8,3,0.5,'vertices',NULL,'edges',NULL);
+ age_create_watts_strogatz_graph 
+---------------------------------
+ 
+(1 row)
+
+SELECT COUNT(*) FROM gp1."edges";
+ count 
+-------
+    32
+(1 row)
+
+SELECT COUNT(*) FROM gp1."vertices";
+ count 
+-------
+    16
+(1 row)
+
+SELECT * FROM age_create_watts_strogatz_graph('gp2',8,5,0.5,'vertices','{"probability":0.5}','edges','{"type":"edge", "strong":true}',false);
+NOTICE:  graph "gp2" has been created
+NOTICE:  VLabel "vertices" has been created
+NOTICE:  ELabel "edges" has been created
+ age_create_watts_strogatz_graph 
+---------------------------------
+ 
+(1 row)
+
+SELECT COUNT(*) FROM gp2."edges";
+ count 
+-------
+    16
+(1 row)
+
+SELECT COUNT(*) FROM gp2."vertices";
+ count 
+-------
+     8
+(1 row)
+
+SELECT * FROM cypher('gp2', $$MATCH (a)-[e]->(b) RETURN properties(a), properties(e)$$) as (start_vertex_props agtype, edge_props agtype);
+  start_vertex_props  |            edge_props            
+----------------------+----------------------------------
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+ {"probability": 0.5} | {"type": "edge", "strong": true}
+(16 rows)
+
+-- SHOULD FAIL
+SELECT * FROM age_create_watts_strogatz_graph(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+ERROR:  graph name cannot be NULL
+SELECT * FROM age_create_watts_strogatz_graph('gp2',NULL,2,0.5,'vertices',NULL,'edges',NULL);
+ERROR:  number of nodes must be greater than number of edges with neighbors and not NULL
+SELECT * FROM age_create_watts_strogatz_graph('gp3',5,NULL,0.5,'vertices',NULL,'edges',NULL);
+ERROR:  number of edges cannot be NULL or lower than 2
+SELECT * FROM age_create_watts_strogatz_graph('gp3',5,2,NULL,'vertices',NULL,'edges',NULL,false);
+ERROR:  the probability of rewiring must be between 0 and 1 and not NULL
+SELECT * FROM age_create_watts_strogatz_graph('gp4',NULL,0,0.5,'vertices',NULL,'edges',NULL,false);
+ERROR:  number of edges cannot be NULL or lower than 2
+SELECT * FROM age_create_watts_strogatz_graph('gp5',5,2,0.5,'vertices',NULL,NULL,NULL,false);
+ERROR:  edge label cannot be NULL
+-- Should error out because same labels are used for both vertices and edges
+SELECT * FROM age_create_watts_strogatz_graph('gp6',10,5,0.5,'label',NULL,'label',NULL,true);
+ERROR:  vertex and edge label cannot be the same
+-- DROPPING GRAPHS
+SELECT drop_graph('gp1', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table gp1._ag_label_vertex
+drop cascades to table gp1._ag_label_edge
+drop cascades to table gp1.vertices
+drop cascades to table gp1.edges
+NOTICE:  graph "gp1" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('gp2', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table gp2._ag_label_vertex
+drop cascades to table gp2._ag_label_edge
+drop cascades to table gp2.vertices
+drop cascades to table gp2.edges
+NOTICE:  graph "gp2" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
