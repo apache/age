@@ -15,53 +15,43 @@
 # specific language governing permissions and limitations
 # under the License.
 
-Release Notes for Apache AGE release v1.3.0 for PG 12
+Release Notes for Apache AGE release v1.4.0 for PG 12
 
-Apache AGE 1.3.0 - Release Notes
+Apache AGE 1.4.0 - Release Notes
 
-NOTE: Due to additions to core tables, there is no upgrade path from the
-      previous version.
+NOTE: Some of these reference the master branch PR that was
+      either applied to lower versions via a separate PR or
+      merged into a newly created branch.
 
-Implement CALL ...[YIELD] for cypher functions. (#630)
-Graph names with the empty string '' are no more allowed. (#251)
-Fix typos at multiple locations. (#470)
-Fix Bug with CALL... [YIELD], clause ignores WHERE.
-Fix EXPLAIN to allow for nested cypher commands.
-Fix delete_global_graphs and add regression tests. (#336)
-Invalid labels now return NULL.
-Update CONTRIBUTING.md (#348)
-Fix null pointer on name compare. (#376)
-Fix Travis CI warning messages.
-Additional regression tests added for age_global_graph. (#341)
-Readme Added for AGE-JDBC-Driver. (#383)
-Updated volitility categories for many functions.
-Fix issue 339 - entities in WHERE clause have wrong Expr. (#391)
-Create complete graph function. (#342) (#662)
-Fix issue 317: Graph naming convention. (#349)
-Update SET clause to support assigning a map to a variable. (#468)
-Patch to address PR 203 that appears to be inactive. (#671)
-Add additional comments for create_graph function. (#582)
-Optimize age_exists function. (#586)
-Implement plus-equal operator in SET clause. (#638)
-Implement CI test for python driver. (#587)
-Move from travis CI to github actions for build. (#673)
-Update all driver CIs to Github actions.
-Fix build warnings.
-Updated Readme for drivers folder. (#642)
-Removed async from function definitions. (#680)
-Barbell graph generation (#648) and Barbell regress tests. (#708)
-UPDATED Python Driver ANTLR 4.9.3 -> 4.11.1 (#706)
-Fix WITH ignoring WHERE clause. (#646)
-Implement isEmpty() predicate function. (#710)
-Fix cypher function input argument checks. (#718)
-Fix Issue 693 - server termination from return exists(path). (#721)
-Update regression tests for cypher_with. (#725)
-Fix issue 733 - create_complete_graph() terminates the server. (#734)
-Prevent MATCH from following OPTIONAL MATCH. (#740)
-Fix property constraints against resolved variables. (#724) (#751) (#701) (#747)
-Include invalid labels in reused variables. (#751) (#762)
-Fix update_entity_tuple to use correct CommandId. (#769)
-Remove check for scalar agtypes in unwind. (#736)
-Update PG12 CI workflows. (#776)
-Update readme and version for python driver. (#780)
-Update README.md
+Added license in Python driver README.md (#956)
+Added the toStringList() function (#1128)
+Added toBooleanList() (#1165)
+Added toFloatList() function (#1016)
+Added toIntegerList() function (#1025)
+Added regression tests for MATCH clause using labels only (#1019)
+Added REGTYPEOID to toString function (#1036)
+Added Dockerfile.dev & move docker-related files to "docker/" (#943)
+Fixed complex MERGE causes crash (#897) (#961)
+Fixed docker build files (#1104)
+Fixed case sensitivity on label usage of reserved keyword (#1040)
+Fixed issue 1000: Indexes created on WHERE (#1133)
+Fixed issue 1002: Invalid reuse of variables in MATCH clause (#1003)
+Fixed issue 1033: access operator on vle edge lists (#1037)
+Fixed issue 1043: ERROR:  container must be an array or object (#1046)
+Fixed issue 1124: Segmentation fault when using specific tables (#1125)
+Fixed issue 395: ERROR: container is not an agtype array (#1039)
+Fixed issue 870: regarding orderability and added regression tests (#994)
+Fixed issue 876: column reference "_age_default_alias_0" is ambiguous (#931)
+Fixed issue 975: Invalid reuse of variables in CREATE clause (#977)
+Fixed issue 989: Impossible to create array with > 100 items (#1001)
+Fixed memory leak issues with age_load (#1142)
+Fixed memory leaks in MERGE (merge_edge & merge_vertex) (#958)
+Fixed MERGE crashes due to incorrect label type (#957)
+Fixed MERGE variable reuse (#997)
+Fixed misspellings in many AGE files (#985)
+Fixed warning messages in DockerHub builds. (#1075)
+Modified test_agtypes to view useful testing message (#992)
+Optimised Antlr4ResultHandler initialization (#1169)
+Updated CIs to pull correct image based on branch (#1105)
+Updated files, format, and version information (#1063)
+Updated README.
