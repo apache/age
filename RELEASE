@@ -22,6 +22,10 @@ Apache AGE 1.4.0 - Release Notes
 NOTE: This is an initial release of PG14. There are no upgrade
       scripts to this release.
 
+NOTE: Some of these reference the master branch PR that was
+      either applied to lower versions via a separate PR or
+      merged into a newly created branch.
+
 Added license in Python driver README.md (#956)
 Added the toStringList() function (#1128)
 Added toBooleanList() (#1165)
