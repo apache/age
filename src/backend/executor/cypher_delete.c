@@ -279,7 +279,7 @@ static agtype_value *extract_entity(CustomScanState *node,
 static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
                           HeapTuple tuple)
 {
-    ResultRelInfo *saved_resultRelInfo;
+    ResultRelInfo **saved_resultRels;
     LockTupleMode lockmode;
     TM_FailureData hufd;
     TM_Result lock_result;
@@ -287,8 +287,8 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     Buffer buffer;
 
     // Find the physical tuple, this variable is coming from
-    saved_resultRelInfo = estate->es_result_relation_info;
-    estate->es_result_relation_info = resultRelInfo;
+    saved_resultRels = estate->es_result_relations;
+    estate->es_result_relations = &resultRelInfo;
 
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
 
@@ -352,7 +352,7 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
 
     ReleaseBuffer(buffer);
 
-    estate->es_result_relation_info = saved_resultRelInfo;
+    estate->es_result_relations = saved_resultRels;
 }
 
 /*
@@ -377,13 +377,13 @@ static void process_delete_list(CustomScanState *node)
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple;
         char *label_name;
-        Value *pos;
+        Integer *pos;
         int entity_position;
 
         item = lfirst(lc);
 
         pos = item->entity_position;
-        entity_position = pos->val.ival;
+        entity_position = pos->ival;
 
         /* skip if the entity is null */
         if (scanTupleSlot->tts_isnull[entity_position - 1])

@@ -134,7 +134,6 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     graph_name = PG_GETARG_NAME(0);
     no_vertices = (int64) PG_GETARG_INT64(1);
     edge_label_name = PG_GETARG_NAME(2);
-    namestrcpy(vtx_label_name, AG_DEFAULT_LABEL_VERTEX);
 
     graph_name_str = NameStr(*graph_name);
     vtx_name_str = AG_DEFAULT_LABEL_VERTEX;

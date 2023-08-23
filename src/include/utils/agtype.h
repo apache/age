@@ -551,6 +551,9 @@ agtype_value *extract_entity_properties(agtype *object, bool error_on_scalar);
 agtype_iterator *get_next_list_element(agtype_iterator *it,
                                        agtype_container *agtc,
                                        agtype_value *elem);
+void pfree_agtype_value(agtype_value* value);
+void pfree_agtype_value_content(agtype_value* value);
+void pfree_agtype_in_state(agtype_in_state* value);
 
 /* Oid accessors for AGTYPE */
 Oid get_AGTYPEOID(void);
