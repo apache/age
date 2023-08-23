@@ -1262,10 +1262,13 @@ $$) AS (toBoolean agtype);
 SELECT * FROM cypher('expr', $$
     RETURN toBoolean(null)
 $$) AS (toBoolean agtype);
--- should fail
 SELECT * FROM cypher('expr', $$
     RETURN toBoolean(1)
 $$) AS (toBoolean agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN toBoolean(0)
+$$) AS (toBoolean agtype);
+-- should fail
 SELECT * FROM cypher('expr', $$
     RETURN toBoolean()
 $$) AS (toBoolean agtype);
@@ -1283,6 +1286,10 @@ SELECT * FROM cypher('expr', $$
     RETURN toBooleanList(["True", "False", "True"])
 $$) AS (toBooleanList agtype);
 
+SELECT * FROM cypher('expr', $$
+    RETURN toBooleanList([0,1,2,3,4])
+$$) AS (toBooleanList agtype);
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN toBooleanList([])
@@ -1298,10 +1305,6 @@ $$) AS (toBooleanList agtype);
 
 SELECT * FROM cypher('expr', $$
     RETURN toBooleanList([["A", "B"], ["C", "D"]])
-$$) AS (toBooleanList agtype);
-
-SELECT * FROM cypher('expr', $$
-    RETURN toBooleanList([0,1,2,3,4])
 $$) AS (toBooleanList agtype);
 
 -- should fail
