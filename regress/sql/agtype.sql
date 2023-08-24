@@ -999,7 +999,7 @@ SELECT pg_typeof('[0,1,2,[3,4],{"5":"five"}]'::agtype #>> '[-1,"5"]');
 
 /*
  * test the combination of #> and #>> below
- * (left operand has to be agtype for #> and #>>, 
+ * (left operand has to be agtype for #> and #>>,
  * errors out when left operand is a text i.e; the output of #>> operator)
  */
 SELECT '{"a":"b","c":[1,2,3], "1" : [{}, {}, [[-3, {"a": {"b": {"d": [-1.9::numeric, false]}, "c": "foo"}}]]]}'::agtype #> '["1", -1, -1, -1, "a"]' #> '["b", "d", -1]';
@@ -1190,10 +1190,10 @@ SELECT age_id(agtype_in('null'));
 SELECT age_start_id(agtype_in('null'));
 SELECT age_end_id(agtype_in('null'));
 
--- 
--- Agtype contains (@> and <@) operator 
--- 
--- left contains @> operator 
+--
+-- Agtype contains (@> and <@) operator
+--
+-- left contains @> operator
 SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b"}';
 SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "c":null}';
 SELECT '{"a":"b", "b":1, "c":null}'::agtype @> '{"a":"b", "g":null}';
@@ -1221,7 +1221,7 @@ SELECT '[[1,2]]'::agtype @> '[[1,2,2, []], [[]]]'::agtype;
 SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"name": "A"}';
 SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype @> '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
 
--- right contains <@ operator 
+-- right contains <@ operator
 SELECT '[1,2,2]'::agtype <@ '[1,2]'::agtype;
 SELECT '[1,2,2]'::agtype <@ '[1,1,2]'::agtype;
 SELECT '[[1,2,2]]'::agtype <@ '[[1,2]]'::agtype;
@@ -1235,7 +1235,7 @@ SELECT '{"g":null}'::agtype <@ '{"a":"b", "b":1, "c":null}';
 SELECT '{"a":"c"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
 SELECT '{"a":"b", "c":"q"}'::agtype <@ '{"a":"b", "b":1, "c":null}';
 
-SELECT '{"name": "A"}' <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype;     
+SELECT '{"name": "A"}' <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype;
 SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex';
 SELECT '{"id": 281474976710657, "label": "", "properties": {"name": "A"}}::vertex'::agtype <@ '{"id": 281474976710657, "label": "", "properties": {"name": "B"}}::vertex';
 
@@ -1321,7 +1321,7 @@ SELECT '{"id": 1}'::agtype ?| array['id'];
 -- should return 'f'
 SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]';
 SELECT '{"a":null, "b":"qq"}'::agtype ?| '["1","2"]';
-SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","1"]'; 
+SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","1"]';
 SELECT '{"a":null, "b":"qq"}'::agtype ?| '[]';
 SELECT '{"a":null, "b":"qq"}'::agtype ?| '["c","d"]'::agtype;
 SELECT '{"id": 281474976710658, "label": "", "properties": {"n": 100}}'::agtype ?| '[null]';

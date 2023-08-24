@@ -231,7 +231,6 @@ Datum gin_extract_agtype_query(PG_FUNCTION_ARGS)
         int key_count = AGTYPE_CONTAINER_SIZE(&agt->root);
         int index = 0;
 
-        /* TODO: this condition needs to be looked into*/
         if (AGTYPE_CONTAINER_IS_SCALAR(&agt->root) ||
             !AGTYPE_CONTAINER_IS_ARRAY(&agt->root))
         {

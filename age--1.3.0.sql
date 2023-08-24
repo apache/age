@@ -2962,7 +2962,7 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
--- get agtype object field as text
+-- get agtype at the specified path
 CREATE OPERATOR #> (
   LEFTARG = agtype,
   RIGHTARG = agtype,
@@ -2977,7 +2977,7 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
--- get agtype object field as text
+-- get agtype at the specified path as text
 CREATE OPERATOR #>> (
   LEFTARG = agtype,
   RIGHTARG = agtype,

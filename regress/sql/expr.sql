@@ -628,7 +628,7 @@ SELECT * FROM cypher('jsonb_operators', $$
     WITH [1,
         {bool: true, int: 3, array: [9, 11, {bool: false, float: 3.14}, 13]},
         5, 7, 9] as lst
-    RETURN lst->1 
+    RETURN lst->1
 $$) AS r(result agtype);
 
 SELECT * FROM cypher('jsonb_operators', $$
@@ -663,14 +663,14 @@ SELECT * FROM cypher('jsonb_operators', $$
     WITH [1,
         {bool: true, int: 3, array: [9, 11, {bool: false, float: 3.14}, 13]},
         5, 7, 9] as lst
-    RETURN lst->(size(lst)-1)        
+    RETURN lst->(size(lst)-1)
 $$) AS r(result agtype);
 
 SELECT * FROM cypher('jsonb_operators', $$
     WITH [1,
         {bool: true, int: 3, array: [9, 11, {bool: false, float: 3.14}, 13]},
         5, 7, 9] as lst
-    RETURN lst->(size(lst)) 
+    RETURN lst->(size(lst))
 $$) AS r(result agtype);
 
 SELECT * FROM cypher('jsonb_operators', $$
@@ -691,7 +691,7 @@ SELECT * FROM cypher('jsonb_operators', $$
     WITH [1,
         {bool: true, int: 3, array: [9, 11, {bool: false, float: 3.14}, 13]},
         5, 7, 9] as lst
-    RETURN lst->-4->'array'->-2->'float'->0 
+    RETURN lst->-4->'array'->-2->'float'->0
 $$) AS r(result agtype);
 
 SELECT * FROM cypher('jsonb_operators',$$MATCH (n) return n->'json' $$) as (a agtype);
@@ -720,7 +720,7 @@ SELECT * FROM cypher('jsonb_operators',$$MATCH (n) WITH n->'list' AS lst RETURN 
  */
 SELECT * FROM cypher('jsonb_operators', $$
     WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
-    RETURN map #> []     
+    RETURN map #> []
 $$) AS (result agtype);
 SELECT * FROM cypher('jsonb_operators', $$
     WITH {json: {a: 1, b: ['a', 'b'], c: {d: ['a']}}, list: ['a', 'b', 'c']} AS map
@@ -747,8 +747,8 @@ SELECT * FROM cypher('jsonb_operators', $$
     RETURN map #> ['list', "-1", -1]
 $$) AS (result agtype);
 SELECT * FROM cypher('jsonb_operators', $$
-    WITH [[-3, 1]] AS list                                                        
-    RETURN list #> []               
+    WITH [[-3, 1]] AS list
+    RETURN list #> []
 $$) AS (result agtype);
 SELECT * FROM cypher('jsonb_operators', $$
     WITH [[-3, 1]] AS list
@@ -806,7 +806,7 @@ SELECT * FROM cypher('jsonb_operators', $$
 $$) AS (result agtype);
 SELECT * FROM cypher('jsonb_operators', $$
     WITH [[-3, 1]] AS list
-    RETURN list #> 0 
+    RETURN list #> 0
 $$) AS (result agtype);
 SELECT * FROM cypher('jsonb_operators', $$
     WITH 3 AS elem
@@ -832,7 +832,7 @@ $$) as (a agtype);
 SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    WHERE n.json @> {c: {d: "a"}} 
+    WHERE n.json @> {c: {d: "a"}}
     RETURN n
 $$) as (a agtype);
 
@@ -846,14 +846,14 @@ $$) as (a agtype);
 SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    WHERE n.json @> {b: ["a"]}                                  
+    WHERE n.json @> {b: ["a"]}
     RETURN n
 $$) as (a agtype);
 
 SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    WHERE n.list @> []        
+    WHERE n.list @> []
     RETURN n
 $$) as (a agtype);
 
@@ -867,14 +867,14 @@ $$) as (a agtype);
 SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    WHERE n @> {} 
+    WHERE n @> {}
     RETURN n
 $$) as (a agtype);
 
-SELECT *                                                                      
+SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    RETURN properties(n).json @> {c: {d: "a"}}                                  
+    RETURN properties(n).json @> {c: {d: "a"}}
 $$) as (a agtype);
 
 SELECT *
@@ -898,7 +898,7 @@ FROM cypher('jsonb_operators', $$
     RETURN n
 $$) as (a agtype);
 
--- right contains <@ operator 
+-- right contains <@ operator
 -- returns result
 SELECT *
 FROM cypher('jsonb_operators', $$
@@ -915,7 +915,7 @@ $$) as (a agtype);
 SELECT *
 FROM cypher('jsonb_operators', $$
     MATCH (n)
-    WHERE {c: {d: "a"}} <@ n.json                                               
+    WHERE {c: {d: "a"}} <@ n.json
     RETURN n
 $$) as (a agtype);
 
@@ -1955,31 +1955,31 @@ SELECT * FROM age_toString(agtype_in(null));
 SELECT * FROM age_toString();
 SELECT * FROM cypher('expr', $$ RETURN toString() $$) AS (results agtype);
 -- toStringList() --
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([5, 10, 7.8, 9, 1.3]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([5, 10, 7.8, 9, 1.3])
 $$) AS (toStringList agtype);
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList(['test', 89, 'again', 7.1, 9]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList(['test', 89, 'again', 7.1, 9])
 $$) AS (toStringList agtype);
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([null, false, true, 'string']) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([null, false, true, 'string'])
 $$) AS (toStringList agtype);
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([9.123456789, 5.123, 1.12345, 0.123123]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([9.123456789, 5.123, 1.12345, 0.123123])
 $$) AS (toStringList agtype);
 -- should return null
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([null]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([null])
 $$) AS (toStringList agtype);
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([true, false, true, true]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([true, false, true, true])
 $$) AS (toStringList agtype);
 -- should fail
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([['a', b]]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([['a', b]])
 $$) AS (toStringList agtype);
-SELECT * FROM cypher('expr', $$ 
-    RETURN toStringList([test]) 
+SELECT * FROM cypher('expr', $$
+    RETURN toStringList([test])
 $$) AS (toStringList agtype);
 
 --
@@ -2901,13 +2901,13 @@ SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Ann", gpa: 3.8::numeric
 SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Derek", gpa: 4.0, age: 19, zip: 90210})$$) AS (a agtype);
 SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Jessica", gpa: 3.9::numeric, age: 20})$$) AS (a agtype);
 SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN (u) $$) AS (vertex agtype);
-SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN avg(u.gpa), sum(u.gpa), sum(u.gpa)/count(u.gpa), count(u.gpa), count(*) $$) 
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN avg(u.gpa), sum(u.gpa), sum(u.gpa)/count(u.gpa), count(u.gpa), count(*) $$)
 AS (avg agtype, sum agtype, sum_divided_by_count agtype, count agtype, count_star agtype);
 -- add in 2 null gpa records
 SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Dave", age: 24})$$) AS (a agtype);
 SELECT * FROM cypher('UCSC', $$CREATE (:students {name: "Mike", age: 18})$$) AS (a agtype);
 SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN (u) $$) AS (vertex agtype);
-SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN avg(u.gpa), sum(u.gpa), sum(u.gpa)/count(u.gpa), count(u.gpa), count(*) $$) 
+SELECT * FROM cypher('UCSC', $$ MATCH (u) RETURN avg(u.gpa), sum(u.gpa), sum(u.gpa)/count(u.gpa), count(u.gpa), count(*) $$)
 AS (avg agtype, sum agtype, sum_divided_by_count agtype, count agtype, count_star agtype);
 -- should return null
 SELECT * FROM cypher('UCSC', $$ RETURN avg(NULL) $$) AS (avg agtype);

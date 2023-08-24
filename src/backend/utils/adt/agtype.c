@@ -3377,13 +3377,13 @@ static Datum process_access_operator_result(FunctionCallInfo fcinfo,
             if (agtv->type == AGTV_BINARY)
             {
                 StringInfo out = makeStringInfo();
-                agtype_container *agtc = (agtype_container *)agtv->val.binary.data;
+                agtype_container *agtc = (agtype_container *)
+                                          agtv->val.binary.data;
                 char *str;
 
                 str = agtype_to_cstring_worker(out, agtc,
                                                agtv->val.binary.len,
                                                false);
-
                 result = cstring_to_text(str);
             }
             else
@@ -3428,9 +3428,10 @@ Datum agtype_object_field_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
 
     if (AGT_ROOT_IS_SCALAR(agtype_in))
     {
-        process_agtype = agtype_value_to_agtype(extract_entity_properties(agtype_in, false));
-    } 
-    else 
+        process_agtype = agtype_value_to_agtype(extract_entity_properties
+                                               (agtype_in, false));
+    }
+    else
     {
         process_agtype = agtype_in;
     }
@@ -3440,7 +3441,8 @@ Datum agtype_object_field_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
         PG_RETURN_NULL();
     }
 
-    v = execute_map_access_operator_internal(process_agtype, NULL, key, key_len);
+    v = execute_map_access_operator_internal(process_agtype, NULL, key,
+                                            key_len);
 
     return process_access_operator_result(fcinfo, v, as_text);
 }
@@ -3518,13 +3520,13 @@ Datum agtype_object_field(PG_FUNCTION_ARGS)
     text *key = PG_GETARG_TEXT_PP(1);
 
     AG_RETURN_AGTYPE_P(agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
-                                                VARSIZE_ANY_EXHDR(key), false));
+                                                VARSIZE_ANY_EXHDR(key),
+                                                false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_object_field_text);
 Datum agtype_object_field_text(PG_FUNCTION_ARGS)
 {
-
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     text *key = PG_GETARG_TEXT_PP(1);
 

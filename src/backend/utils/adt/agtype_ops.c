@@ -234,9 +234,9 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     else
     {
         /* Not a covered case, error out */
-        ereport(ERROR, 
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                    errmsg("Invalid input parameter types for agtype_add")));
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("Invalid input parameter types for agtype_add")));
     }
 
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
@@ -339,7 +339,7 @@ get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
             long lindex;
             uint32 index;
             /*
-             * for array on left hand side, 
+             * for array on left hand side,
              * an integer or a valid integer string on right hand side
              * is a valid index
              */
@@ -350,18 +350,18 @@ get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
             else if (cur_key->type == AGTV_STRING)
             {
                 /*
-                 * extract the int from the string, 
+                 * extract the int from the string,
                  * if character other than digit is found, return null
                  */
                 char* str = NULL;
                 lindex = strtol(cur_key->val.string.val, &str, 10);
-                
+
                 if (strcmp(str, ""))
                 {
                     PG_RETURN_NULL();
                 }
             }
-            else 
+            else
             {
                 PG_RETURN_NULL();
             }
@@ -418,7 +418,7 @@ get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         if (agtvp->type == AGTV_BINARY)
         {
             agtype_iterator *it = agtype_iterator_init(
-                                                    (agtype_container *) 
+                                                    (agtype_container *)
                                                     agtvp->val.binary.data
                                                     );
             agtype_iterator_token r;
@@ -443,6 +443,7 @@ get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
             PG_RETURN_TEXT_P(cstring_to_text_with_len(agtvp->val.string.val,
                                                       agtvp->val.string.len));
         }
+
         if (agtvp->type == AGTV_NULL)
         {
             PG_RETURN_NULL();
@@ -454,7 +455,7 @@ get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
     if (as_text)
     {
             PG_RETURN_TEXT_P(cstring_to_text(agtype_to_cstring(
-                                                            NULL, 
+                                                            NULL,
                                                             &res->root,
                                                             VARSIZE(res))
                                                             ));
@@ -517,8 +518,8 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
 
     // start buidiling the result agtype array
     it = agtype_iterator_init(&agt->root);
-
     r = agtype_iterator_next(&it, &v, false);
+
     Assert(r == WAGT_BEGIN_ARRAY);
 
     n = v.val.array.num_elems;
@@ -530,9 +531,9 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
         if (r == WAGT_ELEM)
         {
             /*
-             * use logic similar to agtype_contains to check 
-             * if the current index (itself or in inverted form) 
-             * is contained in the indexes array, 
+             * use logic similar to agtype_contains to check
+             * if the current index (itself or in inverted form)
+             * is contained in the indexes array,
              * if yes, skip the element at that index in agt array
              * else add the element in result agtype array
              */
@@ -551,10 +552,10 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
 
             it_cur_idx = agtype_iterator_init(&cur_idx_agt->root);
             it_neg_idx = agtype_iterator_init(&neg_idx_agt->root);
-            
+
             it_indexes = agtype_iterator_init(&indexes->root);
             contains_idx = agtype_deep_contains(&it_indexes, &it_cur_idx);
-            
+
             // re-initialize indexes array iterator
             it_indexes = agtype_iterator_init(&indexes->root);
             contains_neg_idx = agtype_deep_contains(&it_indexes, &it_neg_idx);
@@ -645,7 +646,7 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
 
     /*
      * Logic to handle when the rhs is a non scalar array. In this
-     * case; 
+     * case;
      * 1. if the lhs is an object, the values in the rhs array
      *    are string keys to be removed from the object.
      * 2. if the lhs is an array, the values in the rhs array
@@ -667,7 +668,7 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
             {
                 if (elem.type == AGTV_STRING)
                 {
-                    lhs = delete_from_object(lhs, elem.val.string.val, 
+                    lhs = delete_from_object(lhs, elem.val.string.val,
                                                 elem.val.string.len);
                 }
                 else
@@ -677,13 +678,13 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
                             errmsg("expected agtype string, not agtype %s",
                                     agtype_value_type_to_string(elem.type))));
                 }
-            } 
+            }
         }
         else if (AGT_ROOT_IS_ARRAY(lhs) && !(AGT_ROOT_IS_SCALAR(lhs)))
         {
             /*
              * if rhs array contains any non-integer element, error out
-             * else delete the values at the given indexes in rhs array 
+             * else delete the values at the given indexes in rhs array
              * from the lhs array
              */
             while ((it = get_next_list_element(it, &rhs->root, &elem)))
@@ -692,13 +693,14 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                            errmsg("expected agtype integer, not agtype %s",
+                             errmsg("expected agtype integer, not agtype %s",
                                     agtype_value_type_to_string(elem.type))));
                 }
             }
+
             lhs = delete_from_array(lhs, rhs);
         }
-        else 
+        else
         {
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                     errmsg("must be object or array, not a scalar value")));
@@ -709,9 +711,9 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
 
     /*
      * When the lhs is an object and rhs is a string, remove the key from
-     * the object. 
+     * the object.
      * When the lhs is an array and the rhs is an integer then
-     * remove the value at that index from the array, 
+     * remove the value at that index from the array,
      * otherwise give an error
      */
     if(!AGT_ROOT_IS_SCALAR(lhs))
@@ -728,7 +730,7 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
         {
             AG_RETURN_AGTYPE_P(delete_from_array(lhs, rhs));
         }
-        else 
+        else
         {
             if (AGT_ROOT_IS_OBJECT(lhs))
             {
@@ -788,7 +790,7 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
     }
     else
     {
-        ereport(ERROR, 
+        ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("Invalid input parameter types for agtype_sub")));
     }
@@ -1474,9 +1476,9 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
     {
         /*
          * We only match Object keys (which are naturally always Strings), or
-         * string elements in arrays.  In particular, we do not match non-string
-         * scalar elements.  Existence of a key/element is only considered at the
-         * top level.  No recursion occurs.
+         * string elements in arrays. In particular, we do not match non-string
+         * scalar elements.  Existence of a key/element is only considered
+         * at the top level.  No recursion occurs.
          */
         aval = get_ith_agtype_value_from_container(&key->root, 0);
     }
@@ -1499,7 +1501,6 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
                                             AGT_FARRAY,
                                             aval);
     }
-
 
     PG_RETURN_BOOL(v != NULL);
 }
@@ -1528,7 +1529,7 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
                 if (AGT_ROOT_IS_OBJECT(agt) &&
-                    (&elem)->type == AGTV_STRING && 
+                    (&elem)->type == AGTV_STRING &&
                     find_agtype_value_from_container(&agt->root,
                                                          AGT_FOBJECT,
                                                          &elem))
@@ -1589,7 +1590,7 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
                     continue;
                 }
                 else if (AGT_ROOT_IS_OBJECT(agt) &&
-                    (&elem)->type == AGTV_STRING && 
+                    (&elem)->type == AGTV_STRING &&
                     find_agtype_value_from_container(&agt->root,
                                                          AGT_FOBJECT,
                                                          &elem))
@@ -1620,7 +1621,6 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("invalid agtype value for right operand")));
     }
-
 
     PG_RETURN_BOOL(true);
 }
@@ -1670,10 +1670,12 @@ Datum agtype_contains(PG_FUNCTION_ARGS)
     {
         properties = agtype_value_to_agtype(extract_entity_properties(properties, false));
     }
+
     if (AGT_ROOT_IS_SCALAR(constraints)  && AGTE_IS_AGTYPE(constraints->root.children[0]))
     {
         constraints = agtype_value_to_agtype(extract_entity_properties(constraints, false));
     }
+
     property_it = agtype_iterator_init(&properties->root);
     constraint_it = agtype_iterator_init(&constraints->root);
 
@@ -1703,10 +1705,12 @@ Datum agtype_contained_by(PG_FUNCTION_ARGS)
     {
         properties = agtype_value_to_agtype(extract_entity_properties(properties, false));
     }
+
     if (AGT_ROOT_IS_SCALAR(constraints)  && AGTE_IS_AGTYPE(constraints->root.children[0]))
     {
         constraints = agtype_value_to_agtype(extract_entity_properties(constraints, false));
     }
+
     constraint_it = agtype_iterator_init(&constraints->root);
     property_it = agtype_iterator_init(&properties->root);
 
@@ -1728,7 +1732,7 @@ Datum agtype_exists(PG_FUNCTION_ARGS)
     {
         agt = agtype_value_to_agtype(extract_entity_properties(agt, false));
     }
-    
+
     /*
      * We only match Object keys (which are naturally always Strings), or
      * string elements in arrays.  In particular, we do not match non-string
@@ -1908,6 +1912,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
          * (because res will not be finished yet).
          */
         push_agtype_value(state, r1, NULL);
+
         while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_OBJECT)
         {
             Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
@@ -1923,12 +1928,12 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
             Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
             push_agtype_value(state, r2, &v2);
         }
+
         /*
-         * Append the last token WAGT_END_OBJECT to comeplete res
+         * Append the last token WAGT_END_OBJECT to complete res
          */
         res = push_agtype_value(state, WAGT_END_OBJECT, NULL);
     }
-
     /*
      * Both elements are arrays (either can be scalar).
      */
@@ -1967,24 +1972,28 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         {
             push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-            while ((r1 = agtype_iterator_next(it_object, &v1, true)) != WAGT_END_OBJECT)
+            while ((r1 = agtype_iterator_next(it_object, &v1, true))
+                                                 != WAGT_END_OBJECT)
             {
                 Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
                 push_agtype_value(state, r1, &v1);
             }
 
             push_agtype_value(state, WAGT_END_OBJECT, NULL);
-            while ((r2 = agtype_iterator_next(it_array, &v2, true)) != WAGT_END_ARRAY)
+
+            while ((r2 = agtype_iterator_next(it_array, &v2, true))
+                                                 != WAGT_END_ARRAY)
             {
                 Assert(r2 == WAGT_ELEM);
                 push_agtype_value(state, r2, &v2);
             }
+
             res = push_agtype_value(state, WAGT_END_ARRAY, NULL);
         }
         else
         {
-            while ((r1 = agtype_iterator_next(it_array, &v1, true)) !=
-                   WAGT_END_ARRAY)
+            while ((r1 = agtype_iterator_next(it_array, &v1, true))
+                                                 != WAGT_END_ARRAY)
             {
                 Assert(r1 == WAGT_ELEM);
                 push_agtype_value(state, r1, &v1);
@@ -1992,11 +2001,13 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
             push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-            while ((r2 = agtype_iterator_next(it_object, &v2, true)) != WAGT_END_OBJECT)
+            while ((r2 = agtype_iterator_next(it_object, &v2, true))
+                                                 != WAGT_END_OBJECT)
             {
                 Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
                 push_agtype_value(state, r2,&v2);
             }
+
             push_agtype_value(state, WAGT_END_OBJECT, NULL);
 
             res = push_agtype_value(state, WAGT_END_ARRAY, NULL);
@@ -2005,37 +2016,43 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
     else if (rk1 == WAGT_BEGIN_OBJECT)
     {
         /*
-         * We have object || array.
+         * We have object || scalar array.
          */
         Assert(rk2 == WAGT_BEGIN_ARRAY);
 
         push_agtype_value(state, WAGT_BEGIN_ARRAY, NULL);
 
         push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
+
         while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_OBJECT)
         {
             Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
             push_agtype_value(state, r1, &v1);
         }
+
         push_agtype_value(state, WAGT_END_OBJECT, NULL);
+
         while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_ARRAY)
         {
             enum agtype_value_type type = v2.type;
+
             if (type != AGTV_VERTEX && type != AGTV_EDGE && type != AGTV_PATH)
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                     errmsg("invalid right operand for agtype concatenation")));
             }
+
             Assert(r2 == WAGT_ELEM);
             push_agtype_value(state, r2, &v2);
         }
+
         res = push_agtype_value(state, WAGT_END_ARRAY, NULL);
     }
     else
     {
         /*
-         * We have array || object.
+         * We have scalar array || object.
          */
         Assert(rk1 == WAGT_BEGIN_ARRAY);
         Assert(rk2 == WAGT_BEGIN_OBJECT);
@@ -2047,20 +2064,26 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
             Assert(r1 == WAGT_ELEM);
             push_agtype_value(state, r1, &v1);
         }
+
         push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
+
         while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_OBJECT)
         {
             enum agtype_value_type type = v1.type;
+
             if (type != AGTV_VERTEX && type != AGTV_EDGE && type != AGTV_PATH)
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                     errmsg("invalid left operand for agtype concatenation")));
             }
+
             Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
             push_agtype_value(state, r2, &v2);
         }
+
         push_agtype_value(state, WAGT_END_OBJECT, NULL);
+
         res = push_agtype_value(state, WAGT_END_ARRAY, NULL);
     }
 
