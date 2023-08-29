@@ -22,17 +22,13 @@
 LOAD 'age';
 
 SET search_path TO ag_catalog;
-SELECT create_graph('agload_test_graph');
 
-SELECT create_vlabel('agload_test_graph','Country');
 SELECT load_labels_from_file('agload_test_graph', 'Country',
     'age_load/countries.csv');
 
-SELECT create_vlabel('agload_test_graph','City');
 SELECT load_labels_from_file('agload_test_graph', 'City',
     'age_load/cities.csv');
 
-SELECT create_elabel('agload_test_graph','has_city');
 SELECT load_edges_from_file('agload_test_graph', 'has_city',
      'age_load/edges.csv');
 
@@ -48,11 +44,9 @@ SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH(n) RETURN n$$) as (n ag
 
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 
-SELECT create_vlabel('agload_test_graph','Country2');
 SELECT load_labels_from_file('agload_test_graph', 'Country2',
                              'age_load/countries.csv', false);
 
-SELECT create_vlabel('agload_test_graph','City2');
 SELECT load_labels_from_file('agload_test_graph', 'City2',
                              'age_load/cities.csv', false);
 
