@@ -20,6 +20,7 @@ package age
 
 import (
 	"fmt"
+	"net"
 	"reflect"
 	"testing"
 
@@ -28,10 +29,31 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var dsn string = "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=agens sslmode=disable"
-var graphName string = "testGraph"
+const (
+	host      = "127.0.0.1"
+	port      = 5432
+	graphName = "testGraph"
+)
+
+var (
+	dsn = fmt.Sprintf("host=%s port=%d dbname=postgres user=postgres password=agens sslmode=disable", host, port)
+	uri = fmt.Sprintf("%s:%d", host, port)
+)
+
+func checkTCPConnection(url string) error {
+	c, err := net.Dial("tcp", url)
+	if err != nil {
+		return err
+	}
+	return c.Close()
+}
 
 func TestAdditional(t *testing.T) {
+
+	if err := checkTCPConnection(uri); err != nil {
+		t.Skip("Database is not available")
+	}
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +153,11 @@ func TestAdditional(t *testing.T) {
 }
 
 func TestAgeWrapper(t *testing.T) {
+
+	if err := checkTCPConnection(uri); err != nil {
+		t.Skip("Database is not available")
+	}
+
 	ag, err := ConnectAge(graphName, dsn)
 
 	if err != nil {
@@ -226,6 +253,11 @@ func TestAgeWrapper(t *testing.T) {
 }
 
 func TestQueryWithMapper(t *testing.T) {
+
+	if err := checkTCPConnection(uri); err != nil {
+		t.Skip("Database is not available")
+	}
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -322,6 +354,11 @@ func TestQueryWithMapper(t *testing.T) {
 }
 
 func TestCudReturn(t *testing.T) {
+
+	if err := checkTCPConnection(uri); err != nil {
+		t.Skip("Database is not available")
+	}
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -390,6 +427,11 @@ func TestCudReturn(t *testing.T) {
 }
 
 func TestQueryManyReturn(t *testing.T) {
+
+	if err := checkTCPConnection(uri); err != nil {
+		t.Skip("Database is not available")
+	}
+
 	ag, err := ConnectAge(graphName, dsn)
 
 	if err != nil {
