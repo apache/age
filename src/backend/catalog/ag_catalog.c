@@ -62,7 +62,6 @@ void object_access_hook_fini(void)
         prev_object_access_hook = NULL;
         prev_object_hook_is_set = false;
     }
-
 }
 
 void process_utility_hook_init(void)
@@ -87,15 +86,15 @@ void process_utility_hook_fini(void)
  * the extension.
  */
 void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
-                             ProcessUtilityContext context, ParamListInfo params,
-                             QueryEnvironment *queryEnv, DestReceiver *dest,
-                             char *completionTag)
+                            ProcessUtilityContext context, ParamListInfo params,
+                            QueryEnvironment *queryEnv, DestReceiver *dest,
+                            char *completionTag)
 {
     if (is_age_drop(pstmt))
         drop_age_extension((DropStmt *)pstmt->utilityStmt);
     else if (prev_process_utility_hook)
-        (*prev_process_utility_hook) (pstmt, queryString, context, params,
-                                      queryEnv, dest, completionTag);
+        (*prev_process_utility_hook)(pstmt, queryString, context, params,
+                                     queryEnv, dest, completionTag);
     else
         standard_ProcessUtility(pstmt, queryString, context, params, queryEnv,
                                 dest, completionTag);
@@ -131,7 +130,7 @@ static bool is_age_drop(PlannedStmt *pstmt)
 
     drop_stmt = (DropStmt *)pstmt->utilityStmt;
 
-    foreach(lc, drop_stmt->objects)
+    foreach (lc, drop_stmt->objects)
     {
         Node *obj = lfirst(lc);
 
@@ -178,24 +177,19 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
      * The above applies to DROP TABLE command too.
      */
 
+    if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
+        return;
+
     if (class_id == NamespaceRelationId)
     {
-        graph_cache_data *cache_data;
-
-        if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
-            return;
-
-        cache_data = search_graph_namespace_cache(object_id);
+        graph_cache_data *cache_data = search_graph_namespace_cache(object_id);
         if (cache_data)
         {
             char *nspname = get_namespace_name(object_id);
-
             ereport(ERROR, (errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
                             errmsg("schema \"%s\" is for graph \"%s\"",
                                    nspname, NameStr(cache_data->name))));
         }
-
-        return;
     }
 
     if (class_id == RelationRelationId)
