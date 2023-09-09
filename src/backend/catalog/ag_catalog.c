@@ -178,26 +178,22 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
      * The above applies to DROP TABLE command too.
      */
 
+ if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
+        return;
+
     if (class_id == NamespaceRelationId)
     {
-        graph_cache_data *cache_data;
-
-        if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
-            return;
-
-        cache_data = search_graph_namespace_cache(object_id);
+        graph_cache_data *cache_data = search_graph_namespace_cache(object_id);
         if (cache_data)
         {
             char *nspname = get_namespace_name(object_id);
-
             ereport(ERROR, (errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
                             errmsg("schema \"%s\" is for graph \"%s\"",
                                    nspname, NameStr(cache_data->name))));
         }
-
-        return;
     }
 
+    
     if (class_id == RelationRelationId)
     {
         label_cache_data *cache_data;
