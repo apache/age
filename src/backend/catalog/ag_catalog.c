@@ -177,7 +177,7 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
      * The above applies to DROP TABLE command too.
      */
 
-    if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
+ if (drop_arg->dropflags & PERFORM_DELETION_INTERNAL)
         return;
 
     if (class_id == NamespaceRelationId)
@@ -192,6 +192,7 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
         }
     }
 
+    
     if (class_id == RelationRelationId)
     {
         label_cache_data *cache_data;
