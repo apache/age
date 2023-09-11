@@ -109,7 +109,7 @@ agtype *agtype_value_to_agtype(agtype_value *val)
 
     if (IS_A_AGTYPE_SCALAR(val))
     {
-        /* Scalar value */
+        // Scalar value 
         agtype_parse_state *pstate = NULL;
         agtype_value *res;
         agtype_value scalar_array;
@@ -125,9 +125,8 @@ agtype *agtype_value_to_agtype(agtype_value *val)
         out = convert_to_agtype(res);
     }
     else if (val->type == AGTV_OBJECT || val->type == AGTV_ARRAY)
-    {
         out = convert_to_agtype(val);
-    }
+    
     else
     {
         Assert(val->type == AGTV_BINARY);
@@ -198,41 +197,32 @@ uint32 get_agtype_length(const agtype_container *agtc, int index)
 static int get_type_sort_priority(enum agtype_value_type type)
 {
     if (type == AGTV_PATH)
-    {
         return 0;
-    }
+    
     if (type == AGTV_EDGE)
-    {
         return 1;
-    }
+    
     if (type == AGTV_VERTEX)
-    {
         return 2;
-    }
+    
     if (type == AGTV_OBJECT)
-    {
         return 3;
-    }
+    
     if (type == AGTV_ARRAY)
-    {
         return 4;
-    }
+    
     if (type == AGTV_STRING)
-    {
         return 5;
-    }
+    
     if (type == AGTV_BOOL)
-    {
         return 6;
-    }
+    
     if (type == AGTV_NUMERIC || type == AGTV_INTEGER || type == AGTV_FLOAT)
-    {
         return 7;
-    }
+    
     if (type == AGTV_NULL)
-    {
         return 8;
-    }
+    
     return -1;
 }
 
@@ -268,11 +258,9 @@ int compare_agtype_containers_orderability(agtype_container *a,
 
         if (ra == rb)
         {
+            // Decisively equal 
             if (ra == WAGT_DONE)
-            {
-                /* Decisively equal */
                 break;
-            }
 
             if (ra == WAGT_END_ARRAY || ra == WAGT_END_OBJECT)
             {
@@ -316,7 +304,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
                     {
                         if (va.val.array.raw_scalar)
                         {
-                            /* advance iterator ita and get contained type */
+                            // advance iterator ita and get contained type 
                             ra = agtype_iterator_next(&ita, &va, false);
                             res = (get_type_sort_priority(va.type) <
                                    get_type_sort_priority(vb.type)) ?
@@ -325,7 +313,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
                         }
                         else
                         {
-                            /* advance iterator itb and get contained type */
+                            // advance iterator itb and get contained type 
                             rb = agtype_iterator_next(&itb, &vb, false);
                             res = (get_type_sort_priority(va.type) <
                                    get_type_sort_priority(vb.type)) ?
@@ -342,7 +330,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
             }
             else
             {
-                /* Type-defined order */
+                // Type-defined order 
                 res = (get_type_sort_priority(va.type) <
                        get_type_sort_priority(vb.type)) ?
                           -1 :
@@ -371,29 +359,29 @@ int compare_agtype_containers_orderability(agtype_container *a,
                 res = -1;
                 break;
             }
-            /* If right side is shorter, greater than */
+            // If right side is shorter, greater than 
             if (rb == WAGT_END_ARRAY || rb == WAGT_END_OBJECT)
             {
                 res = 1;
                 break;
             }
 
-            /* Correction step because AGTV_ARRAY might be there just because of the container type */
-            /* Case 1: left side is assigned to an array, right is an object */
+            /* 
+             * Correction step because AGTV_ARRAY might be there just because of the container type
+             * Case 1: left side is assigned to an array, right is an object 
+             */
             if(va.type == AGTV_ARRAY && vb.type == AGTV_OBJECT)
-            {
                 ra = agtype_iterator_next(&ita, &va, false);
-            }
-            /* Case 2: left side is an object, right side is assigned to an array */
+            
+            // Case 2: left side is an object, right side is assigned to an array 
             else if(va.type == AGTV_OBJECT && vb.type == AGTV_ARRAY)
-            {
                 rb = agtype_iterator_next(&itb, &vb, false);
-            }
+            
             
             Assert(va.type != vb.type);
             Assert(va.type != AGTV_BINARY);
             Assert(vb.type != AGTV_BINARY);
-            /* Type-defined order */
+            // Type-defined order 
             res = (get_type_sort_priority(va.type) <
                    get_type_sort_priority(vb.type)) ?
                       -1 :
@@ -454,11 +442,9 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
 
     Assert((flags & ~(AGT_FARRAY | AGT_FOBJECT)) == 0);
 
-    /* Quick out without a palloc cycle if object/array is empty */
+    // Quick out without a palloc cycle if object/array is empty 
     if (count <= 0)
-    {
         return NULL;
-    }
 
     result = palloc(sizeof(agtype_value));
 
@@ -483,15 +469,15 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
     }
     else if ((flags & AGT_FOBJECT) && AGTYPE_CONTAINER_IS_OBJECT(container))
     {
-        /* Since this is an object, account for *Pairs* of AGTentrys */
+        // Since this is an object, account for *Pairs* of AGTentrys 
         char *base_addr = (char *)(children + count * 2);
         uint32 stop_low = 0;
         uint32 stop_high = count;
 
-        /* Object key passed by caller must be a string */
+        // Object key passed by caller must be a string 
         Assert(key->type == AGTV_STRING);
 
-        /* Binary search on object/pair keys *only* */
+        // Binary search on object/pair keys *only* 
         while (stop_low < stop_high)
         {
             uint32 stop_middle;
@@ -510,7 +496,7 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
 
             if (difference == 0)
             {
-                /* Found our key, return corresponding value */
+                // Found our key, return corresponding value 
                 int index = stop_middle + count;
 
                 fill_agtype_value(container, index, base_addr,
@@ -528,7 +514,7 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
         }
     }
 
-    /* Not found */
+    // Not found 
     pfree(result);
     return NULL;
 }
@@ -581,19 +567,18 @@ static void fill_agtype_value(agtype_container *container, int index,
     agtentry entry = container->children[index];
 
     if (AGTE_IS_NULL(entry))
-    {
         result->type = AGTV_NULL;
-    }
+    
     else if (AGTE_IS_STRING(entry))
     {
         char *string_val;
         int string_len;
 
         result->type = AGTV_STRING;
-        /* get the position and length of the string */
+        // get the position and length of the string 
         string_val = base_addr + offset;
         string_len = get_agtype_length(container, index);
-        /* we need to do a deep copy of the string value */
+        // we need to do a deep copy of the string value 
         result->val.string.val = pnstrdup(string_val, string_len);
         result->val.string.len = string_len;
         Assert(result->val.string.len >= 0);
@@ -604,7 +589,7 @@ static void fill_agtype_value(agtype_container *container, int index,
         Numeric numeric_copy;
 
         result->type = AGTV_NUMERIC;
-        /* we need to do a deep copy here */
+        // we need to do a deep copy here 
         numeric = (Numeric)(base_addr + INTALIGN(offset));
         numeric_copy = (Numeric) palloc(VARSIZE(numeric));
         memcpy(numeric_copy, numeric, VARSIZE(numeric));
@@ -616,9 +601,8 @@ static void fill_agtype_value(agtype_container *container, int index,
      * passed in.
      */
     else if (AGTE_IS_AGTYPE(entry))
-    {
         ag_deserialize_extended_type(base_addr, offset, result);
-    }
+    
     else if (AGTE_IS_BOOL_TRUE(entry))
     {
         result->type = AGTV_BOOL;
@@ -633,7 +617,7 @@ static void fill_agtype_value(agtype_container *container, int index,
     {
         Assert(AGTE_IS_CONTAINER(entry));
         result->type = AGTV_BINARY;
-        /* Remove alignment padding from data pointer and length */
+        // Remove alignment padding from data pointer and length 
         result->val.binary.data =
             (agtype_container *)(base_addr + INTALIGN(offset));
         result->val.binary.len = get_agtype_length(container, index) -
@@ -670,11 +654,11 @@ agtype_value *push_agtype_value(agtype_parse_state **pstate,
     if (!agtval || (seq != WAGT_ELEM && seq != WAGT_VALUE) ||
         agtval->type != AGTV_BINARY)
     {
-        /* drop through */
+        // drop through 
         return push_agtype_value_scalar(pstate, seq, agtval);
     }
 
-    /* unpack the binary and add each piece to the pstate */
+    // unpack the binary and add each piece to the pstate 
     it = agtype_iterator_init(agtval->val.binary.data);
     while ((tok = agtype_iterator_next(&it, &v, false)) != WAGT_DONE)
     {
@@ -707,7 +691,7 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
             (scalar_val && scalar_val->val.array.raw_scalar);
         if (scalar_val && scalar_val->val.array.num_elems > 0)
         {
-            /* Assume that this array is still really a scalar */
+            // Assume that this array is still really a scalar 
             Assert(scalar_val->type == AGTV_ARRAY);
             (*pstate)->size = scalar_val->val.array.num_elems;
         }
@@ -744,9 +728,9 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
         break;
     case WAGT_END_OBJECT:
         uniqueify_agtype_object(&(*pstate)->cont_val);
-        /* fall through! */
+        // fall through! 
     case WAGT_END_ARRAY:
-        /* Steps here common to WAGT_END_OBJECT case */
+        // Steps here common to WAGT_END_OBJECT case 
         Assert(!scalar_val);
         result = &(*pstate)->cont_val;
 
@@ -925,7 +909,7 @@ recurse:
     switch ((*it)->state)
     {
     case AGTI_ARRAY_START:
-        /* Set v to array on first array call */
+        // Set v to array on first array call 
         val->type = AGTV_ARRAY;
         val->val.array.num_elems = (*it)->num_elems;
 
@@ -936,8 +920,8 @@ recurse:
         val->val.array.raw_scalar = (*it)->is_scalar;
         (*it)->curr_index = 0;
         (*it)->curr_data_offset = 0;
-        (*it)->curr_value_offset = 0; /* not actually used */
-        /* Set state for next call */
+        (*it)->curr_value_offset = 0; // not actually used 
+        // Set state for next call 
         (*it)->state = AGTI_ARRAY_ELEM;
         return WAGT_BEGIN_ARRAY;
 
@@ -963,7 +947,7 @@ recurse:
 
         if (!IS_A_AGTYPE_SCALAR(val) && !skip_nested)
         {
-            /* Recurse into container. */
+            // Recurse into container. 
             *it = iterator_from_container(val->val.binary.data, *it);
             goto recurse;
         }
@@ -977,7 +961,7 @@ recurse:
         }
 
     case AGTI_OBJECT_START:
-        /* Set v to object on first object call */
+        // Set v to object on first object call 
         val->type = AGTV_OBJECT;
         val->val.object.num_pairs = (*it)->num_elems;
 
@@ -989,7 +973,7 @@ recurse:
         (*it)->curr_data_offset = 0;
         (*it)->curr_value_offset = get_agtype_offset((*it)->container,
                                                      (*it)->num_elems);
-        /* Set state for next call */
+        // Set state for next call 
         (*it)->state = AGTI_OBJECT_KEY;
         return WAGT_BEGIN_OBJECT;
 
@@ -1007,7 +991,7 @@ recurse:
         }
         else
         {
-            /* Return key of a key/value pair.  */
+            // Return key of a key/value pair.  
             fill_agtype_value((*it)->container, (*it)->curr_index,
                               (*it)->data_proper, (*it)->curr_data_offset,
                               val);
@@ -1016,13 +1000,13 @@ recurse:
                         (errmsg("unexpected agtype type as object key %d",
                                 val->type)));
 
-            /* Set state for next call */
+            // Set state for next call 
             (*it)->state = AGTI_OBJECT_VALUE;
             return WAGT_KEY;
         }
 
     case AGTI_OBJECT_VALUE:
-        /* Set state for next call */
+        // Set state for next call 
         (*it)->state = AGTI_OBJECT_KEY;
 
         fill_agtype_value((*it)->container,
@@ -1047,9 +1031,7 @@ recurse:
             goto recurse;
         }
         else
-        {
             return WAGT_VALUE;
-        }
     }
 
     ereport(ERROR, (errmsg("invalid iterator state %d", (*it)->state)));
@@ -1069,7 +1051,7 @@ static agtype_iterator *iterator_from_container(agtype_container *container,
     it->parent = parent;
     it->num_elems = AGTYPE_CONTAINER_SIZE(container);
 
-    /* Array starts just after header */
+    // Array starts just after header 
     it->children = container->children;
 
     switch (container->header & (AGT_FARRAY | AGT_FOBJECT))
@@ -1078,7 +1060,7 @@ static agtype_iterator *iterator_from_container(agtype_container *container,
         it->data_proper = (char *)it->children +
                           it->num_elems * sizeof(agtentry);
         it->is_scalar = AGTYPE_CONTAINER_IS_SCALAR(container);
-        /* This is either a "raw scalar", or an array */
+        // This is either a "raw scalar", or an array 
         Assert(!it->is_scalar || it->num_elems == 1);
 
         it->state = AGTI_ARRAY_START;
@@ -1168,10 +1150,10 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
         if (vval.val.object.num_pairs < vcontained.val.object.num_pairs)
             return false;
 
-        /* Work through rhs "is it contained within?" object */
+        // Work through rhs "is it contained within?" object 
         for (;;)
         {
-            agtype_value *lhs_val; /* lhs_val is from pair in lhs object */
+            agtype_value *lhs_val; // lhs_val is from pair in lhs object 
 
             rcont = agtype_iterator_next(m_contained, &vcontained, false);
 
@@ -1185,7 +1167,7 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
 
             Assert(rcont == WAGT_KEY);
 
-            /* First, find value by key... */
+            // First, find value by key... 
             lhs_val = find_agtype_value_from_container(
                 (*val)->container, AGT_FOBJECT, &vcontained);
 
@@ -1205,9 +1187,8 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
              * key
              */
             if (lhs_val->type != vcontained.type)
-            {
                 return false;
-            }
+            
             else if (IS_A_AGTYPE_SCALAR(lhs_val))
             {
                 if (!equals_agtype_scalar_value(lhs_val, &vcontained))
@@ -1215,7 +1196,7 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
             }
             else
             {
-                /* Nested container value (object or array) */
+                // Nested container value (object or array) 
                 agtype_iterator *nestval;
                 agtype_iterator *nest_contained;
 
@@ -1272,7 +1253,7 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
         if (vval.val.array.raw_scalar && !vcontained.val.array.raw_scalar)
             return false;
 
-        /* Work through rhs "is it contained within?" array */
+        // Work through rhs "is it contained within?" array 
         for (;;)
         {
             rcont = agtype_iterator_next(m_contained, &vcontained, true);
@@ -1305,12 +1286,12 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                 {
                     uint32 j = 0;
 
-                    /* Make room for all possible values */
+                    // Make room for all possible values 
                     lhs_conts = palloc(sizeof(agtype_value) * num_lhs_elems);
 
                     for (i = 0; i < num_lhs_elems; i++)
                     {
-                        /* Store all lhs elements in temp array */
+                        // Store all lhs elements in temp array 
                         rcont = agtype_iterator_next(val, &vval, true);
                         Assert(rcont == WAGT_ELEM);
 
@@ -1318,18 +1299,18 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                             lhs_conts[j++] = vval;
                     }
 
-                    /* No container elements in temp array, so give up now */
+                    // No container elements in temp array, so give up now 
                     if (j == 0)
                         return false;
 
-                    /* We may have only partially filled array */
+                    // We may have only partially filled array 
                     num_lhs_elems = j;
                 }
 
-                /* XXX: Nested array containment is O(N^2) */
+                // XXX: Nested array containment is O(N^2) 
                 for (i = 0; i < num_lhs_elems; i++)
                 {
-                    /* Nested container value (object or array) */
+                    // Nested container value (object or array) 
                     agtype_iterator *nestval;
                     agtype_iterator *nest_contained;
                     bool contains;
@@ -1378,7 +1359,7 @@ void agtype_hash_scalar_value(const agtype_value *scalar_val, uint32 *hash)
 {
     uint32 tmp;
 
-    /* Compute hash value for scalar_val */
+    // Compute hash value for scalar_val 
     switch (scalar_val->type)
     {
     case AGTV_NULL:
@@ -1390,7 +1371,7 @@ void agtype_hash_scalar_value(const agtype_value *scalar_val, uint32 *hash)
                      scalar_val->val.string.len));
         break;
     case AGTV_NUMERIC:
-        /* Must hash equal numerics to equal hash codes */
+        // Must hash equal numerics to equal hash codes 
         tmp = DatumGetUInt32(DirectFunctionCall1(
             hash_numeric, NumericGetDatum(scalar_val->val.numeric)));
         break;
@@ -1408,7 +1389,7 @@ void agtype_hash_scalar_value(const agtype_value *scalar_val, uint32 *hash)
     default:
         ereport(ERROR, (errmsg("invalid agtype scalar type %d to compute hash",
                                scalar_val->type)));
-        tmp = 0; /* keep compiler quiet */
+        tmp = 0; // keep compiler quiet 
         break;
     }
 
@@ -1453,9 +1434,8 @@ void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
                 UInt64GetDatum(seed)));
         }
         else
-        {
             tmp = scalar_val->val.boolean ? 0x02 : 0x04;
-        }
+        
         break;
     case AGTV_INTEGER:
         tmp = DatumGetUInt64(DirectFunctionCall2(
@@ -1531,14 +1511,14 @@ static int compare_two_floats_orderability(float8 lhs, float8 rhs)
     if (isnan(lhs))
     {
         if (isnan(rhs))
-            return 0; /* NAN = NAN */
+            return 0; // NAN = NAN 
         else
-            return 1; /* NAN > non-NAN */
+            return 1; // NAN > non-NAN 
     }
+    
     else if (isnan(rhs))
-    {
-        return -1; /* non-NAN < NAN */
-    }
+        return -1; // non-NAN < NAN 
+    
     else
     {
         if (lhs > rhs)
@@ -1555,7 +1535,7 @@ static int compare_two_floats_orderability(float8 lhs, float8 rhs)
  */
 static bool equals_agtype_scalar_value(agtype_value *a, agtype_value *b)
 {
-    /* if the values are of the same type */
+    // if the values are of the same type 
     if (a->type == b->type)
     {
         switch (a->type)
@@ -1588,11 +1568,11 @@ static bool equals_agtype_scalar_value(agtype_value *a, agtype_value *b)
                                    a->type)));
         }
     }
-    /* otherwise, the values are of differing type */
+    // otherwise, the values are of differing type 
     else
         ereport(ERROR, (errmsg("agtype input scalars must be of same type")));
 
-    /* execution will never reach this point due to the ereport call */
+    // execution will never reach this point due to the ereport call 
     return false;
 }
 
@@ -1612,53 +1592,45 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
             return 0;
         case AGTV_STRING:
         {
-            /* varstr_cmp isn't guaranteed to return 1, 0, -1 */
+            // varstr_cmp isn't guaranteed to return 1, 0, -1 
             int result = varstr_cmp(a->val.string.val, a->val.string.len,
                                     b->val.string.val, b->val.string.len,
                                     DEFAULT_COLLATION_OID);
             if (result > 0)
-            {
                 return 1;
-            }
+            
             else if (result < 0)
-            {
                 return -1;
-            }
+            
             else
-            {
                 return 0;
-            }
+    
         }
         case AGTV_NUMERIC:
             return DatumGetInt32(DirectFunctionCall2(
                 numeric_cmp, PointerGetDatum(a->val.numeric),
                 PointerGetDatum(b->val.numeric)));
+        
         case AGTV_BOOL:
             if (a->val.boolean == b->val.boolean)
-            {
                 return 0;
-            }
+            
             else if (a->val.boolean > b->val.boolean)
-            {
                 return 1;
-            }
+            
             else
-            {
                 return -1;
-            }
+            
         case AGTV_INTEGER:
             if (a->val.int_value == b->val.int_value)
-            {
                 return 0;
-            }
+            
             else if (a->val.int_value > b->val.int_value)
-            {
                 return 1;
-            }
+            
             else
-            {
                 return -1;
-            }
+
         case AGTV_FLOAT:
             return compare_two_floats_orderability(a->val.float_value,
                                                    b->val.float_value);
@@ -1675,17 +1647,13 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
             b_graphid = b_id->val.int_value;
 
             if (a_graphid == b_graphid)
-            {
                 return 0;
-            }
+
             else if (a_graphid > b_graphid)
-            {
                 return 1;
-            }
+
             else
-            {
                 return -1;
-            }
         }
         case AGTV_PATH:
         {
@@ -1705,9 +1673,7 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
                 res = compare_agtype_scalar_values(&a_elem, &b_elem);
 
                 if (res)
-                {
                     return res;
-                }
             }
 
             return 0;
@@ -1717,19 +1683,19 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
                                    a->type)));
         }
     }
-    /* check for integer compared to float */
+    // check for integer compared to float 
     if (a->type == AGTV_INTEGER && b->type == AGTV_FLOAT)
     {
         return compare_two_floats_orderability((float8)a->val.int_value,
                                                b->val.float_value);
     }
-    /* check for float compared to integer */
+    // check for float compared to integer 
     if (a->type == AGTV_FLOAT && b->type == AGTV_INTEGER)
     {
         return compare_two_floats_orderability(a->val.float_value,
                                                (float8)b->val.int_value);
     }
-    /* check for integer or float compared to numeric */
+    // check for integer or float compared to numeric 
     if (is_numeric_result(a, b))
     {
         Datum numd, lhsd, rhsd;
@@ -1759,13 +1725,13 @@ int reserve_from_buffer(StringInfo buffer, int len)
 {
     int offset;
 
-    /* Make more room if needed */
+    // Make more room if needed 
     enlargeStringInfo(buffer, len);
 
-    /* remember current offset */
+    // remember current offset 
     offset = buffer->len;
 
-    /* reserve the space */
+    // reserve the space 
     buffer->len += len;
 
     /*
@@ -1811,7 +1777,7 @@ short pad_buffer_to_int(StringInfo buffer)
 
     offset = reserve_from_buffer(buffer, padlen);
 
-    /* padlen must be small, so this is probably faster than a memset */
+    // padlen must be small, so this is probably faster than a memset 
     for (p = 0; p < padlen; p++)
         buffer->data[offset + p] = '\0';
 
@@ -1827,13 +1793,13 @@ static agtype *convert_to_agtype(agtype_value *val)
     agtentry aentry;
     agtype *res;
 
-    /* Should not already have binary representation */
+    // Should not already have binary representation 
     Assert(val->type != AGTV_BINARY);
 
-    /* Allocate an output buffer. It will be enlarged as needed */
+    // Allocate an output buffer. It will be enlarged as needed 
     initStringInfo(&buffer);
 
-    /* Make room for the varlena header */
+    // Make room for the varlena header 
     reserve_from_buffer(&buffer, VARHDRSZ);
 
     convert_agtype_value(&buffer, &aentry, val, 0);
@@ -1898,10 +1864,10 @@ static void convert_agtype_array(StringInfo buffer, agtentry *pheader,
     uint32 header;
     int num_elems = val->val.array.num_elems;
 
-    /* Remember where in the buffer this array starts. */
+    // Remember where in the buffer this array starts. 
     base_offset = buffer->len;
 
-    /* Align to 4-byte boundary (any padding counts as part of my data) */
+    // Align to 4-byte boundary (any padding counts as part of my data) 
     pad_buffer_to_int(buffer);
 
     /*
@@ -1918,7 +1884,7 @@ static void convert_agtype_array(StringInfo buffer, agtentry *pheader,
 
     append_to_buffer(buffer, (char *)&header, sizeof(uint32));
 
-    /* Reserve space for the agtentrys of the elements. */
+    // Reserve space for the agtentrys of the elements. 
     agtentry_offset = reserve_from_buffer(buffer,
                                           sizeof(agtentry) * num_elems);
 
@@ -1964,10 +1930,10 @@ static void convert_agtype_array(StringInfo buffer, agtentry *pheader,
         agtentry_offset += sizeof(agtentry);
     }
 
-    /* Total data size is everything we've appended to buffer */
+    // Total data size is everything we've appended to buffer 
     totallen = buffer->len - base_offset;
 
-    /* Check length again, since we didn't include the metadata above */
+    // Check length again, since we didn't include the metadata above 
     if (totallen > AGTENTRY_OFFLENMASK)
     {
         ereport(
@@ -1978,7 +1944,7 @@ static void convert_agtype_array(StringInfo buffer, agtentry *pheader,
                  AGTENTRY_OFFLENMASK)));
     }
 
-    /* Initialize the header of this node in the container's agtentry array */
+    // Initialize the header of this node in the container's agtentry array 
     *pheader = AGTENTRY_IS_CONTAINER | totallen;
 }
 
@@ -2004,10 +1970,10 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
     uint32 header;
     int num_pairs = val->val.object.num_pairs;
 
-    /* Remember where in the buffer this object starts. */
+    // Remember where in the buffer this object starts. 
     base_offset = buffer->len;
 
-    /* Align to 4-byte boundary (any padding counts as part of my data) */
+    // Align to 4-byte boundary (any padding counts as part of my data) 
     pad_buffer_to_int(buffer);
 
     /*
@@ -2017,7 +1983,7 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
     header = num_pairs | AGT_FOBJECT;
     append_to_buffer(buffer, (char *)&header, sizeof(uint32));
 
-    /* Reserve space for the agtentrys of the keys and values. */
+    // Reserve space for the agtentrys of the keys and values. 
     agtentry_offset = reserve_from_buffer(buffer,
                                           sizeof(agtentry) * num_pairs * 2);
 
@@ -2056,9 +2022,7 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
                      AGTENTRY_OFFLENMASK)));
         }
 
-        /*
-         * Convert each AGT_OFFSET_STRIDE'th length to an offset.
-         */
+        // Convert each AGT_OFFSET_STRIDE'th length to an offset.
         if ((i % AGT_OFFSET_STRIDE) == 0)
             meta = (meta & AGTENTRY_TYPEMASK) | totallen | AGTENTRY_HAS_OFF;
 
@@ -2096,9 +2060,7 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
                      AGTENTRY_OFFLENMASK)));
         }
 
-        /*
-         * Convert each AGT_OFFSET_STRIDE'th length to an offset.
-         */
+        // Convert each AGT_OFFSET_STRIDE'th length to an offset.
         if (((i + num_pairs) % AGT_OFFSET_STRIDE) == 0)
             meta = (meta & AGTENTRY_TYPEMASK) | totallen | AGTENTRY_HAS_OFF;
 
@@ -2107,10 +2069,10 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
         agtentry_offset += sizeof(agtentry);
     }
 
-    /* Total data size is everything we've appended to buffer */
+    // Total data size is everything we've appended to buffer 
     totallen = buffer->len - base_offset;
 
-    /* Check length again, since we didn't include the metadata above */
+    // Check length again, since we didn't include the metadata above 
     if (totallen > AGTENTRY_OFFLENMASK)
     {
         ereport(
@@ -2121,7 +2083,7 @@ static void convert_agtype_object(StringInfo buffer, agtentry *pheader,
                  AGTENTRY_OFFLENMASK)));
     }
 
-    /* Initialize the header of this node in the container's agtentry array */
+    // Initialize the header of this node in the container's agtentry array 
     *pheader = AGTENTRY_IS_CONTAINER | totallen;
 }
 
@@ -2160,9 +2122,9 @@ static void convert_agtype_scalar(StringInfo buffer, agtentry *entry,
         break;
 
     default:
-        /* returns true if there was a valid extended type processed */
+        // returns true if there was a valid extended type processed 
         status = ag_serialize_extended_type(buffer, entry, scalar_val);
-        /* if nothing was found, error log out */
+        // if nothing was found, error log out 
         if (!status)
             ereport(ERROR, (errmsg("invalid agtype scalar type %d to convert",
                                    scalar_val->type)));
@@ -2196,9 +2158,7 @@ static int length_compare_agtype_string_value(const void *a, const void *b)
                      va->val.string.len);
     }
     else
-    {
         res = (va->val.string.len > vb->val.string.len) ? 1 : -1;
-    }
 
     return res;
 }
@@ -2256,7 +2216,7 @@ void uniqueify_agtype_object(agtype_value *object)
 
         while (ptr - object->val.object.pairs < object->val.object.num_pairs)
         {
-            /* Avoid copying over duplicate */
+            // Avoid copying over duplicate 
             if (length_compare_agtype_string_value(ptr, res) != 0)
             {
                 res++;
@@ -2367,9 +2327,7 @@ void pfree_agtype_value_content(agtype_value* value)
         case AGTV_INTEGER:
         case AGTV_FLOAT:
         case AGTV_BOOL:
-            /*
-             * These are deallocated by the calling function.
-             */
+            // These are deallocated by the calling function.
             break;
 
         default:
