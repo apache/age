@@ -48,10 +48,7 @@ class Graph():
         return self.vertices
     
     def getVertex(self, id):
-        if id in self.vertices:
-            return self.vertices[id]
-        else:
-            return None
+        return self.vertices[id] if id in self.vertices else None
 
 class AGObj:
     @property
@@ -90,30 +87,21 @@ class Path(AGObj):
         return self.toString()
 
     def toString(self) -> str: 
-        buf = StringIO()
-        buf.write("[")
-        max = len(self.entities)
-        idx = 0
-        while idx < max:
-            if idx > 0:
+        buf = StringIO("[")
+        for i in range(len(self.entities)):
+            if i > 0:
                 buf.write(",")
-            self.entities[idx]._toString(buf)
-            idx += 1
+            self.entities[i]._toString(buf)
         buf.write("]::PATH")
 
         return buf.getvalue()
 
     def toJson(self) -> str:
-        buf = StringIO()
-        buf.write("{\"gtype\": \"path\", \"elements\": [")
-        
-        max = len(self.entities)
-        idx = 0
-        while idx < max:
-            if idx > 0:
+        buf = StringIO("{\"gtype\": \"path\", \"elements\": [")
+        for i in range(len(self.entities)):
+            if i > 0:
                 buf.write(",")
-            self.entities[idx]._toJson(buf)
-            idx += 1
+            self.entities[i]._toJson(buf)
         buf.write("]}")
 
         return buf.getvalue()
@@ -135,10 +123,7 @@ class Vertex(AGObj):
         self.properties[name]=value
         
     def __getitem__(self,name):
-        if name in self.properties:
-            return self.properties[name]
-        else:
-            return None
+        return self.properties[name] if name in self.properties else None
 
     def __str__(self) -> str:
         return self.toString()
@@ -175,10 +160,7 @@ class Edge(AGObj):
         self.properties[name]=value
         
     def __getitem__(self,name):
-        if name in self.properties:
-            return self.properties[name]
-        else:
-            return None
+        return self.properties[name] if name in self.properties else None
 
     def __str__(self) -> str:
         return self.toString()
@@ -188,12 +170,10 @@ class Edge(AGObj):
 
     def extraStrFormat(node, buf):
         if node.start_id != None:
-            buf.write(", start_id:")
-            buf.write(str(node.start_id))
+            buf.write(f", start_id:{str(node.start_id)}")
 
         if node.end_id != None:
-            buf.write(", end_id:")
-            buf.write(str(node.end_id))
+            buf.write(f", end_id:{str(node.end_id)}")
 
 
     def toString(self) -> str: 
@@ -204,14 +184,10 @@ class Edge(AGObj):
 
     def extraJsonFormat(node, buf):
         if node.start_id != None:
-            buf.write(", \"start_id\": \"")
-            buf.write(str(node.start_id))
-            buf.write("\"")
+            buf.write(f", \"start_id\": \"{str(node.start_id)}\"")
 
         if node.end_id != None:
-            buf.write(", \"end_id\": \"")
-            buf.write(str(node.end_id))
-            buf.write("\"")
+            buf.write(f", \"end_id\": \"{str(node.end_id)}\"")
 
     def toJson(self) -> str:
         return nodeToJson(self, Edge.extraJsonFormat)
@@ -229,20 +205,15 @@ def nodeToString(node, extraFormatter=None):
 def _nodeToString(node, buf, extraFormatter=None):
     buf.write("{")
     if node.label != None:
-        buf.write("label:")
-        buf.write(node.label)
+        buf.write(f"label:{node.label}")
         
     if node.id != None:
-        buf.write(", id:")
-        buf.write(str(node.id))
+        buf.write(f", id:{str(node.id)}")
         
     if node.properties != None:
         buf.write(", properties:{")
         for k,v in node.properties.items():
-            buf.write(k)
-            buf.write(": ")
-            buf.write(str(v))
-            buf.write(", ")
+            buf.write(f"{k}: {str(v)}, ")
         buf.write("}")
 
     if extraFormatter != None:
@@ -268,13 +239,11 @@ def _nodeToJson(node, buf, extraFormatter=None):
         buf.write("\"edge\", ")
 
     if node.label != None:
-        buf.write("\"label\":\"")
-        buf.write(node.label)
-        buf.write("\"")
+        buf.write(f"\"label\":\"{node.label}\"")
+
         
     if node.id != None:
-        buf.write(", \"id\":")
-        buf.write(str(node.id))
+        buf.write(f", \"id\":{str(node.id)}")
         
     if extraFormatter != None:
         extraFormatter(node, buf)
@@ -282,11 +251,7 @@ def _nodeToJson(node, buf, extraFormatter=None):
     if node.properties != None:
         buf.write(", \"properties\":{")
         for k,v in node.properties.items():
-            buf.write("\"")
-            buf.write(k)
-            buf.write("\": \"")
-            buf.write(str(v))
-            buf.write("\", ")
+            buf.write(f"\"{k}\": \"{str(v)}\", ")
         buf.write("}")
     buf.write("}")
     
