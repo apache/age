@@ -255,7 +255,7 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
     agtype *prop_agtype;
     int i;
 
-    r = palloc(sizeof(agtype_value));
+    r = palloc0(sizeof(agtype_value));
 
     prop_agtype = agtype_value_to_agtype(path);
     it = agtype_iterator_init(&prop_agtype->root);

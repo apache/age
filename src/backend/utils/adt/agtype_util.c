@@ -460,7 +460,7 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
         return NULL;
     }
 
-    result = palloc(sizeof(agtype_value));
+    result = palloc0(sizeof(agtype_value));
 
     if ((flags & AGT_FARRAY) && AGTYPE_CONTAINER_IS_ARRAY(container))
     {
@@ -554,7 +554,7 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
     if (i >= nelements)
         return NULL;
 
-    result = palloc(sizeof(agtype_value));
+    result = palloc0(sizeof(agtype_value));
 
     fill_agtype_value(container, i, base_addr, get_agtype_offset(container, i),
                       result);
@@ -716,7 +716,7 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
             (*pstate)->size = 4;
         }
         (*pstate)->cont_val.val.array.elems =
-            palloc(sizeof(agtype_value) * (*pstate)->size);
+            palloc0(sizeof(agtype_value) * (*pstate)->size);
         (*pstate)->last_updated_value = NULL;
         break;
     case WAGT_BEGIN_OBJECT:
@@ -727,7 +727,7 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
         (*pstate)->cont_val.val.object.num_pairs = 0;
         (*pstate)->size = 4;
         (*pstate)->cont_val.val.object.pairs =
-            palloc(sizeof(agtype_pair) * (*pstate)->size);
+            palloc0(sizeof(agtype_pair) * (*pstate)->size);
         (*pstate)->last_updated_value = NULL;
         break;
     case WAGT_KEY:
@@ -784,7 +784,7 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
  */
 static agtype_parse_state *push_state(agtype_parse_state **pstate)
 {
-    agtype_parse_state *ns = palloc(sizeof(agtype_parse_state));
+    agtype_parse_state *ns = palloc0(sizeof(agtype_parse_state));
 
     ns->next = *pstate;
     return ns;
@@ -1306,7 +1306,7 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                     uint32 j = 0;
 
                     /* Make room for all possible values */
-                    lhs_conts = palloc(sizeof(agtype_value) * num_lhs_elems);
+                    lhs_conts = palloc0(sizeof(agtype_value) * num_lhs_elems);
 
                     for (i = 0; i < num_lhs_elems; i++)
                     {

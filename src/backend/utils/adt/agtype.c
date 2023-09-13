@@ -9043,7 +9043,7 @@ agtype_value *agtype_composite_to_agtype_value_binary(agtype *a)
                         errmsg("cannot convert agtype scalar objects to binary agtype_value objects")));
     }
 
-    result = palloc(sizeof(agtype_value));
+    result = palloc0(sizeof(agtype_value));
 
     // convert the agtype to a binary agtype_value
     result->type = AGTV_BINARY;

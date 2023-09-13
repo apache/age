@@ -195,7 +195,7 @@ static void ag_deserialize_composite(char *base, enum agtype_value_type type,
     //offset container by the extended type header
     char *container_base = base + AGT_HEADER_SIZE;
 
-    r = palloc(sizeof(agtype_value));
+    r = palloc0(sizeof(agtype_value));
 
     it = agtype_iterator_init((agtype_container *)container_base);
     while ((tok = agtype_iterator_next(&it, r, true)) != WAGT_DONE)
