@@ -194,7 +194,7 @@ int create_labels_from_csv_file(char *file_path,
     struct csv_parser p;
     char buf[1024];
     size_t bytes_read;
-    unsigned char options = 0;
+    unsigned char options = CSV_APPEND_NULL;
     csv_vertex_reader cr;
 
     if (csv_init(&p, options) != 0)
