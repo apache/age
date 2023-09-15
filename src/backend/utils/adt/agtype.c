@@ -224,12 +224,7 @@ bool is_agtype_null(agtype *agt_arg)
 {
     agtype_container *agtc = &agt_arg->root;
 
-    if (AGTYPE_CONTAINER_IS_SCALAR(agtc) &&
-            AGTE_IS_NULL(agtc->children[0]))
-    {
-        return true;
-    }
-    return false;
+    return (AGTYPE_CONTAINER_IS_SCALAR(agtc) && AGTE_IS_NULL(agtc->children[0]));
 }
 
 /*
@@ -283,14 +278,11 @@ Datum agtype_recv(PG_FUNCTION_ARGS)
     char *str = NULL;
     int nbytes = 0;
 
-    if (version == 1)
-    {
-        str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
-    }
-    else
+    if (version != 1)
     {
         elog(ERROR, "unsupported agtype version number %d", version);
     }
+    str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
 
     return agtype_from_cstring(str, nbytes);
 }
@@ -9546,27 +9538,23 @@ Datum age_float8_stddev_samp_aggfinalfn(PG_FUNCTION_ARGS)
     Datum result;
     PGFunction func;
     agtype_value agtv_float;
+    bool isnull;
+    float8 stddev;
 
     /* we can't use DirectFunctionCall1 as it errors for NULL values */
     func = float8_stddev_samp;
     result = (*func) (fcinfo);
 
     agtv_float.type = AGTV_FLOAT;
+    isnull = fcinfo->isnull;
 
     /*
      * Check to see if float8_stddev_samp returned null. If so, we need to
      * return a agtype float 0.
      */
-    if (fcinfo->isnull)
-    {
-        /* we need to clear the flag */
-        fcinfo->isnull = false;
-        agtv_float.val.float_value = 0.0;
-    }
-    else
-    {
-        agtv_float.val.float_value = DatumGetFloat8(result);
-    }
+    stddev = isnull ? 0.0 : DatumGetFloat8(result);
+    agtv_float.val.float_value = stddev;
+    fcinfo->isnull = false; // Clear the flag.
 
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_float));
 }
