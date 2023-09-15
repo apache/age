@@ -241,6 +241,9 @@ def _nodeToString(node, buf, extraFormatter=None):
         prop_list = []
         for k, v in node.properties.items():
             prop_list.append(f"{k}: {str(v)}")
+
+        # Join properties with comma and write to buffer
+        buf.write(", ".join(prop_list))
         buf.write("}")
 
     if extraFormatter != None:
