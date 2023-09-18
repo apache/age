@@ -6760,7 +6760,7 @@ static FuncExpr *make_clause_func_expr(char *function_name,
      */
     outNode(str, clause_information);
 
-    clause_information_const = makeConst(INTERNALOID, -1, InvalidOid, str->len,
+    clause_information_const = makeConst(INTERNALOID, -1, InvalidOid, str->len + 1,
                              PointerGetDatum(str->data), false, false);
 
     func_oid = get_ag_func_oid(function_name, 1, INTERNALOID);
