@@ -701,14 +701,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
     else if (cmp->op == SETOP_UNION)
     {
         Assert(cmp->larg != NULL && cmp->rarg != NULL);
-        if (cmp->order_by || cmp->limit || cmp->skip)
-        {
-            isLeaf = true;
-        }
-        else
-        {
-            isLeaf = false;
-        }
+        isLeaf = (cmp->order_by || cmp->limit || cmp->skip) ? true : false;
     }
     else
     {
@@ -755,16 +748,12 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
          * because the namespace will be empty, but it could happen if we are
          * inside a rule.
          */
-        if (pstate->p_namespace)
+        if (pstate->p_namespace && contain_vars_of_level((Node *) returnQuery, 1))
         {
-            if (contain_vars_of_level((Node *) returnQuery, 1))
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                         errmsg("UNION member statement cannot refer to other relations of same query level"),
-                         parser_errposition(pstate,
-                                            locate_var_of_level((Node *) returnQuery, 1))));
-            }
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                     errmsg("UNION member statement cannot refer to other relations of same query level"),
+                     parser_errposition(pstate, locate_var_of_level((Node *) returnQuery, 1))));
         }
 
         /*
@@ -894,14 +883,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
                                             &bestexpr);
             bestlocation = exprLocation(bestexpr);
             /* if same type and same typmod, use typmod; else default */
-            if (lcoltype == rcoltype && lcoltypmod == rcoltypmod)
-            {
-                rescoltypmod = lcoltypmod;
-            }
-            else
-            {
-                rescoltypmod = -1;
-            }
+            rescoltypmod = (lcoltype == rcoltype && lcoltypmod == rcoltypmod) ? lcoltypmod : -1;
 
             /*
              * Verify the coercions are actually possible.  If not, we'd fail
@@ -1466,14 +1448,7 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
     query->commandType = CMD_SELECT;
     query->targetList = NIL;
 
-    if (self->is_remove == true)
-    {
-        clause_name = UPDATE_CLAUSE_REMOVE;
-    }
-    else
-    {
-        clause_name = UPDATE_CLAUSE_SET;
-    }
+    clause_name = (self->is_remove == true) ? UPDATE_CLAUSE_REMOVE : UPDATE_CLAUSE_SET;
 
     if (!clause->prev)
     {
@@ -2993,14 +2968,7 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
         Expr *prop_qual = makeBoolExpr(AND_EXPR,
                                        cpstate->property_constraint_quals, -1);
 
-        if (expr == NULL)
-        {
-            expr = prop_qual;
-        }
-        else
-        {
-            expr = makeBoolExpr(AND_EXPR, list_make2(expr, prop_qual), -1);
-        }
+        expr = (expr == NULL) ? prop_qual : makeBoolExpr(AND_EXPR, list_make2(expr, prop_qual), -1);
     }
 
     // transform the where clause quals and add to the quals,
@@ -3401,16 +3369,9 @@ static List *join_to_entity(cypher_parsestate *cpstate,
     {
         List *edge_quals = make_edge_quals(cpstate, entity, side);
 
-        if (list_length(edge_quals) > 1)
-        {
-            expr = makeSimpleA_Expr(AEXPR_IN, "=", qual,
-                                    (Node *)edge_quals, -1);
-        }
-        else
-        {
-            expr = makeSimpleA_Expr(AEXPR_OP, "=", qual,
-                                    linitial(edge_quals), -1);
-        }
+        expr = (list_length(edge_quals) > 1) ?
+            makeSimpleA_Expr(AEXPR_IN, "=", qual, (Node *)edge_quals, -1) :
+            makeSimpleA_Expr(AEXPR_OP, "=", qual, linitial(edge_quals), -1);
 
         quals = lappend(quals, expr);
     }
@@ -3588,15 +3549,10 @@ static Node *create_property_constraints(cypher_parsestate *cpstate,
 
         /* use Postgres to get the properties' transform node */
         pnsi = find_pnsi(cpstate, entity_name);
-        if (pnsi != NULL)
-        {
-            prop_expr = scanNSItemForColumn(pstate, pnsi, 0,
-                                            AG_VERTEX_COLNAME_PROPERTIES, -1);
-        }
-        else
-        {
-            prop_expr = transformExpr(pstate, (Node *)cr, EXPR_KIND_WHERE);
-        }
+        
+        prop_expr = (pnsi != NULL) ? 
+            scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_PROPERTIES, -1) :
+            transformExpr(pstate, (Node *)cr, EXPR_KIND_WHERE);
     }
 
     /* use cypher to get the constraints' transform node */
@@ -3793,12 +3749,7 @@ static bool isa_special_VLE_case(cypher_path *path)
 {
     cypher_relationship *cr = NULL;
 
-    if (path->var_name == NULL)
-    {
-        return false;
-    }
-
-    if (list_length(path->path) != 3)
+    if (path->var_name == NULL || list_length(path->path) != 3)
     {
         return false;
     }
@@ -4613,14 +4564,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 
     schema_name = get_graph_namespace_name(cpstate->graph_name);
 
-    if (valid_label)
-    {
-        rel_name = get_label_relation_name(rel->label, cpstate->graph_oid);
-    }
-    else
-    {
-        rel_name = AG_DEFAULT_LABEL_EDGE;
-    }
+    rel_name = (valid_label) ? get_label_relation_name(rel->label, cpstate->graph_oid) : AG_DEFAULT_LABEL_EDGE;
 
     label_range_var = makeRangeVar(schema_name, rel_name, -1);
     alias = makeAlias(rel->name, NIL);
@@ -4637,14 +4581,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 
     resno = pstate->p_next_resno++;
 
-    if (valid_label)
-    {
-        expr = make_edge_expr(cpstate, pnsi);
-    }
-    else
-    {
-        expr = (Node *)makeNullConst(AGTYPEOID, -1, InvalidOid);
-    }
+    expr = (valid_label) ? make_edge_expr(cpstate, pnsi) : (Node *)makeNullConst(AGTYPEOID, -1, InvalidOid);
 
     if (rel->name)
     {
@@ -4849,14 +4786,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     /* now build a new vertex */
     schema_name = get_graph_namespace_name(cpstate->graph_name);
 
-    if (valid_label)
-    {
-        rel_name = get_label_relation_name(node->label, cpstate->graph_oid);
-    }
-    else
-    {
-        rel_name = AG_DEFAULT_LABEL_VERTEX;
-    }
+    rel_name = (valid_label) ? get_label_relation_name(node->label, cpstate->graph_oid) : AG_DEFAULT_LABEL_VERTEX;
 
     label_range_var = makeRangeVar(schema_name, rel_name, -1);
     alias = makeAlias(node->name, NIL);
