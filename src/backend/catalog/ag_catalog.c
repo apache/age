@@ -131,18 +131,11 @@ static bool is_age_drop(PlannedStmt *pstmt)
 
     drop_stmt = (DropStmt *)pstmt->utilityStmt;
 
-    foreach(lc, drop_stmt->objects)
+
+    foreach (Node *obj, drop_stmt->objects)
     {
-        Node *obj = lfirst(lc);
-
-        if (IsA(obj, String))
-        {
-            String *val = (String *)obj;
-            char *str = val->sval;
-
-            if (!pg_strcasecmp(str, "age"))
-                return true;
-        }
+        if (IsA(obj, String) && pg_strcasecmp(strVal(obj), "age") == 0)
+            return true;
     }
 
     return false;
