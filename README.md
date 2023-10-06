@@ -332,7 +332,7 @@ Starting with Apache AGE is very simple. You can easily select your platform and
 Join the AGE community for help, questions, discussions, and contributions. 
 
 - Check our [website](https://age.apache.org/)
-- Join the Live Chat on [Discord](https://discord.gg/AFzTjkrz2M/)
+- Join the Live Chat on [Discord](https://discord.gg/AFzTjkrz2M)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
 - Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
 - Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
