@@ -5000,11 +5000,29 @@ PG_FUNCTION_INFO_V1(age_tail);
  */
 Datum age_tail(PG_FUNCTION_ARGS)
 {
+    Oid arg_type;
     agtype *agt_arg = NULL;
     agtype *agt_result = NULL;
     agtype_in_state agis_result;
     int count;
     int i;
+
+    /* check number of arguments */
+    if (PG_NARGS() < 1 || PG_NARGS() > 1)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("age_tail() requires only one argument")));
+    }
+
+    /* get the data type */
+    arg_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+    /* check the data type */
+    if (arg_type != AGTYPEOID)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("age_tail() argument must be of type agtype")));
+    }
 
     /* check for null */
     if (PG_ARGISNULL(0))
