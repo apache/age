@@ -5033,7 +5033,6 @@ Datum age_tail(PG_FUNCTION_ARGS)
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
-
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("tail() argument must resolve to a list or null")));
