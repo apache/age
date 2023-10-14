@@ -19,18 +19,16 @@ import decimal
 import age
 import argparse
 
-DSN = "host=localhost port=5432 dbname=postgres user=dehowefeng password=agens"
-TEST_HOST = "localhost"
-TEST_PORT = 5432
-TEST_DB = "postgres"
-TEST_USER = "postgres"
-TEST_PASSWORD = "agens"
-TEST_GRAPH_NAME = "test_graph"
-
 class TestAgeBasic(unittest.TestCase):
     ag = None
     def setUp(self):
         print("Connecting to Test Graph.....")
+        TEST_DB = self.args.database
+        TEST_USER = self.args.user
+        TEST_PASSWORD = self.args.password
+        TEST_PORT = self.args.port
+        TEST_HOST = self.args.host
+        TEST_GRAPH_NAME = self.args.graphName
         self.ag = age.connect(graph=TEST_GRAPH_NAME, host=TEST_HOST, port=TEST_PORT, dbname=TEST_DB, user=TEST_USER, password=TEST_PASSWORD)
 
 
