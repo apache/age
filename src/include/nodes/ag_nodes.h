@@ -68,6 +68,8 @@ typedef enum ag_node_tag
     cypher_create_target_nodes_t,
     cypher_create_path_t,
     cypher_target_node_t,
+    // TODO: if cypher_label_expr_t goes before cypher_target_node_t, the program crashes
+    cypher_label_expr_t,
     // set/remove data structures
     cypher_update_information_t,
     cypher_update_item_t,

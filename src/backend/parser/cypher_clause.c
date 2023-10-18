@@ -37,6 +37,7 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
+#include "parser/cypher_label_expr.h"
 #include "rewrite/rewriteHandler.h"
 
 #include "catalog/ag_graph.h"
@@ -5728,20 +5729,18 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     AttrNumber resno;
     ParseNamespaceItem *pnsi;
 
-    if (edge->label)
+    if (!validate_label_expr_kind(edge->label_expr, cpstate->graph_oid, LABEL_KIND_EDGE))
     {
-        if (get_label_kind(edge->label, cpstate->graph_oid) == LABEL_KIND_VERTEX)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("label %s is for vertices, not edges", edge->label),
-                     parser_errposition(pstate, edge->location)));
-        }
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                    errmsg("label %s is for vertices, not edges", edge->label),
+                    parser_errposition(pstate, edge->location)));
     }
 
+    cluster_name = get_cluster_name(edge->label_expr);
     rel->type = LABEL_KIND_EDGE;
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
-    rel->label_name = edge->label;
+    rel->label_names = LABEL_EXPR_LABEL_NAMES(edge->label_expr);
     rel->resultRelInfo = NULL;
 
     if (edge->name)
@@ -5785,7 +5784,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
     rel->dir = edge->dir;
 
-    if (!edge->label)
+    if (LABEL_EXPR_IS_EMPTY(edge->label_expr))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -5794,7 +5793,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     // create the label entry if it does not exist
-    if (!label_exists(edge->label, cpstate->graph_oid))
+    if (!label_exists(cluster_name, cpstate->graph_oid))
     {
         List *parent;
 
@@ -5803,12 +5802,12 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
         parent = list_make1(rv);
 
-        create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
+        create_label(cpstate->graph_name, cluster_name, LABEL_TYPE_EDGE,
                      parent);
     }
 
     // lock the relation of the label
-    rv = makeRangeVar(cpstate->graph_name, edge->label, -1);
+    rv = makeRangeVar(cpstate->graph_name, cluster_name, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid
@@ -5871,15 +5870,13 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
 {
     ParseState *pstate = (ParseState *)cpstate;
 
-    if (node->label)
+    if (!validate_label_expr_kind(node->label_expr, cpstate->graph_oid,
+                                  LABEL_KIND_VERTEX))
     {
-        if (get_label_kind(node->label, cpstate->graph_oid) == LABEL_KIND_EDGE)
-        {
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                            errmsg("label %s is for edges, not vertices",
-                                   node->label),
-                            parser_errposition(pstate, node->location)));
-        }
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("label %s is for edges, not vertices", node->label),
+                 parser_errposition(pstate, node->location)));
     }
 
     /*
@@ -6005,7 +6002,7 @@ static cypher_target_node *transform_create_cypher_existing_node(
                  errmsg("previously declared nodes in a create clause cannot have properties"),
                  parser_errposition(pstate, node->location)));
     }
-    if (node->label)
+    if (!LABEL_EXPR_IS_EMPTY(node->label_expr))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -6050,28 +6047,18 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     char *alias;
     int resno;
     ParseNamespaceItem *pnsi;
+    char *cluster_name;
 
     rel->type = LABEL_KIND_VERTEX;
     rel->tuple_position = InvalidAttrNumber;
     rel->variable_name = NULL;
     rel->resultRelInfo = NULL;
 
-    if (!node->label)
-    {
-        rel->label_name = "";
-        /*
-         *  If no label is specified, assign the generic label name that
-         *  all labels are descendents of.
-         */
-        node->label = AG_DEFAULT_LABEL_VERTEX;
-    }
-    else
-    {
-        rel->label_name = node->label;
-    }
+    cluster_name = get_cluster_name(node->label_expr);
+    rel->label_names = LABEL_EXPR_LABEL_NAMES(node->label_expr);
 
     // create the label entry if it does not exist
-    if (!label_exists(node->label, cpstate->graph_oid))
+    if (!label_exists(cluster_name, cpstate->graph_oid))
     {
         List *parent;
 
@@ -6080,13 +6067,13 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
 
         parent = list_make1(rv);
 
-        create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
+        create_label(cpstate->graph_name, cluster_name, LABEL_TYPE_VERTEX,
                      parent);
     }
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, node->label, -1);
+    rv = makeRangeVar(cpstate->graph_name, cluster_name, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid

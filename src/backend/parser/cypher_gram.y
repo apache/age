@@ -26,6 +26,7 @@
 #include "parser/cypher_gram.h"
 #include "parser/cypher_parse_node.h"
 #include "parser/scansup.h"
+#include "catalog/ag_label.h"
 
 // override the default action for locations
 #define YYLLOC_DEFAULT(current, rhs, n) \
@@ -144,7 +145,7 @@
 %type <node> path anonymous_path
              path_node path_relationship path_relationship_body
              properties_opt
-%type <string> label_opt
+%type <node> label_expr
 
 /* expression */
 %type <node> expr expr_opt expr_atom expr_literal map list
@@ -1368,15 +1369,17 @@ simple_path:
     ;
 
 path_node:
-    '(' var_name_opt label_opt properties_opt ')'
+    '(' var_name_opt label_expr properties_opt ')'
         {
             cypher_node *n;
 
             n = make_ag_node(cypher_node);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *) $3;
+            n->label_expr->kind = LABEL_KIND_VERTEX;
+            n->label = NULL;        // TODO: to be deprecated
+            n->parsed_label = NULL; // TODO; to be deprecated
             n->use_equals = false;
             n->props = $4;
             n->location = @2;
@@ -1390,8 +1393,10 @@ path_node:
             n = make_ag_node(cypher_node);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *) $3;
+            n->label_expr->kind = LABEL_KIND_VERTEX;
+            n->label = NULL;        // TODO: to be deprecated
+            n->parsed_label = NULL; // TODO; to be deprecated
             n->use_equals = true;
             n->props = $5;
             n->location = @2;
@@ -1431,30 +1436,34 @@ path_relationship:
     ;
 
 path_relationship_body:
-    '[' var_name_opt label_opt cypher_varlen_opt properties_opt ']'
+    '[' var_name_opt label_expr cypher_varlen_opt properties_opt ']'
         {
             cypher_relationship *n;
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *) $3;
+            n->label_expr->kind = LABEL_KIND_EDGE;
+            n->label = NULL;        // TODO: to be deprecated
+            n->parsed_label = NULL; // TODO; to be deprecated
             n->varlen = $4;
             n->use_equals = false;
             n->props = $5;
 
             $$ = (Node *)n;
         }
-    | '[' var_name_opt label_opt cypher_varlen_opt '='properties_opt ']'
+    | '[' var_name_opt label_expr cypher_varlen_opt '='properties_opt ']'
         {
             cypher_relationship *n;
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *) $3;
+            n->label_expr->kind = LABEL_KIND_EDGE;
+            n->label = NULL;        // TODO: to be deprecated
+            n->parsed_label = NULL; // TODO; to be deprecated
             n->varlen = $4;
             n->use_equals = true;
             n->props = $6;
@@ -1479,14 +1488,21 @@ path_relationship_body:
         }
     ;
 
-label_opt:
+label_expr:
     /* empty */
         {
-            $$ = NULL;
+            cypher_label_expr *n;
+            n = make_ag_node(cypher_label_expr);
+
+            $$ = (Node *) n;
         }
     | ':' label_name
         {
-            $$ = $2;
+            cypher_label_expr *n;
+            n = make_ag_node(cypher_label_expr);
+            n->label_names = list_make1(makeString($2));
+
+            $$ = (Node *) n;
         }
     ;
 

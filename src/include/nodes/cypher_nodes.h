@@ -142,14 +142,41 @@ typedef struct cypher_path
     int location;
 } cypher_path;
 
+typedef enum
+{
+    LABEL_EXPR_TYPE_EMPTY = 0,    // (x)
+    LABEL_EXPR_TYPE_SINGLE,       // (x:label)
+    LABEL_EXPR_TYPE_AND,          // (x:label1:label2: ..)
+    LABEL_EXPR_TYPE_OR            // (x:label1|label2| ..)
+} cypher_label_expr_type;
+
+/*
+ * Represents label expressions.
+ *
+ * Note: support for mixing AND and OR expression
+ * may be added in future.
+ */
+typedef struct cypher_label_expr
+{
+    ExtensibleNode extensible;
+    cypher_label_expr_type type;
+    /**
+     * this is assigned to rel->label_names.
+     * be careful before free'ing.
+     */
+    List *label_names; // List of String
+    char kind; // 'v' or 'e'. what does label_expr belong to during parse time? not same as the kind of labels in ag_label.kind.
+} cypher_label_expr;
+
 // ( name :label props )
 typedef struct cypher_node
 {
     ExtensibleNode extensible;
     char *name;
     char *parsed_name;
-    char *label;
-    char *parsed_label;
+    cypher_label_expr *label_expr;
+    char *label;        // TODO: to be depracated
+    char *parsed_label; // TODO: to be depracated
     bool use_equals;
     Node *props; // map or parameter
     int location;
@@ -168,8 +195,9 @@ typedef struct cypher_relationship
     ExtensibleNode extensible;
     char *name;
     char *parsed_name;
-    char *label;
-    char *parsed_label;
+    cypher_label_expr *label_expr;
+    char *label;        // TODO: to be depracated
+    char *parsed_label; // TODO: to be depracated
     bool use_equals;
     Node *props; // map or parameter
     Node *varlen; // variable length relationships (A_Indices)
@@ -374,7 +402,8 @@ typedef struct cypher_target_node
     // relid that the label stores its entity
     Oid relid;
     // label this entity belongs to.
-    char *label_name;
+    char *label_name; // TODO: to be deprecated
+    List *label_names; // List of String
     // variable name for this entity
     char *variable_name;
     /*
