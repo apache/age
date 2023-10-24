@@ -23,6 +23,10 @@
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "utils/datum.h"
+#include "nodes/cypher_nodes.h"
+#include "utils/agtype.h"
+#include "utils/graphid.h"
+#include "parser/cypher_label_expr.h"
 
 /*
  * The following structure is used to hold a single vertex or edge component
@@ -1117,9 +1121,13 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         if (CYPHER_TARGET_NODE_OUTPUT(node->flags))
         {
             Datum result;
+            char *label_name =
+                !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
+                    (char *)strVal(linitial(node->label_expr->label_names)) :
+                    "";
 
             /* make the vertex agtype */
-            result = make_vertex(id, CStringGetDatum(node->label_name), prop);
+            result = make_vertex(id, CStringGetDatum(label_name), prop);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
@@ -1419,9 +1427,13 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
     if (CYPHER_TARGET_NODE_OUTPUT(node->flags))
     {
         Datum result;
+        char *label_name =
+            !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
+                (char *)strVal(linitial(node->label_expr->label_names)) :
+                "";
 
-        result = make_edge(id, start_id, end_id,
-                           CStringGetDatum(node->label_name), prop);
+        result = make_edge(id, start_id, end_id, CStringGetDatum(label_name),
+                           prop);
 
         // add the Datum to the list of entities for creating the path variable
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

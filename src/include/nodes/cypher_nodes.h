@@ -153,19 +153,21 @@ typedef enum
 /*
  * Represents label expressions.
  *
- * Note: support for mixing AND and OR expression
- * may be added in future.
+ * Note: There is a comparator function for this type- label_expr_are_equal.
+ * If any new fields are added, the comparator function should be updated if
+ * necessary.
  */
 typedef struct cypher_label_expr
 {
     ExtensibleNode extensible;
     cypher_label_expr_type type;
-    /**
-     * this is assigned to rel->label_names.
-     * be careful before free'ing.
+
+    /*
+     * List of String.
+     *
+     * It is assigned to rel->label_names. Be careful before free'ing.
      */
-    List *label_names; // List of String
-    char kind; // 'v' or 'e'. what does label_expr belong to during parse time? not same as the kind of labels in ag_label.kind.
+    List *label_names;
 } cypher_label_expr;
 
 // ( name :label props )
@@ -175,8 +177,6 @@ typedef struct cypher_node
     char *name;
     char *parsed_name;
     cypher_label_expr *label_expr;
-    char *label;        // TODO: to be depracated
-    char *parsed_label; // TODO: to be depracated
     bool use_equals;
     Node *props; // map or parameter
     int location;
@@ -196,8 +196,6 @@ typedef struct cypher_relationship
     char *name;
     char *parsed_name;
     cypher_label_expr *label_expr;
-    char *label;        // TODO: to be depracated
-    char *parsed_label; // TODO: to be depracated
     bool use_equals;
     Node *props; // map or parameter
     Node *varlen; // variable length relationships (A_Indices)
@@ -402,8 +400,7 @@ typedef struct cypher_target_node
     // relid that the label stores its entity
     Oid relid;
     // label this entity belongs to.
-    char *label_name; // TODO: to be deprecated
-    List *label_names; // List of String
+    cypher_label_expr *label_expr;
     // variable name for this entity
     char *variable_name;
     /*
