@@ -22,6 +22,10 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "nodes/cypher_nodes.h"
+#include "utils/agtype.h"
+#include "utils/graphid.h"
+#include "parser/cypher_label_expr.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -421,9 +425,10 @@ static void create_edge(cypher_create_custom_scan_state *css,
         PlanState *ps = css->css.ss.ps.lefttree;
         TupleTableSlot *scantuple = ps->ps_ExprContext->ecxt_scantuple;
         Datum result;
-        char *label_name = node->label_names ?
-                                (char *)strVal(linitial(node->label_names)):
-                                "";
+        char *label_name =
+            !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
+                (char *)strVal(linitial(node->label_expr->label_names)) :
+                "";
 
         result = make_edge(
             id, start_id, end_id, CStringGetDatum(label_name),
@@ -511,9 +516,10 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             TupleTableSlot *scantuple;
             PlanState *ps;
             Datum result;
-            char *label_name = node->label_names ?
-                                   (char *)strVal(linitial(node->label_names)) :
-                                   "";
+            char *label_name =
+                !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
+                    (char *)strVal(linitial(node->label_expr->label_names)) :
+                    "";
 
             ps = css->css.ss.ps.lefttree;
             scantuple = ps->ps_ExprContext->ecxt_scantuple;

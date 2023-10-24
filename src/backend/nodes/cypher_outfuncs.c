@@ -205,7 +205,6 @@ void out_cypher_label_expr(StringInfo str, const ExtensibleNode *node)
 
     WRITE_INT32_FIELD(type);
     WRITE_NODE_FIELD(label_names);
-    WRITE_CHAR_FIELD(kind);
 }
 
 /* serialization function for the cypher_node ExtensibleNode. */
@@ -215,8 +214,7 @@ void out_cypher_node(StringInfo str, const ExtensibleNode *node)
 
     WRITE_STRING_FIELD(name);
     WRITE_STRING_FIELD(parsed_name);
-    WRITE_STRING_FIELD(label);
-    WRITE_STRING_FIELD(parsed_label);
+    WRITE_NODE_FIELD(label_expr);
     WRITE_NODE_FIELD(props);
     WRITE_LOCATION_FIELD(location);
 }
@@ -228,8 +226,7 @@ void out_cypher_relationship(StringInfo str, const ExtensibleNode *node)
 
     WRITE_STRING_FIELD(name);
     WRITE_STRING_FIELD(parsed_name);
-    WRITE_STRING_FIELD(label);
-    WRITE_STRING_FIELD(parsed_label);
+    WRITE_NODE_FIELD(label_expr);
     WRITE_NODE_FIELD(props);
     WRITE_NODE_FIELD(varlen);
     WRITE_ENUM_FIELD(dir, cypher_rel_dir);
@@ -398,8 +395,7 @@ void out_cypher_target_node(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(resultRelInfo);
     WRITE_NODE_FIELD(elemTupleSlot);
     WRITE_OID_FIELD(relid);
-    WRITE_STRING_FIELD(label_name);
-    WRITE_NODE_FIELD(label_names);
+    WRITE_NODE_FIELD(label_expr);
     WRITE_STRING_FIELD(variable_name);
     WRITE_INT32_FIELD(tuple_position);
 }
