@@ -49,6 +49,7 @@ OBJS = src/backend/age.o \
        src/backend/parser/cypher_parse_node.o \
        src/backend/parser/cypher_parser.o \
        src/backend/parser/cypher_transform_entity.o \
+       src/backend/parser/cypher_label_expr.o \
        src/backend/utils/adt/age_graphid_ds.o \
        src/backend/utils/adt/agtype.o \
        src/backend/utils/adt/agtype_ext.o \

@@ -101,8 +101,7 @@ void copy_cypher_target_node(ExtensibleNode *newnode, const ExtensibleNode *from
     COPY_SCALAR_FIELD(relid);
     COPY_SCALAR_FIELD(tuple_position);
 
-    COPY_STRING_FIELD(label_name);
-    COPY_NODE_FIELD(label_names);
+    COPY_NODE_FIELD(label_expr);
     COPY_STRING_FIELD(variable_name);
 
     COPY_NODE_FIELD(id_expr);
@@ -111,6 +110,14 @@ void copy_cypher_target_node(ExtensibleNode *newnode, const ExtensibleNode *from
     COPY_NODE_FIELD(prop_expr_state);
     COPY_NODE_FIELD(resultRelInfo);
     COPY_NODE_FIELD(elemTupleSlot);
+}
+
+void copy_cypher_label_expr(ExtensibleNode *newnode, const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_label_expr);
+
+    COPY_SCALAR_FIELD(type);
+    COPY_NODE_FIELD(label_names);
 }
 
 // copy function for cypher_update_information
