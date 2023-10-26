@@ -2330,10 +2330,10 @@ SELECT count(*) FROM cypher('test_enable_containment', $$ MATCH (x:Customer {pho
 (1 row)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (COSTS OFF) MATCH (x:Customer {school:{name:'XYZ',program:{degree:'BSc'}},phone:[987654321],parents:{}}) RETURN x $$) as (a agtype);
-                                                                                                                                        QUERY PLAN                                                                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Seq Scan on "Customer" x
-   Filter: (properties @> agtype_build_map('school'::text, agtype_build_map_nonull('name'::text, '"XYZ"'::agtype, 'program'::text, agtype_build_map_nonull('degree'::text, '"BSc"'::agtype)), 'phone'::text, agtype_build_list('987654321'::agtype), 'parents'::text, agtype_build_map()))
+   Filter: (properties @> '{"phone": [987654321], "school": {"name": "XYZ", "program": {"degree": "BSc"}}, "parents": {}}'::agtype)
 (2 rows)
 
 -- Previous set of queries, with enable_containment off
