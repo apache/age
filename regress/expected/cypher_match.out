@@ -559,16 +559,16 @@ $$) AS (i agtype,  c agtype);
  i |     c     
 ---+-----------
    | "middle"
-   | "end"
-   | "initial"
-   | "middle"
- 0 | "middle"
- 0 | "end"
- 0 | "initial"
  0 | "middle"
  1 | "middle"
+   | "end"
+ 0 | "end"
  1 | "end"
+   | "initial"
+ 0 | "initial"
  1 | "initial"
+   | "middle"
+ 0 | "middle"
  1 | "middle"
 (12 rows)
 

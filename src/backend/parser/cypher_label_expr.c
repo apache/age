@@ -35,11 +35,19 @@ char *find_first_invalid_label(cypher_label_expr *label_expr,
 }
 
 // TODO: can be moved to utils?
-int string_list_comparator(const ListCell *a, const ListCell *b)
+/*
+ * List comparator for String nodes. The ListCells a and b must
+ * contain node pointer of type T_String.
+ */
+int list_string_cmp(const ListCell *a, const ListCell *b)
 {
-    char *str_a = lfirst(a);
-    char *str_b = lfirst(b);
-    return strcmp(str_a, str_b);
+    Node *na = lfirst(a);
+    Node *nb = lfirst(b);
+
+    Assert(IsA(na, String));
+    Assert(IsA(nb, String));
+
+    return strcmp(strVal(na), strVal(nb));
 }
 
 /*
@@ -68,7 +76,7 @@ char *label_expr_table_name(cypher_label_expr *label_expr,
 
     case LABEL_EXPR_TYPE_OR:
         // TODO: implement
-        elog(ERROR, "label expression type OR cannot cannot have a table");
+        elog(ERROR, "label expression type OR cannot have a table");
         return NULL;
 
     default:
@@ -135,6 +143,7 @@ bool label_expr_has_tables(cypher_label_expr *label_expr, char label_expr_kind,
 {
     char *table_name;
     label_cache_data *lcd;
+    ListCell *lc;
 
     switch (label_expr->type)
     {
@@ -148,10 +157,16 @@ bool label_expr_has_tables(cypher_label_expr *label_expr, char label_expr_kind,
         return (lcd != NULL && lcd->kind == label_expr_kind);
 
     case LABEL_EXPR_TYPE_OR:
-        // TODO: implement
-        ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("label expression type OR is not implemented")));
+        foreach (lc, label_expr->label_names)
+        {
+            table_name = strVal(lfirst(lc));
+            lcd = search_label_name_graph_cache(table_name, graph_oid);
+
+            if  (lcd != NULL && lcd->kind == label_expr_kind)
+            {
+                return true;
+            }
+        }
         return false;
 
     default:
