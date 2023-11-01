@@ -26,6 +26,9 @@ NOTICE:  graph "agload_test_graph" has been created
  
 (1 row)
 
+-------------------------
+-- Tests with id field --
+-------------------------
 SELECT create_vlabel('agload_test_graph','Country');
 NOTICE:  VLabel "Country" has been created
  create_vlabel 
@@ -110,6 +113,9 @@ SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH (a)-[e]->(b) RETURN e$$
  72485
 (1 row)
 
+----------------------------
+-- Tests without id field --
+----------------------------
 SELECT create_vlabel('agload_test_graph','Country2');
 NOTICE:  VLabel "Country2" has been created
  create_vlabel 
@@ -218,8 +224,71 @@ $$) AS (result_1 agtype, result_2 agtype);
  "Croatia" | "Europe"
 (1 row)
 
+--------------------------------------------------------
+-- Tests without creating labels first, with id field --
+--------------------------------------------------------
+SELECT load_labels_from_file('agload_test_graph', 'Country3',
+    'age_load/countries.csv');
+NOTICE:  VLabel "Country3" has been created
+ load_labels_from_file 
+-----------------------
+ 
+(1 row)
+
+SELECT load_labels_from_file('agload_test_graph', 'City3',
+    'age_load/cities.csv');
+NOTICE:  VLabel "City3" has been created
+ load_labels_from_file 
+-----------------------
+ 
+(1 row)
+
+SELECT load_edges_from_file('agload_test_graph', 'has_city3',
+     'age_load/edges.csv');
+NOTICE:  ELabel "has_city3" has been created
+ load_edges_from_file 
+----------------------
+ 
+(1 row)
+
+SELECT table_catalog, table_schema, lower(table_name) as table_name, table_type
+FROM information_schema.tables
+WHERE table_schema = 'agload_test_graph' ORDER BY table_name ASC;
+   table_catalog    |   table_schema    |    table_name    | table_type 
+--------------------+-------------------+------------------+------------
+ contrib_regression | agload_test_graph | _ag_label_edge   | BASE TABLE
+ contrib_regression | agload_test_graph | _ag_label_vertex | BASE TABLE
+ contrib_regression | agload_test_graph | city             | BASE TABLE
+ contrib_regression | agload_test_graph | city2            | BASE TABLE
+ contrib_regression | agload_test_graph | city3            | BASE TABLE
+ contrib_regression | agload_test_graph | country          | BASE TABLE
+ contrib_regression | agload_test_graph | country2         | BASE TABLE
+ contrib_regression | agload_test_graph | country3         | BASE TABLE
+ contrib_regression | agload_test_graph | has_city         | BASE TABLE
+ contrib_regression | agload_test_graph | has_city3        | BASE TABLE
+(10 rows)
+
+SELECT COUNT(*) FROM agload_test_graph."Country3";
+ count 
+-------
+    53
+(1 row)
+
+SELECT COUNT(*) FROM agload_test_graph."City3";
+ count 
+-------
+ 72485
+(1 row)
+
+SELECT COUNT(*) FROM agload_test_graph."has_city3";
+ count 
+-------
+ 72485
+(1 row)
+
+-- DROP GRAPH
 SELECT drop_graph('agload_test_graph', true);
-NOTICE:  drop cascades to 7 other objects
+NOTICE:  drop cascades to 10 other objects
 DETAIL:  drop cascades to table agload_test_graph._ag_label_vertex
 drop cascades to table agload_test_graph._ag_label_edge
 drop cascades to table agload_test_graph."Country"
@@ -227,6 +296,9 @@ drop cascades to table agload_test_graph."City"
 drop cascades to table agload_test_graph.has_city
 drop cascades to table agload_test_graph."Country2"
 drop cascades to table agload_test_graph."City2"
+drop cascades to table agload_test_graph."Country3"
+drop cascades to table agload_test_graph."City3"
+drop cascades to table agload_test_graph.has_city3
 NOTICE:  graph "agload_test_graph" has been dropped
  drop_graph 
 ------------

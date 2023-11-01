@@ -32,7 +32,6 @@
 #include "catalog/ag_label.h"
 #include "utils/agtype.h"
 #include "utils/graphid.h"
-
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
@@ -247,12 +246,19 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     file_path = PG_GETARG_TEXT_P(2);
     id_field_exists = PG_GETARG_BOOL(3);
 
-
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
     file_path_str = text_to_cstring(file_path);
 
     graph_oid = get_graph_oid(graph_name_str);
+
+    if (!label_exists(label_name_str, graph_oid))
+    {
+        DirectFunctionCall2(create_vlabel,
+                            CStringGetDatum(graph_name_str),
+                            CStringGetDatum(label_name_str));
+    }
+
     label_id = get_label_id(label_name_str, graph_oid);
 
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
@@ -301,6 +307,14 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     file_path_str = text_to_cstring(file_path);
 
     graph_oid = get_graph_oid(graph_name_str);
+
+    if (!label_exists(label_name_str, graph_oid))
+    {
+        DirectFunctionCall2(create_elabel,
+                            CStringGetDatum(graph_name_str),
+                            CStringGetDatum(label_name_str));
+    }
+
     label_id = get_label_id(label_name_str, graph_oid);
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
