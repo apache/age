@@ -146,6 +146,7 @@
 %type <node> path anonymous_path
              path_node path_relationship path_relationship_body
              properties_opt
+%type <node> label_expr_non_empty
 %type <node> label_expr
 
 /* expression */
@@ -1485,15 +1486,9 @@ path_relationship_body:
         }
     ;
 
-label_expr:
-    /* empty */
-        {
-            cypher_label_expr *n;
-            n = make_ag_node(cypher_label_expr);
-
-            $$ = (Node *) n;
-        }
-    | ':' label_name
+label_expr_non_empty:
+    /* single */
+    ':' label_name
         {
             cypher_label_expr *n;
             n = make_ag_node(cypher_label_expr);
@@ -1502,7 +1497,46 @@ label_expr:
 
             $$ = (Node *) n;
         }
+    /* or expression */
+    | label_expr_non_empty '|' label_name
+        {
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+
+            switch (n->type)
+            {
+            case LABEL_EXPR_TYPE_SINGLE:
+                n->type = LABEL_EXPR_TYPE_OR;
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            case LABEL_EXPR_TYPE_OR:
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            default:
+                ereport(ERROR,
+                        (errcode(ERRCODE_SYNTAX_ERROR),
+                         errmsg("Cannot mix different label expressions"),
+                         ag_scanner_errposition(@2, scanner)));
+            }
+
+            $$ = (Node *) n;
+        }
     ;
+
+label_expr:
+    /* empty */
+        {
+            cypher_label_expr *n;
+            n = make_ag_node(cypher_label_expr);
+
+            $$ = (Node *) n;
+        }
+    | label_expr_non_empty
+        {
+            /* sorts the list */
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+            list_sort(n->label_names, &list_string_cmp);
+            $$ = (Node *)n;
+        };
 
 properties_opt:
     /* empty */
