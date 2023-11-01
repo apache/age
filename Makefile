@@ -114,6 +114,7 @@ REGRESS = scan \
           jsonb_operators \
           list_comprehension \
           map_projection \
+          multiple_label \
           drop
 
 srcdir=`pwd`

@@ -37,7 +37,7 @@
 
 char *find_first_invalid_label(cypher_label_expr *label_expr,
                                char label_expr_kind, Oid graph_oid);
-int string_list_comparator(const ListCell *a, const ListCell *b);
+int list_string_cmp(const ListCell *a, const ListCell *b);
 char *label_expr_table_name(cypher_label_expr *label_expr, char label_expr_kind);
 bool label_expr_are_equal(cypher_label_expr *le1, cypher_label_expr *le2);
 bool label_expr_has_tables(cypher_label_expr *label_expr, char label_expr_kind,

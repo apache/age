@@ -165,9 +165,12 @@ typedef struct cypher_label_expr
     cypher_label_expr_type type;
 
     /*
-     * List of String.
+     * List of String nodes.
      *
-     * It is assigned to rel->label_names. Be careful before free'ing.
+     * The list must be unique and sorted in ascending order. This is
+     * done in the grammar during parsing.
+     *
+     * Note: It is assigned to rel->label_names. Be careful before free'ing.
      */
     List *label_names;
 } cypher_label_expr;
