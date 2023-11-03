@@ -20,6 +20,8 @@
 #include "postgres.h"
 
 #include "catalog/namespace.h"
+#include "commands/label_commands.h"
+#include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
@@ -438,6 +440,8 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
             /* get the vertex properties datum */
             vertex_properties = column_get_datum(tupdesc, tuple, 1,
                                                  "properties", AGTYPEOID, true);
+            /* we need to make a copy of the properties datum */
+            vertex_properties = datumCopy(vertex_properties, false, -1);
 
             /* insert vertex into vertex hashtable */
             inserted = insert_vertex_entry(ggctx, vertex_id,
@@ -550,6 +554,9 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
             /* get the edge properties datum */
             edge_properties = column_get_datum(tupdesc, tuple, 3, "properties",
                                                AGTYPEOID, true);
+
+            /* we need to make a copy of the properties datum */
+            edge_properties = datumCopy(edge_properties, false, -1);
 
             /* insert edge into edge hashtable */
             inserted = insert_edge(ggctx, edge_id, edge_properties,
