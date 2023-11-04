@@ -20,7 +20,6 @@
 #include "postgres.h"
 
 #include "catalog/namespace.h"
-#include "commands/label_commands.h"
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
