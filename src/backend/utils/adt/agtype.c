@@ -10962,7 +10962,7 @@ PG_FUNCTION_INFO_V1(age_unnest);
  */
 Datum age_unnest(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
+    agtype *agtype_arg = NULL;
     ReturnSetInfo *rsi;
     Tuplestorestate *tuple_store;
     TupleDesc tupdesc;
@@ -10973,6 +10973,13 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     agtype_value v;
     agtype_iterator_token r;
 
+    // check for null
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtype_arg = AG_GET_ARG_AGTYPE_P(0);
     if (!AGT_ROOT_IS_ARRAY(agtype_arg))
     {
         ereport(ERROR,
