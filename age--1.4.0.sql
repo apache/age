@@ -4397,6 +4397,14 @@ STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- Date functions
+CREATE FUNCTION ag_catalog.age_date()
+RETURNS agtype
+LANGUAGE c
+STABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 --
 -- End
 --
