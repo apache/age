@@ -24,6 +24,10 @@ LOAD 'age';
 SET search_path TO ag_catalog;
 SELECT create_graph('agload_test_graph');
 
+-------------------------
+-- Tests with id field --
+-------------------------
+
 SELECT create_vlabel('agload_test_graph','Country');
 SELECT load_labels_from_file('agload_test_graph', 'Country',
     'age_load/countries.csv');
@@ -47,6 +51,10 @@ SELECT COUNT(*) FROM agload_test_graph."has_city";
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH(n) RETURN n$$) as (n agtype);
 
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+
+----------------------------
+-- Tests without id field --
+----------------------------
 
 SELECT create_vlabel('agload_test_graph','Country2');
 SELECT load_labels_from_file('agload_test_graph', 'Country2',
@@ -77,5 +85,28 @@ SELECT * FROM cypher('agload_test_graph', $$
     WHERE u.name =~ 'Cro.*'
     RETURN u.name, u.region
 $$) AS (result_1 agtype, result_2 agtype);
+
+--------------------------------------------------------
+-- Tests without creating labels first, with id field --
+--------------------------------------------------------
+
+SELECT load_labels_from_file('agload_test_graph', 'Country3',
+    'age_load/countries.csv');
+
+SELECT load_labels_from_file('agload_test_graph', 'City3',
+    'age_load/cities.csv');
+
+SELECT load_edges_from_file('agload_test_graph', 'has_city3',
+     'age_load/edges.csv');
+
+SELECT table_catalog, table_schema, lower(table_name) as table_name, table_type
+FROM information_schema.tables
+WHERE table_schema = 'agload_test_graph' ORDER BY table_name ASC;
+
+SELECT COUNT(*) FROM agload_test_graph."Country3";
+SELECT COUNT(*) FROM agload_test_graph."City3";
+SELECT COUNT(*) FROM agload_test_graph."has_city3";
+
+-- DROP GRAPH
 
 SELECT drop_graph('agload_test_graph', true);
