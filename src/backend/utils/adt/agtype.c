@@ -2652,14 +2652,21 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
     {
         agtype_value *temp = NULL;
 
-        /* convert the string to an agtype_value */
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
         temp = agtype_value_from_cstring(agtv_p->val.string.val,
                                          agtv_p->val.string.len);
 
+        /* this will catch anything that isn't an array and isn't a scalar */
         if (temp->type != AGTV_ARRAY ||
             !temp->val.array.raw_scalar)
         {
-            elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int8 type: %d",
+                           (int)temp->type)));
         }
 
         /* save the top agtype_value */
@@ -2667,12 +2674,18 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
         /* get the wrapped agtype_value */
         temp = &temp->val.array.elems[0];
 
+        /* these we expect */
         if (temp->type == AGTV_FLOAT ||
             temp->type == AGTV_INTEGER ||
             temp->type == AGTV_NUMERIC ||
             temp->type == AGTV_BOOL)
         {
             agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int8",
+                        (int)temp->type);
         }
     }
 
@@ -2697,7 +2710,10 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
     }
     else
     {
-        elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int8: %d",
+                        (int)agtv_p->type)));
     }
 
     /* free the container, if it was used */
@@ -2756,14 +2772,21 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
     {
         agtype_value *temp = NULL;
 
-        /* convert the string to an agtype_value */
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
         temp = agtype_value_from_cstring(agtv_p->val.string.val,
                                          agtv_p->val.string.len);
 
+        /* this will catch anything that isn't an array and isn't a scalar */
         if (temp->type != AGTV_ARRAY ||
             !temp->val.array.raw_scalar)
         {
-            elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int4 type: %d",
+                           (int)temp->type)));
         }
 
         /* save the top agtype_value */
@@ -2771,12 +2794,18 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
         /* get the wrapped agtype_value */
         temp = &temp->val.array.elems[0];
 
+        /* these we expect */
         if (temp->type == AGTV_FLOAT ||
             temp->type == AGTV_INTEGER ||
             temp->type == AGTV_NUMERIC ||
             temp->type == AGTV_BOOL)
         {
             agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int4",
+                        (int)temp->type);
         }
     }
 
@@ -2796,18 +2825,16 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
         result = DatumGetInt32(DirectFunctionCall1(numeric_int4,
                      NumericGetDatum(agtv_p->val.numeric)));
     }
-    else if (agtv_p->type == AGTV_STRING)
-    {
-        result = DatumGetInt32(DirectFunctionCall1(int4in,
-                     CStringGetDatum(agtv_p->val.string.val)));
-    }
     else if (agtv_p->type == AGTV_BOOL)
     {
         result = (agtv_p->val.boolean) ? 1 : 0;
     }
     else
     {
-        elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int4: %d",
+                        (int)agtv_p->type)));
     }
 
     /* free the container, if it was used */
@@ -2866,14 +2893,21 @@ Datum agtype_to_int2(PG_FUNCTION_ARGS)
     {
         agtype_value *temp = NULL;
 
-        /* convert the string to an agtype_value */
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
         temp = agtype_value_from_cstring(agtv_p->val.string.val,
                                          agtv_p->val.string.len);
 
+        /* this will catch anything that isn't an array and isn't a scalar */
         if (temp->type != AGTV_ARRAY ||
             !temp->val.array.raw_scalar)
         {
-            elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int2 type: %d",
+                           (int)temp->type)));
         }
 
         /* save the top agtype_value */
@@ -2881,12 +2915,18 @@ Datum agtype_to_int2(PG_FUNCTION_ARGS)
         /* get the wrapped agtype_value */
         temp = &temp->val.array.elems[0];
 
+        /* these we expect */
         if (temp->type == AGTV_FLOAT ||
             temp->type == AGTV_INTEGER ||
             temp->type == AGTV_NUMERIC ||
             temp->type == AGTV_BOOL)
         {
             agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int2",
+                        (int)temp->type);
         }
     }
 
@@ -2906,18 +2946,17 @@ Datum agtype_to_int2(PG_FUNCTION_ARGS)
         result = DatumGetInt16(DirectFunctionCall1(numeric_int2,
                      NumericGetDatum(agtv_p->val.numeric)));
     }
-    else if (agtv_p->type == AGTV_STRING)
-    {
-        result = DatumGetInt16(DirectFunctionCall1(int2in,
-                     CStringGetDatum(agtv_p->val.string.val)));
-    }
     else if (agtv_p->type == AGTV_BOOL)
     {
         result = (agtv_p->val.boolean) ? 1 : 0;
     }
     else
     {
-        elog(ERROR, "invalid agtype type: %d", (int)agtv_p->type);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int2: %d",
+                        (int)agtv_p->type)));
+
     }
 
     /* free the container, if it was used */
