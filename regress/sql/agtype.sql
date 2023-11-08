@@ -574,6 +574,8 @@ SELECT agtype_to_int8('NaN');
 SELECT agtype_to_int8('Inf');
 SELECT agtype_to_int8(NaN);
 SELECT agtype_to_int8(Inf);
+SELECT agtype_to_int8('{"name":"John"}');
+SELECT agtype_to_int8('[1,2,3]');
 
 --
 -- Test boolean to integer cast
@@ -609,7 +611,8 @@ SELECT agtype_to_int4('NaN');
 SELECT agtype_to_int4('Inf');
 SELECT agtype_to_int4(NaN);
 SELECT agtype_to_int4(Inf);
-
+SELECT agtype_to_int4('{"name":"John"}');
+SELECT agtype_to_int4('[1,2,3]');
 --
 -- Test boolean to integer2 cast
 --
@@ -644,6 +647,8 @@ SELECT agtype_to_int2('NaN');
 SELECT agtype_to_int2('Inf');
 SELECT agtype_to_int2(NaN);
 SELECT agtype_to_int2(Inf);
+SELECT agtype_to_int2('{"name":"John"}');
+SELECT agtype_to_int2('[1,2,3]');
 
 --
 -- Test agtype to int[]
