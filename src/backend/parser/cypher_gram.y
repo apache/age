@@ -227,7 +227,7 @@ static Node *make_typecast_expr(Node *expr, char *typecast, int location);
 static Node *make_function_expr(List *func_name, List *exprs, int location);
 static Node *make_star_function_expr(List *func_name, List *exprs, int location);
 static Node *make_distinct_function_expr(List *func_name, List *exprs, int location);
-static FuncCall *wrap_pg_funccall_to_agtype(Node* fnode, char *type, int location);
+static FuncCall *node_to_agtype(Node* fnode, char *type, int location);
 
 // setops
 static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
@@ -1730,12 +1730,16 @@ expr_func_subexpr:
             n->operName = NIL;
             n->subselect = (Node *) sub;
             n->location = @1;
-            $$ = (Node *) n;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
         }
     | EXISTS '(' property_value ')'
         {
-            $$ = make_function_expr(list_make1(makeString("exists")),
+            FuncCall *n;
+            n = makeFuncCall(list_make1(makeString("exists")),
                                     list_make1($3), @2);
+
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @2);
+
         }
     ;
 
@@ -2268,7 +2272,7 @@ static Node *make_function_expr(List *func_name, List *exprs, int location)
             fnode = makeFuncCall(funcname, exprs, location);
 
             /* build the cast to wrap the function call to return agtype. */
-            fnode = wrap_pg_funccall_to_agtype((Node *)fnode, "integer", location);
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
 
             return (Node *)fnode;
         }
@@ -2324,7 +2328,7 @@ static Node *make_star_function_expr(List *func_name, List *exprs, int location)
             fnode->agg_star = true;
 
             /* build the cast to wrap the function call to return agtype. */
-            fnode = wrap_pg_funccall_to_agtype((Node *)fnode, "integer", location);
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
 
             return (Node *)fnode;
         }
@@ -2382,7 +2386,7 @@ static Node *make_distinct_function_expr(List *func_name, List *exprs, int locat
             fnode->agg_distinct = true;
 
             /* build the cast to wrap the function call to return agtype. */
-            fnode = wrap_pg_funccall_to_agtype((Node *)fnode, "integer", location);
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
             return (Node *)fnode;
         }
         else
@@ -2413,7 +2417,7 @@ static Node *make_distinct_function_expr(List *func_name, List *exprs, int locat
  * helper function to wrap pg_function in the appropiate typecast function to
  * interface with AGE components
  */
-static FuncCall *wrap_pg_funccall_to_agtype(Node * fnode, char *type, int location)
+static FuncCall *node_to_agtype(Node * fnode, char *type, int location)
 {
     List *funcname = list_make1(makeString("ag_catalog"));
 
