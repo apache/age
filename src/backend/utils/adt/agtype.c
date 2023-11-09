@@ -2360,7 +2360,9 @@ static agtype_value* agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
     nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
 
     if (nargs < 0)
-        PG_RETURN_NULL();
+    {
+        return NULL;
+    }
 
     if (nargs % 2 != 0)
     {
@@ -2403,7 +2405,13 @@ PG_FUNCTION_INFO_V1(agtype_build_map);
  */
 Datum agtype_build_map(PG_FUNCTION_ARGS)
 {
-    agtype_value *result= agtype_build_map_as_agtype_value(fcinfo);
+    agtype_value *result = agtype_build_map_as_agtype_value(fcinfo);
+
+    if (result == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     PG_RETURN_POINTER(agtype_value_to_agtype(result));
 }
 
@@ -2431,8 +2439,15 @@ PG_FUNCTION_INFO_V1(agtype_build_map_nonull);
  */
 Datum agtype_build_map_nonull(PG_FUNCTION_ARGS)
 {
-    agtype_value *result= agtype_build_map_as_agtype_value(fcinfo);
+    agtype_value *result = agtype_build_map_as_agtype_value(fcinfo);
+
+    if (result == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     remove_null_from_agtype_object(result);
+
     PG_RETURN_POINTER(agtype_value_to_agtype(result));
 }
 
