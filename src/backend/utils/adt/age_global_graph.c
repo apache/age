@@ -28,11 +28,8 @@
 #include "commands/label_commands.h"
 
 #include "utils/age_global_graph.h"
-#include "utils/agtype.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
-#include "utils/graphid.h"
-#include "utils/age_graphid_ds.h"
 
 /* defines */
 #define VERTEX_HTAB_NAME "Vertex to edge lists " /* added a space at end for */

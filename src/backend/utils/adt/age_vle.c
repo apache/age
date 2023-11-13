@@ -25,8 +25,6 @@
 
 #include "utils/age_vle.h"
 #include "catalog/ag_graph.h"
-#include "utils/graphid.h"
-#include "utils/age_graphid_ds.h"
 #include "nodes/cypher_nodes.h"
 
 /* defines */
