@@ -19,16 +19,11 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
-#include "catalog/namespace.h"
-#include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "utils/lsyscache.h"
 
 #include "utils/age_vle.h"
 #include "catalog/ag_graph.h"
-#include "utils/graphid.h"
-#include "utils/age_graphid_ds.h"
 #include "nodes/cypher_nodes.h"
 
 /* defines */
