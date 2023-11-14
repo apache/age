@@ -26,12 +26,8 @@
 #include <math.h>
 #include <limits.h>
 
-#include "catalog/pg_type_d.h"
-#include "fmgr.h"
-#include "utils/builtins.h"
-#include "utils/numeric.h"
-
 #include "utils/agtype.h"
+#include "utils/builtins.h"
 
 static void ereport_op_str(const char *op, agtype *lhs, agtype *rhs);
 static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2);
