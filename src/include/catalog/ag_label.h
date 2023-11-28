@@ -46,9 +46,10 @@
 #define Anum_ag_label_kind 4
 #define Anum_ag_label_relation 5
 #define Anum_ag_label_seq_name 6
+#define Anum_ag_label_allrelations 7
 
 
-#define Natts_ag_label 6
+#define Natts_ag_label 7
 
 #define ag_label_relation_id() ag_relation_id("ag_label", "table")
 #define ag_label_name_graph_index_id() \
@@ -84,5 +85,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid);
 
 #define label_exists(label_name, label_graph) \
     OidIsValid(get_label_id(label_name, label_graph))
+
+#define ag_relation_exists(relname, graphoid) \
+    label_exists((relname), (graphoid))
 
 #endif

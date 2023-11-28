@@ -1528,7 +1528,30 @@ label_expr_non_empty:
             default:
                 ereport(ERROR,
                         (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("Cannot mix different label expressions"),
+                         errmsg("cannot mix different label expressions"),
+                         ag_scanner_errposition(@2, scanner)));
+            }
+
+            $$ = (Node *) n;
+        }
+    /* and expression */
+    | label_expr_non_empty ':' label_name
+        {
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+
+            switch (n->type)
+            {
+            case LABEL_EXPR_TYPE_SINGLE:
+                n->type = LABEL_EXPR_TYPE_AND;
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            case LABEL_EXPR_TYPE_AND:
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            default:
+                ereport(ERROR,
+                        (errcode(ERRCODE_SYNTAX_ERROR),
+                         errmsg("cannot mix different label expressions"),
                          ag_scanner_errposition(@2, scanner)));
             }
 
@@ -2402,6 +2425,10 @@ var_name_opt:
 
 label_name:
     schema_name
+    {
+        check_reserved_label_name($1);
+        $$ = $1;
+    }
     ;
 
 symbolic_name:

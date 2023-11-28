@@ -37,6 +37,7 @@ typedef struct label_cache_data
     char kind;
     Oid relation;
     NameData seq_name;
+    List *allrelations;
 } label_cache_data;
 
 /* callers of these functions must not modify the returned struct */

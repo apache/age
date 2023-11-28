@@ -39,6 +39,7 @@
 #include "commands/label_commands.h"
 #include "utils/ag_cache.h"
 #include "utils/name_validation.h"
+#include "parser/cypher_label_expr.h"
 
 /*
  * Relation name doesn't have to be label name but the same name is used so
@@ -177,6 +178,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                 errmsg("label name is invalid")));
     }
 
+    check_reserved_label_name(label_name);
+
     /* Check if graph does not exist */
     if (!graph_exists(graph_name))
     {
@@ -257,6 +260,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                 errmsg("label name is invalid")));
     }
+
+    check_reserved_label_name(label_name);
 
     /* Check if graph does not exist */
     if (!graph_exists(graph_name))

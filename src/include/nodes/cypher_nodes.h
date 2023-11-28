@@ -153,11 +153,29 @@ typedef enum
 } cypher_label_expr_type;
 
 /*
- * Represents label expressions.
+ * Represents a label expression. A label expression is either single label,
+ * multiple labels or no label at all. See `cypher_label_expr_type` for
+ * examples.
  *
- * Note: There is a comparator function for this type- label_expr_are_equal.
- * If any new fields are added, the comparator function should be updated if
- * necessary.
+ * Label expressions are mainly used in a cypher path. Cypher clauses that
+ * deals with paths have to deal with label expressions as well. Different
+ * clauses process label expressions differently.
+ *
+ * To see how CREATE and MERGE clause use label expressions to store entities,
+ * refer to-
+ *	    create_label_expr_relations()
+ *
+ * To see how the MATCH clause uses label expressions to build queries, refer
+ * to-
+ *	    get_label_expr_relations()
+ *
+ * For now, SET and REMOVE clause does not deal with label expressions.
+ *
+ * Additional notes:
+ * -----------------
+ * There is a comparator function for this struct defined in
+ * cypher_label_expr.c. If new fields are added to it, that function may need
+ * to be updated.
  */
 typedef struct cypher_label_expr
 {
