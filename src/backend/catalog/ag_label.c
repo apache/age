@@ -45,6 +45,8 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
     bool nulls[Natts_ag_label];
     Relation ag_label;
     HeapTuple tuple;
+    Datum relation;
+    ArrayType *allrelations;
 
     /*
      * NOTE: Is it better to make use of label_id and label_kind domain types
@@ -72,12 +74,22 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
     values[Anum_ag_label_kind - 1] = CharGetDatum(label_kind);
     nulls[Anum_ag_label_kind - 1] = false;
 
-    values[Anum_ag_label_relation - 1] = ObjectIdGetDatum(label_relation);
+    relation = ObjectIdGetDatum(label_relation);
+    values[Anum_ag_label_relation - 1] = relation;
     nulls[Anum_ag_label_relation - 1] = false;
 
     namestrcpy(&seq_name_data, seq_name);
     values[Anum_ag_label_seq_name - 1] = NameGetDatum(&seq_name_data);
     nulls[Anum_ag_label_seq_name - 1] = false;
+
+    /*
+     * By default, allrelations starts with 1 element = ag_label.relation.
+     * Note: the regclass type info are taken from bootstrap.c.
+     */
+    allrelations = construct_array(&relation, 1, REGCLASSOID, 4, true,
+                                   TYPALIGN_INT);
+    values[Anum_ag_label_allrelations - 1] = PointerGetDatum(allrelations);
+    nulls[Anum_ag_label_allrelations - 1] = false;
 
     tuple = heap_form_tuple(RelationGetDescr(ag_label), values, nulls);
 

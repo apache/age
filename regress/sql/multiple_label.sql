@@ -22,74 +22,213 @@ SET search_path TO ag_catalog;
 
 
 /*
- * MATCH OR Expression (Vertex)
- *
- * TODO: All labels are mutually exclusive. When CREATE for multiple label is
- * implemented write tests for mutually-inclusive MATCHes.
+ * MATCH queries with multiple labels
  */
-
- -- create
-SELECT create_graph('multiple-label-1');
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:A{name:'A1'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:A{name:'A2'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:B{name:'B1'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:B{name:'B2'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:C{name:'C1'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:C{name:'C2'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:D{name:'D1'}) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ CREATE (v:D{name:'D2'}) RETURN v $$) as (a agtype);
-
--- general match
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v) RETURN v $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A) RETURN v.name $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A|B) RETURN v.name $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A|B|C) RETURN v.name $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A|B|C|D) RETURN v.name $$) as (a agtype);
-
--- duplicate (should output same as MATCH (v:A|B))
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A|B|A) RETURN v.name $$) as (a agtype);
-
--- different order (should output same as MATCH (v:A|B))
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:B|A) RETURN v.name $$) as (a agtype);
-
--- label M does not exists (should output same as MATCH (v:A|B))
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:A|B|M) RETURN v.name $$) as (a agtype);
-
--- no label exists (should output empty)
-SELECT * FROM cypher('multiple-label-1', $$ MATCH (v:M|N|O) RETURN v.name $$) as (a agtype);
-
+SElECT create_graph('mlabels1');
+-- create
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a     {name:'a'})   $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:b     {name:'b'})   $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:c     {name:'c'})   $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a:b   {name:'ab'})  $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a:b:c {name:'abc'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:p {name:'p'}]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:q {name:'q'}]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:r {name:'r'}]->() $$) as (a agtype);
+-- match OR
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b)          RETURN x.name $$) as (":a|b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b|c)        RETURN x.name $$) as (":a|b|c" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p]->()     RETURN e.name $$) as (":p" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q]->()   RETURN e.name $$) as (":p|q" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q|r]->() RETURN e.name $$) as (":p|q|r" agtype);
+-- match AND
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b)          RETURN x.name $$) as (":a:b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b:c)        RETURN x.name $$) as (":a:b:c" agtype);
+-- mutual inclusion\exclusion
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b)            RETURN x.name $$) as (":b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b)          RETURN x.name $$) as (":a:b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b)          RETURN x.name $$) as (":a|b" agtype);
+-- duplicate: (a, b, a) = (a, b)
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b:a)        RETURN x.name $$) as (":a:b:a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b|a)        RETURN x.name $$) as (":a|b|a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q|p]->() RETURN e.name $$) as (":p|q|p" agtype);
+-- order: (a, b) = (b, a)
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b:a)          RETURN x.name $$) as (":b:a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b|a)          RETURN x.name $$) as (":b|a" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:q|p]->()   RETURN e.name $$) as (":q|p" agtype);
+-- some label does not exist: m and n
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:m:b)        RETURN x.name $$) as (":a:m:b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|m|b)        RETURN x.name $$) as (":a|m|b" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|n|q]->() RETURN e.name $$) as (":p|n|q" agtype);
+-- no label exists
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:i:j:k)        RETURN x.name $$) as (":i:j:k" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:i|j|k)        RETURN x.name $$) as (":i|j|j" agtype);
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:l|m|n]->() RETURN e.name $$) as (":l|m|n" agtype);
+-- unsupported label expression in match
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:l:m:n]->() RETURN e.name $$) as (":l|m|n" agtype);
 -- cleanup
-SELECT drop_graph('multiple-label-1', true);
+SElECT drop_graph('mlabels1', true);
+
 
 
 /*
- * MATCH OR Expression (Edge)
+ * Unsupported label expressions for create\merge
  */
-
- -- create
-SELECT create_graph('multiple-label-2');
-SELECT * FROM cypher('multiple-label-2', $$ CREATE ({name:'a1'})-[e:A]->({name:'a2'}) RETURN e $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-2', $$ CREATE ({name:'b1'})-[e:B]->({name:'b2'}) RETURN e $$) as (a agtype);
-SELECT * FROM cypher('multiple-label-2', $$ CREATE ({name:'c1'})-[e:C]->({name:'c2'}) RETURN e $$) as (a agtype);
-
--- general match
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[e]->(y) RETURN x.name, y.name, e $$) as (x agtype, y agtype, e agtype);
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:A]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:A|B]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:A|B|C]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-
--- duplicate (should output same as MATCH (x)-[:A|B]->(y))
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:A|B|A]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-
--- different order (should output same as MATCH (x)-[:A|B]->(y))
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:B|A]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-
--- label M does not exists (should output same as MATCH (x)-[:A|B]->(y))
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:A|B|M]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-
--- no label exists (should output empty)
-SELECT * FROM cypher('multiple-label-2', $$ MATCH (x)-[:M|N|O]->(y) RETURN x.name, y.name $$) as (x agtype, y agtype);
-
+SElECT create_graph('mlabels4');
+-- for vertices
+SELECT * FROM cypher('mlabels4', $$ CREATE (:a|b) $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ MERGE  (:a|b) $$) as (a agtype);
+-- for edges
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[]->()     $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a|b]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a:b]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[]->()     $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a|b]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a:b]->() $$) as (a agtype);
 -- cleanup
-SELECT drop_graph('multiple-label-2', true);
+SElECT drop_graph('mlabels4', true);
 
+
+
+/*
+ * Modelling inheritance
+ */
+SElECT create_graph('mlabels5');
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:engineer                  {title:'engineer'})   $$) as (a agtype);
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:manager                   {title:'manager'})    $$) as (a agtype);
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:manager:engineer:techlead {title:'techlead'})   $$) as (a agtype);
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:accountant                {title:'accountant'}) $$) as (a agtype);
+-- match titles
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:employee)   RETURN x.title $$) as ("all"         agtype);
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:engineer)   RETURN x.title $$) as ("engineers"   agtype);
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:manager)    RETURN x.title $$) as ("managers"    agtype);
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:techlead)   RETURN x.title $$) as ("techleads"   agtype);
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:accountant) RETURN x.title $$) as ("accountants" agtype);
+-- cleanup
+SElECT drop_graph('mlabels5', true);
+
+
+
+/*
+ * Invalid label
+ */
+SElECT create_graph('mlabels6');
+SELECT * FROM cypher('mlabels6', $$ CREATE (:a)-[:x]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ CREATE (:b)-[:y]->() $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ CREATE (:c)-[:z]->() $$) as (a agtype);
+-- following fails
+SELECT * FROM cypher('mlabels6', $$ CREATE (:a:y:c) $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) as (a agtype);
+-- cleanup
+SElECT drop_graph('mlabels6', true);
+
+
+
+/*
+ * Mixing different label expression types
+ */
+SElECT create_graph('mlabels7');
+SELECT * FROM cypher('mlabels7', $$ CREATE (:a) $$) as (a agtype);
+SELECT * FROM cypher('mlabels7', $$ CREATE (:b) $$) as (a agtype);
+SELECT * FROM cypher('mlabels7', $$ CREATE (:c) $$) as (a agtype);
+-- following fails
+SELECT * FROM cypher('mlabels7', $$ MATCH (x:a|b:c) RETURN x $$) as (a agtype);
+-- cleanup
+SElECT drop_graph('mlabels7', true);
+
+
+
+/*
+ * Catalog ag_label.allrelations
+ */
+SElECT create_graph('mlabels8');
+CREATE VIEW mlabels8.catalog AS
+    SELECT name, relation, allrelations
+    FROM ag_catalog.ag_label
+    WHERE graph IN
+        (SELECT graphid
+         FROM ag_catalog.ag_graph
+         WHERE name = 'mlabels8')
+    ORDER BY name ASC;
+-- creates :a, :b and :a:b
+SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b)  $$) as (":a:b" agtype);
+SELECT * FROM mlabels8.catalog;
+-- creates :c and :bc
+SELECT * FROM cypher('mlabels8', $$ CREATE (:b:c)  $$) as (":b:c" agtype);
+SELECT * FROM mlabels8.catalog;
+-- :a:b:c inserted in other labels' allrelations column
+SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b:c) $$) as (":a:b:c" agtype);
+SELECT * FROM mlabels8.catalog;
+-- cleanup
+SElECT drop_graph('mlabels8', true);
+
+
+
+/*
+ * Alias of union subquery in join and filter nodes
+ */
+SElECT create_graph('mlabels9');
+SELECT * FROM cypher('mlabels9', $$ CREATE (:a {age:22, title:'a'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ CREATE (:b {age:25, title:'b'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ CREATE (:c {age:27, title:'c'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ CREATE (:d {age:32, title:'d'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a) CREATE (x)-[:rel {start:'a'}]->(:m) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:b) CREATE (x)-[:rel {start:'b'}]->(:m) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:c) CREATE (x)-[:rel {start:'c'}]->(:m) $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:d) CREATE (x)-[:rel {start:'d'}]->(:m) $$) as (a agtype);
+-- join
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c)-[e:rel]->(:m)            RETURN e.start $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (:a|b|c)-[e:rel]->(:m)             RETURN e.start $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c) WITH x MATCH (x)-[e]->() RETURN e.start $$) as (a agtype);
+-- filters
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c) WHERE x.age > 24 RETURN x.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c {age:27})         RETURN x.title $$) as (a agtype);
+-- plans: to check alias
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a)-[e:rel]->(:m)                RETURN e.start $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c)-[e:rel]->(:m)            RETURN e.start $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (:a|b|c)-[e:rel]->(:m)             RETURN e.start $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c) WHERE x.age > 24         RETURN x.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c {age:27})                 RETURN x.title $$) as (a agtype);
+-- cleanup
+SElECT drop_graph('mlabels9', true);
+
+
+
+/*
+ * Match without variables
+ */
+SElECT create_graph('mlabels10');
+SELECT * FROM cypher('mlabels10', $$ CREATE (:a:b)-[:rel{title:'ab->pq'}]->(:p:q) $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ CREATE (:c)-[:rel{title:'c->m'}]->(:m)       $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ CREATE (:d)-[:rel{title:'d->n'}]->(:n)       $$) as (a agtype);
+-- AND
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->()     RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:p:q)     RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->(:p:q) RETURN e.title $$) as (a agtype);
+-- OR
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c|d)-[e:rel]->()     RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:m|n)     RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c|d)-[e:rel]->(:m|n) RETURN e.title $$) as (a agtype);
+-- Single
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c)-[e:rel]->()   RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:m)   RETURN e.title $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c)-[e:rel]->(:m) RETURN e.title $$) as (a agtype);
+-- cleanup
+SElECT drop_graph('mlabels10', true);
+
+
+
+/*
+ * Prevent label names with reserved prefix
+ */
+SElECT create_graph('mlabels11');
+SELECT * FROM cypher('mlabels11', $$ CREATE (:a:b {title:'ab'}) $$) as (a agtype);
+SELECT * FROM cypher('mlabels11', $$ CREATE (:_agr_ab {title:'_agr_ab'})      $$) as (a agtype);
+SELECT create_vlabel('mlabels11', '_agr_xy');
+SELECT create_elabel('mlabels11', '_agr_pq');
+-- check
+SELECT * FROM cypher('mlabels11', $$ MATCH (x:a:b) RETURN x.title      $$) as (a agtype);
+-- cleanup
+SElECT drop_graph('mlabels11', true);
