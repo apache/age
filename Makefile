@@ -107,6 +107,7 @@ REGRESS = scan \
           age_global_graph \
           age_load \
           index \
+          multiple_label \
           analyze \
           graph_generation \
           name_validation \

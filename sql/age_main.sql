@@ -53,6 +53,7 @@ CREATE TABLE ag_label (
                           kind label_kind,
                           relation regclass NOT NULL,
                           seq_name name NOT NULL,
+                          allrelations regclass[] DEFAULT '{}',
                           CONSTRAINT fk_graph_oid
                               FOREIGN KEY(graph)
                                   REFERENCES ag_graph(graphid)

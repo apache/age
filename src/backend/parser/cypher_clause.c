@@ -182,6 +182,13 @@ static TargetEntry *findTarget(List *targetList, char *resname);
 static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
                                                    cypher_relationship *rel,
                                                    Query *query);
+static Query *create_union_query(cypher_parsestate *cpstate,
+                                 List *relation_oids, Alias *alias);
+static ParseNamespaceItem *create_pnsi_for_match(cypher_parsestate *cpstate,
+                                                 cypher_label_expr *label_expr,
+                                                 char label_expr_kind,
+                                                 Alias *alias,
+                                                 bool valid_label);
 // create clause
 static Query *transform_cypher_create(cypher_parsestate *cpstate,
                                       cypher_clause *clause);
@@ -2308,8 +2315,9 @@ static bool match_check_valid_label(cypher_match *match,
 
                 node = lfirst(cell2);
 
-                if (!label_expr_has_tables(node->label_expr, LABEL_KIND_VERTEX,
-                                           cpstate->graph_oid))
+                if (!LABEL_EXPR_HAS_RELATIONS(node->label_expr,
+                                              LABEL_KIND_VERTEX,
+                                              cpstate->graph_oid))
                 {
                     return false;
                 }
@@ -2320,8 +2328,8 @@ static bool match_check_valid_label(cypher_match *match,
 
                 rel = lfirst(cell2);
 
-                if (!label_expr_has_tables(rel->label_expr, LABEL_KIND_EDGE,
-                                           cpstate->graph_oid))
+                if (!LABEL_EXPR_HAS_RELATIONS(rel->label_expr, LABEL_KIND_EDGE,
+                                              cpstate->graph_oid))
                 {
                     return false;
                 }
@@ -3695,24 +3703,6 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
                                            Node *id_field,
                                            cypher_label_expr *label_expr)
 {
-    // TODO: this function neeeds to be updated once label_id columns are arrays.
-    /*
-                left array start_label_ids or _extract_label_id = Label IDs the vertex already has
-                right array filter_label_ids                    = Label IDs we want to filter
-
-
-
-                if filter = empty:
-                    add no filter = this is not called for empty filters
-                else if filter = single:
-                    {filter} <@ {actual label ids}
-                    List * <@ Datum
-
-                - actual label ids are Datum
-                - filter label ids are (List *)
-
-
-     */
     A_Const *n;
     FuncCall *fc;
     String *ag_catalog, *extract_label_id;
@@ -3722,10 +3712,13 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
     A_ArrayExpr *filter_ids;
     A_ArrayExpr *empty_array;
     A_Const *minus_one_const;
-    char *table_name;
+    char *relname;
 
-    table_name = label_expr_table_name(label_expr, LABEL_KIND_VERTEX);
-    lcd = search_label_name_graph_cache(table_name, cpstate->graph_oid);
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                    errmsg("not yet implemented for multiple label")));
+
+    relname = label_expr_relname(label_expr, LABEL_KIND_VERTEX);
+    lcd = search_label_name_graph_cache(relname, cpstate->graph_oid);
 
     if (lcd)
     {
@@ -4285,8 +4278,8 @@ static bool path_check_valid_label(cypher_path *path,
 
             node = lfirst(lc);
 
-            if (!label_expr_has_tables(node->label_expr, LABEL_KIND_VERTEX,
-                                       cpstate->graph_oid))
+            if (!LABEL_EXPR_HAS_RELATIONS(node->label_expr, LABEL_KIND_VERTEX,
+                                          cpstate->graph_oid))
             {
                 return false;
             }
@@ -4297,8 +4290,8 @@ static bool path_check_valid_label(cypher_path *path,
 
             rel = lfirst(lc);
 
-            if (!label_expr_has_tables(rel->label_expr, LABEL_KIND_EDGE,
-                                       cpstate->graph_oid))
+            if (!LABEL_EXPR_HAS_RELATIONS(rel->label_expr, LABEL_KIND_EDGE,
+                                          cpstate->graph_oid))
             {
                 return false;
             }
@@ -4902,55 +4895,44 @@ static Node *make_qual(cypher_parsestate *cpstate,
 }
 
 /*
- * Transforms label expression type OR to a SQL union query.
+ * Builds a SQL union all query from the relation_oids.
  *
  * For example,
- *      MATCH (:A|B|C)
- *   is transformed into-
+ *   If relation_oids are for relations A, B and C,
+ *   it builds-
  *      SELECT * FROM ( -- top select stmt
  *        ((SELECT * FROM A) UNION (SELECT * FROM B)) -- left arg
  *        UNION
  *        (SELECT * FROM C); -- right arg
  *      );
  */
-static Query *label_expr_union_query(cypher_parsestate *cpstate,
-                                     cypher_label_expr *label_expr,
-                                     char label_expr_kind)
+static Query *create_union_query(cypher_parsestate *cpstate,
+                                 List *relation_oids, Alias *alias)
 {
     ParseState *pstate;
     Query *query;
     SelectStmt *top_select_stmt;
     ListCell *lc;
 
-    Assert(LABEL_EXPR_TYPE(label_expr) == LABEL_EXPR_TYPE_OR);
-
     top_select_stmt = NULL;
     pstate = (ParseState *)make_parsestate(&cpstate->pstate);
 
-    foreach (lc, label_expr->label_names)
+    foreach (lc, relation_oids)
     {
-        char *label_name;
+        Oid relid;
         char *schemaname;
         char *relname;
-        label_cache_data *lcd;
         RangeVar *label_rv;
         SelectStmt *select_stmt;
         ColumnRef *cr;
         ResTarget *rt;
 
-        label_name = strVal(lfirst(lc));
-
-        /* ignore labels that does not exist */
-        lcd = search_label_name_graph_cache(label_name, cpstate->graph_oid);
-        if (lcd == NULL || lcd->kind != label_expr_kind)
-        {
-            continue;
-        }
-
         /* make rangevar */
         schemaname = get_graph_namespace_name(cpstate->graph_name);
-        relname = get_label_relation_name(label_name, cpstate->graph_oid);
+        relid = lfirst_oid(lc);
+        relname = get_rel_name(relid);
         label_rv = makeRangeVar(schemaname, relname, -1);
+        label_rv->alias = copyObject(alias);
 
         /* make (SELECT * FROM relname) */
         cr = makeNode(ColumnRef);
@@ -4987,8 +4969,8 @@ static Query *label_expr_union_query(cypher_parsestate *cpstate,
     }
 
     /*
-     * top_select_stmt == NULL only when no labels in label_expr
-     * exists. This function is not called in that case.
+     * top_select_stmt == NULL only when relation_oids is empty.
+     * In that case, this function should not be called.
      */
     Assert(top_select_stmt != NULL);
 
@@ -4999,9 +4981,6 @@ static Query *label_expr_union_query(cypher_parsestate *cpstate,
 
 /*
  * Adds a RTE for the `label_expr` in `cpstate` and returns the PNSI.
- *
- * For invalid label, empty label and single label, the rte is a relation.
- * For multiple label, the rte is a subquery.
  */
 static ParseNamespaceItem *create_pnsi_for_match(cypher_parsestate *cpstate,
                                                  cypher_label_expr *label_expr,
@@ -5010,60 +4989,39 @@ static ParseNamespaceItem *create_pnsi_for_match(cypher_parsestate *cpstate,
                                                  bool valid_label)
 {
     ParseState *pstate;
-    RangeVar *label_rv;
     ParseNamespaceItem *pnsi;
-    Query *subquery;
-    char *schemaname;
-    char *relname;
+    List *reloids;
 
     pstate = (ParseState *)cpstate;
-    schemaname = get_graph_namespace_name(cpstate->graph_name);
+    reloids = get_label_expr_relations(label_expr, label_expr_kind,
+                                       cpstate->graph_oid);
 
     /*
-     * For invalid label, although no rows will be output, a pnsi still needs
-     * to be created in order to construct an empty rte.
+     * In case label expr is invalid or no relations to scan, although no rows
+     * will be output, a pnsi still needs to be created in order to construct
+     * an empty rte.
      */
-    if (!valid_label)
+    if (!valid_label || list_length(reloids) == 0)
     {
+        char *schemaname;
+        char *relname;
+        RangeVar *label_rv;
+
+        schemaname = get_graph_namespace_name(cpstate->graph_name);
         relname = label_expr_kind == LABEL_KIND_VERTEX ?
                       AG_DEFAULT_LABEL_VERTEX :
                       AG_DEFAULT_LABEL_EDGE;
         label_rv = makeRangeVar(schemaname, relname, -1);
         pnsi = addRangeTableEntry(pstate, label_rv, alias, label_rv->inh,
                                   true);
-
-        return pnsi;
     }
-
-    switch (LABEL_EXPR_TYPE(label_expr))
+    else
     {
-    case LABEL_EXPR_TYPE_EMPTY:
-    case LABEL_EXPR_TYPE_SINGLE:
-        relname = label_expr_table_name(label_expr, label_expr_kind);
-        relname = get_label_relation_name(relname, cpstate->graph_oid);
+        Query *subquery;
 
-        label_rv = makeRangeVar(schemaname, relname, -1);
-        pnsi = addRangeTableEntry(pstate, label_rv, alias, label_rv->inh,
-                                  true);
-        break;
-
-    case LABEL_EXPR_TYPE_OR:
-        subquery = label_expr_union_query(cpstate, label_expr,
-                                          label_expr_kind);
+        subquery = create_union_query(cpstate, reloids, alias);
         pnsi = addRangeTableEntryForSubquery(pstate, subquery, alias, false,
                                              true);
-        break;
-
-    case LABEL_EXPR_TYPE_AND:
-        // TODO: implement
-        ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("label expression type AND is not implemented")));
-        break;
-
-    default:
-        elog(ERROR, "Unknown label expression type");
-        break;
     }
 
     return pnsi;
@@ -5083,6 +5041,16 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
     Var *previous_clause_var = NULL;
     bool refs_var = false;
     ParseNamespaceItem *pnsi = NULL;
+
+    if (LABEL_EXPR_TYPE(rel->label_expr) == LABEL_EXPR_TYPE_AND)
+    {
+        ereport(
+            ERROR,
+            (errcode(ERRCODE_SYNTAX_ERROR),
+             errmsg(
+                 "label expression type AND is not allowed for relationships in a MATCH clause"),
+             parser_errposition((ParseState *)cpstate, rel->location)));
+    }
 
     /*
      * If we have an edge name, get any potential variable or column
@@ -5856,10 +5824,9 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     AttrNumber resno;
     ParseNamespaceItem *pnsi;
     char *invalid_label;
-    char *table_name;
+    char *relname;
 
-    // TODO: Error if not (EMPTY or SINGLE).
-    // because edges can have zero or one label
+    check_label_expr_type_for_create(pstate, (Node *)edge);
 
     invalid_label = find_first_invalid_label(edge->label_expr, LABEL_KIND_EDGE,
                                              cpstate->graph_oid);
@@ -5872,7 +5839,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(pstate, edge->location)));
     }
 
-    table_name = label_expr_table_name(edge->label_expr, LABEL_KIND_EDGE);
+    relname = label_expr_relname(edge->label_expr, LABEL_KIND_EDGE);
 
     rel->type = LABEL_KIND_EDGE;
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
@@ -5928,21 +5895,11 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(&cpstate->pstate, edge->location)));
     }
 
-    // create the label entry if it does not exist
-    if (!label_exists(table_name, cpstate->graph_oid))
-    {
-        List *parent;
-
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_EDGE);
-
-        parent = list_make1(rv);
-
-        create_label(cpstate->graph_name, table_name, LABEL_TYPE_EDGE, parent);
-    }
+    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                edge->label_expr, LABEL_KIND_EDGE);
 
     // lock the relation of the label
-    rv = makeRangeVar(cpstate->graph_name, table_name, -1);
+    rv = makeRangeVar(cpstate->graph_name, relname, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid
@@ -6183,35 +6140,25 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     char *alias;
     int resno;
     ParseNamespaceItem *pnsi;
-    char *table_name;
+    char *relname;
+
+    check_label_expr_type_for_create(pstate, (Node *)node);
 
     rel->type = LABEL_KIND_VERTEX;
     rel->tuple_position = InvalidAttrNumber;
     rel->variable_name = NULL;
     rel->resultRelInfo = NULL;
 
-    // TODO: error if OR
-
-    table_name = label_expr_table_name(node->label_expr, LABEL_KIND_VERTEX);
+    relname = label_expr_relname(node->label_expr, LABEL_KIND_VERTEX);
     rel->label_expr = node->label_expr;
 
-    // create the label entry if it does not exist
-    if (!label_exists(table_name, cpstate->graph_oid))
-    {
-        List *parent;
-
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_VERTEX);
-
-        parent = list_make1(rv);
-
-        create_label(cpstate->graph_name, table_name, LABEL_TYPE_VERTEX,
-                     parent);
-    }
+    // create the label entry
+    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                node->label_expr, LABEL_KIND_VERTEX);
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, table_name, -1);
+    rv = makeRangeVar(cpstate->graph_name, relname, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid
@@ -7231,7 +7178,9 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     ParseNamespaceItem *pnsi;
-    char *table_name;
+    char *relname;
+
+    check_label_expr_type_for_create(pstate, (Node *)edge);
 
     if (edge->name != NULL)
     {
@@ -7255,8 +7204,6 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
         edge->name = get_next_default_alias(cpstate);
     }
 
-    // TODO: error if OR
-
     rel->type = LABEL_KIND_EDGE;
 
     // all edges are marked with insert
@@ -7275,28 +7222,13 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(&cpstate->pstate, edge->location)));
     }
 
-    table_name = label_expr_table_name(edge->label_expr, LABEL_KIND_EDGE);
+    relname = label_expr_relname(edge->label_expr, LABEL_KIND_EDGE);
 
-    // check to see if the label exists, create the label entry if it does not.
-    if (table_name && !label_exists(table_name, cpstate->graph_oid))
-    {
-        List *parent;
-        /*
-         * setup the default edge table as the parent table, that we
-         * will inherit from.
-         */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_EDGE);
-
-        parent = list_make1(rv);
-
-        // create the label
-        create_label(cpstate->graph_name, table_name, LABEL_TYPE_EDGE,
-                     parent);
-    }
+    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                edge->label_expr, LABEL_KIND_EDGE);
 
     // lock the relation of the label
-    rv = makeRangeVar(cpstate->graph_name, table_name, -1);
+    rv = makeRangeVar(cpstate->graph_name, relname, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     /*
@@ -7349,7 +7281,9 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     ParseNamespaceItem *pnsi;
-    char *table_name;
+    char *relname;
+
+    check_label_expr_type_for_create((ParseState *)cpstate, (Node *)node);
 
     if (node->name != NULL)
     {
@@ -7398,33 +7332,15 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     rel->variable_name = node->name;
     rel->resultRelInfo = NULL;
 
-    // TODO: error if OR
-
-    table_name = label_expr_table_name(node->label_expr, LABEL_KIND_VERTEX);
+    relname = label_expr_relname(node->label_expr, LABEL_KIND_VERTEX);
     rel->label_expr = node->label_expr;
 
-    // check to see if the label exists, create the label entry if it does not.
-    if (table_name && !label_exists(table_name, cpstate->graph_oid))
-    {
-        List *parent;
-
-        /*
-         * setup the default vertex table as the parent table, that we
-         * will inherit from.
-         */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_VERTEX);
-
-        parent = list_make1(rv);
-
-        // create the label
-        create_label(cpstate->graph_name, table_name, LABEL_TYPE_VERTEX,
-                     parent);
-    }
+    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                node->label_expr, LABEL_KIND_VERTEX);
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, table_name, -1);
+    rv = makeRangeVar(cpstate->graph_name, relname, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     /*

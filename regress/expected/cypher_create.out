@@ -115,7 +115,7 @@ LINE 1: ...LECT * FROM cypher('cypher_create', $$CREATE (:v)-[:e]-()$$)...
                                                              ^
 --edges without labels are not supported
 SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[]->(:v)$$) AS (a agtype);
-ERROR:  relationships must be specify a label in CREATE.
+ERROR:  relationships must have exactly one label in a CREATE\MERGE clause
 LINE 1: ...LECT * FROM cypher('cypher_create', $$CREATE (:v)-[]->(:v)$$...
                                                              ^
 SELECT * FROM cypher_create.e;

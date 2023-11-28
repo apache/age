@@ -500,7 +500,7 @@ static void initialize_label_caches(void)
     // ag_label.relation
     ag_cache_scan_key_init(&label_relation_scan_keys[0],
                            Anum_ag_label_relation, F_OIDEQ);
-    
+
     // ag_label.seq_name, ag_label.graph
     ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0], Anum_ag_label_seq_name,
                            F_NAMEEQ);
@@ -619,6 +619,11 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         invalidate_label_graph_oid_cache(relid);
         invalidate_label_relation_cache(relid);
         invalidate_label_seq_name_graph_cache(relid);
+
+        // TODO: this is a temporary fix to cache being
+        // corrupted after invalidation by create_label_expr_relations
+        label_relation_cache_hash = NULL;
+        create_label_relation_cache();
     }
     else
     {
@@ -626,6 +631,11 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         flush_label_graph_oid_cache();
         flush_label_relation_cache();
         flush_label_seq_name_graph_cache();
+
+        // TODO: this is a temporary fix to cache being
+        // corrupted after invalidation by create_label_expr_relations
+        label_relation_cache_hash = NULL;
+        create_label_relation_cache();
     }
 }
 
@@ -1156,6 +1166,11 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     bool is_null;
     Datum value;
     Name name;
+    MemoryContext oldctx;
+    Oid *allrelations_oids;
+    ArrayType *allrelations_arr;
+    int allrelations_len;
+    int i;
 
     // ag_label.name
     value = heap_getattr(tuple, Anum_ag_label_name, tuple_desc, &is_null);
@@ -1183,4 +1198,19 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     value = heap_getattr(tuple, Anum_ag_label_seq_name, tuple_desc, &is_null);
     Assert(!is_null);
     namestrcpy(&cache_data->seq_name, DatumGetName(value)->data);
+    // ag_label.allrelations
+    value = heap_getattr(tuple, Anum_ag_label_allrelations, tuple_desc, &is_null);
+    Assert(!is_null);
+    allrelations_arr = DatumGetArrayTypeP(value);
+    allrelations_len = ArrayGetNItems(ARR_NDIM(allrelations_arr),
+                                  ARR_DIMS(allrelations_arr));
+    allrelations_oids = (Oid *) ARR_DATA_PTR(allrelations_arr);
+    cache_data->allrelations = NIL;
+    oldctx = MemoryContextSwitchTo(CacheMemoryContext);
+    for (i = 0; i < allrelations_len; i++)
+    {
+        cache_data->allrelations = lappend_oid(cache_data->allrelations,
+                                               allrelations_oids[i]);
+    }
+    MemoryContextSwitchTo(oldctx);
 }
