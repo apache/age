@@ -4630,6 +4630,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
     transform_entity *entity = NULL;
     cypher_relationship *cr = NULL;
     Node *expr = NULL;
+    Var *previous_clause_var = NULL;
     bool refs_var = false;
     ParseNamespaceItem *pnsi = NULL;
 
@@ -4641,14 +4642,16 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
     {
         te = findTarget(*target_list, rel->name);
         entity = find_variable(cpstate, rel->name);
-        expr = colNameToVar(pstate, rel->name, false, rel->location);
+        previous_clause_var = (Var *)colNameToVar(pstate, rel->name, false,
+                                                  rel->location);
 
         /*
          * If we have a valid entity and te for this rel name, go ahead and get
          * the cypher relationship as we will need this for later and flag that
          * we have a variable reference.
          */
-        if (te != NULL && entity != NULL)
+        if ((te != NULL && entity != NULL) ||
+            (entity != NULL && previous_clause_var != NULL))
         {
             cr = (cypher_relationship *)entity->entity.rel;
             refs_var = true;
@@ -4671,7 +4674,8 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
                         errmsg("variable '%s' is for a VLE edge", rel->name),
                         parser_errposition(pstate, rel->location)));
             }
-            else if (entity->type == ENT_PATH)
+            else if (entity->type == ENT_PATH &&
+                     pstate->p_expr_kind != EXPR_KIND_SELECT_TARGET)
             {
                 ereport(ERROR,
                        (errcode(ERRCODE_DUPLICATE_ALIAS),
@@ -4744,7 +4748,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
      * Variables for edges are not allowed to be used multiple times within the
      * same clause.
      */
-    if (expr == NULL && refs_var)
+    if (previous_clause_var == NULL && refs_var)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_DUPLICATE_ALIAS),
@@ -4787,9 +4791,15 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
              *  If expr_kind is WHERE, the expressions are in the parent's
              *  parent's parsestate, due to the way we transform sublinks.
              */
-            transform_entity *tentity = find_variable(parent_cpstate,
-                                                      rel->name);
+            transform_entity *tentity = NULL;
 
+            /* if we have the referenced var, just return it */
+            if (previous_clause_var != NULL)
+            {
+                return (Expr *)previous_clause_var;
+            }
+
+            tentity = find_variable(parent_cpstate, rel->name);
             if (tentity != NULL)
             {
                 return get_relative_expr(tentity, 2);
@@ -4806,13 +4816,7 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
         /* if this vertex is referencing an existing te var, return its expr */
         if (refs_var)
         {
-            return te->expr;
-        }
-
-        /* if this vertex is referencing an existing col var, return its expr */
-        if (expr != NULL)
-        {
-            return (Expr *)expr;
+            return (te != NULL) ? te->expr : (Expr *)previous_clause_var;
         }
     }
 
@@ -4881,20 +4885,25 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     transform_entity *entity = NULL;
     cypher_node *cn = NULL;
     bool refs_var = false;
-    ParseNamespaceItem *pnsi;
+    ParseNamespaceItem *pnsi = NULL;
+    Var *previous_clause_var = NULL;
 
     /* if we have a node name, get any potential variable references */
     if (node->name != NULL)
     {
         te = findTarget(*target_list, node->name);
         entity = find_variable(cpstate, node->name);
+        previous_clause_var = (Var *)colNameToVar(pstate, node->name, false,
+                                                  node->location);
 
         /*
-         * If we have a valid entity and te for this rel name, go ahead and get
-         * the cypher relationship as we will need this for later and flag that
-         * we have a variable reference.
+         * If we have a valid entity and te or a valid entity and a previous var
+         * ref for this rel name, go ahead and get the cypher relationship. We
+         * will need this information for later. Additionally, flag that we have
+         * a variable reference.
          */
-        if (te != NULL && entity != NULL)
+        if ((te != NULL && entity != NULL) ||
+            (entity != NULL && previous_clause_var != NULL))
         {
             cn = (cypher_node *)entity->entity.node;
             refs_var = true;
@@ -4917,11 +4926,23 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
                         errmsg("variable '%s' is for a VLE edge", node->name),
                         parser_errposition(pstate, node->location)));
             }
-            else if (entity->type == ENT_PATH)
+            /* gets non EXISTS cases */
+            else if (entity->type == ENT_PATH &&
+                     pstate->p_expr_kind != EXPR_KIND_SELECT_TARGET)
             {
                 ereport(ERROR,
                        (errcode(ERRCODE_DUPLICATE_ALIAS),
                         errmsg("variable '%s' is for a path", node->name),
+                        parser_errposition(pstate, node->location)));
+            }
+            /* gets EXISTS cases */
+            else if (entity->type == ENT_PATH &&
+                     pstate->p_expr_kind == EXPR_KIND_SELECT_TARGET)
+            {
+                ereport(ERROR,
+                       (errcode(ERRCODE_DUPLICATE_ALIAS),
+                        errmsg("a path variable '%s' is not allowed here",
+                               node->name),
                         parser_errposition(pstate, node->location)));
             }
         }
@@ -5032,6 +5053,12 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
              */
             transform_entity *tentity = NULL;
 
+            /* if we have the referenced var, just return it */
+            if (previous_clause_var != NULL)
+            {
+                return (Expr *)previous_clause_var;
+            }
+
             tentity = find_variable(parent_cpstate, node->name);
             if (tentity != NULL)
             {
@@ -5046,10 +5073,10 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
             }
         }
 
-        /* if this vertex is referencing an existing te var, return its expr */
+        /* if this vertex is referencing an existing var, return its expr */
         if (refs_var)
         {
-            return te->expr;
+            return (te != NULL) ? te->expr : (Expr *)previous_clause_var;
         }
 
         /* if this vertex is referencing an existing col var, return its expr */
