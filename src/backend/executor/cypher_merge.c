@@ -1121,13 +1121,11 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         if (CYPHER_TARGET_NODE_OUTPUT(node->flags))
         {
             Datum result;
-            char *label_name =
-                !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
-                    (char *)strVal(linitial(node->label_expr->label_names)) :
-                    "";
+            Datum labels;
 
             /* make the vertex agtype */
-            result = make_vertex(id, CStringGetDatum(label_name), prop);
+            labels = get_entity_labels(id, css->graph_oid);
+            result = make_vertex(id, labels, prop);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

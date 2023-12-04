@@ -56,18 +56,27 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
 {
     List *parents;
     char *ag_label_relation;
+    char rel_kind;
+    cypher_label_expr_type label_expr_type;
 
-    Assert(LABEL_EXPR_TYPE(label_expr) != LABEL_EXPR_TYPE_OR);
+    label_expr_type = LABEL_EXPR_TYPE(label_expr);
+
+    Assert(label_expr_type != LABEL_EXPR_TYPE_OR);
 
     /* set default labels as parent unless it is the default label itself */
-    if (LABEL_EXPR_TYPE(label_expr) == LABEL_EXPR_TYPE_EMPTY)
+    if (label_expr_type == LABEL_EXPR_TYPE_EMPTY)
     {
         parents = NIL;
+        rel_kind = LABEL_REL_KIND_DEFAULT;
     }
     else
     {
         char *parent_label_name;
         RangeVar *parent_rv;
+
+        rel_kind = label_expr_type == LABEL_EXPR_TYPE_SINGLE ?
+                       LABEL_REL_KIND_SINGLE :
+                       LABEL_REL_KIND_INTR;
 
         parent_label_name = label_expr_kind == LABEL_KIND_VERTEX ?
                                 AG_DEFAULT_LABEL_VERTEX :
@@ -94,14 +103,15 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
         return;
     }
 
-    /* this function creates ag_label entry and relation */
-    create_label(graphname, ag_label_relation, label_expr_kind, parents);
+    /* creates ag_label entry and relation */
+    create_label(graphname, ag_label_relation, label_expr_kind, rel_kind,
+                 parents);
 
     /*
      * For multiple labels (AND expression), processes each individual labels
      * as described above.
      */
-    if (LABEL_EXPR_TYPE(label_expr) == LABEL_EXPR_TYPE_AND)
+    if (label_expr_type == LABEL_EXPR_TYPE_AND)
     {
         ListCell *lc;
         Relation ag_label;
@@ -118,7 +128,8 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
 
             if (!label_exists(label_name, graphoid))
             {
-                create_label(graphname, label_name, label_expr_kind, parents);
+                create_label(graphname, label_name, label_expr_kind,
+                             LABEL_REL_KIND_SINGLE, parents);
             }
 
             /*

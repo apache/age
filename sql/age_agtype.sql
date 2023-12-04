@@ -1060,3 +1060,9 @@ CREATE OPERATOR CLASS graphid_ops_hash
   OPERATOR 1 =,
   FUNCTION 1 ag_catalog.graphid_hash_cmp(graphid);
 
+CREATE FUNCTION ag_catalog._label_names(graph_oid oid, graphid)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';

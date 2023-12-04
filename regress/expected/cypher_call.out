@@ -135,8 +135,8 @@ HINT:  Name explicitly using `YIELD` instead
 SELECT * FROM cypher('cypher_call', $$ MATCH (a) CALL sqrt(64) YIELD sqrt RETURN a, sqrt $$) as (a agtype, sqrt agtype);
                                    a                                    | sqrt 
 ------------------------------------------------------------------------+------
- {"id": 281474976710657, "label": "", "properties": {"n": "a"}}::vertex | 8.0
- {"id": 281474976710658, "label": "", "properties": {"n": "b"}}::vertex | 8.0
+ {"id": 281474976710657, "label": [], "properties": {"n": "a"}}::vertex | 8.0
+ {"id": 281474976710658, "label": [], "properties": {"n": "b"}}::vertex | 8.0
 (2 rows)
 
 /* MATCH CALL YIELD WHERE UPDATE/RETURN */
@@ -163,8 +163,8 @@ SELECT * FROM cypher('cypher_call', $$ MATCH (a) CALL sqrt(64) YIELD sqrt WHERE 
 SELECT * FROM cypher('cypher_call', $$ MATCH (a) CALL sqrt(64) YIELD sqrt WHERE sqrt = 8 RETURN a, sqrt $$) as (a agtype, sqrt agtype);
                                    a                                    | sqrt 
 ------------------------------------------------------------------------+------
- {"id": 281474976710657, "label": "", "properties": {"n": "a"}}::vertex | 8.0
- {"id": 281474976710658, "label": "", "properties": {"n": "b"}}::vertex | 8.0
+ {"id": 281474976710657, "label": [], "properties": {"n": "a"}}::vertex | 8.0
+ {"id": 281474976710658, "label": [], "properties": {"n": "b"}}::vertex | 8.0
 (2 rows)
 
 SELECT * FROM cypher('cypher_call', $$ MATCH (a) CALL sqrt(64) YIELD sqrt WHERE b = 8 RETURN a, sqrt $$) as (a agtype, sqrt agtype);
@@ -195,15 +195,15 @@ SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt MATCH (a) WHERE 
 SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt MATCH (a) WHERE sqrt = 8 RETURN a, sqrt $$) as (a agtype, sqrt agtype);
                                    a                                    | sqrt 
 ------------------------------------------------------------------------+------
- {"id": 281474976710657, "label": "", "properties": {"n": "a"}}::vertex | 8.0
- {"id": 281474976710658, "label": "", "properties": {"n": "b"}}::vertex | 8.0
+ {"id": 281474976710657, "label": [], "properties": {"n": "a"}}::vertex | 8.0
+ {"id": 281474976710658, "label": [], "properties": {"n": "b"}}::vertex | 8.0
 (2 rows)
 
 SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt WHERE sqrt = 8 MATCH (a) RETURN a, sqrt $$) as (a agtype, sqrt agtype);
                                    a                                    | sqrt 
 ------------------------------------------------------------------------+------
- {"id": 281474976710657, "label": "", "properties": {"n": "a"}}::vertex | 8.0
- {"id": 281474976710658, "label": "", "properties": {"n": "b"}}::vertex | 8.0
+ {"id": 281474976710657, "label": [], "properties": {"n": "a"}}::vertex | 8.0
+ {"id": 281474976710658, "label": [], "properties": {"n": "b"}}::vertex | 8.0
 (2 rows)
 
 /* Multiple Calls: CALL YIELD CALL YIELD... RETURN */

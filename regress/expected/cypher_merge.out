@@ -41,7 +41,7 @@ SELECT * FROM cypher('cypher_merge', $$MERGE (n {i: "Hello Merge", j: (null IS N
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                                     n                                                    
 ---------------------------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": "Hello Merge", "j": true, "k": false}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {"i": "Hello Merge", "j": true, "k": false}}::vertex
 (1 row)
 
 --clean up
@@ -74,7 +74,7 @@ SELECT * FROM cypher('cypher_merge', $$MERGE ({j: (null IS NULL)})$$) AS (a agty
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                               n                                              
 ---------------------------------------------------------------------------------------------
- {"id": 281474976710658, "label": "", "properties": {"i": "Hello Merge", "j": true}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {"i": "Hello Merge", "j": true}}::vertex
 (1 row)
 
 --clean up
@@ -122,7 +122,7 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE ({i: n.i})$$) AS (a agtyp
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                         n                                         
 ----------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": "Hello Merge"}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {"i": "Hello Merge"}}::vertex
 (1 row)
 
 --clean up
@@ -150,8 +150,8 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE ({j: n.i})$$) AS (a agtyp
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                         n                                         
 ----------------------------------------------------------------------------------
- {"id": 281474976710660, "label": "", "properties": {"i": "Hello Merge"}}::vertex
- {"id": 281474976710661, "label": "", "properties": {"j": "Hello Merge"}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {"i": "Hello Merge"}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {"j": "Hello Merge"}}::vertex
 (2 rows)
 
 --clean up
@@ -173,15 +173,15 @@ SELECT * FROM cypher('cypher_merge', $$CREATE ({i: 2}) $$) AS (a agtype);
 SELECT * FROM cypher('cypher_merge', $$MERGE (n {i: 1}) RETURN n$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710663, "label": "", "properties": {"i": 1}}::vertex
+ {"id": 281474976710663, "label": [], "properties": {"i": 1}}::vertex
 (1 row)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                   n                                   
 ----------------------------------------------------------------------
- {"id": 281474976710662, "label": "", "properties": {"i": 2}}::vertex
- {"id": 281474976710663, "label": "", "properties": {"i": 1}}::vertex
+ {"id": 281474976710662, "label": [], "properties": {"i": 2}}::vertex
+ {"id": 281474976710663, "label": [], "properties": {"i": 1}}::vertex
 (2 rows)
 
 --clean up
@@ -218,18 +218,18 @@ SELECT * FROM cypher('cypher_merge', $$CREATE () $$) AS (a agtype);
 SELECT * FROM cypher('cypher_merge', $$MERGE (n {i: 1}) RETURN n$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710664, "label": "", "properties": {"i": 1}}::vertex
- {"id": 281474976710665, "label": "", "properties": {"i": 1}}::vertex
+ {"id": 281474976710664, "label": [], "properties": {"i": 1}}::vertex
+ {"id": 281474976710665, "label": [], "properties": {"i": 1}}::vertex
 (2 rows)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                   n                                   
 ----------------------------------------------------------------------
- {"id": 281474976710664, "label": "", "properties": {"i": 1}}::vertex
- {"id": 281474976710665, "label": "", "properties": {"i": 1}}::vertex
- {"id": 281474976710666, "label": "", "properties": {"i": 2}}::vertex
- {"id": 281474976710667, "label": "", "properties": {}}::vertex
+ {"id": 281474976710664, "label": [], "properties": {"i": 1}}::vertex
+ {"id": 281474976710665, "label": [], "properties": {"i": 1}}::vertex
+ {"id": 281474976710666, "label": [], "properties": {"i": 2}}::vertex
+ {"id": 281474976710667, "label": [], "properties": {}}::vertex
 (4 rows)
 
 --clean up
@@ -258,9 +258,9 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE (n)-[:e]->(:v)$$) AS (a a
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e:e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                           e                                                            |                                m                                 
-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710668, "label": "", "properties": {}}::vertex | {"id": 844424930131969, "label": "e", "end_id": 1125899906842625, "start_id": 281474976710668, "properties": {}}::edge | {"id": 1125899906842625, "label": "v", "properties": {}}::vertex
+                               n                                |                                                           e                                                            |                                 m                                  
+----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710668, "label": [], "properties": {}}::vertex | {"id": 844424930131969, "label": "e", "end_id": 1125899906842625, "start_id": 281474976710668, "properties": {}}::edge | {"id": 1125899906842625, "label": ["v"], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -286,9 +286,9 @@ SELECT * FROM cypher('cypher_merge', $$MERGE (n)-[:e]->(:v)$$) AS (a agtype);
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e:e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                           e                                                            |                                m                                 
-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710671, "label": "", "properties": {}}::vertex | {"id": 844424930131971, "label": "e", "end_id": 1125899906842626, "start_id": 281474976710671, "properties": {}}::edge | {"id": 1125899906842626, "label": "v", "properties": {}}::vertex
+                               n                                |                                                           e                                                            |                                 m                                  
+----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710671, "label": [], "properties": {}}::vertex | {"id": 844424930131971, "label": "e", "end_id": 1125899906842626, "start_id": 281474976710671, "properties": {}}::edge | {"id": 1125899906842626, "label": ["v"], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -314,9 +314,9 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE (n)-[:e]->(:v)$$) AS (a a
 
 --validate created correctly
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e:e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                           e                                                            |                                m                                 
-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710672, "label": "", "properties": {}}::vertex | {"id": 844424930131972, "label": "e", "end_id": 1125899906842627, "start_id": 281474976710672, "properties": {}}::edge | {"id": 1125899906842627, "label": "v", "properties": {}}::vertex
+                               n                                |                                                           e                                                            |                                 m                                  
+----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710672, "label": [], "properties": {}}::vertex | {"id": 844424930131972, "label": "e", "end_id": 1125899906842627, "start_id": 281474976710672, "properties": {}}::edge | {"id": 1125899906842627, "label": ["v"], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -342,10 +342,10 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE (n)-[:e]->(:v)$$) AS (a a
 
 --validate created correctly
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e:e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                           e                                                            |                                m                                 
-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710673, "label": "", "properties": {}}::vertex | {"id": 844424930131974, "label": "e", "end_id": 1125899906842628, "start_id": 281474976710673, "properties": {}}::edge | {"id": 1125899906842628, "label": "v", "properties": {}}::vertex
- {"id": 281474976710674, "label": "", "properties": {}}::vertex | {"id": 844424930131975, "label": "e", "end_id": 1125899906842629, "start_id": 281474976710674, "properties": {}}::edge | {"id": 1125899906842629, "label": "v", "properties": {}}::vertex
+                               n                                |                                                           e                                                            |                                 m                                  
+----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710673, "label": [], "properties": {}}::vertex | {"id": 844424930131974, "label": "e", "end_id": 1125899906842628, "start_id": 281474976710673, "properties": {}}::edge | {"id": 1125899906842628, "label": ["v"], "properties": {}}::vertex
+ {"id": 281474976710674, "label": [], "properties": {}}::vertex | {"id": 844424930131975, "label": "e", "end_id": 1125899906842629, "start_id": 281474976710674, "properties": {}}::edge | {"id": 1125899906842629, "label": ["v"], "properties": {}}::vertex
 (2 rows)
 
 --clean up
@@ -414,10 +414,10 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) MERGE (n)-[:e_new]->(:v)$$) AS 
 
 --validate created correctly
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                              e                                                              |                                m                                 
-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710680, "label": "", "properties": {}}::vertex | {"id": 1407374883553281, "label": "e_new", "end_id": 1125899906842630, "start_id": 281474976710680, "properties": {}}::edge | {"id": 1125899906842630, "label": "v", "properties": {}}::vertex
- {"id": 281474976710681, "label": "", "properties": {}}::vertex | {"id": 1407374883553282, "label": "e_new", "end_id": 1125899906842631, "start_id": 281474976710681, "properties": {}}::edge | {"id": 1125899906842631, "label": "v", "properties": {}}::vertex
+                               n                                |                                                              e                                                              |                                 m                                  
+----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710680, "label": [], "properties": {}}::vertex | {"id": 1407374883553281, "label": "e_new", "end_id": 1125899906842630, "start_id": 281474976710680, "properties": {}}::edge | {"id": 1125899906842630, "label": ["v"], "properties": {}}::vertex
+ {"id": 281474976710681, "label": [], "properties": {}}::vertex | {"id": 1407374883553282, "label": "e_new", "end_id": 1125899906842631, "start_id": 281474976710681, "properties": {}}::edge | {"id": 1125899906842631, "label": ["v"], "properties": {}}::vertex
 (2 rows)
 
 --clean up
@@ -443,9 +443,9 @@ SELECT * FROM cypher('cypher_merge', $$MERGE (n)-[:e_new]->(:v)$$) AS (a agtype)
 
 --validate created correctly
 SELECT * FROM cypher('cypher_merge', $$MATCH (n)-[e]->(m:v) RETURN n, e, m$$) AS (n agtype, e agtype, m agtype);
-                               n                                |                                                              e                                                              |                                m                                 
-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- {"id": 281474976710684, "label": "", "properties": {}}::vertex | {"id": 1407374883553283, "label": "e_new", "end_id": 1125899906842632, "start_id": 281474976710684, "properties": {}}::edge | {"id": 1125899906842632, "label": "v", "properties": {}}::vertex
+                               n                                |                                                              e                                                              |                                 m                                  
+----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ {"id": 281474976710684, "label": [], "properties": {}}::vertex | {"id": 1407374883553283, "label": "e_new", "end_id": 1125899906842632, "start_id": 281474976710684, "properties": {}}::edge | {"id": 1125899906842632, "label": ["v"], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -470,7 +470,7 @@ SELECT * FROM cypher('cypher_merge', $$CREATE () MERGE (n)$$) AS (a agtype);
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (n agtype);
                                n                                
 ----------------------------------------------------------------
- {"id": 281474976710685, "label": "", "properties": {}}::vertex
+ {"id": 281474976710685, "label": [], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -492,7 +492,7 @@ SELECT * FROM cypher('cypher_merge', $$CREATE (n) WITH n as a MERGE (a)-[:e]->()
 SELECT * FROM cypher('cypher_merge', $$MATCH p=()-[:e]->() RETURN p$$) AS (p agtype);
                                                                                                                                p                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710687, "label": "", "properties": {}}::vertex, {"id": 844424930131981, "label": "e", "end_id": 281474976710688, "start_id": 281474976710687, "properties": {}}::edge, {"id": 281474976710688, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710687, "label": [], "properties": {}}::vertex, {"id": 844424930131981, "label": "e", "end_id": 281474976710688, "start_id": 281474976710687, "properties": {}}::edge, {"id": 281474976710688, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --clean up
@@ -514,7 +514,7 @@ SELECT * FROM cypher('cypher_merge', $$CREATE (n) MERGE (n)-[:e]->() $$) AS (a a
 SELECT * FROM cypher('cypher_merge', $$MATCH p=()-[:e]->() RETURN p$$) AS (p agtype);
                                                                                                                                p                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710689, "label": "", "properties": {}}::vertex, {"id": 844424930131982, "label": "e", "end_id": 281474976710690, "start_id": 281474976710689, "properties": {}}::edge, {"id": 281474976710690, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710689, "label": [], "properties": {}}::vertex, {"id": 844424930131982, "label": "e", "end_id": 281474976710690, "start_id": 281474976710689, "properties": {}}::edge, {"id": 281474976710690, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --clean up
@@ -536,7 +536,7 @@ SELECT * FROM cypher('cypher_merge', $$CREATE (n {i : 1}) SET n.i = 2 MERGE ({i:
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710691, "label": "", "properties": {"i": 2}}::vertex
+ {"id": 281474976710691, "label": [], "properties": {"i": 2}}::vertex
 (1 row)
 
 --clean up
@@ -558,7 +558,7 @@ SELECT * FROM cypher('cypher_merge', $$CREATE (n {i : 1}) SET n.i = 2 WITH n as 
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710692, "label": "", "properties": {"i": 2}}::vertex
+ {"id": 281474976710692, "label": [], "properties": {"i": 2}}::vertex
 (1 row)
 
 --clean up
@@ -586,7 +586,7 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n {i : 1}) SET n.i = 2 WITH n as a
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710693, "label": "", "properties": {"i": 2}}::vertex
+ {"id": 281474976710693, "label": [], "properties": {"i": 2}}::vertex
 (1 row)
 
 --clean up
@@ -611,7 +611,7 @@ ERROR:  vertex assigned to variable n was deleted
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
                                   a                                   
 ----------------------------------------------------------------------
- {"id": 281474976710694, "label": "", "properties": {"i": 1}}::vertex
+ {"id": 281474976710694, "label": [], "properties": {"i": 1}}::vertex
 (1 row)
 
 --clean up
@@ -652,23 +652,23 @@ SELECT * FROM cypher('cypher_merge', $$
     MERGE (person)-[r:BORN_IN]->(city)
     RETURN person.name, person.bornIn, city
 $$) AS (name agtype, bornIn agtype, city agtype);
-       name        |    bornin    |                                          city                                           
--------------------+--------------+-----------------------------------------------------------------------------------------
- "Rob Reiner"      | "New York"   | {"id": 1970324836974593, "label": "City", "properties": {"name": "New York"}}::vertex
- "Martin Sheen"    | "Ohio"       | {"id": 1970324836974595, "label": "City", "properties": {"name": "Ohio"}}::vertex
- "Michael Douglas" | "New Jersey" | {"id": 1970324836974594, "label": "City", "properties": {"name": "New Jersey"}}::vertex
+       name        |    bornin    |                                           city                                            
+-------------------+--------------+-------------------------------------------------------------------------------------------
+ "Rob Reiner"      | "New York"   | {"id": 1970324836974593, "label": ["City"], "properties": {"name": "New York"}}::vertex
+ "Martin Sheen"    | "Ohio"       | {"id": 1970324836974595, "label": ["City"], "properties": {"name": "Ohio"}}::vertex
+ "Michael Douglas" | "New Jersey" | {"id": 1970324836974594, "label": ["City"], "properties": {"name": "New Jersey"}}::vertex
 (3 rows)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
-                                                           a                                                            
-------------------------------------------------------------------------------------------------------------------------
- {"id": 1688849860263937, "label": "Person", "properties": {"name": "Rob Reiner", "bornIn": "New York"}}::vertex
- {"id": 1688849860263938, "label": "Person", "properties": {"name": "Michael Douglas", "bornIn": "New Jersey"}}::vertex
- {"id": 1688849860263939, "label": "Person", "properties": {"name": "Martin Sheen", "bornIn": "Ohio"}}::vertex
- {"id": 1970324836974593, "label": "City", "properties": {"name": "New York"}}::vertex
- {"id": 1970324836974594, "label": "City", "properties": {"name": "New Jersey"}}::vertex
- {"id": 1970324836974595, "label": "City", "properties": {"name": "Ohio"}}::vertex
+                                                            a                                                             
+--------------------------------------------------------------------------------------------------------------------------
+ {"id": 1688849860263937, "label": ["Person"], "properties": {"name": "Rob Reiner", "bornIn": "New York"}}::vertex
+ {"id": 1688849860263938, "label": ["Person"], "properties": {"name": "Michael Douglas", "bornIn": "New Jersey"}}::vertex
+ {"id": 1688849860263939, "label": ["Person"], "properties": {"name": "Martin Sheen", "bornIn": "Ohio"}}::vertex
+ {"id": 1970324836974593, "label": ["City"], "properties": {"name": "New York"}}::vertex
+ {"id": 1970324836974594, "label": ["City"], "properties": {"name": "New Jersey"}}::vertex
+ {"id": 1970324836974595, "label": ["City"], "properties": {"name": "Ohio"}}::vertex
 (6 rows)
 
 --clean up
@@ -689,7 +689,7 @@ SELECT * FROM cypher('cypher_merge', $$MERGE ()-[:e]-()$$) AS (a agtype);
 SELECT * FROM cypher('cypher_merge', $$MATCH p=()-[]->() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710695, "label": "", "properties": {}}::vertex, {"id": 844424930131983, "label": "e", "end_id": 281474976710696, "start_id": 281474976710695, "properties": {}}::edge, {"id": 281474976710696, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710695, "label": [], "properties": {}}::vertex, {"id": 844424930131983, "label": "e", "end_id": 281474976710696, "start_id": 281474976710695, "properties": {}}::edge, {"id": 281474976710696, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --clean up
@@ -704,14 +704,14 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtyp
 SELECT * FROM cypher('cypher_merge', $$MERGE (a) RETURN a$$) AS (a agtype);
                                a                                
 ----------------------------------------------------------------
- {"id": 281474976710697, "label": "", "properties": {}}::vertex
+ {"id": 281474976710697, "label": [], "properties": {}}::vertex
 (1 row)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH (a) RETURN a$$) AS (a agtype);
                                a                                
 ----------------------------------------------------------------
- {"id": 281474976710697, "label": "", "properties": {}}::vertex
+ {"id": 281474976710697, "label": [], "properties": {}}::vertex
 (1 row)
 
 --clean up
@@ -726,14 +726,14 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtyp
 SELECT * FROM cypher('cypher_merge', $$MERGE p=()-[:e]-() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710698, "label": "", "properties": {}}::vertex, {"id": 844424930131984, "label": "e", "end_id": 281474976710699, "start_id": 281474976710698, "properties": {}}::edge, {"id": 281474976710699, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710698, "label": [], "properties": {}}::vertex, {"id": 844424930131984, "label": "e", "end_id": 281474976710699, "start_id": 281474976710698, "properties": {}}::edge, {"id": 281474976710699, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH p=()-[]->() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710698, "label": "", "properties": {}}::vertex, {"id": 844424930131984, "label": "e", "end_id": 281474976710699, "start_id": 281474976710698, "properties": {}}::edge, {"id": 281474976710699, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710698, "label": [], "properties": {}}::vertex, {"id": 844424930131984, "label": "e", "end_id": 281474976710699, "start_id": 281474976710698, "properties": {}}::edge, {"id": 281474976710699, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --clean up
@@ -748,14 +748,14 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtyp
 SELECT * FROM cypher('cypher_merge', $$MERGE (a)-[:e]-(b) RETURN a$$) AS (a agtype);
                                a                                
 ----------------------------------------------------------------
- {"id": 281474976710700, "label": "", "properties": {}}::vertex
+ {"id": 281474976710700, "label": [], "properties": {}}::vertex
 (1 row)
 
 --validate
 SELECT * FROM cypher('cypher_merge', $$MATCH p=()-[]->() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710700, "label": "", "properties": {}}::vertex, {"id": 844424930131985, "label": "e", "end_id": 281474976710701, "start_id": 281474976710700, "properties": {}}::edge, {"id": 281474976710701, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710700, "label": [], "properties": {}}::vertex, {"id": 844424930131985, "label": "e", "end_id": 281474976710701, "start_id": 281474976710700, "properties": {}}::edge, {"id": 281474976710701, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 --clean up
@@ -770,14 +770,14 @@ SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtyp
 SELECT  * FROM cypher('cypher_merge', $$CREATE p=()-[:e]->() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710702, "label": "", "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710703, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710702, "label": [], "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710703, "label": [], "properties": {}}::vertex]::path
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$MERGE p=()-[:e]-() RETURN p$$) AS (a agtype);
                                                                                                                                a                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710702, "label": "", "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710703, "label": "", "properties": {}}::vertex]::path
- [{"id": 281474976710703, "label": "", "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710702, "label": "", "properties": {}}::vertex]::path
+ [{"id": 281474976710702, "label": [], "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710703, "label": [], "properties": {}}::vertex]::path
+ [{"id": 281474976710703, "label": [], "properties": {}}::vertex, {"id": 844424930131986, "label": "e", "end_id": 281474976710703, "start_id": 281474976710702, "properties": {}}::edge, {"id": 281474976710702, "label": [], "properties": {}}::vertex]::path
 (2 rows)
 
 --clean up
@@ -824,34 +824,34 @@ LINE 1: ..., $$MATCH (n) OPTIONAL MATCH (n)-[:e]->(m) MERGE (m)$$) AS (...
 SELECT * FROM cypher('cypher_merge', $$MATCH (n) RETURN n$$) AS (a agtype);
                                a                                
 ----------------------------------------------------------------
- {"id": 281474976710704, "label": "", "properties": {}}::vertex
+ {"id": 281474976710704, "label": [], "properties": {}}::vertex
 (1 row)
 
 --
 -- MERGE/SET test
 -- Node does exist, then set (github issue #235)
 SELECT * FROM cypher('cypher_merge', $$ CREATE (n:node {name: 'Jason'}) RETURN n $$) AS (n agtype);
-                                         n                                          
-------------------------------------------------------------------------------------
- {"id": 2533274790395905, "label": "node", "properties": {"name": "Jason"}}::vertex
+                                          n                                           
+--------------------------------------------------------------------------------------
+ {"id": 2533274790395905, "label": ["node"], "properties": {"name": "Jason"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype);
-                                         n                                          
-------------------------------------------------------------------------------------
- {"id": 2533274790395905, "label": "node", "properties": {"name": "Jason"}}::vertex
+                                          n                                           
+--------------------------------------------------------------------------------------
+ {"id": 2533274790395905, "label": ["node"], "properties": {"name": "Jason"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE (n:node {name: 'Jason'}) SET n.name = 'Lisa' RETURN n $$) AS (n agtype);
-                                         n                                         
------------------------------------------------------------------------------------
- {"id": 2533274790395905, "label": "node", "properties": {"name": "Lisa"}}::vertex
+                                          n                                          
+-------------------------------------------------------------------------------------
+ {"id": 2533274790395905, "label": ["node"], "properties": {"name": "Lisa"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype);
-                                         n                                         
------------------------------------------------------------------------------------
- {"id": 2533274790395905, "label": "node", "properties": {"name": "Lisa"}}::vertex
+                                          n                                          
+-------------------------------------------------------------------------------------
+ {"id": 2533274790395905, "label": ["node"], "properties": {"name": "Lisa"}}::vertex
 (1 row)
 
 -- Node doesn't exist, is created, then set
@@ -866,41 +866,41 @@ SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE (n:node {name: 'Jason'}) SET n.name = 'Lisa' RETURN n $$) AS (n agtype);
-                                         n                                         
------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "node", "properties": {"name": "Lisa"}}::vertex
+                                          n                                          
+-------------------------------------------------------------------------------------
+ {"id": 2533274790395906, "label": ["node"], "properties": {"name": "Lisa"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype);
-                                         n                                         
------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "node", "properties": {"name": "Lisa"}}::vertex
+                                          n                                          
+-------------------------------------------------------------------------------------
+ {"id": 2533274790395906, "label": ["node"], "properties": {"name": "Lisa"}}::vertex
 (1 row)
 
 -- Multiple SETs
 SELECT * FROM cypher('cypher_merge', $$ MERGE (n:node {name: 'Lisa'}) SET n.age = 23, n.gender = "Female" RETURN n $$) AS (n agtype);
-                                                        n                                                         
-------------------------------------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "node", "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
+                                                         n                                                          
+--------------------------------------------------------------------------------------------------------------------
+ {"id": 2533274790395906, "label": ["node"], "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype);
-                                                        n                                                         
-------------------------------------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "node", "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
+                                                         n                                                          
+--------------------------------------------------------------------------------------------------------------------
+ {"id": 2533274790395906, "label": ["node"], "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE (n:node {name: 'Jason'}) SET n.name = 'Lisa', n.age = 23, n.gender = 'Female' RETURN n $$) AS (n agtype);
-                                                        n                                                         
-------------------------------------------------------------------------------------------------------------------
- {"id": 2533274790395907, "label": "node", "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
+                                                         n                                                          
+--------------------------------------------------------------------------------------------------------------------
+ {"id": 2533274790395907, "label": ["node"], "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n:node) RETURN n $$) AS (n agtype);
-                                                        n                                                         
-------------------------------------------------------------------------------------------------------------------
- {"id": 2533274790395906, "label": "node", "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
- {"id": 2533274790395907, "label": "node", "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
+                                                         n                                                          
+--------------------------------------------------------------------------------------------------------------------
+ {"id": 2533274790395906, "label": ["node"], "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
+ {"id": 2533274790395907, "label": ["node"], "properties": {"age": 23, "name": "Lisa", "gender": "Female"}}::vertex
 (2 rows)
 
 --
@@ -913,9 +913,9 @@ SELECT * FROM cypher('cypher_merge', $$ MERGE ()-[:B]->(x:C)-[:E]->(x:C)<-[f:F]-
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE ()-[:B]->(x:C)-[:E]->(x:C)<-[f:F]-(y:I) RETURN x $$) AS (x agtype);
-                                x                                 
-------------------------------------------------------------------
- {"id": 3096224743817217, "label": "C", "properties": {}}::vertex
+                                 x                                  
+--------------------------------------------------------------------
+ {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=()-[:B]->(x:C)-[:E]->(x:C)<-[f:F]-(y:I) $$) AS (p agtype);
@@ -924,22 +924,22 @@ SELECT * FROM cypher('cypher_merge', $$ MERGE p=()-[:B]->(x:C)-[:E]->(x:C)<-[f:F
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=()-[:B]->(x:C)-[:E]->(x:C)<-[f:F]-(y:I) RETURN p $$) AS (p agtype);
-                                                                                                                                                                                                                                                                                                                             p                                                                                                                                                                                                                                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710705, "label": "", "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": "I", "properties": {}}::vertex]::path
+                                                                                                                                                                                                                                                                                                                                p                                                                                                                                                                                                                                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710705, "label": [], "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": ["I"], "properties": {}}::vertex]::path
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=()-[:B]->(x:C)-[:E]->(x:C)<-[f:F]-(y:I) RETURN p $$) AS (p agtype);
-                                                                                                                                                                                                                                                                                                                             p                                                                                                                                                                                                                                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710705, "label": "", "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": "I", "properties": {}}::vertex]::path
+                                                                                                                                                                                                                                                                                                                                p                                                                                                                                                                                                                                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710705, "label": [], "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": ["I"], "properties": {}}::vertex]::path
 (1 row)
 
 -- This should only return 1 row, as the path should already exist.
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=()-[:B]->(:C)-[:E]->(:C)<-[:F]-(:I) RETURN p $$) AS (p agtype);
-                                                                                                                                                                                                                                                                                                                             p                                                                                                                                                                                                                                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710705, "label": "", "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": "I", "properties": {}}::vertex]::path
+                                                                                                                                                                                                                                                                                                                                p                                                                                                                                                                                                                                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710705, "label": [], "properties": {}}::vertex, {"id": 2814749767106561, "label": "B", "end_id": 3096224743817217, "start_id": 281474976710705, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3659174697238529, "label": "F", "end_id": 3096224743817217, "start_id": 3940649673949185, "properties": {}}::edge, {"id": 3940649673949185, "label": ["I"], "properties": {}}::vertex]::path
 (1 row)
 
 -- test variable reuse in MERGE - the first MERGE of each group should create,
@@ -960,9 +960,9 @@ SELECT * FROM cypher('cypher_merge', $$ MERGE (x:P)-[:E]->(x) $$) AS (x agtype);
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:P)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 4222124650659841, "label": "P", "properties": {}}::vertex, {"id": 3377699720527874, "label": "E", "end_id": 4222124650659841, "start_id": 4222124650659841, "properties": {}}::edge, {"id": 4222124650659841, "label": "P", "properties": {}}::vertex]::path | {"id": 4222124650659841, "label": "P", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex, {"id": 3377699720527874, "label": "E", "end_id": 4222124650659841, "start_id": 4222124650659841, "properties": {}}::edge, {"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex]::path | {"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:Q)-[:E]->(x:Q) RETURN p, x $$) AS (p agtype, x agtype);
@@ -981,9 +981,9 @@ SELECT * FROM cypher('cypher_merge', $$ MERGE (x:Q)-[:E]->(x:Q) $$) AS (x agtype
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:Q)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 4503599627370497, "label": "Q", "properties": {}}::vertex, {"id": 3377699720527875, "label": "E", "end_id": 4503599627370497, "start_id": 4503599627370497, "properties": {}}::edge, {"id": 4503599627370497, "label": "Q", "properties": {}}::vertex]::path | {"id": 4503599627370497, "label": "Q", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex, {"id": 3377699720527875, "label": "E", "end_id": 4503599627370497, "start_id": 4503599627370497, "properties": {}}::edge, {"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex]::path | {"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:R)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
@@ -992,44 +992,44 @@ SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:R)-[:E]->(x) RETURN p, x $$) 
 (0 rows)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=(x:R)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 4785074604081153, "label": "R", "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": "R", "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": "R", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=(x:R)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 4785074604081153, "label": "R", "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": "R", "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": "R", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x:R)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 4785074604081153, "label": "R", "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": "R", "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": "R", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex
 (1 row)
 
 -- should return 4 rows
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=(x)-[:E]->(x) RETURN p, x $$) AS (p agtype, x agtype);
-                                                                                                                                  p                                                                                                                                   |                                x                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------
- [{"id": 3096224743817217, "label": "C", "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": "C", "properties": {}}::vertex]::path | {"id": 3096224743817217, "label": "C", "properties": {}}::vertex
- [{"id": 4222124650659841, "label": "P", "properties": {}}::vertex, {"id": 3377699720527874, "label": "E", "end_id": 4222124650659841, "start_id": 4222124650659841, "properties": {}}::edge, {"id": 4222124650659841, "label": "P", "properties": {}}::vertex]::path | {"id": 4222124650659841, "label": "P", "properties": {}}::vertex
- [{"id": 4503599627370497, "label": "Q", "properties": {}}::vertex, {"id": 3377699720527875, "label": "E", "end_id": 4503599627370497, "start_id": 4503599627370497, "properties": {}}::edge, {"id": 4503599627370497, "label": "Q", "properties": {}}::vertex]::path | {"id": 4503599627370497, "label": "Q", "properties": {}}::vertex
- [{"id": 4785074604081153, "label": "R", "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": "R", "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": "R", "properties": {}}::vertex
+                                                                                                                                    p                                                                                                                                     |                                 x                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------
+ [{"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex, {"id": 3377699720527873, "label": "E", "end_id": 3096224743817217, "start_id": 3096224743817217, "properties": {}}::edge, {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex]::path | {"id": 3096224743817217, "label": ["C"], "properties": {}}::vertex
+ [{"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex, {"id": 3377699720527874, "label": "E", "end_id": 4222124650659841, "start_id": 4222124650659841, "properties": {}}::edge, {"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex]::path | {"id": 4222124650659841, "label": ["P"], "properties": {}}::vertex
+ [{"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex, {"id": 3377699720527875, "label": "E", "end_id": 4503599627370497, "start_id": 4503599627370497, "properties": {}}::edge, {"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex]::path | {"id": 4503599627370497, "label": ["Q"], "properties": {}}::vertex
+ [{"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex, {"id": 3377699720527876, "label": "E", "end_id": 4785074604081153, "start_id": 4785074604081153, "properties": {}}::edge, {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex]::path | {"id": 4785074604081153, "label": ["R"], "properties": {}}::vertex
 (4 rows)
 
 -- should create 1 row
 SELECT * FROM cypher('cypher_merge', $$ MERGE p=(x)-[:E1]->(x) RETURN p, x $$) AS (p agtype, x agtype);
                                                                                                                                 p                                                                                                                                |                               x                                
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------
- [{"id": 281474976710706, "label": "", "properties": {}}::vertex, {"id": 5066549580791809, "label": "E1", "end_id": 281474976710706, "start_id": 281474976710706, "properties": {}}::edge, {"id": 281474976710706, "label": "", "properties": {}}::vertex]::path | {"id": 281474976710706, "label": "", "properties": {}}::vertex
+ [{"id": 281474976710706, "label": [], "properties": {}}::vertex, {"id": 5066549580791809, "label": "E1", "end_id": 281474976710706, "start_id": 281474976710706, "properties": {}}::edge, {"id": 281474976710706, "label": [], "properties": {}}::vertex]::path | {"id": 281474976710706, "label": [], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_merge', $$ MATCH p=(x)-[:E1]->(x) RETURN p, x $$) AS (p agtype, x agtype);
                                                                                                                                 p                                                                                                                                |                               x                                
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------
- [{"id": 281474976710706, "label": "", "properties": {}}::vertex, {"id": 5066549580791809, "label": "E1", "end_id": 281474976710706, "start_id": 281474976710706, "properties": {}}::edge, {"id": 281474976710706, "label": "", "properties": {}}::vertex]::path | {"id": 281474976710706, "label": "", "properties": {}}::vertex
+ [{"id": 281474976710706, "label": [], "properties": {}}::vertex, {"id": 5066549580791809, "label": "E1", "end_id": 281474976710706, "start_id": 281474976710706, "properties": {}}::edge, {"id": 281474976710706, "label": [], "properties": {}}::vertex]::path | {"id": 281474976710706, "label": [], "properties": {}}::vertex
 (1 row)
 
 -- the following should fail due to multiple labels

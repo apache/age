@@ -535,7 +535,7 @@ Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
 Datum make_path(List *path);
 Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
                        const char *attname, Oid typid, bool isnull);
-agtype_value *agtype_value_build_vertex(graphid id, char *label,
+agtype_value *agtype_value_build_vertex(graphid id, Datum labels,
                                         Datum properties);
 agtype_value *agtype_value_build_edge(graphid id, char *label, graphid end_id,
                                       graphid start_id, Datum properties);

@@ -52,6 +52,7 @@
 #include "utils/agtype_parser.h"
 #include "utils/ag_float8_supp.h"
 #include "utils/agtype_raw.h"
+#include "utils/ag_cache.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 
@@ -524,6 +525,28 @@ static void agtype_typecast_object(agtype_in_state *state, char *annotation)
         /* verify that the structure conforms to a valid vertex */
         if (is_object_vertex(agtv))
         {
+            agtype_value *label_field;
+
+            label_field = &(state->res->val.object.pairs[1].value);
+
+            /* converts cstring label to array labels */
+            if (label_field->type == AGTV_STRING)
+            {
+                agtype_value *labels;
+                agtype_parse_state *pstate;
+
+                pstate = NULL;
+                push_agtype_value(&pstate, WAGT_BEGIN_ARRAY, NULL);
+
+                if (label_field->val.string.len != 0)
+                {
+                    push_agtype_value(&pstate, WAGT_ELEM, label_field);
+                }
+
+                labels = push_agtype_value(&pstate, WAGT_END_ARRAY, NULL);
+                *label_field = *labels;
+            }
+
             agtv->type = AGTV_VERTEX;
             /* if it isn't the top, we need to adjust the copied value */
             if (!top)
@@ -660,7 +683,7 @@ static bool is_object_vertex(agtype_value *agtv)
         /* check for a label of type string */
         else if (key_len == 5 &&
                  pg_strncasecmp(key_val, "label", key_len) == 0 &&
-                 value->type == AGTV_STRING)
+                 (value->type == AGTV_ARRAY || value->type == AGTV_STRING))
         {
             has_label = true;
         }
@@ -2179,12 +2202,12 @@ Datum make_path(List *path)
 PG_FUNCTION_INFO_V1(_agtype_build_vertex);
 
 /*
- * SQL function agtype_build_vertex(graphid, cstring, agtype)
+ * SQL function agtype_build_vertex(graphid, agtype, agtype)
  */
 Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 {
     graphid id;
-    char *label;
+    agtype *labels;
     agtype *properties;
     agtype_build_state *bstate;
     agtype *rawscalar;
@@ -2205,7 +2228,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     }
 
     id = AG_GETARG_GRAPHID(0);
-    label = PG_GETARG_CSTRING(1);
+    labels = AG_GET_ARG_AGTYPE_P(1);
 
     if (fcinfo->args[2].isnull)
     {
@@ -2230,7 +2253,83 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     write_string(bstate, "label");
     write_string(bstate, "properties");
     write_graphid(bstate, id);
-    write_string(bstate, label);
+    write_container(bstate, labels);
+    write_container(bstate, properties);
+    vertex = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
+    write_extended(bstate, vertex, AGT_HEADER_VERTEX);
+    rawscalar = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    PG_RETURN_POINTER(rawscalar);
+}
+
+
+PG_FUNCTION_INFO_V1(_agtype_build_vertex_cstringlabel);
+
+/*
+ * SQL function agtype_build_vertex(graphid, cstring, agtype)
+ * This is kept for backward compatibility.
+ */
+Datum _agtype_build_vertex_cstringlabel(PG_FUNCTION_ARGS)
+{
+    graphid id;
+    agtype *labels;
+    char *label_name;
+    agtype *properties;
+    agtype_build_state *bstate;
+    agtype *rawscalar;
+    agtype *vertex;
+
+    /* handles null */
+    if (fcinfo->args[0].isnull)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_vertex() graphid cannot be NULL")));
+    }
+
+    if (fcinfo->args[1].isnull)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("_agtype_build_vertex() label cannot be NULL")));
+    }
+
+    id = AG_GETARG_GRAPHID(0);
+    label_name = PG_GETARG_CSTRING(1);
+
+    /* converts cstring label to array labels */
+    bstate = init_agtype_build_state(1, AGT_FARRAY);
+    write_string(bstate, label_name);
+    labels = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    if (fcinfo->args[2].isnull)
+    {
+        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
+    }
+    else
+    {
+        properties = AG_GET_ARG_AGTYPE_P(2);
+
+        if (!AGT_ROOT_IS_OBJECT(properties))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("_agtype_build_vertex() properties argument must be an object")));
+        }
+    }
+
+    bstate = init_agtype_build_state(3, AGT_FOBJECT);
+    write_string(bstate, "id");
+    write_string(bstate, "label");
+    write_string(bstate, "properties");
+    write_graphid(bstate, id);
+    write_container(bstate, labels);
     write_container(bstate, properties);
     vertex = build_agtype(bstate);
     pfree_agtype_build_state(bstate);
@@ -4742,7 +4841,7 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
 {
     agtype *arg_agt;
     agtype_value agtv_key;
-    agtype_value *agtv_graphid, *agtv_label, *agtv_properties;
+    agtype_value *agtv_graphid, *agtv_labels, *agtv_properties;
     Datum result;
     int count;
 
@@ -4782,12 +4881,36 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
 
     agtv_key.val.string.val = "label";
     agtv_key.val.string.len = 5;
-    agtv_label = find_agtype_value_from_container(&arg_agt->root,
+    agtv_labels = find_agtype_value_from_container(&arg_agt->root,
                                                   AGT_FOBJECT, &agtv_key);
-    if (agtv_label == NULL || agtv_label->type != AGTV_STRING)
+
+    if (agtv_labels && (agtv_labels->type == AGTV_ARRAY ||
+                        agtv_labels->type == AGTV_BINARY))
+    {
+        /* good to go */
+        ;
+    }
+    else if (agtv_labels && agtv_labels->type == AGTV_STRING)
+    {
+        /* converts to an array */
+        agtype_parse_state *pstate;
+
+        pstate = NULL;
+        push_agtype_value(&pstate, WAGT_BEGIN_ARRAY, NULL);
+
+        if (agtv_labels->val.string.len > 0)
+        {
+            push_agtype_value(&pstate, WAGT_ELEM, agtv_labels);
+        }
+
+        agtv_labels = push_agtype_value(&pstate, WAGT_END_ARRAY, NULL);
+    }
+    else
+    {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("vertex typecast object has invalid or missing label")));
+    }
 
     agtv_key.val.string.val = "properties";
     agtv_key.val.string.len = 10;
@@ -4803,7 +4926,7 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
     /* Hand it off to the build vertex routine */
     result = DirectFunctionCall3(_agtype_build_vertex,
                  Int64GetDatum(agtv_graphid->val.int_value),
-                 CStringGetDatum(agtv_label->val.string.val),
+                 PointerGetDatum(agtype_value_to_agtype(agtv_labels)),
                  PointerGetDatum(agtype_value_to_agtype(agtv_properties)));
     return result;
 }
@@ -5208,13 +5331,13 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     TableScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
-    Datum id, properties, result;
+    Datum id, properties, labels, result;
 
     /* get the specific graph namespace (schema) */
     Oid graph_namespace_oid = get_namespace_oid(graph, false);
     /* get the specific vertex label table (schema.vertex_label) */
-    Oid vertex_label_table_oid = get_relname_relid(vertex_label,
-                                                 graph_namespace_oid);
+    Oid vertex_label_table_oid = get_entity_reloid(graphid,
+                                                   graph_namespace_oid);
     /* get the active snapshot */
     Snapshot snapshot = GetActiveSnapshot();
 
@@ -5249,9 +5372,10 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* get the properties */
     properties = column_get_datum(tupdesc, tuple, 1, "properties",
                                   AGTYPEOID, true);
+    /* get the labels */
+    labels = get_entity_labels(graphid, graph_namespace_oid);
     /* reconstruct the vertex */
-    result = DirectFunctionCall3(_agtype_build_vertex, id,
-                                 CStringGetDatum(vertex_label), properties);
+    result = DirectFunctionCall3(_agtype_build_vertex, id, labels, properties);
     /* end the scan and close the relation */
     table_endscan(scan_desc);
     table_close(graph_vertex_label, ShareLock);
@@ -10752,13 +10876,13 @@ Datum age_collect_aggfinalfn(PG_FUNCTION_ARGS)
 }
 
 /* helper function to quickly build an agtype_value vertex */
-agtype_value *agtype_value_build_vertex(graphid id, char *label,
+agtype_value *agtype_value_build_vertex(graphid id, Datum labels,
                                         Datum properties)
 {
     agtype_in_state result;
 
     /* the label can't be NULL */
-    Assert(label != NULL);
+    Assert(AGT_ROOT_IS_ARRAY(DATUM_GET_AGTYPE_P(labels)));
 
     memset(&result, 0, sizeof(agtype_in_state));
 
@@ -10775,8 +10899,7 @@ agtype_value *agtype_value_build_vertex(graphid id, char *label,
     /* push the label key/value pair */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                   string_to_agtype_value(label));
+    add_agtype(labels, false, &result, AGTYPEOID, false);
 
     /* push the properties key/value pair */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
@@ -11226,7 +11349,6 @@ Datum age_labels(PG_FUNCTION_ARGS)
     agtype *agt_arg = NULL;
     agtype_value *agtv_temp = NULL;
     agtype_value *agtv_label = NULL;
-    agtype_in_state agis_result;
 
     /* get the vertex argument */
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
@@ -11259,26 +11381,12 @@ Datum age_labels(PG_FUNCTION_ARGS)
 
     /* get the label from the vertex */
     agtv_label = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "label");
-    /* it cannot be NULL */
-    Assert(agtv_label != NULL);
 
-    /* clear the result structure */
-    MemSet(&agis_result, 0, sizeof(agtype_in_state));
-
-    /* push the beginning of the array */
-    agis_result.res = push_agtype_value(&agis_result.parse_state,
-                                        WAGT_BEGIN_ARRAY, NULL);
-
-    /* push in the label */
-    agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
-                                        agtv_label);
-
-    /* push the end of the array */
-    agis_result.res = push_agtype_value(&agis_result.parse_state,
-                                        WAGT_END_ARRAY, NULL);
+    /* it cannot be NULL and must be an array */
+    Assert(agtv_label != NULL && agtv_label->type == AGTV_ARRAY);
 
     /* convert the agtype_value to a datum to return to the caller */
-    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_label));
 }
 
 PG_FUNCTION_INFO_V1(age_relationships);

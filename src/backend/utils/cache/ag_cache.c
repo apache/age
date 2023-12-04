@@ -84,6 +84,12 @@ typedef struct label_seq_name_graph_cache_entry
     label_cache_data data;
 } label_seq_name_graph_cache_entry;
 
+typedef struct label_allrelations_cache_entry
+{
+    Oid relation;
+    List *lcds;
+} label_allrelations_cache_entry;
+
 // ag_graph.name
 static HTAB *graph_name_cache_hash = NULL;
 static ScanKeyData graph_name_scan_keys[1];
@@ -107,6 +113,9 @@ static ScanKeyData label_relation_scan_keys[1];
 // ag_label.seq_name, ag_label.graph
 static HTAB *label_seq_name_graph_cache_hash = NULL;
 static ScanKeyData label_seq_name_graph_scan_keys[2];
+
+// ag_label.allrelations
+static HTAB *label_allrelations_cache_hash = NULL;
 
 // initialize all caches
 static void initialize_caches(void);
@@ -137,6 +146,7 @@ static void create_label_name_graph_cache(void);
 static void create_label_graph_oid_cache(void);
 static void create_label_relation_cache(void);
 static void create_label_seq_name_graph_cache(void);
+static void create_label_allrelations_cache(void);
 static void invalidate_label_caches(Datum arg, Oid relid);
 static void invalidate_label_name_graph_cache(Oid relid);
 static void flush_label_name_graph_cache(void);
@@ -146,6 +156,8 @@ static void invalidate_label_relation_cache(Oid relid);
 static void flush_label_relation_cache(void);
 static void invalidate_label_seq_name_graph_cache(Oid relid);
 static void flush_label_seq_name_graph_cache(void);
+static void invalidate_label_allrelations_cache(Oid relid);
+static void flush_allrelations_cache(void);
 
 static label_cache_data *search_label_name_graph_cache_miss(Name name,
                                                             Oid graph);
@@ -162,6 +174,9 @@ static label_cache_data *search_label_seq_name_graph_cache_miss(Name name,
 static void *label_seq_name_graph_cache_hash_search(Name name, Oid graph,
                                                     HASHACTION action,
                                                     bool *found);
+static List *search_label_allrelations_cache_miss(Oid relation);
+static void *label_allrelations_cache_hash_search(Oid key, HASHACTION action,
+                                                  bool *found);
 
 static void fill_label_cache_data(label_cache_data *cache_data,
                                   HeapTuple tuple, TupleDesc tuple_desc);
@@ -538,6 +553,7 @@ static void create_label_caches(void)
     create_label_graph_oid_cache();
     create_label_relation_cache();
     create_label_seq_name_graph_cache();
+    create_label_allrelations_cache();
 }
 
 static void create_label_name_graph_cache(void)
@@ -607,6 +623,23 @@ static void create_label_seq_name_graph_cache(void)
                                                   HASH_ELEM | HASH_BLOBS);
 }
 
+static void create_label_allrelations_cache(void)
+{
+    HASHCTL hash_ctl;
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(Oid);
+    hash_ctl.entrysize = sizeof(label_allrelations_cache_entry);
+
+    /*
+     * Please see the comment of hash_create() for the nelem value 16 here.
+     * HASH_BLOBS flag is set because the size of the key is sizeof(uint32).
+     */
+    label_allrelations_cache_hash =
+        hash_create("ag_label (allrelations) cache", 16, &hash_ctl,
+                    HASH_ELEM | HASH_BLOBS);
+}
+
 static void invalidate_label_caches(Datum arg, Oid relid)
 {
     Assert(label_name_graph_cache_hash);
@@ -619,11 +652,14 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         invalidate_label_graph_oid_cache(relid);
         invalidate_label_relation_cache(relid);
         invalidate_label_seq_name_graph_cache(relid);
+        invalidate_label_allrelations_cache(relid);
 
         // TODO: this is a temporary fix to cache being
         // corrupted after invalidation by create_label_expr_relations
         label_relation_cache_hash = NULL;
+        label_allrelations_cache_hash = NULL;
         create_label_relation_cache();
+        create_label_allrelations_cache();
     }
     else
     {
@@ -631,11 +667,14 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         flush_label_graph_oid_cache();
         flush_label_relation_cache();
         flush_label_seq_name_graph_cache();
+        flush_allrelations_cache();
 
         // TODO: this is a temporary fix to cache being
         // corrupted after invalidation by create_label_expr_relations
         label_relation_cache_hash = NULL;
+        label_allrelations_cache_hash = NULL;
         create_label_relation_cache();
+        create_label_allrelations_cache();
     }
 }
 
@@ -773,6 +812,24 @@ static void invalidate_label_relation_cache(Oid relid)
     }
 }
 
+static void invalidate_label_allrelations_cache(Oid relid)
+{
+    label_allrelations_cache_entry *entry;
+    void *removed;
+
+    entry = hash_search(label_allrelations_cache_hash, &relid, HASH_FIND, NULL);
+    if (!entry)
+    {
+        return;
+    }
+    removed = hash_search(label_allrelations_cache_hash, &relid, HASH_REMOVE,
+                          NULL);
+    if (!removed)
+    {
+        ereport(ERROR, (errmsg_internal("label (allrelations) cache corrupted")));
+    }
+}
+
 static void flush_label_relation_cache(void)
 {
     HASH_SEQ_STATUS hash_seq;
@@ -789,6 +846,31 @@ static void flush_label_relation_cache(void)
             break;
         }
         removed = hash_search(label_relation_cache_hash, &entry->relation,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("label (relation) cache corrupted")));
+        }
+    }
+}
+
+static void flush_allrelations_cache(void)
+{
+    HASH_SEQ_STATUS hash_seq;
+
+    hash_seq_init(&hash_seq, label_allrelations_cache_hash);
+    for (;;)
+    {
+        label_allrelations_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(label_allrelations_cache_hash, &entry->relation,
                               HASH_REMOVE, NULL);
         if (!removed)
         {
@@ -1160,6 +1242,127 @@ static void *label_seq_name_graph_cache_hash_search(Name name, Oid graph,
     return hash_search(label_seq_name_graph_cache_hash, &key, action, found);
 }
 
+/*
+ * Returns a list of label_cache_data of non-default labels that make up the
+ * given relation.
+ */
+List *search_label_allrelations_cache(Oid relation)
+{
+    label_allrelations_cache_entry *entry;
+    bool found;
+
+    AssertArg(relation);
+
+    initialize_caches();
+
+    entry = label_allrelations_cache_hash_search(relation, HASH_FIND, &found);
+
+    if (found)
+    {
+        return entry->lcds;
+    }
+
+    return search_label_allrelations_cache_miss(relation);
+}
+
+static void *label_allrelations_cache_hash_search(Oid key, HASHACTION action,
+                                                  bool *found)
+{
+    return hash_search(label_allrelations_cache_hash, &key, action, found);
+}
+
+static List *search_label_allrelations_cache_miss(Oid relation)
+{
+    Relation ag_label;
+    SysScanDesc scan_desc;
+    HeapTuple tuple;
+    List *lcds = NIL;
+    bool found;
+    label_allrelations_cache_entry *entry;
+    MemoryContext oldctx;
+
+    oldctx = MemoryContextSwitchTo(CacheMemoryContext);
+
+    /*
+     * Calling table_open() might call AcceptInvalidationMessage() and that
+     * might invalidate the label caches. This is OK because this function is
+     * called when the desired entry is not in the cache.
+     */
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
+
+    /* TODO: for now, do seq scan */
+    scan_desc = systable_beginscan(ag_label, InvalidOid, false, NULL, 0, NULL);
+
+    /* reads each row of ag_label */
+    while (true)
+    {
+        label_cache_data *lcd;
+        bool isNull;
+        Datum ag_label_allrelations;
+        Datum rel_kind;
+        Datum *elemsp;
+        bool *nullsp;
+        int nelemsp;
+        int i;
+
+        tuple = systable_getnext(scan_desc);
+        if (!HeapTupleIsValid(tuple))
+        {
+            break;
+        }
+
+        /* extracts allrelations and rel_kind */
+        rel_kind = heap_getattr(tuple, Anum_ag_label_rel_kind,
+                                RelationGetDescr(ag_label), &isNull);
+        Assert(!isNull);
+        ag_label_allrelations = heap_getattr(tuple, Anum_ag_label_allrelations,
+                                             RelationGetDescr(ag_label),
+                                             &isNull);
+        Assert(!isNull);
+
+        if (DatumGetChar(rel_kind) != LABEL_REL_KIND_SINGLE)
+        {
+            continue;
+        }
+
+        /* deconstructs allrelations to an array of Datums */
+        elemsp = palloc(sizeof(Datum));
+        nullsp = palloc(sizeof(bool));
+        deconstruct_array(DatumGetArrayTypeP(ag_label_allrelations),
+                          REGCLASSOID, 4, true, TYPALIGN_INT, &elemsp, &nullsp,
+                          &nelemsp);
+
+        /* for each item in allrelations */
+        for (i = 0; i < nelemsp; i++)
+        {
+            Oid item;
+
+            Assert(!nullsp[i]);
+
+            item = DatumGetObjectId(elemsp[i]);
+
+            /* argument `relation` is in allrelations */
+            if (item == relation)
+            {
+                lcd = (label_cache_data *)palloc(sizeof(label_cache_data));
+                fill_label_cache_data(lcd, tuple, RelationGetDescr(ag_label));
+                lcds = lappend(lcds, lcd);
+                break;
+            }
+        }
+    }
+
+    entry = label_allrelations_cache_hash_search(relation, HASH_ENTER, &found);
+    Assert(!found);
+    entry->lcds = lcds;
+
+    systable_endscan(scan_desc);
+    table_close(ag_label, AccessShareLock);
+    MemoryContextSwitchTo(oldctx);
+
+    return entry->lcds;
+}
+
 static void fill_label_cache_data(label_cache_data *cache_data,
                                   HeapTuple tuple, TupleDesc tuple_desc)
 {
@@ -1178,26 +1381,32 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     name = DatumGetName(value);
     Assert(name != NULL);
     namestrcpy(&cache_data->name, name->data);
+
     // ag_label.graph
     value = heap_getattr(tuple, Anum_ag_label_graph, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->graph = DatumGetObjectId(value);
+
     // ag_label.id
     value = heap_getattr(tuple, Anum_ag_label_id, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->id = DatumGetInt32(value);
+
     // ag_label.kind
     value = heap_getattr(tuple, Anum_ag_label_kind, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->kind = DatumGetChar(value);
+
     // ag_label.relation
     value = heap_getattr(tuple, Anum_ag_label_relation, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->relation = DatumGetObjectId(value);
+
     // ag_label.seq_name
     value = heap_getattr(tuple, Anum_ag_label_seq_name, tuple_desc, &is_null);
     Assert(!is_null);
     namestrcpy(&cache_data->seq_name, DatumGetName(value)->data);
+
     // ag_label.allrelations
     value = heap_getattr(tuple, Anum_ag_label_allrelations, tuple_desc, &is_null);
     Assert(!is_null);
@@ -1213,4 +1422,9 @@ static void fill_label_cache_data(label_cache_data *cache_data,
                                                allrelations_oids[i]);
     }
     MemoryContextSwitchTo(oldctx);
+
+    // ag_label.rel_kind
+    value = heap_getattr(tuple, Anum_ag_label_rel_kind, tuple_desc, &is_null);
+    Assert(!is_null);
+    cache_data->rel_kind = DatumGetChar(value);
 }

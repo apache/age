@@ -145,7 +145,7 @@ SElECT drop_graph('mlabels7', true);
  */
 SElECT create_graph('mlabels8');
 CREATE VIEW mlabels8.catalog AS
-    SELECT name, relation, allrelations
+    SELECT name, relation, allrelations, rel_kind
     FROM ag_catalog.ag_label
     WHERE graph IN
         (SELECT graphid
@@ -232,3 +232,52 @@ SELECT create_elabel('mlabels11', '_agr_pq');
 SELECT * FROM cypher('mlabels11', $$ MATCH (x:a:b) RETURN x.title      $$) as (a agtype);
 -- cleanup
 SElECT drop_graph('mlabels11', true);
+
+
+
+/*
+ * Internal functions _label_names() and _agtype_build_vertex
+ */
+SElECT create_graph('mlabels12');
+-- check create
+SELECT * FROM cypher('mlabels12', $$ CREATE (x:Person:Student {title: 'Person and Student'}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('mlabels12', $$ CREATE (x:Person         {title: 'Person only'}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('mlabels12', $$ CREATE (x {title: 'No label'})  RETURN x $$) as (a agtype);
+-- check _label_names
+SELECT
+    v.properties -> '"title"' AS "title",
+    _label_names(g.id, v.id)
+FROM
+    mlabels12._ag_label_vertex AS v,
+    (SELECT graphid AS id
+     FROM ag_catalog.ag_graph
+     WHERE name = 'mlabels12'
+     LIMIT 1) AS g;
+-- check match
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) RETURN x $$) as ("MATCH" agtype);
+-- check set
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) SET x.age = 32 RETURN x $$) as ("SET" agtype);
+-- check merge
+SELECT * FROM cypher('mlabels12', $$ MERGE (x:Teacher:Person) RETURN x $$) as ("MERGE" agtype);
+-- check vle
+SELECT * FROM cypher('mlabels12', $$ CREATE (:a:b)-[:r]->(:k)-[:r]->(:m:n) $$) as (a agtype);
+SELECT * FROM cypher('mlabels12', $$ MATCH p=()-[*2]->() RETURN p $$) as ("VLE" agtype);
+-- check vertex typecast
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}'::agtype);
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}'::agtype);
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": [], "properties": {"age": 32}}'::agtype);
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": "hello", "properties": {"age": 32}}'::agtype);
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": "", "properties": {"age": 32}}'::agtype);
+-- check agtype_in
+SELECT agtype_in('{"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}::vertex');
+SELECT agtype_in('{"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}::vertex');
+SELECT agtype_in('{"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex');
+SELECT agtype_in('{"id": 281474976710657, "label": "hello", "properties": {"age": 32}}::vertex');
+SELECT agtype_in('{"id": 281474976710657, "label": "", "properties": {"age": 32}}::vertex');
+-- check age_labels
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) RETURN labels(x) $$) as ("labels" agtype);
+-- check startnode and endnode
+SELECT * FROM cypher('mlabels12', $$ MATCH ()-[e]->() RETURN startNode(e) $$) as ("startNode" agtype);
+SELECT * FROM cypher('mlabels12', $$ MATCH ()-[e]->() RETURN endNode(e)   $$) as ("endNode" agtype);
+-- cleanup
+SElECT drop_graph('mlabels12', true);
