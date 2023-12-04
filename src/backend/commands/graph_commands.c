@@ -90,8 +90,10 @@ Datum create_graph(PG_FUNCTION_ARGS)
 
     //Create the default label tables
     graph = graph_name->data;
-    create_label(graph, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX, NIL);
-    create_label(graph, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE, NIL);
+    create_label(graph, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX,
+                 LABEL_REL_KIND_DEFAULT, NIL);
+    create_label(graph, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE,
+                 LABEL_REL_KIND_DEFAULT, NIL);
 
     ereport(NOTICE,
             (errmsg("graph \"%s\" has been created", NameStr(*graph_name))));

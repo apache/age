@@ -1069,15 +1069,15 @@ SELECT 'null'::agtype - '1';
 ERROR:  Invalid input parameter types for agtype_sub
 SELECT 'null'::agtype - '[1]';
 ERROR:  must be object or array, not a scalar value
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '"a"';
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '"a"';
 ERROR:  Invalid input parameter types for agtype_sub
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '["a"]';
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '["a"]';
 ERROR:  must be object or array, not a scalar value
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[1]';
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[1]';
 ERROR:  must be object or array, not a scalar value
 SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype - '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype;
 ERROR:  Invalid input parameter types for agtype_sub
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[]';
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '[]';
 ERROR:  must be object or array, not a scalar value
 --
 -- Test operator + for extended functionality
@@ -1118,16 +1118,16 @@ SELECT '["b", 2, {"d": 4}]'::agtype + '{"a":1 , "b":2, "c":3}'::agtype;
  ["b", 2, {"d": 4}, {"a": 1, "b": 2, "c": 3}]
 (1 row)
 
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype + '[1]';
-                                                                                             ?column?                                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex, 1]
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype + '[1]';
+                                                                                              ?column?                                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex, 1]
 (1 row)
 
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '[1, "e", true]';
-                                                         ?column?                                                         
---------------------------------------------------------------------------------------------------------------------------
- [{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, 1, "e", true]
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '[1, "e", true]';
+                                                          ?column?                                                          
+----------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, 1, "e", true]
 (1 row)
 
 SELECT '[]'::agtype + '{}';
@@ -1178,28 +1178,28 @@ SELECT '1'::agtype + '[{"a":1 , "b":2, "c":3}]'::agtype;
  [1, {"a": 1, "b": 2, "c": 3}]
 (1 row)
 
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"d": 4}';
-                                                       ?column?                                                       
-----------------------------------------------------------------------------------------------------------------------
- [{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, {"d": 4}]
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"d": 4}';
+                                                        ?column?                                                        
+------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, {"d": 4}]
 (1 row)
 
-SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
-                                                                                                       ?column?                                                                                                       
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, {"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex]
+SELECT '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype + '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
+                                                                                                         ?column?                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex, {"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex]
 (1 row)
 
-SELECT '[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype + ' [{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype;
-                                                                                                                                                                                                                                                                                                   ?column?                                                                                                                                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path, [{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path]
+SELECT '[{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path'::agtype + ' [{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path'::agtype;
+                                                                                                                                                                                                                                                                                                       ?column?                                                                                                                                                                                                                                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [[{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path, [{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path]
 (1 row)
 
-SELECT '[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype;
-                                                                                                                                                                                                                                               ?column?                                                                                                                                                                                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [[{"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex]::path, {"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex]
+SELECT '[{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path'::agtype + '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype;
+                                                                                                                                                                                                                                                  ?column?                                                                                                                                                                                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [[{"id": 1688849860263938, "label": ["v2"], "properties": {"id": "middle"}}::vertex, {"id": 1970324836974594, "label": "e2", "end_id": 1688849860263937, "start_id": 1688849860263938, "properties": {}}::edge, {"id": 1688849860263937, "label": ["v2"], "properties": {"id": "initial"}}::vertex]::path, {"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex]
 (1 row)
 
 SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype + '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype;
@@ -1208,10 +1208,10 @@ SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "s
  [{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge, {"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge]
 (1 row)
 
-SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype + '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
-                                                                                                                   ?column?                                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge, {"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex]
+SELECT '{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge'::agtype + '{"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex'::agtype;
+                                                                                                                    ?column?                                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1688849860263951, "label": "e_var", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {"id": 0}}::edge, {"id": 1125899906842625, "label": ["Vertex"], "properties": {"a": "xyz", "b": true, "c": -19.888}}::vertex]
 (1 row)
 
 -- errors out
@@ -2118,19 +2118,19 @@ SELECT agtype_in('{"bool":true, "integer":1}') < agtype_in('{"bool":true, "integ
  t
 (1 row)
 
-SELECT agtype_in('{"id":0, "label": "v", "properties":{"i":0}}::vertex') < agtype_in('{"bool":true, "i":0}');
+SELECT agtype_in('{"id":0, "label": ["v"], "properties":{"i":0}}::vertex') < agtype_in('{"bool":true, "i":0}');
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT agtype_in('{"id":2, "start_id":0, "end_id":1, "label": "e", "properties":{"i":0}}::edge') < agtype_in('{"id":0, "label": "v", "properties":{"i":0}}::vertex');
+SELECT agtype_in('{"id":2, "start_id":0, "end_id":1, "label": "e", "properties":{"i":0}}::edge') < agtype_in('{"id":0, "label": ["v"], "properties":{"i":0}}::vertex');
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT agtype_in('[{"id": 0, "label": "v", "properties": {"i": 0}}::vertex, {"id": 2, "start_id": 0, "end_id": 1, "label": "e", "properties": {"i": 0}}::edge, {"id": 1, "label": "v", "properties": {"i": 0}}::vertex]::path') < agtype_in('{"id":2, "start_id":0, "end_id":1, "label": "e", "properties":{"i":0}}::edge');
+SELECT agtype_in('[{"id": 0, "label": ["v"], "properties": {"i": 0}}::vertex, {"id": 2, "start_id": 0, "end_id": 1, "label": "e", "properties": {"i": 0}}::edge, {"id": 1, "label": ["v"], "properties": {"i": 0}}::vertex]::path') < agtype_in('{"id":2, "start_id":0, "end_id":1, "label": "e", "properties":{"i":0}}::edge');
  ?column? 
 ----------
  t
@@ -2156,45 +2156,45 @@ NOTICE:  graph "orderability_graph" has been created
  
 (1 row)
 
-SELECT * FROM cypher('orderability_graph', $$ CREATE (:vertex {prop: null}), (:vertex {prop: 1}), (:vertex {prop: 1.01}),(:vertex {prop: true}), (:vertex {prop:"string"}),(:vertex {prop:"string_2"}), (:vertex {prop:[1, 2, 3]}), (:vertex {prop:[1, 2, 3, 4, 5]}), (:vertex {prop:{bool:true, i:0}}), (:vertex {prop:{bool:true, i:null}}), (:vertex {prop: {id:0, label: "v", properties:{i:0}}::vertex}),  (:vertex {prop: {id: 2, start_id: 0, end_id: 1, label: "e", properties: {i: 0}}::edge}), (:vertex {prop: [{id: 0, label: "v", properties: {i: 0}}::vertex, {id: 2, start_id: 0, end_id: 1, label: "e", properties: {i: 0}}::edge, {id: 1, label: "v", properties: {i: 0}}::vertex]::path}) $$)  AS (x agtype);
+SELECT * FROM cypher('orderability_graph', $$ CREATE (:vertex {prop: null}), (:vertex {prop: 1}), (:vertex {prop: 1.01}),(:vertex {prop: true}), (:vertex {prop:"string"}),(:vertex {prop:"string_2"}), (:vertex {prop:[1, 2, 3]}), (:vertex {prop:[1, 2, 3, 4, 5]}), (:vertex {prop:{bool:true, i:0}}), (:vertex {prop:{bool:true, i:null}}), (:vertex {prop: {id:0, label: ["v"], properties:{i:0}}::vertex}),  (:vertex {prop: {id: 2, start_id: 0, end_id: 1, label: "e", properties: {i: 0}}::edge}), (:vertex {prop: [{id: 0, label: ["v"], properties: {i: 0}}::vertex, {id: 2, start_id: 0, end_id: 1, label: "e", properties: {i: 0}}::edge, {id: 1, label: ["v"], properties: {i: 0}}::vertex]::path}) $$)  AS (x agtype);
  x 
 ---
 (0 rows)
 
 SELECT * FROM cypher('orderability_graph', $$ MATCH (n) RETURN n ORDER BY n.prop $$) AS (sorted agtype);
-                                                                                                                                         sorted                                                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 844424930131981, "label": "vertex", "properties": {"prop": [{"id": 0, "label": "v", "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": "v", "properties": {"i": 0}}::vertex]::path}}::vertex
- {"id": 844424930131980, "label": "vertex", "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
- {"id": 844424930131979, "label": "vertex", "properties": {"prop": {"id": 0, "label": "v", "properties": {"i": 0}}::vertex}}::vertex
- {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"bool": true}}}::vertex
- {"id": 844424930131977, "label": "vertex", "properties": {"prop": {"i": 0, "bool": true}}}::vertex
- {"id": 844424930131975, "label": "vertex", "properties": {"prop": [1, 2, 3]}}::vertex
- {"id": 844424930131976, "label": "vertex", "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
- {"id": 844424930131973, "label": "vertex", "properties": {"prop": "string"}}::vertex
- {"id": 844424930131974, "label": "vertex", "properties": {"prop": "string_2"}}::vertex
- {"id": 844424930131972, "label": "vertex", "properties": {"prop": true}}::vertex
- {"id": 844424930131970, "label": "vertex", "properties": {"prop": 1}}::vertex
- {"id": 844424930131971, "label": "vertex", "properties": {"prop": 1.01}}::vertex
- {"id": 844424930131969, "label": "vertex", "properties": {}}::vertex
+                                                                                                                                            sorted                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131981, "label": ["vertex"], "properties": {"prop": [{"id": 0, "label": ["v"], "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": ["v"], "properties": {"i": 0}}::vertex]::path}}::vertex
+ {"id": 844424930131980, "label": ["vertex"], "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
+ {"id": 844424930131979, "label": ["vertex"], "properties": {"prop": {"id": 0, "label": ["v"], "properties": {"i": 0}}::vertex}}::vertex
+ {"id": 844424930131978, "label": ["vertex"], "properties": {"prop": {"bool": true}}}::vertex
+ {"id": 844424930131977, "label": ["vertex"], "properties": {"prop": {"i": 0, "bool": true}}}::vertex
+ {"id": 844424930131975, "label": ["vertex"], "properties": {"prop": [1, 2, 3]}}::vertex
+ {"id": 844424930131976, "label": ["vertex"], "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
+ {"id": 844424930131973, "label": ["vertex"], "properties": {"prop": "string"}}::vertex
+ {"id": 844424930131974, "label": ["vertex"], "properties": {"prop": "string_2"}}::vertex
+ {"id": 844424930131972, "label": ["vertex"], "properties": {"prop": true}}::vertex
+ {"id": 844424930131970, "label": ["vertex"], "properties": {"prop": 1}}::vertex
+ {"id": 844424930131971, "label": ["vertex"], "properties": {"prop": 1.01}}::vertex
+ {"id": 844424930131969, "label": ["vertex"], "properties": {}}::vertex
 (13 rows)
 
 SELECT * FROM cypher('orderability_graph', $$ MATCH (n) RETURN n ORDER BY n.prop DESC $$) AS (sorted agtype);
-                                                                                                                                         sorted                                                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "vertex", "properties": {}}::vertex
- {"id": 844424930131971, "label": "vertex", "properties": {"prop": 1.01}}::vertex
- {"id": 844424930131970, "label": "vertex", "properties": {"prop": 1}}::vertex
- {"id": 844424930131972, "label": "vertex", "properties": {"prop": true}}::vertex
- {"id": 844424930131974, "label": "vertex", "properties": {"prop": "string_2"}}::vertex
- {"id": 844424930131973, "label": "vertex", "properties": {"prop": "string"}}::vertex
- {"id": 844424930131976, "label": "vertex", "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
- {"id": 844424930131975, "label": "vertex", "properties": {"prop": [1, 2, 3]}}::vertex
- {"id": 844424930131977, "label": "vertex", "properties": {"prop": {"i": 0, "bool": true}}}::vertex
- {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"bool": true}}}::vertex
- {"id": 844424930131979, "label": "vertex", "properties": {"prop": {"id": 0, "label": "v", "properties": {"i": 0}}::vertex}}::vertex
- {"id": 844424930131980, "label": "vertex", "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
- {"id": 844424930131981, "label": "vertex", "properties": {"prop": [{"id": 0, "label": "v", "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": "v", "properties": {"i": 0}}::vertex]::path}}::vertex
+                                                                                                                                            sorted                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["vertex"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["vertex"], "properties": {"prop": 1.01}}::vertex
+ {"id": 844424930131970, "label": ["vertex"], "properties": {"prop": 1}}::vertex
+ {"id": 844424930131972, "label": ["vertex"], "properties": {"prop": true}}::vertex
+ {"id": 844424930131974, "label": ["vertex"], "properties": {"prop": "string_2"}}::vertex
+ {"id": 844424930131973, "label": ["vertex"], "properties": {"prop": "string"}}::vertex
+ {"id": 844424930131976, "label": ["vertex"], "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
+ {"id": 844424930131975, "label": ["vertex"], "properties": {"prop": [1, 2, 3]}}::vertex
+ {"id": 844424930131977, "label": ["vertex"], "properties": {"prop": {"i": 0, "bool": true}}}::vertex
+ {"id": 844424930131978, "label": ["vertex"], "properties": {"prop": {"bool": true}}}::vertex
+ {"id": 844424930131979, "label": ["vertex"], "properties": {"prop": {"id": 0, "label": ["v"], "properties": {"i": 0}}::vertex}}::vertex
+ {"id": 844424930131980, "label": ["vertex"], "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
+ {"id": 844424930131981, "label": ["vertex"], "properties": {"prop": [{"id": 0, "label": ["v"], "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": ["v"], "properties": {"i": 0}}::vertex]::path}}::vertex
 (13 rows)
 
 SELECT * FROM drop_graph('orderability_graph', true);
@@ -3210,31 +3210,31 @@ NOTICE:  graph "agtype_null_duplicate_test" has been created
 SELECT * FROM cypher('agtype_null_duplicate_test', $$ CREATE (a { a:NULL, b:'bb', c:'cc', d:'dd' }) RETURN a $$) AS (a agtype);
                                                a                                               
 -----------------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"b": "bb", "c": "cc", "d": "dd"}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {"b": "bb", "c": "cc", "d": "dd"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('agtype_null_duplicate_test', $$ CREATE (a { a:'aa', b:'bb', c:'cc', d:'dd' }) RETURN a $$) AS (a agtype);
                                                     a                                                     
 ----------------------------------------------------------------------------------------------------------
- {"id": 281474976710658, "label": "", "properties": {"a": "aa", "b": "bb", "c": "cc", "d": "dd"}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {"a": "aa", "b": "bb", "c": "cc", "d": "dd"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('agtype_null_duplicate_test', $$ CREATE (a { a:'aa', b:'bb', b:NULL , d:NULL }) RETURN a $$) AS (a agtype);
                                     a                                    
 -------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"a": "aa"}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {"a": "aa"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('agtype_null_duplicate_test', $$ CREATE (a { a:'aa', b:'bb', b:'xx', d:NULL }) RETURN a $$) AS (a agtype);
                                          a                                          
 ------------------------------------------------------------------------------------
- {"id": 281474976710660, "label": "", "properties": {"a": "aa", "b": "xx"}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {"a": "aa", "b": "xx"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('agtype_null_duplicate_test', $$ CREATE (a { a:NULL }) RETURN a $$) AS (a agtype);
                                a                                
 ----------------------------------------------------------------
- {"id": 281474976710661, "label": "", "properties": {}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM drop_graph('agtype_null_duplicate_test', true);
@@ -3251,74 +3251,74 @@ NOTICE:  graph "agtype_null_duplicate_test" has been dropped
 -- Vertex
 --
 --Basic Vertex Creation
-SELECT _agtype_build_vertex('1'::graphid, $$label_name$$, agtype_build_map());
-                    _agtype_build_vertex                    
-------------------------------------------------------------
- {"id": 1, "label": "label_name", "properties": {}}::vertex
-(1 row)
-
-SELECT _agtype_build_vertex('1'::graphid, $$label$$, agtype_build_map('id', 2));
+SELECT _agtype_build_vertex('1'::graphid, $$label_name$$::cstring, agtype_build_map());
                      _agtype_build_vertex                     
 --------------------------------------------------------------
- {"id": 1, "label": "label", "properties": {"id": 2}}::vertex
+ {"id": 1, "label": ["label_name"], "properties": {}}::vertex
+(1 row)
+
+SELECT _agtype_build_vertex('1'::graphid, $$label$$::cstring, agtype_build_map('id', 2));
+                      _agtype_build_vertex                      
+----------------------------------------------------------------
+ {"id": 1, "label": ["label"], "properties": {"id": 2}}::vertex
 (1 row)
 
 --Null properties
-SELECT _agtype_build_vertex('1'::graphid, $$label_name$$, NULL);
-                    _agtype_build_vertex                    
-------------------------------------------------------------
- {"id": 1, "label": "label_name", "properties": {}}::vertex
+SELECT _agtype_build_vertex('1'::graphid, $$label_name$$::cstring, NULL);
+                     _agtype_build_vertex                     
+--------------------------------------------------------------
+ {"id": 1, "label": ["label_name"], "properties": {}}::vertex
 (1 row)
 
 --Test access operator
-SELECT agtype_access_operator(_agtype_build_vertex('1'::graphid, $$label$$,
+SELECT agtype_access_operator(_agtype_build_vertex('1'::graphid, $$label$$::cstring,
                               agtype_build_map('id', 2)), '"id"');
  agtype_access_operator 
 ------------------------
  2
 (1 row)
 
-SELECT _agtype_build_vertex('1'::graphid, $$label$$, agtype_build_list());
+SELECT _agtype_build_vertex('1'::graphid, $$label$$::cstring, agtype_build_list());
 ERROR:  _agtype_build_vertex() properties argument must be an object
 --Vertex in a map
 SELECT agtype_build_map(
 	'vertex',
-	_agtype_build_vertex('1'::graphid, $$label_name$$, agtype_build_map()));
-                            agtype_build_map                            
-------------------------------------------------------------------------
- {"vertex": {"id": 1, "label": "label_name", "properties": {}}::vertex}
+	_agtype_build_vertex('1'::graphid, $$label_name$$::cstring, agtype_build_map()));
+                             agtype_build_map                             
+--------------------------------------------------------------------------
+ {"vertex": {"id": 1, "label": ["label_name"], "properties": {}}::vertex}
 (1 row)
 
 SELECT agtype_access_operator(
         agtype_build_map(
-            'vertex', _agtype_build_vertex('1'::graphid, $$label_name$$,
+            'vertex', _agtype_build_vertex('1'::graphid, $$label_name$$::cstring,
                                            agtype_build_map('key', 'value')),
-            'other_vertex', _agtype_build_vertex('1'::graphid, $$label_name$$,
+            'other_vertex', _agtype_build_vertex('1'::graphid, $$label_name$$::cstring,
                                            agtype_build_map('key', 'other_value'))),
         '"vertex"');
-                          agtype_access_operator                          
---------------------------------------------------------------------------
- {"id": 1, "label": "label_name", "properties": {"key": "value"}}::vertex
+                           agtype_access_operator                           
+----------------------------------------------------------------------------
+ {"id": 1, "label": ["label_name"], "properties": {"key": "value"}}::vertex
 (1 row)
 
 --Vertex in a list
 SELECT agtype_build_list(
-	_agtype_build_vertex('1'::graphid, $$label_name$$, agtype_build_map()),
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()));
-                                                    agtype_build_list                                                     
---------------------------------------------------------------------------------------------------------------------------
- [{"id": 1, "label": "label_name", "properties": {}}::vertex, {"id": 2, "label": "label_name", "properties": {}}::vertex]
+	_agtype_build_vertex('1'::graphid, $$label_name$$::cstring, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()));
+                                                      agtype_build_list                                                       
+------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 1, "label": ["label_name"], "properties": {}}::vertex, {"id": 2, "label": ["label_name"], "properties": {}}::vertex]
 (1 row)
 
 SELECT agtype_access_operator(
 	agtype_build_list(
-		_agtype_build_vertex('1'::graphid, $$label_name$$,
+		_agtype_build_vertex('1'::graphid, $$label_name$$::cstring,
                                      agtype_build_map('id', 3)),
-		_agtype_build_vertex('2'::graphid, $$label_name$$,
+		_agtype_build_vertex('2'::graphid, $$label_name$$::cstring,
                                      agtype_build_map('id', 4))), '0');
-                      agtype_access_operator                       
--------------------------------------------------------------------
- {"id": 1, "label": "label_name", "properties": {"id": 3}}::vertex
+                       agtype_access_operator                        
+---------------------------------------------------------------------
+ {"id": 1, "label": ["label_name"], "properties": {"id": 3}}::vertex
 (1 row)
 
 --
@@ -3326,14 +3326,14 @@ SELECT agtype_access_operator(
 --
 --Basic Edge Creation
 SELECT _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label_name$$, agtype_build_map());
+			  $$label_name$$::cstring, agtype_build_map());
                                   _agtype_build_edge                                  
 --------------------------------------------------------------------------------------
  {"id": 1, "label": "label_name", "end_id": 3, "start_id": 2, "properties": {}}::edge
 (1 row)
 
 SELECT _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2));
+			  $$label$$::cstring, agtype_build_map('id', 2));
                                    _agtype_build_edge                                   
 ----------------------------------------------------------------------------------------
  {"id": 1, "label": "label", "end_id": 3, "start_id": 2, "properties": {"id": 2}}::edge
@@ -3341,7 +3341,7 @@ SELECT _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
 
 --Null properties
 SELECT _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label_name$$, NULL);
+			  $$label_name$$::cstring, NULL);
                                   _agtype_build_edge                                  
 --------------------------------------------------------------------------------------
  {"id": 1, "label": "label_name", "end_id": 3, "start_id": 2, "properties": {}}::edge
@@ -3349,7 +3349,7 @@ SELECT _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
 
 --Test access operator
 SELECT agtype_access_operator(_agtype_build_edge('1'::graphid, '2'::graphid,
-			      '3'::graphid, $$label$$, agtype_build_map('id', 2)),'"id"');
+			      '3'::graphid, $$label$$::cstring, agtype_build_map('id', 2)),'"id"');
  agtype_access_operator 
 ------------------------
  2
@@ -3359,7 +3359,7 @@ SELECT agtype_access_operator(_agtype_build_edge('1'::graphid, '2'::graphid,
 SELECT agtype_build_map(
 	'edge',
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			   $$label_name$$, agtype_build_map()));
+			   $$label_name$$::cstring, agtype_build_map()));
                                         agtype_build_map                                        
 ------------------------------------------------------------------------------------------------
  {"edge": {"id": 1, "label": "label_name", "end_id": 3, "start_id": 2, "properties": {}}::edge}
@@ -3368,9 +3368,9 @@ SELECT agtype_build_map(
 SELECT agtype_access_operator(
         agtype_build_map(
             'edge', _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-				       $$label_name$$, agtype_build_map('key', 'value')),
+				       $$label_name$$::cstring, agtype_build_map('key', 'value')),
             'other_edge', _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-					     $$label_name$$, agtype_build_map('key', 'other_value'))),
+					     $$label_name$$::cstring, agtype_build_map('key', 'other_value'))),
         '"edge"');
                                        agtype_access_operator                                       
 ----------------------------------------------------------------------------------------------------
@@ -3380,9 +3380,9 @@ SELECT agtype_access_operator(
 --Edge in a list
 SELECT agtype_build_list(
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			   $$label_name$$, agtype_build_map()),
+			   $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('2'::graphid, '2'::graphid, '3'::graphid,
-			   $$label_name$$, agtype_build_map()));
+			   $$label_name$$::cstring, agtype_build_map()));
                                                                               agtype_build_list                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  [{"id": 1, "label": "label_name", "end_id": 3, "start_id": 2, "properties": {}}::edge, {"id": 2, "label": "label_name", "end_id": 3, "start_id": 2, "properties": {}}::edge]
@@ -3390,9 +3390,9 @@ SELECT agtype_build_list(
 
 SELECT agtype_access_operator(
 	agtype_build_list(
-		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid, $$label_name$$,
+		_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid, $$label_name$$::cstring,
                                      agtype_build_map('id', 3)),
-		_agtype_build_edge('2'::graphid, '2'::graphid, '3'::graphid, $$label_name$$,
+		_agtype_build_edge('2'::graphid, '2'::graphid, '3'::graphid, $$label_name$$::cstring,
                                      agtype_build_map('id', 4))), '0');
                                    agtype_access_operator                                    
 ---------------------------------------------------------------------------------------------
@@ -3401,90 +3401,90 @@ SELECT agtype_access_operator(
 
 -- Path
 SELECT _agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2)),
-	_agtype_build_vertex('3'::graphid, $$label_name$$, agtype_build_map())
+			  $$label$$::cstring, agtype_build_map('id', 2)),
+	_agtype_build_vertex('3'::graphid, $$label_name$$::cstring, agtype_build_map())
 );
-                                                                                                   _agtype_build_path                                                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 2, "label": "label_name", "properties": {}}::vertex, {"id": 1, "label": "label", "end_id": 3, "start_id": 2, "properties": {"id": 2}}::edge, {"id": 3, "label": "label_name", "properties": {}}::vertex]::path
+                                                                                                     _agtype_build_path                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 2, "label": ["label_name"], "properties": {}}::vertex, {"id": 1, "label": "label", "end_id": 3, "start_id": 2, "properties": {"id": 2}}::edge, {"id": 3, "label": ["label_name"], "properties": {}}::vertex]::path
 (1 row)
 
 --All these paths should produce Errors
 SELECT _agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2))
+			  $$label$$::cstring, agtype_build_map('id', 2))
 );
 ERROR:  a path is of the form: [vertex, (edge, vertex)*i] where i >= 0
 SELECT _agtype_build_path(
-       _agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+       _agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
        _agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-                         $$label$$, agtype_build_map('id', 2)),
-       _agtype_build_vertex('3'::graphid, $$label_name$$, agtype_build_map()),
+                         $$label$$::cstring, agtype_build_map('id', 2)),
+       _agtype_build_vertex('3'::graphid, $$label_name$$::cstring, agtype_build_map()),
        _agtype_build_edge('1'::graphid, '4'::graphid, '5'::graphid,
-                         $$label$$, agtype_build_map('id', 2))
+                         $$label$$::cstring, agtype_build_map('id', 2))
 );
 ERROR:  a path is of the form: [vertex, (edge, vertex)*i] where i >= 0
 SELECT _agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2)),
+			  $$label$$::cstring, agtype_build_map('id', 2)),
 	NULL
 );
 ERROR:  argument 3 must not be null
 SELECT _agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2)),
+			  $$label$$::cstring, agtype_build_map('id', 2)),
 	1
 );
 ERROR:  argument 3 must be an agtype
 SELECT _agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2)),
+			  $$label$$::cstring, agtype_build_map('id', 2)),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2))
+			  $$label$$::cstring, agtype_build_map('id', 2))
 );
 ERROR:  paths consist of alternating vertices and edges
 HINT:  argument 3 must be an vertex
 --
 -- id, startid, endid
 --
-SELECT age_id(_agtype_build_vertex('1'::graphid, $$label_name$$, agtype_build_map()));
+SELECT age_id(_agtype_build_vertex('1'::graphid, $$label_name$$::cstring, agtype_build_map()));
  age_id 
 --------
  1
 (1 row)
 
 SELECT age_id(_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label_name$$, agtype_build_map('id', 2)));
+			  $$label_name$$::cstring, agtype_build_map('id', 2)));
  age_id 
 --------
  1
 (1 row)
 
 SELECT age_start_id(_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label_name$$, agtype_build_map('id', 2)));
+			  $$label_name$$::cstring, agtype_build_map('id', 2)));
  age_start_id 
 --------------
  2
 (1 row)
 
 SELECT age_end_id(_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label_name$$, agtype_build_map('id', 2)));
+			  $$label_name$$::cstring, agtype_build_map('id', 2)));
  age_end_id 
 ------------
  3
 (1 row)
 
 SELECT age_id(_agtype_build_path(
-	_agtype_build_vertex('2'::graphid, $$label_name$$, agtype_build_map()),
+	_agtype_build_vertex('2'::graphid, $$label_name$$::cstring, agtype_build_map()),
 	_agtype_build_edge('1'::graphid, '2'::graphid, '3'::graphid,
-			  $$label$$, agtype_build_map('id', 2)),
-	_agtype_build_vertex('3'::graphid, $$label$$, agtype_build_map('id', 2))
+			  $$label$$::cstring, agtype_build_map('id', 2)),
+	_agtype_build_vertex('3'::graphid, $$label$$::cstring, agtype_build_map('id', 2))
 ));
 ERROR:  id() argument must be a vertex, an edge or null
 SELECT age_id(agtype_in('1'));
@@ -3698,13 +3698,13 @@ SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
       -505290721
 (1 row)
 
-SELECT agtype_hash_cmp('{"id":1, "label":"test", "properties":{"id":100}}'::agtype);
+SELECT agtype_hash_cmp('{"id":1, "label": ["test"], "properties":{"id":100}}'::agtype);
  agtype_hash_cmp 
 -----------------
-      1116453668
+       153197719
 (1 row)
 
-SELECT agtype_hash_cmp('{"id":1, "label":"test", "properties":{"id":100}}::vertex'::agtype);
+SELECT agtype_hash_cmp('{"id":1, "label": ["test"], "properties":{"id":100}}::vertex'::agtype);
  agtype_hash_cmp 
 -----------------
       1848106598
@@ -3723,18 +3723,18 @@ SELECT agtype_hash_cmp('{"id":2, "start_id":1, "end_id": 3, "label":"elabel", "p
 (1 row)
 
 SELECT agtype_hash_cmp('
-	[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	 {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	 {"id":5, "label":"vlabel", "properties":{}}::vertex]'::agtype);
+	 {"id":5, "label": ["vlabel"], "properties":{}}::vertex]'::agtype);
  agtype_hash_cmp 
 -----------------
       -231467898
 (1 row)
 
 SELECT agtype_hash_cmp('
-	[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	 {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	 {"id":5, "label":"vlabel", "properties":{}}::vertex]::path'::agtype);
+	 {"id":5, "label": ["vlabel"], "properties":{}}::vertex]::path'::agtype);
  agtype_hash_cmp 
 -----------------
        843330291
@@ -3797,39 +3797,39 @@ SELECT agtype_btree_cmp(agtype_in('null'), NULL);
 
 SELECT agtype_btree_cmp(
 	'1'::agtype,
-	'{"id":1, "label":"test", "properties":{"id":100}}::vertex'::agtype);
+	'{"id":1, "label": ["test"], "properties":{"id":100}}::vertex'::agtype);
  agtype_btree_cmp 
 ------------------
                 1
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'{"id":1, "label":"test", "properties":{"id":100}}'::agtype,
-	'{"id":1, "label":"test", "properties":{"id":100}}'::agtype);
+	'{"id":1, "label": ["test"], "properties":{"id":100}}'::agtype,
+	'{"id":1, "label": ["test"], "properties":{"id":100}}'::agtype);
  agtype_btree_cmp 
 ------------------
                 0
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'{"id":1, "label":"test", "properties":{"id":100}}'::agtype,
-	'{"id":1, "label":"test", "properties":{"id":200}}'::agtype);
+	'{"id":1, "label": ["test"], "properties":{"id":100}}'::agtype,
+	'{"id":1, "label": ["test"], "properties":{"id":200}}'::agtype);
  agtype_btree_cmp 
 ------------------
                -1
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'{"id":1, "label":"test", "properties":{"id":100}}::vertex'::agtype,
-	'{"id":1, "label":"test", "properties":{"id":100}}::vertex'::agtype);
+	'{"id":1, "label": ["test"], "properties":{"id":100}}::vertex'::agtype,
+	'{"id":1, "label": ["test"], "properties":{"id":100}}::vertex'::agtype);
  agtype_btree_cmp 
 ------------------
                 0
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'{"id":1, "label":"test", "properties":{"id":100}}::vertex'::agtype,
-	'{"id":1, "label":"test", "properties":{"id":200}}::vertex'::agtype);
+	'{"id":1, "label": ["test"], "properties":{"id":100}}::vertex'::agtype,
+	'{"id":1, "label": ["test"], "properties":{"id":200}}::vertex'::agtype);
  agtype_btree_cmp 
 ------------------
                 0
@@ -3860,24 +3860,24 @@ SELECT agtype_btree_cmp(
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	'[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	  {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	  {"id":3, "label":"vlabel", "properties":{}}::vertex]::path'::agtype,
-	'[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	  {"id":3, "label": ["vlabel"], "properties":{}}::vertex]::path'::agtype,
+	'[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	  {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	  {"id":3, "label":"vlabel", "properties":{}}::vertex]::path'::agtype);
+	  {"id":3, "label": ["vlabel"], "properties":{}}::vertex]::path'::agtype);
  agtype_btree_cmp 
 ------------------
                 0
 (1 row)
 
 SELECT agtype_btree_cmp(
-	'[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	'[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	  {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	  {"id":3, "label":"vlabel", "properties":{}}::vertex]::path'::agtype,
-	'[{"id":1, "label":"test", "properties":{"id":100}}::vertex,
+	  {"id":3, "label": ["vlabel"], "properties":{}}::vertex]::path'::agtype,
+	'[{"id":1, "label": ["test"], "properties":{"id":100}}::vertex,
 	  {"id":2, "start_id":1, "end_id": 3, "label":"elabel", "properties":{}}::edge,
-	  {"id":4, "label":"vlabel", "properties":{}}::vertex]::path'::agtype);
+	  {"id":4, "label": ["vlabel"], "properties":{}}::vertex]::path'::agtype);
  agtype_btree_cmp 
 ------------------
                -1

@@ -5576,11 +5576,11 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
     Assert(pnsi != NULL);
 
     func_oid = get_ag_func_oid("_agtype_build_vertex", 3, GRAPHIDOID,
-                               CSTRINGOID, AGTYPEOID);
+                               AGTYPEOID, AGTYPEOID);
 
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_ID, -1);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
+    label_name_func_oid = get_ag_func_oid("_label_names", 2, OIDOID,
                                           GRAPHIDOID);
 
     graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
