@@ -516,16 +516,14 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             TupleTableSlot *scantuple;
             PlanState *ps;
             Datum result;
-            char *label_name =
-                !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
-                    (char *)strVal(linitial(node->label_expr->label_names)) :
-                    "";
+            Datum labels;
 
             ps = css->css.ss.ps.lefttree;
             scantuple = ps->ps_ExprContext->ecxt_scantuple;
+            labels = get_entity_labels(id, css->graph_oid);
 
             // make the vertex agtype
-            result = make_vertex(id, CStringGetDatum(label_name),
+            result = make_vertex(id, labels,
                                  scanTupleSlot->tts_values[node->prop_attr_num]);
 
             /* append to the path list */

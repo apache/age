@@ -203,7 +203,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
     parent = list_make1(rv);
 
-    create_label(graph_name, label_name, LABEL_TYPE_VERTEX, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_VERTEX,
+                 LABEL_REL_KIND_SINGLE, parent);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", label_name)));
@@ -285,7 +286,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_EDGE);
 
     parent = list_make1(rv);
-    create_label(graph_name, label_name, LABEL_TYPE_EDGE, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_EDGE,
+                 LABEL_REL_KIND_SINGLE, parent);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", label_name)));
@@ -299,7 +301,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * ag_catalog.ag_label.
  */
 void create_label(char *graph_name, char *label_name, char label_type,
-                  List *parents)
+                  char rel_kind, List *parents)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -352,7 +354,7 @@ void create_label(char *graph_name, char *label_name, char label_type,
     label_id = get_new_label_id(graph_oid, nsp_id);
 
     insert_label(label_name, graph_oid, label_id, label_type,
-                 relation_id, seq_name);
+                 relation_id, seq_name, rel_kind);
 
     CommandCounterIncrement();
 }

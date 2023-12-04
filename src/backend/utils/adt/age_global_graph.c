@@ -1333,7 +1333,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_vertex, "label");
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
+    copy_agtype_value(result.parse_state, agtv_temp, &result.res, true);
 
     /* set up an integer for returning values */
     agtv_temp = &agtv_integer;
