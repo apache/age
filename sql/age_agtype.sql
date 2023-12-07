@@ -1071,3 +1071,10 @@ CREATE FUNCTION ag_catalog._label_names(graph_oid oid, graphid)
     IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._label_ids(graph_oid oid, graphid)
+    RETURNS int4[]
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';

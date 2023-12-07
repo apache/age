@@ -3778,54 +3778,103 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
                                            Node *id_field,
                                            cypher_label_expr *label_expr)
 {
-    A_Const *n;
-    FuncCall *fc;
-    String *ag_catalog, *extract_label_id;
-    label_cache_data *lcd;
-    A_Expr *lhs;
-    int32 label_id;
-    A_ArrayExpr *filter_ids;
-    A_ArrayExpr *empty_array;
-    A_Const *minus_one_const;
-    char *relname;
+    A_Expr *result;
+    A_ArrayExpr *filter_label_ids_node; // label IDs in MATCH's filter
+    FuncCall    *actual_label_ids_node; // label IDs of id_field entity
+    A_Const *graph_oid_const;
+    cypher_label_expr_type label_expr_type;
+    List *filter_label_ids;
+    ListCell *lc;
+    char *array_op;
 
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                    errmsg("not yet implemented for multiple label")));
+    label_expr_type = LABEL_EXPR_TYPE(label_expr);
+    filter_label_ids = label_expr_label_ids_for_filter(
+        label_expr, LABEL_KIND_VERTEX, cpstate->graph_oid);
 
-    relname = label_expr_relname(label_expr, LABEL_KIND_VERTEX);
-    lcd = search_label_name_graph_cache(relname, cpstate->graph_oid);
-
-    if (lcd)
+    if (filter_label_ids == NIL)
     {
-        label_id = lcd->id;
+        A_Const *l;
+        A_Const *r;
+
+        l = makeNode(A_Const);
+        l->val.boolval.type = T_Boolean;
+        l->isnull = false;
+        l->location = -1;
+        r = makeNode(A_Const);
+        r->val.boolval.type = T_Boolean;
+        r->isnull = false;
+        r->location = -1;
+
+        /*
+         * If filter_label_ids is empty because label_expr itself is empty,
+         * then it means match all (filter none). Otherwise, empty means
+         * match none.
+         */
+        if (label_expr_type == LABEL_EXPR_TYPE_EMPTY)
+        {
+            l->val.boolval.boolval = true;
+            r->val.boolval.boolval = true;
+        }
+        else
+        {
+            l->val.boolval.boolval = true;
+            r->val.boolval.boolval = false;
+        }
+
+        result = makeSimpleA_Expr(AEXPR_OP, "=", (Node *)l, (Node *)r, -1);
+
+        return result;
     }
-    else
+
+    /*
+     * Following code builds and returns either of the qual Node:
+     *      filter_label_ids && _label_ids(graph_oid, id_field)
+     *      filter_label_ids <@ _label_ids(graph_oid, id_field)
+     */
+
+    /* First, builds an A_ArrayExpr containing filter_label_ids */
+    filter_label_ids_node = makeNode(A_ArrayExpr);
+    filter_label_ids_node->elements = NIL;
+    filter_label_ids_node->location = -1;
+    foreach (lc, filter_label_ids)
     {
-        label_id = -5; // -1 is reserved for array concat
+        A_Const *elem = makeNode(A_Const);
+        elem->val.ival.type = T_Integer;
+        elem->val.ival.ival = lfirst_int(lc); // label id
+        elem->location = -1;
+
+        filter_label_ids_node->elements =
+            lappend(filter_label_ids_node->elements, elem);
     }
 
-    n = makeNode(A_Const);
-    n->val.ival.type = T_Integer;
-    n->val.ival.ival = label_id;
-    n->location = -1;
-    filter_ids = makeNode(A_ArrayExpr);
-    filter_ids->elements = list_make1(n);
-    filter_ids->location = -1;
+    /* Next, builds the _label_ids function call expression */
+    graph_oid_const = makeNode(A_Const);
+    graph_oid_const->val.ival.type = T_Integer;
+    graph_oid_const->val.ival.ival = cpstate->graph_oid;
+    graph_oid_const->location = -1;
+    actual_label_ids_node = makeFuncCall(
+        list_make2(makeString("ag_catalog"), makeString("_label_ids")),
+        list_make2(graph_oid_const, id_field), COERCE_EXPLICIT_CALL, -1);
 
-    minus_one_const = makeNode(A_Const);
-    minus_one_const->val.ival.type = T_Integer;
-    minus_one_const->val.ival.ival = -1;
+    /*
+     * To match an entity,
+     *
+     * For AND label expression,
+     *  filter_label_ids must be a subset (<@ operator) of the entity's actual
+     *  label IDs. It means, all filter label IDs are present in the entity's
+     *  label IDs.
+     *
+     * For OR and Single label expression,
+     *  filter_label_ids must overlap (&& operator) with entity's actual label
+     *  IDS. It means at least one filter label ID is present in the entity's
+     *  label IDs.
+     */
+    array_op = label_expr_type == LABEL_EXPR_TYPE_AND ? "<@" : "&&";
+    result = makeSimpleA_Expr(AEXPR_OP, array_op,
+                              (Node *)filter_label_ids_node,
+                              (Node *)actual_label_ids_node, -1);
 
-    ag_catalog = makeString("ag_catalog");
-    extract_label_id = makeString("_extract_label_id");
-    fc = makeFuncCall(list_make2(ag_catalog, extract_label_id),
-                      list_make1(id_field), COERCE_EXPLICIT_CALL, -1);
-    empty_array = makeNode(A_ArrayExpr);
-    empty_array->elements = list_make1(minus_one_const);
-    empty_array->location = -1;
-    lhs = makeSimpleA_Expr(AEXPR_OP, "||", (Node *)empty_array, (Node *)fc, -1);
-
-    return makeSimpleA_Expr(AEXPR_OP, "@>", (Node *)lhs, (Node *)filter_ids, -1);
+    return result;
 }
 
 /*
