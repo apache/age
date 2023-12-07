@@ -286,6 +286,51 @@ Datum _label_names(PG_FUNCTION_ARGS)
     AG_RETURN_AGTYPE_P(res);
 }
 
+PG_FUNCTION_INFO_V1(_label_ids);
+
+/*
+ * Arguments:
+ *      [0] = graph OID
+ *      [1] = entity (vertex\edge) ID
+ *
+ * Returns:
+ *      a int32 array of label IDs
+ */
+Datum _label_ids(PG_FUNCTION_ARGS)
+{
+    Oid graph_oid;
+    graphid entity_id;
+    ArrayType *res;
+    List *lcds;
+    ListCell *lc;
+    Datum *label_ids;
+    int len;
+    int i;
+
+    Assert(!PG_ARGISNULL(0));
+    Assert(!PG_ARGISNULL(1));
+
+    graph_oid = PG_GETARG_OID(0);
+    entity_id = AG_GETARG_GRAPHID(1);
+
+    lcds = search_label_allrelations_cache(
+        get_entity_reloid(entity_id, graph_oid));
+    len = list_length(lcds);
+    label_ids = (Datum *)palloc(sizeof(Datum) * len);
+
+    i = 0;
+    foreach (lc, lcds)
+    {
+        label_cache_data *lcd = lfirst(lc);
+        label_ids[i] = Int32GetDatum(lcd->id);
+        i++;
+    }
+
+    res = construct_array(label_ids, len, INT4OID, 4, true, TYPALIGN_INT);
+
+    PG_RETURN_ARRAYTYPE_P(res);
+}
+
 PG_FUNCTION_INFO_V1(_label_id);
 
 Datum _label_id(PG_FUNCTION_ARGS)

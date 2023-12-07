@@ -453,6 +453,62 @@ bool label_expr_are_equal(cypher_label_expr *le1, cypher_label_expr *le2)
 }
 
 /*
+ * Returns label IDs of labels contained by the label expressoin in arbitrary
+ * order. This is used by the MATCH clause to build filter quals.
+ *
+ * Note: Default labels are not considered labels by this function. So, for
+ * empty label expression, empty list is returned. Also, for non-empty types,
+ * empty list means the filter should not match any entities at all. For
+ * example, when no labels are valid in the expression. The caller is
+ * responsible for distinguishing between the two cases.
+ */
+List *label_expr_label_ids_for_filter(cypher_label_expr *label_expr,
+                                      char label_expr_kind, Oid graph_oid)
+{
+    cypher_label_expr_type label_expr_type;
+    List *result;
+    ListCell *lc;
+
+    label_expr_type = LABEL_EXPR_TYPE(label_expr);
+    result = NIL;
+
+    if (label_expr_type == LABEL_EXPR_TYPE_EMPTY)
+    {
+        return NIL;
+    }
+
+    foreach (lc, label_expr->label_names)
+    {
+        char *label_name;
+        label_cache_data *lcd;
+
+        label_name = strVal((String *)lfirst(lc));
+        lcd = search_label_name_graph_cache(label_name, graph_oid);
+
+        /* if a label_name does not exist in the cache */
+        if (!lcd || lcd->kind != label_expr_kind)
+        {
+            if (label_expr_type == LABEL_EXPR_TYPE_AND)
+            {
+                /* for AND, nothing to match */
+                return NIL;
+            }
+            else
+            {
+                /* for OR\Single, skip that label */
+                continue;
+            }
+        }
+        else
+        {
+            result = lappend_int(result, lcd->id);
+        }
+    }
+
+    return result;
+}
+
+/*
  * Checks unsupported label expression type in CREATE\MERGE clause and reports
  * error.
  *

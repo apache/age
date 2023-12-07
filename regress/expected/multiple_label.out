@@ -810,104 +810,136 @@ NOTICE:  graph "mlabels9" has been dropped
 /*
  * Match without variables
  */
-SElECT create_graph('mlabels10');
+SELECT create_graph('mlabels10');
 NOTICE:  graph "mlabels10" has been created
  create_graph 
 --------------
  
 (1 row)
 
-SELECT * FROM cypher('mlabels10', $$ CREATE (:a:b)-[:rel{title:'ab->pq'}]->(:p:q) $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ CREATE ()-[:rel {start:''}]->(:x)       $$) as (a agtype);
  a 
 ---
 (0 rows)
 
-SELECT * FROM cypher('mlabels10', $$ CREATE (:c)-[:rel{title:'c->m'}]->(:m)       $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ CREATE (:a)-[:rel {start:'a'}]->(:x)    $$) as (a agtype);
  a 
 ---
 (0 rows)
 
-SELECT * FROM cypher('mlabels10', $$ CREATE (:d)-[:rel{title:'d->n'}]->(:n)       $$) as (a agtype);
+SELECT * FROM cypher('mlabels10', $$ CREATE (:a:b)-[:rel {start:'ab'}]->(:x) $$) as (a agtype);
  a 
 ---
 (0 rows)
 
--- AND
-SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->()     RETURN e.title $$) as (a agtype);
-    a     
-----------
- "ab->pq"
-(1 row)
+SELECT * FROM cypher('mlabels10', $$ CREATE (:c)-[:rel {start:'c'}]->(:x)    $$) as (a agtype);
+ a 
+---
+(0 rows)
 
-SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:p:q)     RETURN e.title $$) as (a agtype);
-    a     
-----------
- "ab->pq"
-(1 row)
+SELECT * FROM cypher('mlabels10', $$ CREATE (:d)-[:rel {start:'d'}]->(:x)    $$) as (a agtype);
+ a 
+---
+(0 rows)
 
-SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->(:p:q) RETURN e.title $$) as (a agtype);
-    a     
-----------
- "ab->pq"
-(1 row)
+-- _label_ids()
+WITH graph AS (
+    SELECT graphid as id
+    FROM ag_catalog.ag_graph
+    WHERE name = 'mlabels10'
+    LIMIT 1
+)
+SELECT
+    array_agg(C.name)         AS "label names derived from _label_ids",
+    E.properties -> '"start"' AS start
+FROM
+    mlabels10._ag_label_edge AS E,
+    ag_catalog.ag_label      AS C,
+    graph
+WHERE
+    C.graph = graph.id
+    AND
+    CASE
+        WHEN _label_ids(graph.id, E.start_id) = '{}' AND
+              C.kind = 'v' AND
+              c.rel_kind = 'd'
+              THEN true
+        ELSE C.id = ANY(_label_ids(graph.id, E.start_id))
+    END
+GROUP BY
+    start
+ORDER BY
+    start
+;
+ label names derived from _label_ids | start 
+-------------------------------------+-------
+ {_ag_label_vertex}                  | ""
+ {a}                                 | "a"
+ {a,b}                               | "ab"
+ {c}                                 | "c"
+ {d}                                 | "d"
+(5 rows)
 
--- OR
-SELECT * FROM cypher('mlabels10', $$ MATCH (:c|d)-[e:rel]->()     RETURN e.title $$) as (a agtype);
-   a    
---------
- "c->m"
- "d->n"
+-- matches all
+SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(x:x)     RETURN e.start $$) as ("()" agtype);
+  ()  
+------
+ ""
+ "a"
+ "ab"
+ "c"
+ "d"
+(5 rows)
+
+-- matches :a and :a:b
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a)-[e:rel]->(x:x)   RETURN e.start $$) as ("(:a)" agtype);
+ (:a) 
+------
+ "a"
+ "ab"
 (2 rows)
 
-SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:m|n)     RETURN e.title $$) as (a agtype);
-   a    
+-- matches only :a:b
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a:b)" agtype);
+ (:a:b) 
 --------
- "c->m"
- "d->n"
-(2 rows)
-
-SELECT * FROM cypher('mlabels10', $$ MATCH (:c|d)-[e:rel]->(:m|n) RETURN e.title $$) as (a agtype);
-   a    
---------
- "c->m"
- "d->n"
-(2 rows)
-
--- Single
-SELECT * FROM cypher('mlabels10', $$ MATCH (:c)-[e:rel]->()   RETURN e.title $$) as (a agtype);
-   a    
---------
- "c->m"
+ "ab"
 (1 row)
 
-SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(:m)   RETURN e.title $$) as (a agtype);
-   a    
+-- matches none
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:m)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a:m)" agtype);
+ (:a:m) 
 --------
- "c->m"
-(1 row)
+(0 rows)
 
-SELECT * FROM cypher('mlabels10', $$ MATCH (:c)-[e:rel]->(:m) RETURN e.title $$) as (a agtype);
-   a    
+-- matches only :a, :a:b and :d
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a|d)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a|d)" agtype);
+ (:a|d) 
 --------
- "c->m"
+ "a"
+ "ab"
+ "d"
+(3 rows)
+
+-- matches c only
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c|m)-[e:rel]->(x:x) RETURN e.start $$) as ("(:c|m)" agtype);
+ (:c|m) 
+--------
+ "c"
 (1 row)
 
 -- cleanup
-SElECT drop_graph('mlabels10', true);
-NOTICE:  drop cascades to 13 other objects
+SELECT drop_graph('mlabels10', true);
+NOTICE:  drop cascades to 9 other objects
 DETAIL:  drop cascades to table mlabels10._ag_label_vertex
 drop cascades to table mlabels10._ag_label_edge
-drop cascades to table mlabels10._agr_ab
-drop cascades to table mlabels10.a
-drop cascades to table mlabels10.b
 drop cascades to table mlabels10.rel
-drop cascades to table mlabels10._agr_pq
-drop cascades to table mlabels10.p
-drop cascades to table mlabels10.q
+drop cascades to table mlabels10.x
+drop cascades to table mlabels10.a
+drop cascades to table mlabels10._agr_ab
+drop cascades to table mlabels10.b
 drop cascades to table mlabels10.c
-drop cascades to table mlabels10.m
 drop cascades to table mlabels10.d
-drop cascades to table mlabels10.n
 NOTICE:  graph "mlabels10" has been dropped
  drop_graph 
 ------------
