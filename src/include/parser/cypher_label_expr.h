@@ -59,6 +59,8 @@ char *find_first_invalid_label(cypher_label_expr *label_expr,
                                char label_expr_kind, Oid graph_oid);
 char *label_expr_relname(cypher_label_expr *label_expr, char label_expr_kind);
 bool label_expr_are_equal(cypher_label_expr *le1, cypher_label_expr *le2);
+List *label_expr_label_ids_for_filter(cypher_label_expr *label_expr,
+                                      char label_expr_kind, Oid graph_oid);
 void check_label_expr_type_for_create(ParseState *pstate, Node *entity);
 void check_reserved_label_name(char *label_name);
 
