@@ -1208,6 +1208,7 @@ path:
 
             p = (cypher_path *)$3;
             p->var_name = $1;
+            p->parsed_var_name = $1;
             p->location = @1;
 
             $$ = (Node *)p;
@@ -1223,6 +1224,7 @@ anonymous_path:
             n = make_ag_node(cypher_path);
             n->path = $1;
             n->var_name = NULL;
+            n->parsed_var_name = NULL;
             n->location = @1;
 
             $$ = (Node *)n;
@@ -1273,6 +1275,7 @@ path_node:
 
             n = make_ag_node(cypher_node);
             n->name = $2;
+            n->parsed_name = $2;
             n->label = $3;
             n->parsed_label = $3;
             n->props = $4;
@@ -1319,6 +1322,7 @@ path_relationship_body:
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
+            n->parsed_name = $2;
             n->label = $3;
             n->parsed_label = $3;
             n->varlen = $4;
@@ -1333,6 +1337,7 @@ path_relationship_body:
 
             n = make_ag_node(cypher_relationship);
             n->name = NULL;
+            n->parsed_name = NULL;
             n->label = NULL;
             n->parsed_label = NULL;
             n->varlen = NULL;
