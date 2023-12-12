@@ -166,7 +166,7 @@
         ((length) == 0 ? NULL : debackslash(token, length))
 
 #define non_nullable_string(token,length)  \
-        ((length) == 0 ? "" : debackslash(token, length))
+        ((length == 2 && token[0] == '"' && token[1] == '"') ? "" : debackslash(token, length))
 
 /*
  * Default read function for cypher nodes. For most nodes, we don't expect

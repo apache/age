@@ -97,8 +97,15 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool re
         (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree, context, params,
                                       queryEnv, dest, qc);
     else
+    {
+        Assert(IsA(pstmt, PlannedStmt));
+        Assert(pstmt->commandType == CMD_UTILITY);
+        Assert(queryString != NULL);	/* required as of 8.4 */
+        Assert(qc == NULL || qc->commandTag == CMDTAG_UNKNOWN);
         standard_ProcessUtility(pstmt, queryString, readOnlyTree, context, params, queryEnv,
                                 dest, qc);
+    }
+        
 }
 
 static void drop_age_extension(DropStmt *stmt)

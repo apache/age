@@ -77,7 +77,7 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
 
     // initialize the resultRelInfo
     InitResultRelInfo(resultRelInfo, label_relation,
-                      list_length(estate->es_range_table), NULL,
+                      0, NULL,
                       estate->es_instrument);
 
     // open the parse state
@@ -254,8 +254,8 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
     // Insert index entries for the tuple
     if (resultRelInfo->ri_NumIndices > 0)
     {
-        ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false,
-                              false, NULL, NIL);
+        ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate,
+                              false, false, NULL, NIL, false);
     }
 
     return tuple;

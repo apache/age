@@ -63,12 +63,12 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
      * NOTE: Is it better to make use of label_id and label_kind domain types
      *       than to use assert to check label_id and label_kind are valid?
      */
-    AssertArg(label_name);
-    AssertArg(label_id_is_valid(label_id));
-    AssertArg(label_kind == LABEL_KIND_VERTEX ||
+    Assert(label_name);
+    Assert(label_id_is_valid(label_id));
+    Assert(label_kind == LABEL_KIND_VERTEX ||
               label_kind == LABEL_KIND_EDGE);
-    AssertArg(OidIsValid(label_relation));
-    AssertArg(seq_name);
+    Assert(OidIsValid(label_relation));
+    Assert(seq_name);
 
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
 
@@ -188,8 +188,9 @@ Datum _label_name(PG_FUNCTION_ARGS)
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-                        errmsg("graph_oid and label_id must not be null")));
+        PG_RETURN_NULL(); 
+        //ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+        //                errmsg("graph_oid and label_id must not be null")));
 
     graph = PG_GETARG_OID(0);
 
@@ -241,7 +242,7 @@ Datum _extract_label_id(PG_FUNCTION_ARGS)
     }
     graph_oid = AG_GETARG_GRAPHID(0);
 
-    PG_RETURN_INT32(get_graphid_label_id(graph_oid));
+    PG_RETURN_INT64(get_graphid_label_id(graph_oid));
 }
 
 bool label_id_exists(Oid graph_oid, int32 label_id)
