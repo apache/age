@@ -1356,10 +1356,10 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     Datum value;
     Name name;
     MemoryContext oldctx;
-    Oid *allrelations_oids;
-    ArrayType *allrelations_arr;
-    int allrelations_len;
     int i;
+    Datum *elemsp;
+    bool *nullsp;
+    int nelemsp;
 
     // ag_label.name
     value = heap_getattr(tuple, Anum_ag_label_name, tuple_desc, &is_null);
@@ -1396,16 +1396,19 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     // ag_label.allrelations
     value = heap_getattr(tuple, Anum_ag_label_allrelations, tuple_desc, &is_null);
     Assert(!is_null);
-    allrelations_arr = DatumGetArrayTypeP(value);
-    allrelations_len = ArrayGetNItems(ARR_NDIM(allrelations_arr),
-                                  ARR_DIMS(allrelations_arr));
-    allrelations_oids = (Oid *) ARR_DATA_PTR(allrelations_arr);
-    cache_data->allrelations = NIL;
+
+    elemsp = (Datum *)palloc(sizeof(Datum));
+    nullsp = (bool *)palloc(sizeof(bool));
+    deconstruct_array(DatumGetArrayTypeP(value), REGCLASSOID, 4, true,
+                      TYPALIGN_INT, &elemsp, &nullsp, &nelemsp);
+
     oldctx = MemoryContextSwitchTo(CacheMemoryContext);
-    for (i = 0; i < allrelations_len; i++)
+    cache_data->allrelations = NIL;
+    for (i = 0; i < nelemsp; i++)
     {
+        Assert(!nullsp[i]);
         cache_data->allrelations = lappend_oid(cache_data->allrelations,
-                                               allrelations_oids[i]);
+                                               DatumGetObjectId(elemsp[i]));
     }
     MemoryContextSwitchTo(oldctx);
 

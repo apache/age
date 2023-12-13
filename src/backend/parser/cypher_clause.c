@@ -5887,7 +5887,6 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     AttrNumber resno;
     ParseNamespaceItem *pnsi;
     char *invalid_label;
-    char *relname;
 
     check_label_expr_type_for_create(pstate, (Node *)edge);
 
@@ -5901,8 +5900,6 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  errmsg("label %s is for vertices, not edges", invalid_label),
                  parser_errposition(pstate, edge->location)));
     }
-
-    relname = label_expr_relname(edge->label_expr, LABEL_KIND_EDGE);
 
     rel->type = LABEL_KIND_EDGE;
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
@@ -5958,11 +5955,9 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(&cpstate->pstate, edge->location)));
     }
 
-    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
-                                edge->label_expr, LABEL_KIND_EDGE);
-
     // lock the relation of the label
-    rv = makeRangeVar(cpstate->graph_name, relname, -1);
+    rv = create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                     edge->label_expr, LABEL_KIND_EDGE);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid
@@ -6203,7 +6198,6 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     char *alias;
     int resno;
     ParseNamespaceItem *pnsi;
-    char *relname;
 
     check_label_expr_type_for_create(pstate, (Node *)node);
 
@@ -6211,17 +6205,12 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     rel->tuple_position = InvalidAttrNumber;
     rel->variable_name = NULL;
     rel->resultRelInfo = NULL;
-
-    relname = label_expr_relname(node->label_expr, LABEL_KIND_VERTEX);
+    rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
     rel->label_expr = node->label_expr;
 
     // create the label entry
-    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
-                                node->label_expr, LABEL_KIND_VERTEX);
-
-    rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
-
-    rv = makeRangeVar(cpstate->graph_name, relname, -1);
+    rv = create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                     node->label_expr, LABEL_KIND_VERTEX);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     // Store the relid
@@ -7241,7 +7230,6 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     ParseNamespaceItem *pnsi;
-    char *relname;
 
     check_label_expr_type_for_create(pstate, (Node *)edge);
 
@@ -7285,13 +7273,9 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(&cpstate->pstate, edge->location)));
     }
 
-    relname = label_expr_relname(edge->label_expr, LABEL_KIND_EDGE);
-
-    create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
-                                edge->label_expr, LABEL_KIND_EDGE);
-
     // lock the relation of the label
-    rv = makeRangeVar(cpstate->graph_name, relname, -1);
+    rv = create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                     edge->label_expr, LABEL_KIND_EDGE);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     /*
@@ -7344,7 +7328,6 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     ParseNamespaceItem *pnsi;
-    char *relname;
 
     check_label_expr_type_for_create((ParseState *)cpstate, (Node *)node);
 
@@ -7394,8 +7377,6 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     rel->tuple_position = InvalidAttrNumber;
     rel->variable_name = node->name;
     rel->resultRelInfo = NULL;
-
-    relname = label_expr_relname(node->label_expr, LABEL_KIND_VERTEX);
     rel->label_expr = node->label_expr;
 
     create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
@@ -7403,7 +7384,9 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, relname, -1);
+    // create the label relation
+    rv = create_label_expr_relations(cpstate->graph_oid, cpstate->graph_name,
+                                     node->label_expr, LABEL_KIND_VERTEX);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
     /*
