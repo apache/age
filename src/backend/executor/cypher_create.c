@@ -438,7 +438,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
         result = make_edge(
             id, start_id, end_id, CStringGetDatum(node->label_name),
-            PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+            scanTupleSlot->tts_values[node->prop_attr_num]);
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
         {
@@ -528,7 +528,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
             // make the vertex agtype
             result = make_vertex(id, CStringGetDatum(node->label_name),
-                PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+                scanTupleSlot->tts_values[node->prop_attr_num]);
 
             // append to the path list
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

@@ -49,8 +49,8 @@ void insert_graph(const Name graph_name, const Oid nsp_id)
     HeapTuple tuple;
 
 
-    AssertArg(graph_name);
-    AssertArg(OidIsValid(nsp_id));
+    Assert(graph_name);
+    Assert(OidIsValid(nsp_id));
 
     ag_graph = table_open(ag_graph_relation_id(), RowExclusiveLock);
     values[Anum_ag_graph_oid - 1] = ObjectIdGetDatum(nsp_id);

@@ -249,7 +249,8 @@ static Node *transform_A_Const(cypher_parsestate *cpstate, A_Const *ac)
             }
             else
             {
-                float8 f = float8in_internal(n, NULL, "double precision", n);
+                float8 f = float8in_internal(n, NULL, "double precision", n,
+                                             NULL);
 
                 d = float_to_agtype(f);
             }
