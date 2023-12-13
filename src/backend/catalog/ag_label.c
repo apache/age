@@ -241,6 +241,12 @@ Datum _label_name(PG_FUNCTION_ARGS)
 
     label_cache = search_label_graph_oid_cache(graph, label_id);
 
+    if (label_cache->kind == LABEL_KIND_VERTEX)
+    {
+        elog(ERROR, "_label_name is not supported for vertices; "
+                    "try _label_names instead");
+    }
+
     label_name = NameStr(label_cache->name);
 
     if (IS_AG_DEFAULT_LABEL(label_name))
