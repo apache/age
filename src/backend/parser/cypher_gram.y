@@ -98,6 +98,9 @@
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
+%type <list> subquery_stmt subquery_stmt_no_return single_subquery
+             single_subquery_no_return subquery_part_init
+
 /* RETURN and WITH clause */
 %type <node> return return_item sort_item skip_opt limit_opt with
 %type <list> return_item_list order_by_opt sort_item_list
@@ -155,6 +158,8 @@
 %type <node> expr_var expr_func expr_func_norm expr_func_subexpr
 %type <list> expr_list expr_list_opt map_keyval_list_opt map_keyval_list
 %type <node> property_value
+
+%type <node> expr_subquery
 
 /* names */
 %type <string> property_key_name var_name var_name_opt label_name
@@ -605,6 +610,53 @@ updating_clause:
     | remove
     | delete
     | merge
+    ;
+
+subquery_stmt:
+    single_subquery
+        {
+            $$ = $1;
+        }
+    | subquery_stmt UNION all_or_distinct subquery_stmt
+        {
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+        }
+    ;
+
+subquery_stmt_no_return:
+    single_subquery_no_return
+        {
+            $$ = $1;
+        }
+    | subquery_stmt_no_return UNION all_or_distinct subquery_stmt_no_return
+        {
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+        }
+    ;
+
+single_subquery:
+        subquery_part_init reading_clause_list return
+        {
+            $$ = list_concat($1, lappend($2, $3));  
+        }
+    ;
+
+single_subquery_no_return:
+        subquery_part_init reading_clause_list
+        {
+            $$ = list_concat($1, $2);  
+        }
+    ;
+
+subquery_part_init:
+    /* empty */
+        {
+            $$ = NIL;
+        }
+    | subquery_part_init reading_clause_list with
+        {
+            $$ = lappend(list_concat($1, $2), $3);    
+        }
     ;
 
 cypher_varlen_opt:
@@ -1806,6 +1858,41 @@ expr_func_subexpr:
         }
     ;
 
+expr_subquery:
+    EXISTS '{' anonymous_path '}'
+        {
+            cypher_sub_pattern *sub;
+            SubLink    *n;
+
+            sub = make_ag_node(cypher_sub_pattern);
+            sub->kind = CSP_EXISTS;
+            sub->pattern = list_make1($3);
+
+            n = makeNode(SubLink);
+            n->subLinkType = EXISTS_SUBLINK;
+            n->subLinkId = 0;
+            n->testexpr = NULL;
+            n->operName = NIL;
+            n->subselect = (Node *) sub;
+            n->location = @1;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
+        }
+    | EXISTS '{' subquery_stmt '}'
+        {
+            ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                    errmsg("EXISTS subquery not yet implemented"),
+                    ag_scanner_errposition(@1, scanner)));
+        }
+    | EXISTS '{' subquery_stmt_no_return '}'
+        {
+            ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                    errmsg("EXISTS subquery not yet implemented"),
+                    ag_scanner_errposition(@1, scanner)));
+        }
+    ;
+
 property_value:
     expr_var '.' property_key_name
         {
@@ -1839,6 +1926,7 @@ expr_atom:
     | expr_case
     | expr_var
     | expr_func
+    | expr_subquery
     ;
 
 expr_literal:
