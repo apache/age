@@ -6886,7 +6886,7 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (case_statement agtype);
                                 case_statement                                 
 -------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {"i": 1, "id": 1}}::vertex
  "none"
  "none"
  "none"
@@ -6907,7 +6907,7 @@ $$ ) AS (case_statement agtype);
  "none"
  "none"
  "none"
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {"i": true, "j": false, "id": 4}}::vertex
  "none"
  "none"
 (6 rows)
@@ -6942,11 +6942,11 @@ $$ ) AS (case_statement agtype);
                                          case_statement                                         
 ------------------------------------------------------------------------------------------------
  "none"
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex
- {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex
- {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
- {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {"i": "a", "j": "b", "id": 2}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {"i": 0, "j": 1, "id": 3}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {"i": true, "j": false, "id": 4}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
+ {"id": 281474976710662, "label": [], "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
 (6 rows)
 
 SELECT * FROM cypher('case_statement', $$
@@ -6959,12 +6959,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (case_statement agtype);
                                          case_statement                                         
 ------------------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex
- {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {"i": 1, "id": 1}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {"i": "a", "j": "b", "id": 2}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {"i": 0, "j": 1, "id": 3}}::vertex
  "none"
- {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
- {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
+ {"id": 281474976710662, "label": [], "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
 (6 rows)
 
 --should return n
@@ -6978,12 +6978,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (case_statement agtype);
                                          case_statement                                         
 ------------------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex
- {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex
- {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
- {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {"i": 1, "id": 1}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {"i": "a", "j": "b", "id": 2}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {"i": 0, "j": 1, "id": 3}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {"i": true, "j": false, "id": 4}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex
+ {"id": 281474976710662, "label": [], "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex
 (6 rows)
 
 --chained expression in THEN

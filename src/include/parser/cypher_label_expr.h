@@ -49,9 +49,9 @@
     (list_length(get_label_expr_relations((label_expr), (label_expr_kind), \
                                           (graph_oid))) > 0)
 
-void create_label_expr_relations(Oid graphoid, char *graphname,
-                                 cypher_label_expr *label_expr,
-                                 char label_expr_kind);
+RangeVar *create_label_expr_relations(Oid graphoid, char *graphname,
+                                      cypher_label_expr *label_expr,
+                                      char label_expr_kind);
 List *get_label_expr_relations(cypher_label_expr *label_expr,
                                char label_expr_kind, Oid graph_oid);
 
