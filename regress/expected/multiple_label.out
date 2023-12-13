@@ -1058,7 +1058,7 @@ SELECT * FROM cypher('mlabels12', $$ MATCH (x) SET x.age = 32 RETURN x $$) as ("
 SELECT * FROM cypher('mlabels12', $$ MERGE (x:Teacher:Person) RETURN x $$) as ("MERGE" agtype);
                                        MERGE                                        
 ------------------------------------------------------------------------------------
- {"id": 1688849860263937, "label": ["Teacher", "Person"], "properties": {}}::vertex
+ {"id": 1688849860263937, "label": ["Person", "Teacher"], "properties": {}}::vertex
 (1 row)
 
 -- check vle
@@ -1142,7 +1142,7 @@ SELECT * FROM cypher('mlabels12', $$ MATCH (x) RETURN labels(x) $$) as ("labels"
  []
  ["Student", "Person"]
  ["Person"]
- ["Teacher", "Person"]
+ ["Person", "Teacher"]
  ["a", "b"]
  ["k"]
  ["m", "n"]

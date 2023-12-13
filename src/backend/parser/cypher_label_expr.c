@@ -19,7 +19,7 @@ static void append_to_allrelations(Relation ag_label, char *label_name,
 
 /*
  * Creates ag_label entries and relations required for the given `label_expr`
- * if does not exists.
+ * if does not exists. Returns the RangeVar of ag_label.relation.
  *
  * The label_expr may represent empty, single or multiple labels. For empty
  * (default labels) and single label, a relation is created and an ag_label
@@ -51,14 +51,15 @@ static void append_to_allrelations(Relation ag_label, char *label_name,
  * being treated as a label, it has a label ID). The latter option is easier to
  * implement.
  */
-void create_label_expr_relations(Oid graphoid, char *graphname,
-                                 cypher_label_expr *label_expr,
-                                 char label_expr_kind)
+RangeVar *create_label_expr_relations(Oid graphoid, char *graphname,
+                                      cypher_label_expr *label_expr,
+                                      char label_expr_kind)
 {
     List *parents;
     char *ag_label_relation;
     char rel_kind;
     cypher_label_expr_type label_expr_type;
+    RangeVar *rv;
 
     label_expr_type = LABEL_EXPR_TYPE(label_expr);
 
@@ -94,6 +95,7 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
      * holds the intersection relation name.
      */
     ag_label_relation = label_expr_relname(label_expr, label_expr_kind);
+    rv = makeRangeVar(graphname, ag_label_relation, -1);
 
     /*
      * If the relation exists, it can be assumed that all required ag_label
@@ -101,7 +103,7 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
      */
     if (ag_relation_exists(ag_label_relation, graphoid))
     {
-        return;
+        return rv;
     }
 
     /* creates ag_label entry and relation */
@@ -146,6 +148,8 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
         CacheInvalidateRelcacheAll();
         CommandCounterIncrement();
     }
+
+    return rv;
 }
 
 /*

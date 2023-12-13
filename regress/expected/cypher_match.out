@@ -2992,9 +2992,9 @@ NOTICE:  graph "issue_1393" has been created
 SELECT * FROM cypher('issue_1393', $$
   CREATE (n1:Object) RETURN n1
 $$) AS (n1 agtype);
-                                  n1                                  
-----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
+                                   n1                                   
+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 -- vertex cases
@@ -3015,17 +3015,17 @@ $$) AS (n1 agtype, n2 agtype);
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1)-[]->(n2)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1:Object)-[]->(n2:Object)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
@@ -3038,109 +3038,109 @@ $$) AS (n1 agtype, n2 agtype);
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1)-[]->()) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   CREATE (n1:Object)-[e:knows]->(n2:Object) RETURN n1, e, n2
 $$) AS (n1 agtype, e agtype, n2 agtype);
-                                  n1                                  |                                                             e                                                              |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                                             e                                                              |                                   n2                                   
+------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE EXISTS((n1)-[]->(n2)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE EXISTS((n1:Object)-[]->(n2:Object)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1)-[]->(n2)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (8 rows)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1:Object)-[]->(n2:Object)) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (8 rows)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE EXISTS((n1)-[]->()) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (3 rows)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1)-[]->()) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (6 rows)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE EXISTS((n1:Object)-[]->()) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (3 rows)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) WHERE NOT EXISTS((n1:Object)-[]->()) RETURN n1,n2
 $$) AS (n1 agtype, n2 agtype);
-                                  n1                                  |                                  n2                                  
-----------------------------------------------------------------------+----------------------------------------------------------------------
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131969, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131969, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
- {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex
+                                   n1                                   |                                   n2                                   
+------------------------------------------------------------------------+------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131969, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
+ {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex
 (6 rows)
 
 -- should error
@@ -3279,18 +3279,18 @@ SELECT * FROM cypher('issue_1393', $$
   MATCH (n1) MATCH (n2) MATCH (n1)-[e1]->() MATCH (n2)<-[e2]-(n1) MATCH (n3)
   WHERE EXISTS((n3)-[e1]->(n2)) RETURN n1,n2,n3,e1
 $$) AS (n1 agtype, n2 agtype, n3 agtype, e1 agtype);
-                                  n1                                  |                                  n2                                  |                                  n3                                  |                                                             e1                                                             
-----------------------------------------------------------------------+----------------------------------------------------------------------+----------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+                                   n1                                   |                                   n2                                   |                                   n3                                   |                                                             e1                                                             
+------------------------------------------------------------------------+------------------------------------------------------------------------+------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
 (1 row)
 
 SELECT * FROM cypher('issue_1393', $$
   MATCH (n1:Object) MATCH (n2:Object) MATCH (n1)-[e1:knows]->() MATCH (n2)<-[e2:knows]-(n1) MATCH (n3:Object)
   WHERE EXISTS((n3:Object)-[e1:knows]->(n2:Object)) RETURN n1,n2,n3,e1
 $$) AS (n1 agtype, n2 agtype, n3 agtype, e1 agtype);
-                                  n1                                  |                                  n2                                  |                                  n3                                  |                                                             e1                                                             
-----------------------------------------------------------------------+----------------------------------------------------------------------+----------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------
- {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 844424930131971, "label": "Object", "properties": {}}::vertex | {"id": 844424930131970, "label": "Object", "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+                                   n1                                   |                                   n2                                   |                                   n3                                   |                                                             e1                                                             
+------------------------------------------------------------------------+------------------------------------------------------------------------+------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131971, "label": ["Object"], "properties": {}}::vertex | {"id": 844424930131970, "label": ["Object"], "properties": {}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
 (1 row)
 
 --
