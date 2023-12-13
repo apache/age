@@ -653,13 +653,6 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         invalidate_label_relation_cache(relid);
         invalidate_label_seq_name_graph_cache(relid);
         invalidate_label_allrelations_cache(relid);
-
-        // TODO: this is a temporary fix to cache being
-        // corrupted after invalidation by create_label_expr_relations
-        label_relation_cache_hash = NULL;
-        label_allrelations_cache_hash = NULL;
-        create_label_relation_cache();
-        create_label_allrelations_cache();
     }
     else
     {
@@ -668,13 +661,6 @@ static void invalidate_label_caches(Datum arg, Oid relid)
         flush_label_relation_cache();
         flush_label_seq_name_graph_cache();
         flush_allrelations_cache();
-
-        // TODO: this is a temporary fix to cache being
-        // corrupted after invalidation by create_label_expr_relations
-        label_relation_cache_hash = NULL;
-        label_allrelations_cache_hash = NULL;
-        create_label_relation_cache();
-        create_label_allrelations_cache();
     }
 }
 
@@ -875,7 +861,7 @@ static void flush_allrelations_cache(void)
         if (!removed)
         {
             ereport(ERROR,
-                    (errmsg_internal("label (relation) cache corrupted")));
+                    (errmsg_internal("label (allrelations) cache corrupted")));
         }
     }
 }
@@ -1118,7 +1104,7 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     SysScanDesc scan_desc;
     HeapTuple tuple;
     bool found;
-    label_cache_data *entry;
+    label_relation_cache_entry *entry;
 
     memcpy(scan_keys, label_relation_scan_keys,
            sizeof(label_relation_scan_keys));
@@ -1150,12 +1136,12 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     Assert(!found); // no concurrent update on label_relation_cache_hash
 
     // fill the new entry with the retrieved tuple
-    fill_label_cache_data(entry, tuple, RelationGetDescr(ag_label));
+    fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
 
-    return entry;
+    return &entry->data;
 }
 
 label_cache_data *search_label_seq_name_graph_cache(const char *name, Oid graph)

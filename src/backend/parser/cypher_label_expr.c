@@ -2,6 +2,7 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
+#include "catalog/indexing.h"
 #include "utils/builtins.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
@@ -118,7 +119,7 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
 
         Assert(list_length(label_expr->label_names) > 1);
 
-        ag_label = table_open(ag_label_relation_id(), RowShareLock);
+        ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
 
         foreach (lc, label_expr->label_names)
         {
@@ -139,7 +140,7 @@ void create_label_expr_relations(Oid graphoid, char *graphname,
             append_to_allrelations(ag_label, label_name, ag_label_relation,
                                    graphoid);
         }
-        table_close(ag_label, NoLock);
+        table_close(ag_label, RowExclusiveLock);
 
         /* signals to rebuild the ag_label cache */
         CacheInvalidateRelcacheAll();
@@ -205,7 +206,7 @@ static void append_to_allrelations(Relation ag_label, char *label_name,
     new_ag_label_tup =
         heap_modify_tuple_by_cols(ag_label_tup, ag_label_tupdesc, 1, &replCols,
                                   &res_arraycat, &replIsNull);
-    simple_heap_update(ag_label, &ag_label_tup->t_data->t_ctid,
+    CatalogTupleUpdate(ag_label, &ag_label_tup->t_data->t_ctid,
                        new_ag_label_tup);
     CommandCounterIncrement();
     systable_endscan(ag_label_scan);
