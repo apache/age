@@ -337,8 +337,23 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 Assert(IsA(field1, String));
                 colname = strVal(field1);
 
-                /* Try to identify as an unqualified column */
-                node = colNameToVar(pstate, colname, false, cref->location);
+                if (cpstate->p_list_comp)
+                {
+                    /*
+                     * Just scan through the last pnsi(that is for list comp)
+                     * to find the column.
+                     */
+                    node = scanNSItemForColumn(pstate,
+                                               llast(pstate->p_namespace),
+                                               0, colname, cref->location);
+                }
+                else
+                {
+                    /* Try to identify as an unqualified column */
+                    node = colNameToVar(pstate, colname, false,
+                                        cref->location);
+                }
+
                 if (node != NULL)
                 {
                         break;
@@ -1717,14 +1732,28 @@ static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
                                                  cypher_unwind *unwind)
 {
     cypher_clause cc;
+    Node* expr;
+    ParseNamespaceItem *pnsi;
+    ParseState *pstate = (ParseState *)cpstate;
+
+    cpstate->p_list_comp = true;
 
     cc.prev = NULL;
     cc.next = NULL;
     cc.self = (Node *)unwind;
 
-    transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, &cc,
-                                        NULL, true);
+    pnsi = transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, &cc,
+                                               NULL, true);
 
-    return transform_cypher_expr(cpstate, unwind->collect,
+    expr = transform_cypher_expr(cpstate, unwind->collect,
                                  EXPR_KIND_SELECT_TARGET);
+
+    /*
+     * Remove the namespace item for listcomp subquery
+     * because it should not be visible outside
+     */
+    pstate->p_namespace = list_delete_ptr(pstate->p_namespace, pnsi);
+    cpstate->p_list_comp = false;
+
+    return expr;
 }
