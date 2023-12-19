@@ -188,9 +188,10 @@ Datum _label_name(PG_FUNCTION_ARGS)
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-        PG_RETURN_NULL(); 
-        //ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-        //                errmsg("graph_oid and label_id must not be null")));
+    {
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("graph_oid and label_id must not be null")));
+    }
 
     graph = PG_GETARG_OID(0);
 
