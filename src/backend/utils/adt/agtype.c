@@ -4745,7 +4745,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     uint64 seed = 0xF0F0F0F0;
 
     if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(0);
+        PG_RETURN_INT32(0);
 
     agt = AG_GET_ARG_AGTYPE_P(0);
 
@@ -6982,7 +6982,7 @@ Datum agtype_to_graphid(PG_FUNCTION_ARGS)
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
-    PG_RETURN_INT16(agtv.val.int_value);
+    PG_RETURN_INT64(agtv.val.int_value);
 }
 
 PG_FUNCTION_INFO_V1(age_type);

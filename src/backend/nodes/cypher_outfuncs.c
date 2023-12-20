@@ -34,11 +34,17 @@ static void outChar(StringInfo str, char c);
         outNode(str, _node->field_name); \
     } while (0)
 
+/* PG15 outToken conflates NULL and empty strings; preserve the distinction
+ * expected by nullable_string(), including an unlabeled vertex's empty label.
+ */
 #define WRITE_STRING_FIELD(field_name) \
     do \
     { \
         appendStringInfoString(str, " :" CppAsString(field_name) " "); \
-        outToken(str, _node->field_name); \
+        if (_node->field_name != NULL && _node->field_name[0] == '\0') \
+            appendStringInfoString(str, "\"\""); \
+        else \
+            outToken(str, _node->field_name); \
     } while (0)
 
 /* Write a char field (ie, one ascii character) */
