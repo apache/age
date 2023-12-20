@@ -868,6 +868,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     }
 
     query->rtable = pstate->p_rtable;
+    query->rteperminfos = pstate->p_rteperminfos;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
 
     assign_query_collations(pstate, query);

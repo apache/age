@@ -808,7 +808,7 @@ static void remove_relation(List *qname)
     Oid rel_oid;
     ObjectAddress address;
 
-    AssertArg(list_length(qname) == 2);
+    Assert(list_length(qname) == 2);
 
     // concurrent is false so lockmode is AccessExclusiveLock
 
@@ -868,8 +868,7 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
 
     // relkind == expected_relkind
 
-    if (!pg_class_ownercheck(rel_oid, GetUserId()) &&
-        !pg_namespace_ownercheck(get_rel_namespace(rel_oid), GetUserId()))
+    if (!object_ownercheck(rel_oid, get_rel_namespace(rel_oid), GetUserId()))
     {
         aclcheck_error(ACLCHECK_NOT_OWNER,
                        get_relkind_objtype(get_rel_relkind(rel_oid)),

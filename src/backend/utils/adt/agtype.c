@@ -29,6 +29,8 @@
  */
 
 #include "postgres.h"
+#include "varatt.h"
+#include <math.h>
 
 #include <float.h>
 
@@ -971,7 +973,7 @@ static void agtype_in_scalar(void *pstate, char *token,
         Assert(token != NULL);
         v.type = AGTV_FLOAT;
         v.val.float_value = float8in_internal(token, NULL, "double precision",
-                                              token);
+                                              token, NULL);
         break;
     case AGTYPE_TOKEN_NUMERIC:
         Assert(token != NULL);
@@ -1974,7 +1976,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
      */
     if (nargs >= 1 && nargs <= 3)
     {
-        int i = 0;
+        i = 0;
 
         for (i = 0; i < nargs; i++)
         {
@@ -2207,7 +2209,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 
     if (fcinfo->args[2].isnull)
     {
-        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
         properties = build_agtype(bstate);
         pfree_agtype_build_state(bstate);
     }
@@ -2303,7 +2305,7 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     /* if the properties object is null, push an empty object */
     if (fcinfo->args[4].isnull)
     {
-        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
         properties = build_agtype(bstate);
         pfree_agtype_build_state(bstate);
     }
@@ -3669,13 +3671,13 @@ Datum agtype_object_field_agtype(PG_FUNCTION_ARGS)
 
     if (key_value->type == AGTV_INTEGER)
     {
-        PG_RETURN_TEXT_P(agtype_array_element_impl(fcinfo, agt,
+        PG_RETURN_TEXT_P((const void*)agtype_array_element_impl(fcinfo, agt,
                                                    key_value->val.int_value,
                                                    false));
     }
     else if (key_value->type == AGTV_STRING)
     {
-        AG_RETURN_AGTYPE_P(agtype_object_field_impl(fcinfo, agt,
+        AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt,
                                                     key_value->val.string.val,
                                                     key_value->val.string.len,
                                                     false));
@@ -3703,13 +3705,13 @@ Datum agtype_object_field_text_agtype(PG_FUNCTION_ARGS)
 
     if (key_value->type == AGTV_INTEGER)
     {
-        PG_RETURN_TEXT_P(agtype_array_element_impl(fcinfo, agt,
+        PG_RETURN_TEXT_P((const void*)agtype_array_element_impl(fcinfo, agt,
                                                    key_value->val.int_value,
                                                    true));
     }
     else if (key_value->type == AGTV_STRING)
     {
-        AG_RETURN_AGTYPE_P(agtype_object_field_impl(fcinfo, agt,
+        AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt,
                                                     key_value->val.string.val,
                                                     key_value->val.string.len,
                                                     true));
@@ -3727,7 +3729,7 @@ Datum agtype_object_field(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     text *key = PG_GETARG_TEXT_PP(1);
 
-    AG_RETURN_AGTYPE_P(agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
+    AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
                                                 VARSIZE_ANY_EXHDR(key),
                                                 false));
 }
@@ -3739,7 +3741,7 @@ Datum agtype_object_field_text(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     text *key = PG_GETARG_TEXT_PP(1);
 
-    PG_RETURN_TEXT_P(agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
+    PG_RETURN_TEXT_P((const void*)agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
                                               VARSIZE_ANY_EXHDR(key), true));
 }
 
@@ -3750,7 +3752,8 @@ Datum agtype_array_element(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     int elem = PG_GETARG_INT32(1);
 
-    AG_RETURN_AGTYPE_P(agtype_array_element_impl(fcinfo, agt, elem, false));
+    AG_RETURN_AGTYPE_P((const void*)
+        agtype_array_element_impl(fcinfo, agt, elem, false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_array_element_text);
@@ -3760,7 +3763,8 @@ Datum agtype_array_element_text(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     int elem = PG_GETARG_INT32(1);
 
-    PG_RETURN_TEXT_P(agtype_array_element_impl(fcinfo, agt, elem, true));
+    PG_RETURN_TEXT_P((const void*)
+        agtype_array_element_impl(fcinfo, agt, elem, true));
 }
 
 PG_FUNCTION_INFO_V1(agtype_access_operator);
@@ -4267,8 +4271,11 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     agtype_value *r;
     uint64 seed = 0xF0F0F0F0;
 
+    /* this function returns INTEGER which is 32 bits */
     if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(0);
+    {
+        PG_RETURN_INT32(0);
+    }
 
     agt = AG_GET_ARG_AGTYPE_P(0);
 
@@ -4291,7 +4298,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
         seed = LEFT_ROTATE(seed, 1);
     }
 
-    PG_RETURN_INT16(hash);
+    PG_RETURN_INT32(hash);
 }
 
 // Comparison function for btree Indexes
@@ -4302,18 +4309,25 @@ Datum agtype_btree_cmp(PG_FUNCTION_ARGS)
     agtype *agtype_lhs;
     agtype *agtype_rhs;
 
+    /* this function returns INTEGER which is 32bits */
     if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
-        PG_RETURN_INT16(0);
+    {
+        PG_RETURN_INT32(0);
+    }
     else if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(1);
+    {
+        PG_RETURN_INT32(1);
+    }
     else if (PG_ARGISNULL(1))
-        PG_RETURN_INT16(-1);
+    {
+        PG_RETURN_INT32(-1);
+    }
 
     agtype_lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype_rhs = AG_GET_ARG_AGTYPE_P(1);
 
-    PG_RETURN_INT16(compare_agtype_containers_orderability(&agtype_lhs->root,
-                                                     &agtype_rhs->root));
+    PG_RETURN_INT32(compare_agtype_containers_orderability(&agtype_lhs->root,
+                                                           &agtype_rhs->root));
 }
 
 PG_FUNCTION_INFO_V1(agtype_typecast_numeric);
@@ -6340,7 +6354,7 @@ PG_FUNCTION_INFO_V1(graphid_to_agtype);
 
 Datum graphid_to_agtype(PG_FUNCTION_ARGS)
 {
-    PG_RETURN_POINTER(integer_to_agtype(AG_GETARG_GRAPHID(0)));
+    PG_RETURN_POINTER((const void *) integer_to_agtype(AG_GETARG_GRAPHID(0)));
 }
 
 PG_FUNCTION_INFO_V1(agtype_to_graphid);
@@ -6356,7 +6370,7 @@ Datum agtype_to_graphid(PG_FUNCTION_ARGS)
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
-    PG_RETURN_INT16(agtv.val.int_value);
+    PG_RETURN_INT64(agtv.val.int_value);
 }
 
 PG_FUNCTION_INFO_V1(age_type);
@@ -10179,7 +10193,7 @@ Datum age_percentile_cont_aggfinalfn(PG_FUNCTION_ARGS)
     if (!tuplesort_skiptuples(pgastate->sortstate, first_row, true))
         elog(ERROR, "missing row in percentile_cont");
 
-    if (!tuplesort_getdatum(pgastate->sortstate, true, &first_val, &isnull, NULL))
+    if (!tuplesort_getdatum(pgastate->sortstate, true, false, &first_val, &isnull, NULL))
         elog(ERROR, "missing row in percentile_cont");
     if (isnull)
         PG_RETURN_NULL();
@@ -10190,7 +10204,7 @@ Datum age_percentile_cont_aggfinalfn(PG_FUNCTION_ARGS)
     }
     else
     {
-        if (!tuplesort_getdatum(pgastate->sortstate, true, &second_val, &isnull, NULL))
+        if (!tuplesort_getdatum(pgastate->sortstate, true, false, &second_val, &isnull, NULL))
             elog(ERROR, "missing row in percentile_cont");
 
         if (isnull)
@@ -10256,7 +10270,7 @@ Datum age_percentile_disc_aggfinalfn(PG_FUNCTION_ARGS)
             elog(ERROR, "missing row in percentile_disc");
     }
 
-    if (!tuplesort_getdatum(pgastate->sortstate, true, &val, &isnull, NULL))
+    if (!tuplesort_getdatum(pgastate->sortstate, true, false, &val, &isnull, NULL))
         elog(ERROR, "missing row in percentile_disc");
 
     /* We shouldn't have stored any nulls, but do the right thing anyway */
@@ -11363,5 +11377,5 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
     }
 
     /* otherwise, just pass it through */
-    PG_RETURN_POINTER(PG_GETARG_DATUM(0));
+    PG_RETURN_POINTER((const void*) PG_GETARG_DATUM(0));
 }
