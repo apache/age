@@ -7129,8 +7129,8 @@ static FuncExpr *make_clause_func_expr(char *function_name,
  */
 static void markRelsAsNulledBy(ParseState *pstate, Node *n, int jindex)
 {
-    int			varno;
-    ListCell   *lc;
+    int varno;
+    ListCell *lc;
 
     /* Note: we can't see FromExpr here */
     if (IsA(n, RangeTblRef))
