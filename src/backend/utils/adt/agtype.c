@@ -2193,12 +2193,9 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     /* handles null */
     if (fcinfo->args[0].isnull)
     {
-        /*
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_vertex() graphid cannot be NULL")));
-                 */
-        PG_RETURN_NULL();
     }
 
     if (fcinfo->args[1].isnull)
@@ -2267,12 +2264,9 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     /* process graph id */
     if (fcinfo->args[0].isnull)
     {
-        PG_RETURN_NULL();
-        /*
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("_agtype_build_edge() graphid cannot be NULL")));
-                 */
     }
 
     id = AG_GETARG_GRAPHID(0);

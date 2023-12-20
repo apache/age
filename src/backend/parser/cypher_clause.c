@@ -45,6 +45,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
+#include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
 #include "utils/typcache.h"
 #include "utils/lsyscache.h"
@@ -331,6 +332,8 @@ static List *make_target_list_from_join(ParseState *pstate,
                                         RangeTblEntry *rte);
 static FuncExpr *make_clause_func_expr(char *function_name,
                                        Node *clause_information);
+static void markRelsAsNulledBy(ParseState *pstate, Node *n, int jindex);
+
 /* for VLE support */
 static ParseNamespaceItem *transform_RangeFunction(cypher_parsestate *cpstate,
                                                    RangeFunction *r);
@@ -2472,8 +2475,17 @@ static void get_res_cols(ParseState *pstate, ParseNamespaceItem *l_pnsi,
 
         if (var == NULL)
         {
+            Var *v;
+
+            /*
+             * Each join (left) RTE's Var, that references a column of the
+             * right RTE, needs to be marked 'nullable'.
+             */
+            v = lfirst(r_lvar);
+            markNullableIfNeeded(pstate, v);
+
             colnames = lappend(colnames, lfirst(r_lname));
-            colvars = lappend(colvars, lfirst(r_lvar));
+            colvars = lappend(colvars, v);
         }
     }
 
@@ -2521,6 +2533,13 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
 
     j->rarg = transform_clause_for_join(cpstate, clause, &r_rte,
                                         &r_nsitem, r_alias);
+
+    /*
+     * Since this is a left join, we need to mark j->rarg as it may potentially
+     * emit NULL. The jindex argument holds rtindex of the join's RTE, which is
+     * created right after j->arg's RTE in this case.
+     */
+    markRelsAsNulledBy(pstate, j->rarg, r_nsitem->p_rtindex + 1);
 
     // we are done transform the lateral left join
     pstate->p_lateral_active = false;
@@ -6377,6 +6396,13 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
     j->rarg = transform_clause_for_join(cpstate, isolated_merge_clause, &r_rte,
                                             &r_nsitem, r_alias);
 
+    /*
+     * Since this is a left join, we need to mark j->rarg as it may potentially
+     * emit NULL. The jindex argument holds rtindex of the join's RTE, which is
+     * created right after j->arg's RTE in this case.
+     */
+    markRelsAsNulledBy(pstate, j->rarg, r_nsitem->p_rtindex + 1);
+
     // deactivate the lateral flag
     pstate->p_lateral_active = false;
 
@@ -7093,6 +7119,50 @@ static FuncExpr *make_clause_func_expr(char *function_name,
                              InvalidOid, COERCE_EXPLICIT_CALL);
 
     return func_expr;
+}
+
+/*
+ * This function is borrowed from PG version 16.1.
+ *
+ * It is used in transformations involving left join in Optional Match and
+ * Merge in a similar way PG16's transformFromClauseItem() uses it.
+ */
+static void markRelsAsNulledBy(ParseState *pstate, Node *n, int jindex)
+{
+    int			varno;
+    ListCell   *lc;
+
+    /* Note: we can't see FromExpr here */
+    if (IsA(n, RangeTblRef))
+    {
+        varno = ((RangeTblRef *) n)->rtindex;
+    }
+    else if (IsA(n, JoinExpr))
+    {
+        JoinExpr   *j = (JoinExpr *) n;
+
+        /* recurse to children */
+        markRelsAsNulledBy(pstate, j->larg, jindex);
+        markRelsAsNulledBy(pstate, j->rarg, jindex);
+        varno = j->rtindex;
+    }
+    else
+    {
+        elog(ERROR, "unrecognized node type: %d", (int) nodeTag(n));
+        varno = 0;				/* keep compiler quiet */
+    }
+
+    /*
+     * Now add jindex to the p_nullingrels set for relation varno.  Since we
+     * maintain the p_nullingrels list lazily, we might need to extend it to
+     * make the varno'th entry exist.
+     */
+    while (list_length(pstate->p_nullingrels) < varno)
+    {
+        pstate->p_nullingrels = lappend(pstate->p_nullingrels, NULL);
+    }
+    lc = list_nth_cell(pstate->p_nullingrels, varno - 1);
+    lfirst(lc) = bms_add_member((Bitmapset *) lfirst(lc), jindex);
 }
 
 /*
