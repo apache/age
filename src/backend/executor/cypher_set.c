@@ -485,7 +485,8 @@ static void process_update_list(CustomScanState *node)
         }
 
         // Alter the properties Agtype value.
-        if (strcmp(update_item->prop_name, ""))
+        if (update_item->prop_name != NULL &&
+            strcmp(update_item->prop_name, "") != 0)
         {
             altered_properties = alter_property_value(original_properties,
                                                       update_item->prop_name,
