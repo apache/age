@@ -4277,8 +4277,11 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     agtype_value *r;
     uint64 seed = 0xF0F0F0F0;
 
+    /* this function returns INTEGER which is 32 bits */
     if (PG_ARGISNULL(0))
-        PG_RETURN_INT64(0);
+    {
+        PG_RETURN_INT32(0);
+    }
 
     agt = AG_GET_ARG_AGTYPE_P(0);
 
@@ -4301,7 +4304,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
         seed = LEFT_ROTATE(seed, 1);
     }
 
-    PG_RETURN_INT64(hash);
+    PG_RETURN_INT32(hash);
 }
 
 // Comparison function for btree Indexes
@@ -4312,18 +4315,25 @@ Datum agtype_btree_cmp(PG_FUNCTION_ARGS)
     agtype *agtype_lhs;
     agtype *agtype_rhs;
 
+    /* this function returns INTEGER which is 32bits */
     if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
-        PG_RETURN_INT16(0);
+    {
+        PG_RETURN_INT32(0);
+    }
     else if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(1);
+    {
+        PG_RETURN_INT32(1);
+    }
     else if (PG_ARGISNULL(1))
-        PG_RETURN_INT16(-1);
+    {
+        PG_RETURN_INT32(-1);
+    }
 
     agtype_lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype_rhs = AG_GET_ARG_AGTYPE_P(1);
 
-    PG_RETURN_INT64(compare_agtype_containers_orderability(&agtype_lhs->root,
-                                                     &agtype_rhs->root));
+    PG_RETURN_INT32(compare_agtype_containers_orderability(&agtype_lhs->root,
+                                                           &agtype_rhs->root));
 }
 
 PG_FUNCTION_INFO_V1(agtype_typecast_numeric);

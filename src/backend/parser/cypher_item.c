@@ -40,7 +40,8 @@
 
 static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
-			       int sublevels_up, bool require_col_privs, int location);
+			       int sublevels_up, bool require_col_privs,
+                               int location);
 
 // see transformTargetEntry()
 TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
@@ -161,10 +162,8 @@ static List *ExpandAllTables(ParseState *pstate, int location)
         /* Remember we found a p_cols_visible item */
         found_table = true;
 
-        target = list_concat(target, expand_pnsi_attrs(pstate,
-                                                      nsitem,
-                                                      0,
-                                                      true, location));
+        target = list_concat(target, expand_pnsi_attrs(pstate, nsitem, 0, true,
+                                                       location));
     }
 
     /* Check for "RETURN *;" */
@@ -181,7 +180,8 @@ static List *ExpandAllTables(ParseState *pstate, int location)
  * Modified to exclude hidden variables and aliases in RETURN *
  */
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
-			       int sublevels_up, bool require_col_privs, int location)
+			       int sublevels_up, bool require_col_privs,
+                               int location)
 {
     RangeTblEntry *rte = pnsi->p_rte;
     RTEPermissionInfo *perminfo = pnsi->p_perminfo;
@@ -190,7 +190,7 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
     List *te_list = NIL;
     int var_prefix_len = strlen(AGE_DEFAULT_VARNAME_PREFIX);
     int alias_prefix_len = strlen(AGE_DEFAULT_ALIAS_PREFIX);
-    
+
     vars = expandNSItemVars(pstate, pnsi, sublevels_up, location, &names);
 
     /*
