@@ -1,3 +1,4 @@
+BEGIN; -- Start a transaction
 LOAD 'age';
 SET search_path TO ag_catalog;
 --
@@ -256,3 +257,4 @@ NOTICE:  graph "ag_graph_3" has been dropped
 --
 -- End of tests
 --
+COMMIT; -- Commit the changes made
