@@ -5798,6 +5798,45 @@ SELECT * from cypher('expr', $$
     RETURN sqrt("1")
 $$) as (result agtype);
 ERROR:  sqrt() unsupported argument agtype 1
+-- date()
+SELECT current_date = results::date FROM cypher('expr', $$
+    RETURN date()
+$$) AS (results text), current_date;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT current_date = TO_DATE(results, 'YYYY/MM/DD') FROM cypher('expr', $$
+    RETURN date()
+$$) AS (results text), current_date;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- Should fail
+SELECT * FROM cypher('expr', $$
+    RETURN date('text')
+$$) as (today agtype);
+ERROR:  function ag_catalog.age_date(agtype) does not exist
+LINE 2:     RETURN date('text')
+                       ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN date(null)
+$$) as (today agtype);
+ERROR:  function ag_catalog.age_date(agtype) does not exist
+LINE 2:     RETURN date(null)
+                       ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN date(2)
+$$) as (today agtype);
+ERROR:  function ag_catalog.age_date(agtype) does not exist
+LINE 2:     RETURN date(2)
+                       ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 --
 -- user defined function expressions - using pg functions for these tests
 --

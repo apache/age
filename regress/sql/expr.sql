@@ -2456,6 +2456,24 @@ SELECT * from cypher('expr', $$
     RETURN sqrt("1")
 $$) as (result agtype);
 
+-- date()
+SELECT current_date = results::date FROM cypher('expr', $$
+    RETURN date()
+$$) AS (results text), current_date;
+SELECT current_date = TO_DATE(results, 'YYYY/MM/DD') FROM cypher('expr', $$
+    RETURN date()
+$$) AS (results text), current_date;
+-- Should fail
+SELECT * FROM cypher('expr', $$
+    RETURN date('text')
+$$) as (today agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN date(null)
+$$) as (today agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN date(2)
+$$) as (today agtype);
+
 --
 -- user defined function expressions - using pg functions for these tests
 --
