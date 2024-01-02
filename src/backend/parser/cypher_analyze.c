@@ -19,31 +19,21 @@
 
 #include "postgres.h"
 
-#include "catalog/pg_type_d.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/primnodes.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
-#include "parser/parse_node.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "utils/builtins.h"
 
 #include "catalog/ag_graph.h"
-#include "nodes/ag_nodes.h"
 #include "parser/cypher_analyze.h"
 #include "parser/cypher_clause.h"
-#include "parser/cypher_item.h"
-#include "parser/cypher_parse_node.h"
 #include "parser/cypher_parser.h"
 #include "utils/ag_func.h"
 #include "utils/age_session_info.h"
-#include "utils/agtype.h"
 
 /*
  * extra_node is a global variable to this source to store, at the moment, the
@@ -165,6 +155,28 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("cypher(...) in ROWS FROM is not supported"),
                      parser_errposition(pstate, exprLocation((Node *)funcexpr))));
+        }
+
+        /*
+         * From PG -
+         * SQLValueFunction - parameterless functions with special grammar
+         *                    productions.
+         * CoerceViaIO - represents a type coercion between two types whose textual
+         *               representations are compatible
+         * Var - expression node representing a variable (ie, a table column)
+         * OpExpr - expression node for an operator invocation
+         * Const - constant value or expression node
+         * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
+         *
+         * These are a special case that needs to be ignored.
+         *
+         */
+        if (IsA(funcexpr, SQLValueFunction)
+                || IsA(funcexpr, CoerceViaIO)
+                || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
+                || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+        {
+            return false;
         }
 
         return expression_tree_walker((Node *)funcexpr->args,
@@ -296,6 +308,28 @@ static bool is_rte_cypher(RangeTblEntry *rte)
  */
 static bool is_func_cypher(FuncExpr *funcexpr)
 {
+    /*
+     * From PG -
+     * SQLValueFunction - parameterless functions with special grammar
+     *                    productions.
+     * CoerceViaIO - represents a type coercion between two types whose textual
+     *               representations are compatible
+     * Var - expression node representing a variable (ie, a table column)
+     * OpExpr - expression node for an operator invocation
+     * Const - constant value or expression node
+     * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
+     *
+     * These are a special case that needs to be ignored.
+     *
+     */
+    if (IsA(funcexpr, SQLValueFunction)
+            || IsA(funcexpr, CoerceViaIO)
+            || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+    {
+        return false;
+    }
+
     return is_oid_ag_func(funcexpr->funcid, "cypher");
 }
 
@@ -756,11 +790,19 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
 
     pnsi = addRangeTableEntryForSubquery(pstate, subquery, makeAlias("_", NIL),
                                         lateral, true);
+
     rtindex = list_length(pstate->p_rtable);
-    Assert(rtindex == 1); // rte is the only RangeTblEntry in pstate
+    // rte is the only RangeTblEntry in pstate
+    if (rtindex !=1 )
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_DATATYPE_MISMATCH),
+                 errmsg("invalid value for rtindex")));
+    }
+
 
     addNSItemToQuery(pstate, pnsi, true, true, true);
-    query->targetList = expandNSItemAttrs(pstate, pnsi, 0, -1);
+    query->targetList = expandNSItemAttrs(pstate, pnsi, 0, true, -1);
 
     markTargetListOrigins(pstate, query->targetList);
 
@@ -816,6 +858,7 @@ static Query *analyze_cypher_and_coerce(List *stmt, RangeTblFunction *rtfunc,
     }
 
     query->rtable = pstate->p_rtable;
+    query->rteperminfos = pstate->p_rteperminfos;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
 
     assign_query_collations(pstate, query);

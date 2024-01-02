@@ -19,34 +19,9 @@
 
 #include "postgres.h"
 
-#include "access/xact.h"
 #include "access/genam.h"
-#include "access/heapam.h"
-#include "catalog/dependency.h"
-#include "catalog/objectaddress.h"
-#include "commands/defrem.h"
-#include "commands/schemacmds.h"
-#include "commands/tablecmds.h"
-#include "fmgr.h"
-#include "miscadmin.h"
-#include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/value.h"
-#include "parser/parser.h"
-#include "utils/fmgroids.h"
-#include "utils/relcache.h"
-#include "utils/rel.h"
-
-#include "catalog/ag_graph.h"
-#include "catalog/ag_label.h"
 #include "commands/graph_commands.h"
-#include "commands/label_commands.h"
-#include "utils/graphid.h"
 #include "utils/load/age_load.h"
-#include "utils/load/ag_load_edges.h"
-#include "utils/load/ag_load_labels.h"
 
 
 int64 get_nextval_internal(graph_cache_data* graph_cache,
@@ -83,7 +58,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     int64 no_vertices;
     int64 i,j,vid = 1, eid, start_vid, end_vid;
 
-    Name vtx_label_name;
+    Name vtx_label_name = NULL;
     Name edge_label_name;
     int32 vtx_label_id;
     int32 edge_label_id;
@@ -154,7 +129,7 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     if (!graph_exists(graph_name_str))
     {
-        DirectFunctionCall1(create_graph, CStringGetDatum(graph_name));
+        DirectFunctionCall1(create_graph, CStringGetDatum(graph_name->data));
     }
 
     graph_oid = get_graph_oid(graph_name_str);
@@ -165,16 +140,16 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
         if (!label_exists(vtx_name_str, graph_oid))
         {
             DirectFunctionCall2(create_vlabel,
-                                CStringGetDatum(graph_name),
-                                CStringGetDatum(vtx_label_name));
+                                CStringGetDatum(graph_name->data),
+                                CStringGetDatum(vtx_label_name->data));
         }
     }
 
     if (!label_exists(edge_name_str, graph_oid))
     {
         DirectFunctionCall2(create_elabel,
-                            CStringGetDatum(graph_name),
-                            CStringGetDatum(edge_label_name));
+                            CStringGetDatum(graph_name->data),
+                            CStringGetDatum(edge_label_name->data));
     }
 
     vtx_label_id = get_label_id(vtx_name_str, graph_oid);

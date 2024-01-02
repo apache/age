@@ -24,33 +24,20 @@
 
 #include "postgres.h"
 
-#include "catalog/pg_type.h"
 #include "miscadmin.h"
-#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/value.h"
-#include "optimizer/tlist.h"
+#include "optimizer/optimizer.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
-#include "parser/parse_expr.h"
 #include "parser/parse_func.h"
 #include "parser/cypher_clause.h"
-#include "parser/parse_node.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "utils/builtins.h"
 #include "utils/float.h"
-#include "utils/int8.h"
 #include "utils/lsyscache.h"
-#include "utils/syscache.h"
 
-#include "commands/label_commands.h"
-#include "nodes/cypher_nodes.h"
 #include "parser/cypher_expr.h"
-#include "parser/cypher_item.h"
-#include "parser/cypher_parse_node.h"
 #include "parser/cypher_transform_entity.h"
 #include "utils/ag_func.h"
 #include "utils/agtype.h"
@@ -73,7 +60,11 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref);
 static Node *transform_A_Indirection(cypher_parsestate *cpstate,
                                      A_Indirection *a_ind);
 static Node *transform_AEXPR_OP(cypher_parsestate *cpstate, A_Expr *a);
+static Node *transform_cypher_comparison_aexpr_OP(cypher_parsestate *cpstate,
+                                                  cypher_comparison_aexpr *a);
 static Node *transform_BoolExpr(cypher_parsestate *cpstate, BoolExpr *expr);
+static Node *transform_cypher_comparison_boolexpr(cypher_parsestate *cpstate,
+                                                  cypher_comparison_boolexpr *b);
 static Node *transform_cypher_bool_const(cypher_parsestate *cpstate,
                                          cypher_bool_const *bc);
 static Node *transform_cypher_integer_const(cypher_parsestate *cpstate,
@@ -97,6 +88,8 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn);
 static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
                                    int location, int sublevels_up);
 static ArrayExpr *make_agtype_array_expr(List *args);
+static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
+                                                  ColumnRef *cr);
 
 /* transform a cypher expression */
 Node *transform_cypher_expr(cypher_parsestate *cpstate, Node *expr,
@@ -191,6 +184,12 @@ static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
         if (is_ag_node(expr, cypher_typecast))
             return transform_cypher_typecast(cpstate,
                                              (cypher_typecast *)expr);
+        if (is_ag_node(expr, cypher_comparison_aexpr))
+            return transform_cypher_comparison_aexpr_OP(cpstate,
+                                             (cypher_comparison_aexpr *)expr);
+        if (is_ag_node(expr, cypher_comparison_boolexpr))
+            return transform_cypher_comparison_boolexpr(cpstate,
+                                             (cypher_comparison_boolexpr *)expr);
         ereport(ERROR,
                 (errmsg_internal("unrecognized ExtensibleNode: %s",
                                  ((ExtensibleNode *)expr)->extnodename)));
@@ -211,44 +210,56 @@ static Node *transform_A_Const(cypher_parsestate *cpstate, A_Const *ac)
 {
     ParseState *pstate = (ParseState *)cpstate;
     ParseCallbackState pcbstate;
-    Value *v = &ac->val;
+
     Datum d = (Datum)0;
     bool is_null = false;
     Const *c;
 
     setup_parser_errposition_callback(&pcbstate, pstate, ac->location);
-    switch (nodeTag(v))
+    switch (nodeTag(&ac->val))
     {
     case T_Integer:
-        d = integer_to_agtype((int64)intVal(v));
+        d = integer_to_agtype((int64)intVal(&ac->val));
         break;
     case T_Float:
         {
-            char *n = strVal(v);
+	    char *n = ac->val.sval.sval;
+            char *endptr;
             int64 i;
+            errno = 0;
 
-            if (scanint8(n, true, &i))
+            i = strtoi64(ac->val.fval.fval, &endptr, 10);
+
+            if (errno == 0 && *endptr == '\0')
             {
                 d = integer_to_agtype(i);
             }
             else
             {
-                float8 f = float8in_internal(n, NULL, "double precision", n);
+                float8 f = float8in_internal(n, NULL, "double precision", n,
+                                             NULL);
 
                 d = float_to_agtype(f);
             }
         }
         break;
     case T_String:
-        d = string_to_agtype(strVal(v));
+        d = string_to_agtype(strVal(&ac->val));
         break;
-    case T_Null:
-        is_null = true;
+    case T_Boolean:
+        d = boolean_to_agtype(boolVal(&ac->val));
         break;
     default:
-        ereport(ERROR,
-                (errmsg_internal("unrecognized node type: %d", nodeTag(v))));
-        return NULL;
+        if (ac->isnull)
+        {
+	    is_null = true;
+	}
+        else
+        {
+	    ereport(ERROR, (errmsg_internal("unrecognized node type: %d",
+                                            nodeTag(&ac->val))));
+	    return NULL;
+	}
     }
     cancel_parser_errposition_callback(&pcbstate);
 
@@ -328,17 +339,15 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 }
 
                 /*
-                 * If expr_kind is WHERE, Try to find the columnRef as a
-                 * transform_entity and extract the expr.
+                 * Try to find the columnRef as a transform_entity
+                 * and extract the expr.
                  */
-                if (pstate->p_expr_kind == EXPR_KIND_WHERE)
+                te = find_variable(cpstate, colname) ;
+                if (te != NULL && te->expr != NULL &&
+                    te->declared_in_current_clause)
                 {
-                    te = find_variable(cpstate, colname) ;
-                    if (te != NULL && te->expr != NULL)
-                    {
-                        node = (Node *)te->expr;
-                        break;
-                    }
+                    node = (Node *)te->expr;
+                    break;
                 }
                 /*
                  * Not known as a column of any range-table entry.
@@ -477,25 +486,158 @@ static Node *transform_AEXPR_OP(cypher_parsestate *cpstate, A_Expr *a)
                            a->location);
 }
 
+/*
+ * function for transforming cypher comparision A_Expr. Since this node is a
+ * wrapper to let us know when a comparison occurs in a chained comparison,
+ * we convert it to a regular A_expr and transform it.
+ */
+static Node *transform_cypher_comparison_aexpr_OP(cypher_parsestate *cpstate,
+                                                  cypher_comparison_aexpr *a)
+{
+    A_Expr *n = makeNode(A_Expr);
+    n->kind = a->kind;
+    n->name = a->name;
+    n->lexpr = a->lexpr;
+    n->rexpr = a->rexpr;
+    n->location = a->location;
+
+    return (Node *)transform_AEXPR_OP(cpstate, n);
+}
+
+
 static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
 {
-    Oid func_in_oid;
-    FuncExpr *result;
-    List *args = NIL;
+    ParseState *pstate = (ParseState *)cpstate;
+    cypher_list *rexpr;
+    Node *result = NULL;
+    Node *lexpr;
+    List *rexprs;
+    List *rvars;
+    List *rnonvars;
+    bool useOr;
+    ListCell *l;
 
-    args = lappend(args, transform_cypher_expr_recurse(cpstate, a->rexpr));
-    args = lappend(args, transform_cypher_expr_recurse(cpstate, a->lexpr));
+    /* Check for null arguments in the list to return NULL*/
+    if (!is_ag_node(a->rexpr, cypher_list))
+    {
+        if (nodeTag(a->rexpr) == T_A_Const)
+        {
+            A_Const *r_a_const = (A_Const*)a->rexpr;
+            if (r_a_const->isnull == true)
+            {
+                return (Node *)makeConst(AGTYPEOID, -1, InvalidOid, -1, (Datum)NULL, true, false);
+            }
+        }
 
-    /* get the agtype_access_slice function */
-    func_in_oid = get_ag_func_oid("agtype_in_operator", 2, AGTYPEOID,
-                                  AGTYPEOID);
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("object of IN must be a list")));
+    }
 
-    result = makeFuncExpr(func_in_oid, AGTYPEOID, args, InvalidOid, InvalidOid,
-                          COERCE_EXPLICIT_CALL);
+    Assert(is_ag_node(a->rexpr, cypher_list));
 
-    result->location = exprLocation(a->lexpr);
+    // If the operator is <>, combine with AND not OR.
+    if (strcmp(strVal(linitial(a->name)), "<>") == 0)
+    {
+        useOr = false;
+    }
+    else
+    {
+        useOr = true;
+    }
 
-    return (Node *)result;
+    lexpr = transform_cypher_expr_recurse(cpstate, a->lexpr);
+
+    rexprs = rvars = rnonvars = NIL;
+
+    rexpr = (cypher_list *)a->rexpr;
+
+    foreach(l, (List *) rexpr->elems)
+    {
+        Node *rexpr = transform_cypher_expr_recurse(cpstate, lfirst(l));
+
+        rexprs = lappend(rexprs, rexpr);
+                if (contain_vars_of_level(rexpr, 0))
+                {
+                        rvars = lappend(rvars, rexpr);
+                }
+                else
+                {
+                        rnonvars = lappend(rnonvars, rexpr);
+                }
+    }
+
+
+    /*
+     * ScalarArrayOpExpr is only going to be useful if there's more than one
+     * non-Var righthand item.
+     */
+    if (list_length(rnonvars) > 1)
+    {
+        List *allexprs;
+        Oid scalar_type;
+        List *aexprs;
+        ArrayExpr *newa;
+
+        allexprs = list_concat(list_make1(lexpr), rnonvars);
+
+        scalar_type = AGTYPEOID;
+
+        /* verify they are a common type */
+        if (!verify_common_type(scalar_type, allexprs))
+        {
+            ereport(ERROR,
+                    errmsg_internal("not a common type: %d", scalar_type));
+        }
+
+        /*
+         * coerce all the right-hand non-Var inputs to the common type
+         * and build an ArrayExpr for them.
+         */
+        aexprs = NIL;
+        foreach(l, rnonvars)
+        {
+            Node *rexpr = (Node *) lfirst(l);
+
+            rexpr = coerce_to_common_type(pstate, rexpr, AGTYPEOID, "IN");
+            aexprs = lappend(aexprs, rexpr);
+        }
+        newa = makeNode(ArrayExpr);
+        newa->array_typeid = get_array_type(AGTYPEOID);
+        /* array_collid will be set by parse_collate.c */
+        newa->element_typeid = AGTYPEOID;
+        newa->elements = aexprs;
+        newa->multidims = false;
+        result = (Node *) make_scalar_array_op(pstate, a->name, useOr,
+                                               lexpr, (Node *) newa, a->location);
+
+        /* Consider only the Vars (if any) in the loop below */
+        rexprs = rvars;
+    }
+
+    // Must do it the hard way, with a boolean expression tree.
+    foreach(l, rexprs)
+    {
+        Node *rexpr = (Node *) lfirst(l);
+        Node *cmp;
+
+        // Ordinary scalar operator
+        cmp = (Node *) make_op(pstate, a->name, copyObject(lexpr), rexpr,
+                               pstate->p_last_srf, a->location);
+
+        cmp = coerce_to_boolean(pstate, cmp, "IN");
+        if (result == NULL)
+        {
+            result = cmp;
+        }
+        else
+        {
+            result = (Node *) makeBoolExpr(useOr ? OR_EXPR : AND_EXPR,
+                                           list_make2(result, cmp),
+                                           a->location);
+        }
+    }
+
+    return result;
 }
 
 static Node *transform_BoolExpr(cypher_parsestate *cpstate, BoolExpr *expr)
@@ -534,6 +676,24 @@ static Node *transform_BoolExpr(cypher_parsestate *cpstate, BoolExpr *expr)
 
     return (Node *)makeBoolExpr(expr->boolop, args, expr->location);
 }
+
+/*
+ * function for transforming cypher_comparison_boolexpr. Since this node is a
+ * wrapper to let us know when a comparison occurs in a chained comparison,
+ * we convert it to a PG BoolExpr and transform it.
+ */
+static Node *transform_cypher_comparison_boolexpr(cypher_parsestate *cpstate,
+                                                  cypher_comparison_boolexpr *b)
+{
+    BoolExpr *n = makeNode(BoolExpr);
+
+    n->boolop = b->boolop;
+    n->args = b->args;
+    n->location = b->location;
+
+    return transform_BoolExpr(cpstate, n);
+}
+
 
 static Node *transform_cypher_bool_const(cypher_parsestate *cpstate,
                                          cypher_bool_const *bc)
@@ -796,6 +956,52 @@ static ArrayExpr *make_agtype_array_expr(List *args)
     return newa;
 }
 
+/*
+ * Transform a ColumnRef for indirection. Try to find the rte that the ColumnRef
+ * references and pass the properties of that rte as what the ColumnRef is
+ * referencing. Otherwise, reference the Var.
+ */
+static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
+                                                  ColumnRef *cr)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    ParseNamespaceItem *pnsi = NULL;
+    Node *field1 = linitial(cr->fields);
+    char *relname = NULL;
+    Node *node = NULL;
+    int levels_up = 0;
+
+    Assert(IsA(field1, String));
+    relname = strVal(field1);
+
+    /* locate the referenced RTE (used to be find_rte(cpstate, relname)) */
+    pnsi = refnameNamespaceItem(pstate, NULL, relname, cr->location,
+                                &levels_up);
+
+    /* if we didn't find anything, return NULL */
+    if (!pnsi)
+    {
+        return NULL;
+    }
+
+    /* find the properties column of the NSI and return a var for it */
+    node = scanNSItemForColumn(pstate, pnsi, 0, "properties", cr->location);
+
+    /*
+     * Error out if we couldn't find it.
+     *
+     * TODO: Should we error out or return NULL for further processing?
+     *       For now, just error out.
+     */
+    if (!node)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+                        errmsg("could not find properties for %s", relname)));
+    }
+
+    return node;
+}
+
 static Node *transform_A_Indirection(cypher_parsestate *cpstate,
                                      A_Indirection *a_ind)
 {
@@ -817,8 +1023,25 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
     func_slice_oid = get_ag_func_oid("agtype_access_slice", 3, AGTYPEOID,
                                      AGTYPEOID, AGTYPEOID);
 
-    /* transform indirection argument expression */
-    ind_arg_expr = transform_cypher_expr_recurse(cpstate, a_ind->arg);
+    /*
+     * If the indirection argument is a ColumnRef, we want to pull out the
+     * properties, as a var node, if possible.
+     */
+    if (IsA(a_ind->arg, ColumnRef))
+    {
+        ColumnRef *cr = (ColumnRef *)a_ind->arg;
+
+        ind_arg_expr = transform_column_ref_for_indirection(cpstate, cr);
+    }
+
+    /*
+     * If we didn't get the properties from a ColumnRef, just transform the
+     * indirection argument.
+     */
+    if (ind_arg_expr == NULL)
+    {
+        ind_arg_expr = transform_cypher_expr_recurse(cpstate, a_ind->arg);
+    }
 
     /* get the location of the expression */
     location = exprLocation(ind_arg_expr);
@@ -865,7 +1088,7 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
             if (!indices->lidx)
             {
                 A_Const *n = makeNode(A_Const);
-                n->val.type = T_Null;
+                n->isnull = true;
                 n->location = -1;
                 node = transform_cypher_expr_recurse(cpstate, (Node *)n);
             }
@@ -879,7 +1102,7 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
             if (!indices->uidx)
             {
                 A_Const *n = makeNode(A_Const);
-                n->val.type = T_Null;
+                n->isnull = true;
                 n->location = -1;
                 node = transform_cypher_expr_recurse(cpstate, (Node *)n);
             }
@@ -1092,7 +1315,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     if (list_length(fn->funcname) == 1)
     {
         /* get the name, size, and the ag name allocated */
-        char *name = ((Value*)linitial(fn->funcname))->val.str;
+        char *name = ((String*)linitial(fn->funcname))->sval;
         int pnlen = strlen(name);
         char *ag_name = palloc(pnlen + 5);
         int i;
@@ -1258,6 +1481,17 @@ static Node *transform_CaseExpr(cypher_parsestate *cpstate, CaseExpr
         warg = (Node *) w->expr;
         if (placeholder)
         {
+            if(is_ag_node(warg, cypher_comparison_aexpr) ||
+               is_ag_node(warg, cypher_comparison_boolexpr) )
+            {
+                List *funcname = list_make1(makeString("ag_catalog"));
+                funcname = lappend(funcname, makeString("bool_to_agtype"));
+
+                warg = (Node *) makeFuncCall(funcname, list_make1(warg),
+                                             COERCE_EXPLICIT_CAST,
+                                             cexpr->location);
+            }
+
             /* shorthand form was specified, so expand... */
             warg = (Node *) makeSimpleA_Expr(AEXPR_OP, "=",
                                              (Node *) placeholder,
@@ -1271,6 +1505,18 @@ static Node *transform_CaseExpr(cypher_parsestate *cpstate, CaseExpr
                                                 "CASE/WHEN");
 
         warg = (Node *) w->result;
+
+        if(is_ag_node(warg, cypher_comparison_aexpr) ||
+           is_ag_node(warg, cypher_comparison_boolexpr) )
+        {
+            List *funcname = list_make1(makeString("ag_catalog"));
+            funcname = lappend(funcname, makeString("bool_to_agtype"));
+
+            warg = (Node *) makeFuncCall(funcname, list_make1(warg),
+                                         COERCE_EXPLICIT_CAST,
+                                         cexpr->location);
+        }
+
         neww->result = (Expr *) transform_cypher_expr_recurse(cpstate, warg);
         neww->location = w->location;
 
@@ -1286,7 +1532,7 @@ static Node *transform_CaseExpr(cypher_parsestate *cpstate, CaseExpr
     {
         A_Const    *n = makeNode(A_Const);
 
-        n->val.type = T_Null;
+        n->isnull = true;
         n->location = -1;
         defresult = (Node *) n;
     }

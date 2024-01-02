@@ -29,45 +29,31 @@
  */
 
 #include "postgres.h"
-
+#include "varatt.h"
 #include <math.h>
+
+#include <float.h>
 
 #include "access/genam.h"
 #include "access/heapam.h"
-#include "access/skey.h"
-#include "access/table.h"
-#include "access/tableam.h"
-#include "access/htup_details.h"
 #include "catalog/namespace.h"
-#include "catalog/pg_collation.h"
-#include "catalog/pg_operator.h"
-#include "catalog/pg_type.h"
-#include "catalog/pg_aggregate_d.h"
 #include "catalog/pg_collation_d.h"
 #include "catalog/pg_operator_d.h"
-#include "executor/nodeAgg.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
 #include "parser/parse_coerce.h"
-#include "nodes/pg_list.h"
 #include "utils/builtins.h"
 #include "utils/float.h"
-#include "utils/fmgroids.h"
-#include "utils/int8.h"
 #include "utils/lsyscache.h"
-#include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/typcache.h"
-
 #include "utils/age_vle.h"
-#include "utils/agtype.h"
 #include "utils/agtype_parser.h"
 #include "utils/ag_float8_supp.h"
+#include "utils/agtype_raw.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
-#include "utils/graphid.h"
-#include "utils/numeric.h"
 
 /* State structure for Percentile aggregate functions */
 typedef struct PercentileGroupAggState
@@ -103,6 +89,7 @@ typedef enum /* type categories for datum_to_agtype */
 } agt_type_category;
 
 static inline Datum agtype_from_cstring(char *str, int len);
+static inline agtype_value *agtype_value_from_cstring(char *str, int len);
 size_t check_string_length(size_t len);
 static void agtype_in_agtype_annotation(void *pstate, char *annotation);
 static void agtype_in_object_start(void *pstate);
@@ -145,10 +132,19 @@ static agtype_value *execute_array_access_operator_internal(agtype *array,
 static agtype_value *execute_map_access_operator(agtype *map,
                                                  agtype_value* map_value,
                                                  agtype *key);
-static agtype_value *execute_map_access_operator_internal(
-    agtype *map, agtype_value *map_value, char *key, int key_len);
-Datum agtype_object_field_impl(FunctionCallInfo fcinfo, bool as_text);
-Datum agtype_array_element_impl(FunctionCallInfo fcinfo, bool as_text);
+static agtype_value *execute_map_access_operator_internal(agtype *map,
+                                                          agtype_value *map_value,
+                                                          char *key,
+                                                          int key_len);
+static Datum agtype_object_field_impl(FunctionCallInfo fcinfo,
+                                      agtype *agtype_in,
+                                      char *key, int key_len, bool as_text);
+static Datum agtype_array_element_impl(FunctionCallInfo fcinfo,
+                                       agtype *agtype_in, int element,
+                                       bool as_text);
+static Datum process_access_operator_result(FunctionCallInfo fcinfo,
+                                            agtype_value *agtv,
+                                            bool as_text);
 /* typecast functions */
 static void agtype_typecast_object(agtype_in_state *state, char *annotation);
 static void agtype_typecast_array(agtype_in_state *state, char *annotation);
@@ -175,14 +171,11 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
 static agtype_iterator *get_next_object_key(agtype_iterator *it,
                                             agtype_container *agtc,
                                             agtype_value *key);
-static agtype_iterator *get_next_list_element(agtype_iterator *it,
-                                              agtype_container *agtc,
-                                              agtype_value *elem);
 static int extract_variadic_args_min(FunctionCallInfo fcinfo,
                                      int variadic_start, bool convert_unknown,
                                      Datum **args, Oid **types, bool **nulls,
                                      int min_num_args);
-static agtype_value* agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo);
+static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo);
 agtype_value *agtype_composite_to_agtype_value_binary(agtype *a);
 
 /* global storage of  OID for agtype and _agtype */
@@ -354,13 +347,14 @@ Datum agtype_out(PG_FUNCTION_ARGS)
 }
 
 /*
- * agtype_from_cstring
+ * agtype_value_from_cstring
  *
- * Turns agtype string into an agtype Datum.
+ * Helper function to turn an agtype string into an agtype_value.
  *
  * Uses the agtype parser (with hooks) to construct an agtype.
  */
-static inline Datum agtype_from_cstring(char *str, int len)
+
+static inline agtype_value *agtype_value_from_cstring(char *str, int len)
 {
     agtype_lex_context *lex;
     agtype_in_state state;
@@ -384,7 +378,21 @@ static inline Datum agtype_from_cstring(char *str, int len)
     parse_agtype(lex, &sem);
 
     /* after parsing, the item member has the composed agtype structure */
-    PG_RETURN_POINTER(agtype_value_to_agtype(state.res));
+    return state.res;
+}
+
+/*
+ * agtype_from_cstring
+ *
+ * Turns agtype string into a Datum of agtype.
+ *
+ * Calls helper function
+ */
+static inline Datum agtype_from_cstring(char *str, int len)
+{
+    agtype_value *agtv = agtype_value_from_cstring(str, len);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv));
 }
 
 size_t check_string_length(size_t len)
@@ -959,13 +967,13 @@ static void agtype_in_scalar(void *pstate, char *token,
     case AGTYPE_TOKEN_INTEGER:
         Assert(token != NULL);
         v.type = AGTV_INTEGER;
-        scanint8(token, false, &v.val.int_value);
+        v.val.int_value = pg_strtoint64(token);
         break;
     case AGTYPE_TOKEN_FLOAT:
         Assert(token != NULL);
         v.type = AGTV_FLOAT;
         v.val.float_value = float8in_internal(token, NULL, "double precision",
-                                              token);
+                                              token, NULL);
         break;
     case AGTYPE_TOKEN_NUMERIC:
         Assert(token != NULL);
@@ -1968,7 +1976,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
      */
     if (nargs >= 1 && nargs <= 3)
     {
-        int i = 0;
+        i = 0;
 
         for (i = 0; i < nargs; i++)
         {
@@ -2175,18 +2183,14 @@ PG_FUNCTION_INFO_V1(_agtype_build_vertex);
  */
 Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 {
-    agtype_in_state result;
     graphid id;
+    char *label;
+    agtype *properties;
+    agtype_build_state *bstate;
+    agtype *rawscalar;
+    agtype *vertex;
 
-    memset(&result, 0, sizeof(agtype_in_state));
-
-    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
-                                   NULL);
-
-    /* process graphid */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("id"));
-
+    /* handles null */
     if (fcinfo->args[0].isnull)
     {
         ereport(ERROR,
@@ -2194,39 +2198,24 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
                  errmsg("_agtype_build_vertex() graphid cannot be NULL")));
     }
 
-    id = AG_GETARG_GRAPHID(0);
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                   integer_to_agtype_value(id));
-
-    /* process label */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("label"));
-
     if (fcinfo->args[1].isnull)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("_agtype_build_vertex() label cannot be NULL")));
     }
 
-    result.res =
-        push_agtype_value(&result.parse_state, WAGT_VALUE,
-                          string_to_agtype_value(PG_GETARG_CSTRING(1)));
+    id = AG_GETARG_GRAPHID(0);
+    label = PG_GETARG_CSTRING(1);
 
-    /* process properties */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("properties"));
-
-    //if the properties object is null, push an empty object
     if (fcinfo->args[2].isnull)
     {
-        result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
-                                       NULL);
-        result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT,
-                                       NULL);
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
     }
     else
     {
-        agtype *properties = AG_GET_ARG_AGTYPE_P(2);
+        properties = AG_GET_ARG_AGTYPE_P(2);
 
         if (!AGT_ROOT_IS_OBJECT(properties))
         {
@@ -2234,15 +2223,24 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                      errmsg("_agtype_build_vertex() properties argument must be an object")));
         }
-
-        add_agtype((Datum)properties, false, &result, AGTYPEOID, false);
     }
 
-    result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT, NULL);
+    bstate = init_agtype_build_state(3, AGT_FOBJECT);
+    write_string(bstate, "id");
+    write_string(bstate, "label");
+    write_string(bstate, "properties");
+    write_graphid(bstate, id);
+    write_string(bstate, label);
+    write_container(bstate, properties);
+    vertex = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
 
-    result.res->type = AGTV_VERTEX;
+    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
+    write_extended(bstate, vertex, AGT_HEADER_VERTEX);
+    rawscalar = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
 
-    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+    PG_RETURN_POINTER(rawscalar);
 }
 
 Datum make_vertex(Datum id, Datum label, Datum properties)
@@ -2257,18 +2255,13 @@ PG_FUNCTION_INFO_V1(_agtype_build_edge);
  */
 Datum _agtype_build_edge(PG_FUNCTION_ARGS)
 {
-    agtype_in_state result;
+    agtype_build_state *bstate;
+    agtype *edge, *rawscalar;
     graphid id, start_id, end_id;
-
-    memset(&result, 0, sizeof(agtype_in_state));
-
-    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
-                                   NULL);
+    char *label;
+    agtype *properties;
 
     /* process graph id */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("id"));
-
     if (fcinfo->args[0].isnull)
     {
         ereport(ERROR,
@@ -2277,27 +2270,17 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     }
 
     id = AG_GETARG_GRAPHID(0);
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                   integer_to_agtype_value(id));
 
     /* process label */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("label"));
-
     if (fcinfo->args[3].isnull)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("_agtype_build_vertex() label cannot be NULL")));
     }
 
-    result.res =
-        push_agtype_value(&result.parse_state, WAGT_VALUE,
-                          string_to_agtype_value(PG_GETARG_CSTRING(3)));
+    label = PG_GETARG_CSTRING(3);
 
     /* process end_id */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("end_id"));
-
     if (fcinfo->args[2].isnull)
     {
         ereport(ERROR,
@@ -2306,13 +2289,8 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     }
 
     end_id = AG_GETARG_GRAPHID(2);
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                   integer_to_agtype_value(end_id));
 
     /* process start_id */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("start_id"));
-
     if (fcinfo->args[1].isnull)
     {
         ereport(ERROR,
@@ -2321,24 +2299,19 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     }
 
     start_id = AG_GETARG_GRAPHID(1);
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                   integer_to_agtype_value(start_id));
 
     /* process properties */
-    result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
-                                   string_to_agtype_value("properties"));
 
     /* if the properties object is null, push an empty object */
     if (fcinfo->args[4].isnull)
     {
-        result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
-                                       NULL);
-        result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT,
-                                       NULL);
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
     }
     else
     {
-        agtype *properties = AG_GET_ARG_AGTYPE_P(4);
+        properties = AG_GET_ARG_AGTYPE_P(4);
 
         if (!AGT_ROOT_IS_OBJECT(properties))
         {
@@ -2346,15 +2319,27 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                      errmsg("_agtype_build_edge() properties argument must be an object")));
         }
-
-        add_agtype((Datum)properties, false, &result, AGTYPEOID, false);
     }
 
-    result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT, NULL);
+    bstate = init_agtype_build_state(5, AGT_FOBJECT);
+    write_string(bstate, "id");
+    write_string(bstate, "label");
+    write_string(bstate, "end_id");
+    write_string(bstate, "start_id");
+    write_string(bstate, "properties");
+    write_graphid(bstate, id);
+    write_string(bstate, label);
+    write_graphid(bstate, end_id);
+    write_graphid(bstate, start_id);
+    write_container(bstate, properties);
+    edge = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
 
-    result.res->type = AGTV_EDGE;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
+    write_extended(bstate, edge, AGT_HEADER_EDGE);
+    rawscalar = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+    PG_RETURN_POINTER(rawscalar);
 }
 
 Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
@@ -2364,7 +2349,7 @@ Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
                                properties);
 }
 
-static agtype_value* agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
+static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
 {
     int nargs;
     int i;
@@ -2377,7 +2362,9 @@ static agtype_value* agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
     nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
 
     if (nargs < 0)
-        PG_RETURN_NULL();
+    {
+        return NULL;
+    }
 
     if (nargs % 2 != 0)
     {
@@ -2420,7 +2407,14 @@ PG_FUNCTION_INFO_V1(agtype_build_map);
  */
 Datum agtype_build_map(PG_FUNCTION_ARGS)
 {
-    agtype_value *result= agtype_build_map_as_agtype_value(fcinfo);
+    agtype_value *result = NULL;
+
+    result = agtype_build_map_as_agtype_value(fcinfo);
+    if (result == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     PG_RETURN_POINTER(agtype_value_to_agtype(result));
 }
 
@@ -2448,8 +2442,16 @@ PG_FUNCTION_INFO_V1(agtype_build_map_nonull);
  */
 Datum agtype_build_map_nonull(PG_FUNCTION_ARGS)
 {
-    agtype_value *result= agtype_build_map_as_agtype_value(fcinfo);
+    agtype_value *result = NULL;
+
+    result = agtype_build_map_as_agtype_value(fcinfo);
+    if (result == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     remove_null_from_agtype_object(result);
+
     PG_RETURN_POINTER(agtype_value_to_agtype(result));
 }
 
@@ -2608,17 +2610,20 @@ PG_FUNCTION_INFO_V1(agtype_to_int8);
  */
 Datum agtype_to_int8(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
     agtype_value agtv;
+    agtype_value *agtv_p = NULL;
+    agtype_value *container = NULL;
     int64 result = 0x0;
-    agtype *arg_agt;
+    agtype *arg_agt = NULL;
 
     /* get the agtype equivalence of any convertable input type */
     arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
 
     /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
     if (arg_agt == NULL)
+    {
         PG_RETURN_NULL();
+    }
 
     if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
         (agtv.type != AGTV_FLOAT &&
@@ -2626,26 +2631,94 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
          agtv.type != AGTV_NUMERIC &&
          agtv.type != AGTV_STRING &&
          agtv.type != AGTV_BOOL))
+    {
         cannot_cast_agtype_value(agtv.type, "int");
+    }
 
-    PG_FREE_IF_COPY(agtype_in, 0);
+    agtv_p = &agtv;
 
-    if (agtv.type == AGTV_INTEGER)
-        result = agtv.val.int_value;
-    else if (agtv.type == AGTV_FLOAT)
+    /*
+     * If it is an agtype string, we need to convert the string component first.
+     * We need to do this because the string could be any type of value. Fx,
+     * integer, float, boolean, numeric, object, or array. Once converted, we
+     * need to remember scalar values are returned as a scalar array. We only
+     * care about scalar arrays.
+     */
+    if (agtv_p->type == AGTV_STRING)
+    {
+        agtype_value *temp = NULL;
+
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
+        temp = agtype_value_from_cstring(agtv_p->val.string.val,
+                                         agtv_p->val.string.len);
+
+        /* this will catch anything that isn't an array and isn't a scalar */
+        if (temp->type != AGTV_ARRAY ||
+            !temp->val.array.raw_scalar)
+        {
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int8 type: %d",
+                           (int)temp->type)));
+        }
+
+        /* save the top agtype_value */
+        container = temp;
+        /* get the wrapped agtype_value */
+        temp = &temp->val.array.elems[0];
+
+        /* these we expect */
+        if (temp->type == AGTV_FLOAT ||
+            temp->type == AGTV_INTEGER ||
+            temp->type == AGTV_NUMERIC ||
+            temp->type == AGTV_BOOL)
+        {
+            agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int8",
+                        (int)temp->type);
+        }
+    }
+
+    /* now check the rest */
+    if (agtv_p->type == AGTV_INTEGER)
+    {
+        result = agtv_p->val.int_value;
+    }
+    else if (agtv_p->type == AGTV_FLOAT)
+    {
         result = DatumGetInt64(DirectFunctionCall1(dtoi8,
-                                Float8GetDatum(agtv.val.float_value)));
-    else if (agtv.type == AGTV_NUMERIC)
+                     Float8GetDatum(agtv_p->val.float_value)));
+    }
+    else if (agtv_p->type == AGTV_NUMERIC)
+    {
         result = DatumGetInt64(DirectFunctionCall1(numeric_int8,
-                     NumericGetDatum(agtv.val.numeric)));
-    else if (agtv.type == AGTV_STRING)
-        result = DatumGetInt64(DirectFunctionCall1(int8in,
-                           CStringGetDatum(agtv.val.string.val)));
-    else if(agtv.type == AGTV_BOOL)
-        result = DatumGetInt64(DirectFunctionCall1(bool_int4,
-                      BoolGetDatum(agtv.val.boolean)));
+                     NumericGetDatum(agtv_p->val.numeric)));
+    }
+    else if(agtv_p->type == AGTV_BOOL)
+    {
+        result = (agtv_p->val.boolean) ? 1 : 0;
+    }
     else
-        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int8: %d",
+                        (int)agtv_p->type)));
+    }
+
+    /* free the container, if it was used */
+    if (container)
+    {
+        pfree(container);
+    }
+
+    PG_FREE_IF_COPY(arg_agt, 0);
 
     PG_RETURN_INT64(result);
 }
@@ -2657,10 +2730,11 @@ PG_FUNCTION_INFO_V1(agtype_to_int4);
  */
 Datum agtype_to_int4(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
     agtype_value agtv;
+    agtype_value *agtv_p = NULL;
+    agtype_value *container = NULL;
     int32 result = 0x0;
-    agtype *arg_agt;
+    agtype *arg_agt = NULL;
 
     /* get the agtype equivalence of any convertable input type */
     arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
@@ -2681,37 +2755,91 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
         cannot_cast_agtype_value(agtv.type, "int");
     }
 
-    PG_FREE_IF_COPY(agtype_in, 0);
+    agtv_p = &agtv;
 
-    if (agtv.type == AGTV_INTEGER)
+    /*
+     * If it is an agtype string, we need to convert the string component first.
+     * We need to do this because the string could be any type of value. Fx,
+     * integer, float, boolean, numeric, object, or array. Once converted, we
+     * need to remember scalar values are returned as a scalar array. We only
+     * care about scalar arrays.
+     */
+    if (agtv_p->type == AGTV_STRING)
+    {
+        agtype_value *temp = NULL;
+
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
+        temp = agtype_value_from_cstring(agtv_p->val.string.val,
+                                         agtv_p->val.string.len);
+
+        /* this will catch anything that isn't an array and isn't a scalar */
+        if (temp->type != AGTV_ARRAY ||
+            !temp->val.array.raw_scalar)
+        {
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int4 type: %d",
+                           (int)temp->type)));
+        }
+
+        /* save the top agtype_value */
+        container = temp;
+        /* get the wrapped agtype_value */
+        temp = &temp->val.array.elems[0];
+
+        /* these we expect */
+        if (temp->type == AGTV_FLOAT ||
+            temp->type == AGTV_INTEGER ||
+            temp->type == AGTV_NUMERIC ||
+            temp->type == AGTV_BOOL)
+        {
+            agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int4",
+                        (int)temp->type);
+        }
+    }
+
+    /* now check the rest */
+    if (agtv_p->type == AGTV_INTEGER)
     {
         result = DatumGetInt32(DirectFunctionCall1(int84,
-                    Int64GetDatum(agtv.val.int_value)));
+                     Int64GetDatum(agtv_p->val.int_value)));
     }
-    else if (agtv.type == AGTV_FLOAT)
+    else if (agtv_p->type == AGTV_FLOAT)
     {
         result = DatumGetInt32(DirectFunctionCall1(dtoi4,
-                                Float8GetDatum(agtv.val.float_value)));
+                     Float8GetDatum(agtv_p->val.float_value)));
     }
-    else if (agtv.type == AGTV_NUMERIC)
+    else if (agtv_p->type == AGTV_NUMERIC)
     {
         result = DatumGetInt32(DirectFunctionCall1(numeric_int4,
-                     NumericGetDatum(agtv.val.numeric)));
+                     NumericGetDatum(agtv_p->val.numeric)));
     }
-    else if (agtv.type == AGTV_STRING)
+    else if (agtv_p->type == AGTV_BOOL)
     {
-        result = DatumGetInt32(DirectFunctionCall1(int4in,
-                           CStringGetDatum(agtv.val.string.val)));
-    }
-    else if (agtv.type == AGTV_BOOL)
-    {
-        result = DatumGetInt64(DirectFunctionCall1(bool_int4,
-                    BoolGetDatum(agtv.val.boolean)));
+        result = (agtv_p->val.boolean) ? 1 : 0;
     }
     else
     {
-        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int4: %d",
+                        (int)agtv_p->type)));
     }
+
+    /* free the container, if it was used */
+    if (container)
+    {
+        pfree(container);
+    }
+
+    PG_FREE_IF_COPY(arg_agt, 0);
 
     PG_RETURN_INT32(result);
 }
@@ -2723,41 +2851,117 @@ PG_FUNCTION_INFO_V1(agtype_to_int2);
  */
 Datum agtype_to_int2(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
     agtype_value agtv;
+    agtype_value *agtv_p = NULL;
+    agtype_value *container = NULL;
     int16 result = 0x0;
-    agtype *arg_agt;
+    agtype *arg_agt = NULL;
 
     /* get the agtype equivalence of any convertable input type */
     arg_agt = get_one_agtype_from_variadic_args(fcinfo, 0, 1);
 
     /* Return null if arg_agt is null. This covers SQL and Agtype NULLS */
     if (arg_agt == NULL)
+    {
         PG_RETURN_NULL();
+    }
 
     if (!agtype_extract_scalar(&arg_agt->root, &agtv) ||
         (agtv.type != AGTV_FLOAT &&
          agtv.type != AGTV_INTEGER &&
          agtv.type != AGTV_NUMERIC &&
-         agtv.type != AGTV_STRING))
+         agtv.type != AGTV_STRING &&
+         agtv.type != AGTV_BOOL))
+    {
         cannot_cast_agtype_value(agtv.type, "int");
+    }
 
-    PG_FREE_IF_COPY(agtype_in, 0);
+    agtv_p = &agtv;
 
-    if (agtv.type == AGTV_INTEGER)
+    /*
+     * If it is an agtype string, we need to convert the string component first.
+     * We need to do this because the string could be any type of value. Fx,
+     * integer, float, boolean, numeric, object, or array. Once converted, we
+     * need to remember scalar values are returned as a scalar array. We only
+     * care about scalar arrays.
+     */
+    if (agtv_p->type == AGTV_STRING)
+    {
+        agtype_value *temp = NULL;
+
+        /*
+         * Convert the string to an agtype_value. Remember that a returned
+         * scalar value is returned in a one element array.
+         */
+        temp = agtype_value_from_cstring(agtv_p->val.string.val,
+                                         agtv_p->val.string.len);
+
+        /* this will catch anything that isn't an array and isn't a scalar */
+        if (temp->type != AGTV_ARRAY ||
+            !temp->val.array.raw_scalar)
+        {
+            ereport(ERROR,
+                   (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("invalid agtype string to int2 type: %d",
+                           (int)temp->type)));
+        }
+
+        /* save the top agtype_value */
+        container = temp;
+        /* get the wrapped agtype_value */
+        temp = &temp->val.array.elems[0];
+
+        /* these we expect */
+        if (temp->type == AGTV_FLOAT ||
+            temp->type == AGTV_INTEGER ||
+            temp->type == AGTV_NUMERIC ||
+            temp->type == AGTV_BOOL)
+        {
+            agtv_p = temp;
+        }
+        else
+        {
+            elog(ERROR, "unexpected string type: %d in agtype_to_int2",
+                        (int)temp->type);
+        }
+    }
+
+    /* now check the rest */
+    if (agtv_p->type == AGTV_INTEGER)
+    {
         result = DatumGetInt16(DirectFunctionCall1(int82,
-                    Int64GetDatum(agtv.val.int_value)));
-    else if (agtv.type == AGTV_FLOAT)
-        result = DatumGetInt32(DirectFunctionCall1(dtoi2,
-                                Float8GetDatum(agtv.val.float_value)));
-    else if (agtv.type == AGTV_NUMERIC)
+                     Int64GetDatum(agtv_p->val.int_value)));
+    }
+    else if (agtv_p->type == AGTV_FLOAT)
+    {
+        result = DatumGetInt16(DirectFunctionCall1(dtoi2,
+                     Float8GetDatum(agtv_p->val.float_value)));
+    }
+    else if (agtv_p->type == AGTV_NUMERIC)
+    {
         result = DatumGetInt16(DirectFunctionCall1(numeric_int2,
-                     NumericGetDatum(agtv.val.numeric)));
-    else if (agtv.type == AGTV_STRING)
-        result = DatumGetInt16(DirectFunctionCall1(int2in,
-                           CStringGetDatum(agtv.val.string.val)));
+                     NumericGetDatum(agtv_p->val.numeric)));
+    }
+    else if (agtv_p->type == AGTV_BOOL)
+    {
+        result = (agtv_p->val.boolean) ? 1 : 0;
+    }
     else
-        elog(ERROR, "invalid agtype type: %d", (int)agtv.type);
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid conversion type in agtype_to_int2: %d",
+                        (int)agtv_p->type)));
+
+    }
+
+    /* free the container, if it was used */
+    if (container)
+    {
+        pfree(container);
+    }
+
+    PG_FREE_IF_COPY(arg_agt, 0);
 
     PG_RETURN_INT16(result);
 }
@@ -2895,18 +3099,41 @@ PG_FUNCTION_INFO_V1(agtype_to_int4_array);
 
 /*
  * Cast agtype to int4[].
+ *
+ * TODO:
+ *
+ * We either need to change the function definition in age--x.x.x.sql
+ * to something like agtype[] or we need to make this function work
+ * for "any" type input. Right now it only works for an agtype array but
+ * it takes "any" input. Hence the additional code added to block anything
+ * other than agtype.
  */
 Datum agtype_to_int4_array(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
+    agtype_iterator *agtype_iterator = NULL;
+    agtype *agtype_in = NULL;
     agtype_value agtv;
     agtype_iterator_token agtv_token;
     Datum *array_value;
     ArrayType *result;
+    Oid arg_type = InvalidOid;
     int element_size;
     int i;
 
-    agtype_iterator *agtype_iterator = agtype_iterator_init(&agtype_in->root);
+    /* get the input data type */
+    arg_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+    /* verify the input is agtype */
+    if (arg_type != AGTYPEOID)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("argument must resolve to agtype")));
+    }
+
+    agtype_in = AG_GET_ARG_AGTYPE_P(0);
+
+    agtype_iterator = agtype_iterator_init(&agtype_in->root);
     agtv_token = agtype_iterator_next(&agtype_iterator, &agtv, false);
 
     if (agtv.type != AGTV_ARRAY)
@@ -3338,28 +3565,32 @@ static int extract_variadic_args_min(FunctionCallInfo fcinfo,
     return nargs;
 }
 
-/*
- * get agtype object field
- */
-Datum agtype_object_field_impl(FunctionCallInfo fcinfo, bool as_text)
+static Datum process_access_operator_result(FunctionCallInfo fcinfo,
+                                            agtype_value *agtv,
+                                            bool as_text)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
-    text *key = PG_GETARG_TEXT_PP(1);
-    agtype_value *v;
-
-    if (!AGT_ROOT_IS_OBJECT(agtype_in))
-    {
-        PG_RETURN_NULL();
-    }
-
-    v = execute_map_access_operator_internal(agtype_in, NULL, VARDATA_ANY(key),
-                                             VARSIZE_ANY_EXHDR(key));
-
-    if (v != NULL)
+    if (agtv != NULL)
     {
         if (as_text)
         {
-            text *result = agtype_value_to_text(v, false);
+            text *result;
+
+            if (agtv->type == AGTV_BINARY)
+            {
+                StringInfo out = makeStringInfo();
+                agtype_container *agtc =
+                    (agtype_container *)agtv->val.binary.data;
+                char *str;
+
+                str = agtype_to_cstring_worker(out, agtc,
+                                               agtv->val.binary.len,
+                                               false);
+                result = cstring_to_text(str);
+            }
+            else
+            {
+                result = agtype_value_to_text(agtv, false);
+            }
 
             if (result)
             {
@@ -3368,20 +3599,16 @@ Datum agtype_object_field_impl(FunctionCallInfo fcinfo, bool as_text)
         }
         else
         {
-            AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
+            AG_RETURN_AGTYPE_P(agtype_value_to_agtype(agtv));
         }
     }
 
     PG_RETURN_NULL();
 }
 
-/*
- * get agtype array element
- */
-Datum agtype_array_element_impl(FunctionCallInfo fcinfo, bool as_text)
+Datum agtype_array_element_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
+                                int element, bool as_text)
 {
-    agtype *agtype_in = AG_GET_ARG_AGTYPE_P(0);
-    int element = PG_GETARG_INT32(1);
     agtype_value *v;
 
     if (!AGT_ROOT_IS_ARRAY(agtype_in))
@@ -3389,55 +3616,155 @@ Datum agtype_array_element_impl(FunctionCallInfo fcinfo, bool as_text)
         PG_RETURN_NULL();
     }
 
-    if (element < 0)
+    v = execute_array_access_operator_internal(agtype_in, NULL, element);
+
+    return process_access_operator_result(fcinfo, v, as_text);
+}
+
+Datum agtype_object_field_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
+                               char *key, int key_len, bool as_text)
+{
+    agtype_value *v;
+    agtype* process_agtype;
+
+    if (AGT_ROOT_IS_SCALAR(agtype_in))
+    {
+        agtype_value *process_agtv = extract_entity_properties(agtype_in,
+                                                               false);
+        if (!process_agtv)
+        {
+            PG_RETURN_NULL();
+        }
+
+        process_agtype = agtype_value_to_agtype(process_agtv);
+    }
+    else
+    {
+        process_agtype = agtype_in;
+    }
+
+    if (!AGT_ROOT_IS_OBJECT(process_agtype))
     {
         PG_RETURN_NULL();
     }
 
-    v = execute_array_access_operator_internal(agtype_in, NULL, element);
+    v = execute_map_access_operator_internal(process_agtype, NULL,
+                                             key, key_len);
 
-    if (v != NULL)
+    return process_access_operator_result(fcinfo, v, as_text);
+}
+
+PG_FUNCTION_INFO_V1(agtype_object_field_agtype);
+
+Datum agtype_object_field_agtype(PG_FUNCTION_ARGS)
+{
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    agtype *key = AG_GET_ARG_AGTYPE_P(1);
+    agtype_value *key_value;
+
+    if (!AGT_ROOT_IS_SCALAR(key))
     {
-        if (as_text)
-        {
-            text *result = agtype_value_to_text(v, false);
-
-            if (result)
-            {
-                PG_RETURN_TEXT_P(result);
-            }
-        }
-        else
-        {
-            AG_RETURN_AGTYPE_P(agtype_value_to_agtype(v));
-        }
+        PG_RETURN_NULL();
     }
 
-    PG_RETURN_NULL();
+    key_value = get_ith_agtype_value_from_container(&key->root, 0);
+
+    if (key_value->type == AGTV_INTEGER)
+    {
+        PG_RETURN_TEXT_P((const void*)agtype_array_element_impl(fcinfo, agt,
+                                                   key_value->val.int_value,
+                                                   false));
+    }
+    else if (key_value->type == AGTV_STRING)
+    {
+        AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt,
+                                                    key_value->val.string.val,
+                                                    key_value->val.string.len,
+                                                    false));
+    }
+    else
+    {
+        PG_RETURN_NULL();
+    }
+}
+
+PG_FUNCTION_INFO_V1(agtype_object_field_text_agtype);
+
+Datum agtype_object_field_text_agtype(PG_FUNCTION_ARGS)
+{
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    agtype *key = AG_GET_ARG_AGTYPE_P(1);
+    agtype_value *key_value;
+
+    if (!AGT_ROOT_IS_SCALAR(key))
+    {
+        PG_RETURN_NULL();
+    }
+
+    key_value = get_ith_agtype_value_from_container(&key->root, 0);
+
+    if (key_value->type == AGTV_INTEGER)
+    {
+        PG_RETURN_TEXT_P((const void*)agtype_array_element_impl(fcinfo, agt,
+                                                   key_value->val.int_value,
+                                                   true));
+    }
+    else if (key_value->type == AGTV_STRING)
+    {
+        AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt,
+                                                    key_value->val.string.val,
+                                                    key_value->val.string.len,
+                                                    true));
+    }
+    else
+    {
+        PG_RETURN_NULL();
+    }
 }
 
 PG_FUNCTION_INFO_V1(agtype_object_field);
+
 Datum agtype_object_field(PG_FUNCTION_ARGS)
 {
-    return agtype_object_field_impl(fcinfo, false);
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    text *key = PG_GETARG_TEXT_PP(1);
+
+    AG_RETURN_AGTYPE_P((const void*)agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
+                                                VARSIZE_ANY_EXHDR(key),
+                                                false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_object_field_text);
+
 Datum agtype_object_field_text(PG_FUNCTION_ARGS)
 {
-    return agtype_object_field_impl(fcinfo, true);
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    text *key = PG_GETARG_TEXT_PP(1);
+
+    PG_RETURN_TEXT_P((const void*)agtype_object_field_impl(fcinfo, agt, VARDATA_ANY(key),
+                                              VARSIZE_ANY_EXHDR(key), true));
 }
 
 PG_FUNCTION_INFO_V1(agtype_array_element);
+
 Datum agtype_array_element(PG_FUNCTION_ARGS)
 {
-    return agtype_array_element_impl(fcinfo, false);
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    int elem = PG_GETARG_INT32(1);
+
+    AG_RETURN_AGTYPE_P((const void*)
+        agtype_array_element_impl(fcinfo, agt, elem, false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_array_element_text);
+
 Datum agtype_array_element_text(PG_FUNCTION_ARGS)
 {
-    return agtype_array_element_impl(fcinfo, true);
+    agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+    int elem = PG_GETARG_INT32(1);
+
+    PG_RETURN_TEXT_P((const void*)
+        agtype_array_element_impl(fcinfo, agt, elem, true));
 }
 
 PG_FUNCTION_INFO_V1(agtype_access_operator);
@@ -4035,8 +4362,11 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     agtype_value *r;
     uint64 seed = 0xF0F0F0F0;
 
+    /* this function returns INTEGER which is 32 bits */
     if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(0);
+    {
+        PG_RETURN_INT32(0);
+    }
 
     agt = AG_GET_ARG_AGTYPE_P(0);
 
@@ -4059,7 +4389,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
         seed = LEFT_ROTATE(seed, 1);
     }
 
-    PG_RETURN_INT16(hash);
+    PG_RETURN_INT32(hash);
 }
 
 // Comparison function for btree Indexes
@@ -4070,18 +4400,25 @@ Datum agtype_btree_cmp(PG_FUNCTION_ARGS)
     agtype *agtype_lhs;
     agtype *agtype_rhs;
 
+    /* this function returns INTEGER which is 32bits */
     if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
-        PG_RETURN_INT16(0);
+    {
+        PG_RETURN_INT32(0);
+    }
     else if (PG_ARGISNULL(0))
-        PG_RETURN_INT16(1);
+    {
+        PG_RETURN_INT32(1);
+    }
     else if (PG_ARGISNULL(1))
-        PG_RETURN_INT16(-1);
+    {
+        PG_RETURN_INT32(-1);
+    }
 
     agtype_lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype_rhs = AG_GET_ARG_AGTYPE_P(1);
 
-    PG_RETURN_INT16(compare_agtype_containers_orderability(&agtype_lhs->root,
-                                                     &agtype_rhs->root));
+    PG_RETURN_INT32(compare_agtype_containers_orderability(&agtype_lhs->root,
+                                                           &agtype_rhs->root));
 }
 
 PG_FUNCTION_INFO_V1(agtype_typecast_numeric);
@@ -5160,6 +5497,83 @@ Datum age_last(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
 }
 
+
+PG_FUNCTION_INFO_V1(age_tail);
+/*
+ * Returns a list  containing all the elements, excluding the first one, from a list.
+ */
+Datum age_tail(PG_FUNCTION_ARGS)
+{
+    Oid arg_type;
+    agtype *agt_arg = NULL;
+    agtype *agt_result = NULL;
+    agtype_in_state agis_result;
+    int count;
+    int i;
+
+    /* check number of arguments */
+    if (PG_NARGS() < 1 || PG_NARGS() > 1)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("age_tail() requires only one argument")));
+    }
+
+    /* get the data type */
+    arg_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+    /* check the data type */
+    if (arg_type != AGTYPEOID)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("age_tail() argument must be of type agtype")));
+    }
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for an array */
+    if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("tail() argument must resolve to a list or null")));
+    }
+
+    count = AGT_ROOT_COUNT(agt_arg);
+
+    /* if we have an empty list or only one element in the list, return null */
+    if (count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* iterate through the list beginning with the second item */
+    for (i = 1; i < count; i++)
+    {
+        agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                            get_ith_agtype_value_from_container(&agt_arg->root, i));
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    agt_result = agtype_value_to_agtype(agis_result.res);
+    pfree_agtype_value(agis_result.res);
+
+    PG_RETURN_POINTER(agt_result);
+}
+
 PG_FUNCTION_INFO_V1(age_properties);
 
 Datum age_properties(PG_FUNCTION_ARGS)
@@ -5332,6 +5746,98 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
+PG_FUNCTION_INFO_V1(age_tobooleanlist);
+/*
+ * Converts a list of values and returns a list of boolean values. 
+ * If any values are not convertible to boolean they will be null in the list returned.
+ */
+Datum age_tobooleanlist(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_in_state agis_result;
+    agtype_value *elem;
+    agtype_value bool_elem;
+    char *string = NULL;
+    int count;
+    int i;
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+        PG_RETURN_NULL();
+
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for an array */
+    if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toBooleanList() argument must resolve to a list or null")));
+
+    count = AGT_ROOT_COUNT(agt_arg);
+
+    /* if we have an empty list or only one element in the list, return null */
+    if (count == 0)
+        PG_RETURN_NULL();
+    
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* iterate through the list */
+    for (i = 0; i < count; i++)
+    {
+        // TODO: check element's type, it's value, and convert it to boolean if possible.
+        elem = get_ith_agtype_value_from_container(&agt_arg->root, i);
+        bool_elem.type = AGTV_BOOL;
+
+        switch (elem->type)
+        {
+        case AGTV_STRING:
+            
+            string = elem->val.string.val;
+
+            if (pg_strcasecmp(string, "true") == 0)
+            {
+                bool_elem.val.boolean = true;
+                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
+            }
+            else if (pg_strcasecmp(string, "false") == 0)
+            {
+                bool_elem.val.boolean = false;
+                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
+            }
+            else
+            {
+                bool_elem.type = AGTV_NULL;
+                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
+            }
+            
+            break;
+        
+        case AGTV_BOOL:
+            
+            bool_elem.val.boolean = elem->val.boolean;
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
+
+            break;
+        
+        default:
+            
+            bool_elem.type = AGTV_NULL;
+            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
+            
+            break;
+        }
+    }
+
+    /* push the end of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
 PG_FUNCTION_INFO_V1(age_tofloat);
 
 Datum age_tofloat(PG_FUNCTION_ARGS)
@@ -5468,7 +5974,7 @@ Datum age_tofloat(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(age_tofloatlist);
 /*
- * toFloatList() converts a list of values and returns a list of floating point values. 
+ * toFloatList() converts a list of values and returns a list of floating point values.
  * If any values are not convertible to floating point they will be null in the list returned.
  */
 Datum age_tofloatlist(PG_FUNCTION_ARGS)
@@ -5481,7 +5987,7 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     int count;
     int i;
     bool is_valid = false;
-    float float_num;
+    float8 float_num;
     char buffer[64];
 
     /* check for null */
@@ -5490,17 +5996,22 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
+
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+    {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("toFloatList() argument must resolve to a list or null")));
+    }
 
     count = AGT_ROOT_COUNT(agt_arg);
 
     /* if we have an empty list or only one element in the list, return null */
     if (count == 0)
+    {
         PG_RETURN_NULL();
-    
+    }
+
     /* clear the result structure */
     MemSet(&agis_result, 0, sizeof(agtype_in_state));
 
@@ -5524,15 +6035,15 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
             {
                 float_elem.type = AGTV_FLOAT;
                 float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid); 
+                                            string, &is_valid);
                 agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
             }
-            else 
+            else
             {
                 float_elem.type = AGTV_NULL;
                 agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
             }
-            
+
             break;
 
         case AGTV_FLOAT:
@@ -5545,7 +6056,7 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
             agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
 
             break;
-            
+
         default:
 
             float_elem.type = AGTV_NULL;
@@ -5596,18 +6107,26 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
     if (type != AGTYPEOID)
     {
         if (type == INT2OID)
+        {
             result = (int64) DatumGetInt16(arg);
+        }
         else if (type == INT4OID)
+        {
             result = (int64) DatumGetInt32(arg);
+        }
         else if (type == INT8OID)
+        {
             result = (int64) DatumGetInt64(arg);
+        }
         else if (type == FLOAT4OID)
         {
             float4 f = DatumGetFloat4(arg);
 
             if (isnan(f) || isinf(f) ||
-                f < PG_INT64_MIN || f > PG_INT64_MAX)
+                f < (float4)PG_INT64_MIN || f > (float4)PG_INT64_MAX)
+            {
                 PG_RETURN_NULL();
+            }
 
             result = (int64) f;
         }
@@ -5616,8 +6135,10 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
             float8 f = DatumGetFloat8(arg);
 
             if (isnan(f) || isinf(f) ||
-                f < PG_INT64_MIN || f > PG_INT64_MAX)
+                f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+            {
                 PG_RETURN_NULL();
+            }
 
             result = (int64) f;
         }
@@ -5629,27 +6150,38 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                 numeric_float8_no_overflow, arg));
 
             if (isnan(f) || isinf(f) ||
-                f < PG_INT64_MIN || f > PG_INT64_MAX)
+                f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+            {
                 PG_RETURN_NULL();
+            }
 
             result = (int64) f;
         }
         else if (type == CSTRINGOID || type == TEXTOID)
         {
+            char *endptr;
             if (type == CSTRINGOID)
+            {
                 string = DatumGetCString(arg);
+            }
             else
+            {
                 string = text_to_cstring(DatumGetTextPP(arg));
+            }
 
             /* convert it if it is a regular integer string */
-            is_valid = scanint8(string, true, &result);
+            result = strtoi64(string, &endptr, 10);
+
             /*
              * If it isn't an integer string, try converting it as a float
              * string.
              */
-            if (!is_valid)
+            result = float8in_internal_null(string, NULL, "double precision",
+                                            string, &is_valid);
+
+            if (*endptr != '\0')
             {
-                float f;
+                float8 f;
 
                 f = float8in_internal_null(string, NULL, "double precision",
                                            string, &is_valid);
@@ -5658,16 +6190,20 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                  * return null.
                  */
                 if (!is_valid || isnan(f) || isinf(f) ||
-                    f < PG_INT64_MIN || f > PG_INT64_MAX)
+                    f < PG_INT64_MIN || f > (double)PG_INT64_MAX)
+                {
                     PG_RETURN_NULL();
+                }
 
                 result = (int64) f;
             }
         }
         else
+        {
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("toInteger() unsupported argument type %d",
                                    type)));
+        }
     }
     else
     {
@@ -5687,11 +6223,13 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
             result = agtv_value->val.int_value;
         else if (agtv_value->type == AGTV_FLOAT)
         {
-            float f = agtv_value->val.float_value;
+            float8 f = agtv_value->val.float_value;
 
             if (isnan(f) || isinf(f) ||
-                f < PG_INT64_MIN || f > PG_INT64_MAX)
+                f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+            {
                 PG_RETURN_NULL();
+            }
 
             result = (int64) f;
         }
@@ -5704,25 +6242,29 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                 numeric_float8_no_overflow, num));
 
             if (isnan(f) || isinf(f) ||
-                f < PG_INT64_MIN || f > PG_INT64_MAX)
+                f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+            {
                 PG_RETURN_NULL();
+            }
 
             result = (int64) f;
         }
         else if (agtv_value->type == AGTV_STRING)
         {
+            char *endptr;
             /* we need a null terminated cstring */
             string = strndup(agtv_value->val.string.val,
                              agtv_value->val.string.len);
             /* convert it if it is a regular integer string */
-            is_valid = scanint8(string, true, &result);
+            result = strtoi64(string, &endptr, 10);
+
             /*
              * If it isn't an integer string, try converting it as a float
              * string.
              */
-            if (!is_valid)
+            if (*endptr != '\0')
             {
-                float f;
+                float8 f;
 
                 f = float8in_internal_null(string, NULL, "double precision",
                                            string, &is_valid);
@@ -5732,18 +6274,24 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                  * return null.
                  */
                 if (!is_valid || isnan(f) || isinf(f) ||
-                    f < PG_INT64_MIN || f > PG_INT64_MAX)
+                    f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+                {
                     PG_RETURN_NULL();
+                }
 
                 result = (int64) f;
             }
             else
+            {
                 free(string);
+            }
         }
         else
+        {
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("toInteger() unsupported argument agtype %d",
                                    agtv_value->type)));
+        }
     }
 
     /* build the result */
@@ -5755,7 +6303,7 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(age_tointegerlist);
 /*
- * toIntegerList() converts a list of values and returns a list of integers point values. 
+ * toIntegerList() converts a list of values and returns a list of integers point values.
  * If any values are not convertible to integer they will be null in the list returned.
  */
 Datum age_tointegerlist(PG_FUNCTION_ARGS)
@@ -5779,14 +6327,18 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+    {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("toIntegerList() argument must resolve to a list or null")));
+    }
 
     count = AGT_ROOT_COUNT(agt_arg);
 
     /* if we have an empty list or only one element in the list, return null */
     if (count == 0)
+    {
         PG_RETURN_NULL();
+    }
 
     /* clear the result structure */
     MemSet(&agis_result, 0, sizeof(agtype_in_state));
@@ -5809,13 +6361,12 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
             string = elem->val.string.val;
             integer_elem.type = AGTV_INTEGER;
             integer_elem.val.int_value = atoi(string);
-            
+
             if (*string == '+' || *string == '-' || (*string >= '0' && *string <= '9'))
             {
                 is_float = 1;
                 while (*(++string))
                 {
-
                     if(!(*string >= '0' && *string <= '9'))
                     {
                         if(*string == '.' && is_float)
@@ -5828,7 +6379,7 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
                             break;
                         }
                     }
-                }   
+                }
             }
             else
             {
@@ -5837,7 +6388,7 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
             }
 
             agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &integer_elem);
-           
+
             break;
 
         case AGTV_FLOAT:
@@ -5971,7 +6522,7 @@ PG_FUNCTION_INFO_V1(graphid_to_agtype);
 
 Datum graphid_to_agtype(PG_FUNCTION_ARGS)
 {
-    PG_RETURN_POINTER(integer_to_agtype(AG_GETARG_GRAPHID(0)));
+    PG_RETURN_POINTER((const void *) integer_to_agtype(AG_GETARG_GRAPHID(0)));
 }
 
 PG_FUNCTION_INFO_V1(agtype_to_graphid);
@@ -5987,7 +6538,7 @@ Datum agtype_to_graphid(PG_FUNCTION_ARGS)
 
     PG_FREE_IF_COPY(agtype_in, 0);
 
-    PG_RETURN_INT16(agtv.val.int_value);
+    PG_RETURN_INT64(agtv.val.int_value);
 }
 
 PG_FUNCTION_INFO_V1(age_type);
@@ -6321,7 +6872,115 @@ Datum age_tostring(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
-static agtype_iterator *get_next_list_element(agtype_iterator *it,
+PG_FUNCTION_INFO_V1(age_tostringlist);
+/*
+ * toStringList() converts a list of values and returns a list of String values.
+ * If any values are not convertible to string point they will be null in the list returned.
+ */
+Datum age_tostringlist(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg = NULL;
+    agtype_in_state agis_result;
+    agtype_value *elem;
+    agtype_value string_elem;
+    int count;
+    int i;
+    char buffer[64];
+
+    /* check for null */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+    agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    /* check for an array */
+    if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toStringList() argument must resolve to a list or null")));
+    }
+
+    count = AGT_ROOT_COUNT(agt_arg);
+
+    /* if we have an empty list or only one element in the list, return null */
+    if (count == 0)
+    {
+        PG_RETURN_NULL();
+    }
+
+    /* clear the result structure */
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+
+    /* push the beginning of the array */
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+
+    /* iterate through the list */
+    for (i = 0; i < count; i++)
+    {
+        // TODO: check element's type, it's value, and convert it to string if possible.
+        elem = get_ith_agtype_value_from_container(&agt_arg->root, i);
+        string_elem.type = AGTV_STRING;
+
+        switch (elem->type)
+        {
+        case AGTV_STRING:
+
+            if(!elem)
+            {
+                string_elem.type = AGTV_NULL;
+
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &string_elem);
+            }
+
+            string_elem.val.string.val = elem->val.string.val;
+            string_elem.val.string.len = elem->val.string.len;
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &string_elem);
+
+            break;
+
+        case AGTV_FLOAT:
+
+            sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
+            string_elem.val.string.val = pstrdup(buffer);
+            string_elem.val.string.len = strlen(buffer);
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &string_elem);
+
+            break;
+
+        case AGTV_INTEGER:
+
+            sprintf(buffer, "%ld", elem->val.int_value);
+            string_elem.val.string.val = pstrdup(buffer);
+            string_elem.val.string.len = strlen(buffer);
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &string_elem);
+
+            break;
+
+        default:
+
+            string_elem.type = AGTV_NULL;
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &string_elem);
+
+            break;
+        }
+    }
+
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
+agtype_iterator *get_next_list_element(agtype_iterator *it,
                            agtype_container *agtc, agtype_value *elem)
 {
     agtype_iterator_token itok;
@@ -6353,13 +7012,15 @@ static agtype_iterator *get_next_list_element(agtype_iterator *it,
     Assert(itok == WAGT_ELEM || itok == WAGT_END_ARRAY);
 
     /* if this is the end of the array return NULL */
-    if (itok == WAGT_END_ARRAY) {
+    if (itok == WAGT_END_ARRAY)
+    {
         return NULL;
     }
 
     /* this should be the element, copy it */
-    if (itok == WAGT_ELEM) {
-        memcpy(elem, &tmp, sizeof(agtype_value));
+    if (itok == WAGT_ELEM)
+    {
+        *elem = tmp;
     }
 
     return it;
@@ -9198,22 +9859,14 @@ agtype_value *alter_properties(agtype_value *original_properties,
     // Copy original properties.
     if (original_properties)
     {
-        int i;
-
         if (original_properties->type != AGTV_OBJECT)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                             errmsg("a map is expected")));
         }
 
-        for (i = 0; i < original_properties->val.object.num_pairs; i++)
-        {
-            agtype_pair* pair = original_properties->val.object.pairs + i;
-            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_KEY,
-                                                    &pair->key);
-            parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE,
-                                                    &pair->value);
-        }
+        copy_agtype_value(parse_state, original_properties,
+                          &parsed_agtype_value, true);
     }
 
     // Append new properties.
@@ -9259,8 +9912,8 @@ agtype_value *alter_properties(agtype_value *original_properties,
  * extract_variadic_args.
  */
 agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
-                                                 int variadic_offset,
-                                                 int expected_nargs)
+                                          int variadic_offset,
+                                          int expected_nargs)
 {
     int nargs;
     Datum *args = NULL;
@@ -9759,7 +10412,7 @@ Datum age_percentile_cont_aggfinalfn(PG_FUNCTION_ARGS)
     if (!tuplesort_skiptuples(pgastate->sortstate, first_row, true))
         elog(ERROR, "missing row in percentile_cont");
 
-    if (!tuplesort_getdatum(pgastate->sortstate, true, &first_val, &isnull, NULL))
+    if (!tuplesort_getdatum(pgastate->sortstate, true, false, &first_val, &isnull, NULL))
         elog(ERROR, "missing row in percentile_cont");
     if (isnull)
         PG_RETURN_NULL();
@@ -9770,7 +10423,7 @@ Datum age_percentile_cont_aggfinalfn(PG_FUNCTION_ARGS)
     }
     else
     {
-        if (!tuplesort_getdatum(pgastate->sortstate, true, &second_val, &isnull, NULL))
+        if (!tuplesort_getdatum(pgastate->sortstate, true, false, &second_val, &isnull, NULL))
             elog(ERROR, "missing row in percentile_cont");
 
         if (isnull)
@@ -9836,7 +10489,7 @@ Datum age_percentile_disc_aggfinalfn(PG_FUNCTION_ARGS)
             elog(ERROR, "missing row in percentile_disc");
     }
 
-    if (!tuplesort_getdatum(pgastate->sortstate, true, &val, &isnull, NULL))
+    if (!tuplesort_getdatum(pgastate->sortstate, true, false, &val, &isnull, NULL))
         elog(ERROR, "missing row in percentile_disc");
 
     /* We shouldn't have stored any nulls, but do the right thing anyway */
@@ -10128,6 +10781,62 @@ agtype_value *get_agtype_value(char *funcname, agtype *agt_arg,
     return agtv_value;
 }
 
+/*
+ * Returns properties of an entity (vertex or edge) or NULL if there are none.
+ * If the object passed is not a scalar, an error is thrown.
+ * If the object is a scalar and error_on_scalar is false, the scalar is
+ * returned, otherwise an error is thrown.
+ */
+agtype_value *extract_entity_properties(agtype *object, bool error_on_scalar)
+{
+    agtype_value *scalar_value = NULL;
+    agtype_value *return_value = NULL;
+
+    if (!AGT_ROOT_IS_SCALAR(object))
+    {
+        ereport(ERROR,(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                       errmsg("expected a scalar value")));
+    }
+
+    /* unpack the scalar */
+    scalar_value = get_ith_agtype_value_from_container(&object->root, 0);
+
+    /* get the properties depending on the type or fail */
+    if (scalar_value->type == AGTV_VERTEX)
+    {
+        return_value = &scalar_value->val.object.pairs[2].value;
+    }
+    else if (scalar_value->type == AGTV_EDGE)
+    {
+        return_value = &scalar_value->val.object.pairs[4].value;
+    }
+    else if (scalar_value->type == AGTV_PATH)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("cannot extract properties from an agtype path")));
+    }
+    else if (error_on_scalar)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("scalar object must be a vertex or edge")));
+    }
+    else
+    {
+        return_value = scalar_value;
+    }
+
+    /* if the properties are NULL, return NULL */
+    if (return_value == NULL || return_value->type == AGTV_NULL)
+    {
+        return NULL;
+    }
+
+    /* set the object_value to the property_value. */
+    return return_value;
+}
+
 PG_FUNCTION_INFO_V1(age_eq_tilde);
 /*
  * Execution function for =~ aka regular expression comparisons
@@ -10235,7 +10944,7 @@ static agtype_iterator *get_next_object_key(agtype_iterator *it,
     /* this should be the key, copy it */
     if (itok == WAGT_KEY)
     {
-        memcpy(key, &tmp, sizeof(agtype_value));
+        *key = tmp;
     }
 
     /*
@@ -10702,7 +11411,7 @@ PG_FUNCTION_INFO_V1(age_unnest);
  */
 Datum age_unnest(PG_FUNCTION_ARGS)
 {
-    agtype *agtype_arg = AG_GET_ARG_AGTYPE_P(0);
+    agtype *agtype_arg = NULL;
     ReturnSetInfo *rsi;
     Tuplestorestate *tuple_store;
     TupleDesc tupdesc;
@@ -10713,6 +11422,13 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     agtype_value v;
     agtype_iterator_token r;
 
+    // check for null
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtype_arg = AG_GET_ARG_AGTYPE_P(0);
     if (!AGT_ROOT_IS_ARRAY(agtype_arg))
     {
         ereport(ERROR,
@@ -10833,7 +11549,7 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
             {
                 agtv_result.val.int_value = (int64) DatumGetInt32(arg);
             }
-            else if (type == INT4OID)
+            else if (type == INT2OID)
             {
                 agtv_result.val.int_value = (int64) DatumGetInt16(arg);
             }
@@ -10880,5 +11596,5 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
     }
 
     /* otherwise, just pass it through */
-    PG_RETURN_POINTER(PG_GETARG_DATUM(0));
+    PG_RETURN_POINTER((const void*) PG_GETARG_DATUM(0));
 }

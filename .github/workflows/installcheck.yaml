@@ -2,32 +2,32 @@ name: Build / Regression
 
 on:
   push:
-    branches: [ 'master', 'PG14' ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ 'master', 'PG14' ]
+    branches: [ "master" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get latest commit id of PostgreSQL 14
+      - name: Get latest commit id of PostgreSQL 16
         run: |
-          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_14_STABLE | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_16_STABLE | awk '{print $1}')" >> $GITHUB_ENV
 
-      - name: Cache PostgreSQL 14
+      - name: Cache PostgreSQL 16
         uses: actions/cache@v3
-        id: pg14cache
+        id: pg16cache
         with:
-          path: ~/pg14
-          key: ${{ runner.os }}-v1-pg14-${{ env.PG_COMMIT_HASH }}
+          path: ~/pg16
+          key: ${{ runner.os }}-v1-pg16-${{ env.PG_COMMIT_HASH }}
 
-      - name: Install PostgreSQL 14
-        if: steps.pg14cache.outputs.cache-hit != 'true'
+      - name: Install PostgreSQL 16
+        if: steps.pg16cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch REL_14_STABLE git://git.postgresql.org/git/postgresql.git ~/pg14source
-          cd ~/pg14source
-          ./configure --prefix=$HOME/pg14 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
+          git clone --depth 1 --branch REL_16_STABLE git://git.postgresql.org/git/postgresql.git ~/pg16source
+          cd ~/pg16source
+          ./configure --prefix=$HOME/pg16 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
 
       - uses: actions/checkout@v3
@@ -35,12 +35,12 @@ jobs:
       - name: Build
         id: build
         run: |
-          make PG_CONFIG=$HOME/pg14/bin/pg_config install -j$(nproc)
+          make PG_CONFIG=$HOME/pg16/bin/pg_config install -j$(nproc)
 
       - name: Regression tests
         id: regression_tests
         run: |
-          make PG_CONFIG=$HOME/pg14/bin/pg_config installcheck
+          make PG_CONFIG=$HOME/pg16/bin/pg_config installcheck
         continue-on-error: true
 
       - name: Dump regression test errors

@@ -19,26 +19,13 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
-#include "access/xact.h"
-#include "parser/parse_node.h"
-#include "storage/lockdefs.h"
-#include "tcop/dest.h"
-#include "utils/builtins.h"
-#include "utils/lsyscache.h"
-#include "utils/rel.h"
-
-#include "catalog/ag_graph.h"
-#include "catalog/ag_label.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
-
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
 
 agtype *create_empty_agtype(void)
 {
+    agtype* out;
     agtype_in_state result;
 
     memset(&result, 0, sizeof(agtype_in_state));
@@ -47,12 +34,18 @@ agtype *create_empty_agtype(void)
                                    NULL);
     result.res = push_agtype_value(&result.parse_state, WAGT_END_OBJECT, NULL);
 
-    return agtype_value_to_agtype(result.res);
+    out = agtype_value_to_agtype(result.res);
+    pfree_agtype_in_state(&result);
+
+    return out;
 }
 
 agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                 int64 vertex_id)
 {
+    agtype* out;
+    agtype_value* key_agtype;
+    agtype_value* value_agtype;
     agtype_in_state result;
     int i;
 
@@ -61,33 +54,50 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_OBJECT,
                                    NULL);
 
+    key_agtype = string_to_agtype_value("__id__");
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_KEY,
-                                   string_to_agtype_value("__id__"));
+                                   key_agtype);
+
+    value_agtype = integer_to_agtype_value(vertex_id);
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_VALUE,
-                                   integer_to_agtype_value(vertex_id));
+                                   value_agtype);
+
+    pfree_agtype_value(key_agtype);
+    pfree_agtype_value(value_agtype);
 
     for (i = 0; i<fields_len; i++)
     {
+        key_agtype = string_to_agtype_value(header[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
-                                       string_to_agtype_value(header[i]));
+                                       key_agtype);
+
+        value_agtype = string_to_agtype_value(fields[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
-                                       string_to_agtype_value(fields[i]));
+                                       value_agtype);
+
+        pfree_agtype_value(key_agtype);
+        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
-    return agtype_value_to_agtype(result.res);
+    out = agtype_value_to_agtype(result.res);
+    pfree_agtype_in_state(&result);
+
+    return out;
 }
 
 agtype* create_agtype_from_list_i(char **header, char **fields,
                                   size_t fields_len, size_t start_index)
 {
-
+    agtype* out;
+    agtype_value* key_agtype;
+    agtype_value* value_agtype;
     agtype_in_state result;
     size_t i;
 
@@ -103,18 +113,26 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
 
     for (i = start_index; i < fields_len; i++)
     {
+        key_agtype = string_to_agtype_value(header[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
-                                       string_to_agtype_value(header[i]));
+                                       key_agtype);
+        value_agtype = string_to_agtype_value(fields[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
-                                       string_to_agtype_value(fields[i]));
+                                       value_agtype);
+
+        pfree_agtype_value(key_agtype);
+        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
-    return agtype_value_to_agtype(result.res);
+    out = agtype_value_to_agtype(result.res);
+    pfree_agtype_in_state(&result);
+
+    return out;
 }
 
 void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,

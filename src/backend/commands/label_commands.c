@@ -516,12 +516,12 @@ static FuncCall *build_id_default_func_expr(char *graph_name, char *label_name,
     label_id_func_name = list_make2(makeString("ag_catalog"),
                                     makeString("_label_id"));
     graph_name_const = makeNode(A_Const);
-    graph_name_const->val.type = T_String;
-    graph_name_const->val.val.str = graph_name;
+    graph_name_const->val.sval.type = T_String;
+    graph_name_const->val.sval.sval = graph_name;
     graph_name_const->location = -1;
     label_name_const = makeNode(A_Const);
-    label_name_const->val.type = T_String;
-    label_name_const->val.val.str = label_name;
+    label_name_const->val.sval.type = T_String;
+    label_name_const->val.sval.sval = label_name;
     label_name_const->location = -1;
     label_id_func_args = list_make2(graph_name_const, label_name_const);
     label_id_func = makeFuncCall(label_id_func_name, label_id_func_args, COERCE_SQL_SYNTAX, -1);
@@ -530,8 +530,8 @@ static FuncCall *build_id_default_func_expr(char *graph_name, char *label_name,
     nextval_func_name = SystemFuncName("nextval");
     qualified_seq_name = quote_qualified_identifier(schema_name, seq_name);
     qualified_seq_name_const = makeNode(A_Const);
-    qualified_seq_name_const->val.type = T_String;
-    qualified_seq_name_const->val.val.str = qualified_seq_name;
+    qualified_seq_name_const->val.sval.type = T_String;
+    qualified_seq_name_const->val.sval.sval = qualified_seq_name;
     qualified_seq_name_const->location = -1;
     regclass_cast = makeNode(TypeCast);
     regclass_cast->typeName = SystemTypeName("regclass");
@@ -767,8 +767,27 @@ Datum drop_label(PG_FUNCTION_ARGS)
                         errmsg("force option is not supported yet")));
     }
 
+    /* validate schema_name */
     schema_name = get_namespace_name(nsp_id);
+    if (schema_name == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("schema_name not found for namespace id \"%d\"",
+                        nsp_id)));
+    }
+
+    /* validate rel_name */
     rel_name = get_rel_name(label_relation);
+    if (rel_name == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("rel_name not found for label \"%s\"",
+                        label_name_str)));
+    }
+
+    /* build qualified name */
     qname = list_make2(makeString(schema_name), makeString(rel_name));
 
     remove_relation(qname);
@@ -789,7 +808,7 @@ static void remove_relation(List *qname)
     Oid rel_oid;
     ObjectAddress address;
 
-    AssertArg(list_length(qname) == 2);
+    Assert(list_length(qname) == 2);
 
     // concurrent is false so lockmode is AccessExclusiveLock
 
@@ -849,8 +868,7 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
 
     // relkind == expected_relkind
 
-    if (!pg_class_ownercheck(rel_oid, GetUserId()) &&
-        !pg_namespace_ownercheck(get_rel_namespace(rel_oid), GetUserId()))
+    if (!object_ownercheck(rel_oid, get_rel_namespace(rel_oid), GetUserId()))
     {
         aclcheck_error(ACLCHECK_NOT_OWNER,
                        get_relkind_objtype(get_rel_relkind(rel_oid)),

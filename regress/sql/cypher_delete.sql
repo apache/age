@@ -247,6 +247,62 @@ END;
 SELECT * FROM cypher('cypher_delete', $$MATCH (u:vertices) RETURN u $$) AS (result agtype);
 
 --
+-- Detach Delete
+--
+
+SELECT create_graph('detach_delete');
+SELECT * FROM cypher('detach_delete',
+$$
+    CREATE (x:Label3{name:'x', delete: true}),
+           (y:Label3{name:'y', delete: true}),
+           (a:Label1{name:'a', delete: true}),
+           (b:Label5{name:'b'}),
+           (c:Label5{name:'c'}),
+           (d:Label5{name:'d'}),
+           (m:Label7{name:'m', delete: true}),
+           (n:Label2{name:'n'}),
+           (p:Label2{name:'p'}),
+           (q:Label2{name:'q'}),
+           (a)-[:rel1{name:'ab'}]->(b),
+           (c)-[:rel2{name:'cd'}]->(d),
+           (n)-[:rel3{name:'nm'}]->(m),
+           (a)-[:rel4{name:'am'}]->(m),
+           (p)-[:rel5{name:'pq'}]->(q)
+$$
+) as (a agtype);
+
+-- no vertices or edges are deleted (error is expected)
+SELECT * FROM cypher('detach_delete', $$ MATCH (x:Label1), (y:Label3), (z:Label7) DELETE x, y, z RETURN 1 $$) as (a agtype);
+SELECT * FROM cypher('detach_delete', $$ MATCH (v) RETURN v.name $$) as (vname agtype);
+SELECT * FROM cypher('detach_delete', $$ MATCH ()-[e]->() RETURN e.name $$) as (ename agtype);
+
+-- x, y, a, m, ab, nm, am are deleted
+SELECT * FROM cypher('detach_delete', $$ MATCH (x:Label1), (y:Label3), (z:Label7) DETACH DELETE x, y, z RETURN 1 $$) as (a agtype);
+SELECT * FROM cypher('detach_delete', $$ MATCH (v) RETURN v.name $$) as (vname agtype);
+SELECT * FROM cypher('detach_delete', $$ MATCH ()-[e]->() RETURN e.name $$) as (ename agtype);
+
+SELECT drop_graph('detach_delete', true);
+
+--
+-- SET followed by DELETE
+--
+SELECT create_graph('setdelete');
+
+-- MATCH (x) SET x DELETE x
+SELECT * FROM cypher('setdelete', $$ CREATE (:A), (:A), (:A) $$) as ("CREATE" agtype);
+SELECT * FROM cypher('setdelete', $$ MATCH (x:A) SET x.age = 24 DELETE x $$) as ("SET + DELETE" agtype);
+SELECT id as "expected: 0 rows" FROM setdelete._ag_label_vertex;
+
+-- MATCH (n)-[e]->(m) SET e DETACH DELETE n
+SELECT * FROM cypher('setdelete', $$ CREATE (:n)-[:e]->(:m), (:n)-[:e]->(:m) $$) AS ("CREATE" agtype);
+SELECT * FROM cypher('setdelete', $$ MATCH (n)-[e]->(m) SET e.i = 1 DETACH DELETE n RETURN id(m) $$) AS ("SET + DETACH DELETE" agtype);
+SELECT id as "expected: 2 rows (m vertices)" FROM setdelete._ag_label_vertex;
+SELECT id as "expected: 0 rows"              FROM setdelete._ag_label_edge;
+
+-- clean up
+SELECT drop_graph('setdelete', true);
+
+--
 -- Clean up
 --
 DROP FUNCTION delete_test;

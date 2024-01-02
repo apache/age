@@ -30,11 +30,11 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.3.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.4.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
-  <a href="https://www.postgresql.org/docs/14/index.html">
-    <img src="https://img.shields.io/badge/Version-PostgreSQL 14-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/14/index.html"/>
+  <a href="https://www.postgresql.org/docs/16/index.html">
+    <img src="https://img.shields.io/badge/Version-Postgresql 16-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/16/index.html"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -49,7 +49,7 @@
     <img src="https://img.shields.io/github/stars/apache/age"/>
   </a>
   &nbsp;
-  <a href="https://discord.gg/NMsBs9X8Ss">
+  <a href="https://discord.gg/EuK6EEg3k7">
     <img src="https://img.shields.io/discord/1022177873127280680.svg?label=discord&style=flat&color=5a66f6"></a>
 </p>
 
@@ -131,8 +131,8 @@ Apache AGE is intended to be simple to install and run. It can be installed with
 &nbsp;Install PostgreSQL
 </h4>
 
-You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, 13 & 14. Supporting the latest versions is on AGE roadmap. 
-     
+You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, 13, 14, 15 & 16. Supporting the latest versions is on AGE roadmap.
+
 <h4>
 &nbsp;Installation via Package Manager
 </h4>
@@ -149,7 +149,7 @@ sudo apt install postgresql
 &nbsp;Installation From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/14/installation.html">official Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/16/installation.html">official Postgres Website.</a>
 
 
 
@@ -158,7 +158,7 @@ You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres 
 
 Clone the <a href="https://github.com/apache/age">github repository</a> or download the <a href="https://github.com/apache/age/releases">download an official release.
 </a>
-Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13 & 14 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, or 14.
+Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, 14, 15 & 16 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, 14, 15, or 16.
 <br>
     
 ```bash
@@ -197,6 +197,12 @@ docker run \
     -e POSTGRES_DB=postgresDB \
     -d \
     apache/age
+```
+
+<h5> Enter PostgreSQL's psql: </h5>
+
+```bash
+docker exec -it age psql -d postgresDB -U postgresUser
 ```
 
 
@@ -332,7 +338,7 @@ Starting with Apache AGE is very simple. You can easily select your platform and
 Join the AGE community for help, questions, discussions, and contributions. 
 
 - Check our [website](https://age.apache.org/)
-- Join the Live Chat on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
+- Join the Live Chat on [Discord](https://discord.gg/EuK6EEg3k7)
 - Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
 - Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
 - Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org

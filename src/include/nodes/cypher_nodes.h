@@ -133,6 +133,7 @@ typedef struct cypher_path
     ExtensibleNode extensible;
     List *path; // [ node ( , relationship , node , ... ) ]
     char *var_name;
+    char *parsed_var_name;
     int location;
 } cypher_path;
 
@@ -141,6 +142,7 @@ typedef struct cypher_node
 {
     ExtensibleNode extensible;
     char *name;
+    char *parsed_name;
     char *label;
     char *parsed_label;
     Node *props; // map or parameter
@@ -159,6 +161,7 @@ typedef struct cypher_relationship
 {
     ExtensibleNode extensible;
     char *name;
+    char *parsed_name;
     char *label;
     char *parsed_label;
     Node *props; // map or parameter
@@ -238,6 +241,29 @@ typedef struct cypher_create_path
     AttrNumber path_attr_num;
     char *var_name;
 } cypher_create_path;
+
+/*
+ * comparison expressions
+ */
+
+typedef struct cypher_comparison_aexpr
+{
+    ExtensibleNode extensible;
+    A_Expr_Kind kind; /* see above */
+    List *name; /* possibly-qualified name of operator */
+    Node *lexpr; /* left argument, or NULL if none */
+    Node *rexpr; /* right argument, or NULL if none */
+    int location; /* token location, or -1 if unknown */
+} cypher_comparison_aexpr;
+
+typedef struct cypher_comparison_boolexpr
+{
+    ExtensibleNode extensible;
+    BoolExprType boolop;
+    List       *args;           /* arguments to this expression */
+    int         location;       /* token location, or -1 if unknown */
+} cypher_comparison_boolexpr;
+
 
 /*
  * procedure call
@@ -393,7 +419,7 @@ typedef struct cypher_delete_information
 typedef struct cypher_delete_item
 {
     ExtensibleNode extensible;
-    Value *entity_position;
+    Integer *entity_position;
     char *var_name;
 } cypher_delete_item;
 
