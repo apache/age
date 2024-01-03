@@ -2989,7 +2989,7 @@ SELECT * FROM cypher('keys', $$CREATE ({name: 'keiko fuji', age: 62, job: 'singe
 SELECT * FROM cypher('keys', $$MATCH (a),(b) WHERE a.name = 'hikaru utada' AND b.name = 'alexander guy cook' CREATE (a)-[:collaborated_with {song:"one last kiss"}]->(b)$$) AS (result agtype);
 SELECT * FROM cypher('keys', $$MATCH (a),(b) WHERE a.name = 'hikaru utada' AND b.name = 'keiko fuji' CREATE (a)-[:knows]->(b)$$) AS (result agtype);
 SELECT * FROM cypher('keys', $$MATCH (v) RETURN keys(v)$$) AS (vertex_keys agtype);
-SELECT * FROM cypher('keys', $$MATCH ()-[e]-() RETURN keys(e)$$) AS (edge_keys agtype);
+SELECT * FROM cypher('keys', $$MATCH ()-[e]-() RETURN keys(e) ORDER BY keys(e) ASC $$) AS (edge_keys agtype);
 SELECT * FROM cypher('keys', $$RETURN keys({a:1,b:'two',c:[1,2,3]})$$) AS (keys agtype);
 
 --should return empty list
@@ -2999,7 +2999,9 @@ SELECT * FROM cypher('keys', $$RETURN keys(null)$$) AS (keys agtype);
 --should return error
 SELECT * from cypher('keys', $$RETURN keys([1,2,3])$$) as (keys agtype);
 SELECT * from cypher('keys', $$RETURN keys("string")$$) as (keys agtype);
+\set debug_parallel_query to regress -- suppresses context message from a parallel worker
 SELECT * from cypher('keys', $$MATCH u=()-[]-() RETURN keys(u)$$) as (keys agtype);
+\unset debug_parallel_query
 
 SELECT create_graph('list');
 SELECT * from cypher('list', $$CREATE p=({name:"rick"})-[:knows]->({name:"morty"}) RETURN p$$) as (path agtype);
