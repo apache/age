@@ -17,7 +17,7 @@
 
 MODULE_big = age
 
-age_sql = age--1.4.0.sql
+age_sql = age--1.5.0.sql
 
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
@@ -75,10 +75,10 @@ OBJS = src/backend/age.o \
 
 EXTENSION = age
 
-#SQLS = $(sort ($(wildcard sql/*.sql)))
+CLEANUP := $(shell rm age--?\.?\.?\.sql)
 SQLS := $(shell cat sql/sql_files)
-SQLS := $(addprefix sql/,$(SQLS)) 
-SQLS := $(addsuffix .sql,$(SQLS)) 
+SQLS := $(addprefix sql/,$(SQLS))
+SQLS := $(addsuffix .sql,$(SQLS))
 
 DATA_built = $(age_sql)
 
