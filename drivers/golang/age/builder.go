@@ -24,7 +24,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"github.com/antlr/antlr4/runtime/Go/antlr/v4"
+
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/apache/age/drivers/golang/parser"
 )
 
