@@ -26,6 +26,8 @@
 #include "parser/cypher_gram.h"
 #include "parser/cypher_parse_node.h"
 #include "parser/scansup.h"
+#include "parser/cypher_label_expr.h"
+#include "catalog/ag_label.h"
 
 // override the default action for locations
 #define YYLLOC_DEFAULT(current, rhs, n) \
@@ -138,7 +140,8 @@
 %type <node> path anonymous_path
              path_node path_relationship path_relationship_body
              properties_opt
-%type <string> label_opt
+%type <node> label_expr_non_empty
+%type <node> label_expr
 
 /* expression */
 %type <node> expr expr_opt expr_atom expr_literal map list
@@ -1259,15 +1262,14 @@ simple_path:
     ;
 
 path_node:
-    '(' var_name_opt label_opt properties_opt ')'
+    '(' var_name_opt label_expr properties_opt ')'
         {
             cypher_node *n;
 
             n = make_ag_node(cypher_node);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *)$3;
             n->props = $4;
             n->location = @2;
 
@@ -1306,15 +1308,14 @@ path_relationship:
     ;
 
 path_relationship_body:
-    '[' var_name_opt label_opt cypher_varlen_opt properties_opt ']'
+    '[' var_name_opt label_expr cypher_varlen_opt properties_opt ']'
         {
             cypher_relationship *n;
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            n->label_expr = (cypher_label_expr *)$3;
             n->varlen = $4;
             n->props = $5;
 
@@ -1328,8 +1329,7 @@ path_relationship_body:
             n = make_ag_node(cypher_relationship);
             n->name = NULL;
             n->parsed_name = NULL;
-            n->label = NULL;
-            n->parsed_label = NULL;
+            n->label_expr = make_ag_node(cypher_label_expr);
             n->varlen = NULL;
             n->props = NULL;
 
@@ -1337,16 +1337,80 @@ path_relationship_body:
         }
     ;
 
-label_opt:
-    /* empty */
+label_expr_non_empty:
+    /* single */
+    ':' label_name
         {
-            $$ = NULL;
+            cypher_label_expr *n;
+            n = make_ag_node(cypher_label_expr);
+            n->type = LABEL_EXPR_TYPE_SINGLE;
+            n->label_names = list_make1(makeString($2));
+
+            $$ = (Node *) n;
         }
-    | ':' label_name
+    /* or expression */
+    | label_expr_non_empty '|' label_name
         {
-            $$ = $2;
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+
+            switch (n->type)
+            {
+            case LABEL_EXPR_TYPE_SINGLE:
+                n->type = LABEL_EXPR_TYPE_OR;
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            case LABEL_EXPR_TYPE_OR:
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            default:
+                ereport(ERROR,
+                        (errcode(ERRCODE_SYNTAX_ERROR),
+                         errmsg("cannot mix different label expressions"),
+                         ag_scanner_errposition(@2, scanner)));
+            }
+
+            $$ = (Node *) n;
+        }
+    /* and expression */
+    | label_expr_non_empty ':' label_name
+        {
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+
+            switch (n->type)
+            {
+            case LABEL_EXPR_TYPE_SINGLE:
+                n->type = LABEL_EXPR_TYPE_AND;
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            case LABEL_EXPR_TYPE_AND:
+                n->label_names = list_append_unique(n->label_names, makeString($3));
+                break;
+            default:
+                ereport(ERROR,
+                        (errcode(ERRCODE_SYNTAX_ERROR),
+                         errmsg("cannot mix different label expressions"),
+                         ag_scanner_errposition(@2, scanner)));
+            }
+
+            $$ = (Node *) n;
         }
     ;
+
+label_expr:
+    /* empty */
+        {
+            cypher_label_expr *n;
+            n = make_ag_node(cypher_label_expr);
+
+            $$ = (Node *) n;
+        }
+    | label_expr_non_empty
+        {
+            /* sorts the list */
+            cypher_label_expr *n = (cypher_label_expr *)$1;
+            list_sort(n->label_names, &list_string_cmp);
+            $$ = (Node *)n;
+        };
 
 properties_opt:
     /* empty */
@@ -1986,6 +2050,10 @@ var_name_opt:
 
 label_name:
     schema_name
+    {
+        check_reserved_label_name($1);
+        $$ = $1;
+    }
     ;
 
 symbolic_name:
@@ -2775,10 +2843,10 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
      * we need to create a variable name for the left node.
      */
     if ((cnl->name == NULL && length > 1) ||
-        (cnl->name == NULL && cnl->label != NULL) ||
+        (cnl->name == NULL && !LABEL_EXPR_IS_EMPTY(cnl->label_expr)) ||
         (cnl->name == NULL && cnl->props != NULL) ||
         (cnl->name == NULL && cnr->name != NULL) ||
-        (cnl->name == NULL && cnr->label != NULL) ||
+        (cnl->name == NULL && !LABEL_EXPR_IS_EMPTY(cnr->label_expr)) ||
         (cnl->name == NULL && cnr->props != NULL))
     {
         cnl->name = create_unique_name(AGE_DEFAULT_PREFIX"vle_function_start_var");
@@ -2811,7 +2879,7 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
      * done in the transform phase.
      */
     if (cnr->name == NULL &&
-        (cnr->label != NULL || cnr->props != NULL))
+        (!LABEL_EXPR_IS_EMPTY(cnr->label_expr) || cnr->props != NULL))
     {
         cnr->name = create_unique_name(AGE_DEFAULT_PREFIX"vle_function_end_var");
     }
@@ -2837,13 +2905,17 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
     }
 
     /* build the required edge arguments */
-    if (cr->label == NULL)
+    if (LABEL_EXPR_IS_EMPTY(cr->label_expr))
     {
         eargs = lappend(eargs, make_null_const(location));
     }
     else
     {
-        eargs = lappend(eargs, make_string_const(cr->label, location));
+        char *label_name =
+            !LABEL_EXPR_IS_EMPTY(cr->label_expr) ?
+                (char *)strVal(linitial(cr->label_expr->label_names)) :
+                "";
+        eargs = lappend(eargs, make_string_const(label_name, location));
     }
     if (cr->props == NULL)
     {

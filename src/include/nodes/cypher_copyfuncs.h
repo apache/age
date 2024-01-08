@@ -38,6 +38,7 @@ void copy_ag_node(ExtensibleNode *newnode,
 void copy_cypher_create_target_nodes(ExtensibleNode *newnode, const ExtensibleNode *from);
 void copy_cypher_create_path(ExtensibleNode *newnode, const ExtensibleNode *from);
 void copy_cypher_target_node(ExtensibleNode *newnode, const ExtensibleNode *from);
+void copy_cypher_label_expr(ExtensibleNode *newnode, const ExtensibleNode *from);
 
 // set/remove data structures
 void copy_cypher_update_information(ExtensibleNode *newnode, const ExtensibleNode *from);

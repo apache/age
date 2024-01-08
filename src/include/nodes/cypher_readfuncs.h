@@ -43,6 +43,7 @@ void read_ag_node(ExtensibleNode *node);
 void read_cypher_create_target_nodes(struct ExtensibleNode *node);
 void read_cypher_create_path(struct ExtensibleNode *node);
 void read_cypher_target_node(struct ExtensibleNode *node);
+void read_cypher_label_expr(struct ExtensibleNode *node);
 
 // set/remove data structures
 void read_cypher_update_information(struct ExtensibleNode *node);

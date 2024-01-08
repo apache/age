@@ -44,6 +44,7 @@ void out_cypher_merge(StringInfo str, const ExtensibleNode *node);
 
 // pattern
 void out_cypher_path(StringInfo str, const ExtensibleNode *node);
+void out_cypher_label_expr(StringInfo str, const ExtensibleNode *node);
 void out_cypher_node(StringInfo str, const ExtensibleNode *node);
 void out_cypher_relationship(StringInfo str, const ExtensibleNode *node);
 

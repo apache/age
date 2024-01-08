@@ -57,13 +57,21 @@ AS 'MODULE_PATHNAME';
 --
 -- agtype - vertex
 --
-CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, cstring, agtype)
+CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, agtype, agtype)
     RETURNS agtype
     LANGUAGE c
     IMMUTABLE
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, cstring, agtype)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME', '_agtype_build_vertex_cstringlabel';
 
 --
 -- agtype - edge

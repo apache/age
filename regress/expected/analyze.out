@@ -31,7 +31,7 @@ NOTICE:  graph "analyze" has been created
 SELECT * FROM cypher('analyze', $$ CREATE (u) RETURN u $$) AS (result agtype);
                              result                             
 ----------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {}}::vertex
 (1 row)
 
 -- should error due to invalid input to cypher function
@@ -100,7 +100,7 @@ SELECT * FROM age_prepare_cypher('analyze', 'MATCH (u) RETURN (u)');
 SELECT * FROM cypher(NULL, NULL) AS (result agtype);
                              result                             
 ----------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {}}::vertex
 (1 row)
 
 -- should error due to invalid input to cypher function
