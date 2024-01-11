@@ -24,19 +24,23 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+
 	"github.com/antlr/antlr4/runtime/Go/antlr/v4"
 	"github.com/apache/age/drivers/golang/parser"
 )
 
-const MaxUint = ^uint(0)
-const MaxInt = int(MaxUint >> 1)
-const MinUint = 0
-const MinInt = -MaxInt - 1
+const (
+	MaxUint = ^uint(0)
+	MaxInt  = int(MaxUint >> 1)
+	MinUint = 0
+	MinInt  = -MaxInt - 1
+)
 
 type Unmarshaller interface {
 	unmarshal(text string) (Entity, error)
 }
 
+// AGUnmarshaler is a unmarshaler for AGE result data.
 type AGUnmarshaler struct {
 	Unmarshaller
 	ageParser   *parser.AgeParser
@@ -48,7 +52,8 @@ type AGUnmarshaler struct {
 func NewAGUnmarshaler() *AGUnmarshaler {
 	vcache := make(map[int64]interface{})
 
-	m := &AGUnmarshaler{ageParser: parser.NewAgeParser(nil),
+	m := &AGUnmarshaler{
+		ageParser:   parser.NewAgeParser(nil),
 		visitor:     &UnmarshalVisitor{vcache: vcache},
 		errListener: NewAGErrorListener(),
 		vcache:      vcache,
@@ -106,6 +111,7 @@ func (el *AGErrorListener) SyntaxError(recognizer antlr.Recognizer, offendingSym
 func (el *AGErrorListener) getErrs() []antlr.RecognitionException {
 	return el.errList
 }
+
 func (el *AGErrorListener) clearErrs() {
 	el.errList = []antlr.RecognitionException{}
 }

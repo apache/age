@@ -22,22 +22,29 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
 	"github.com/antlr/antlr4/runtime/Go/antlr/v4"
 	"github.com/apache/age/drivers/golang/parser"
 )
 
+// AGMapper is a mapper for AGE result data.
 type AGMapper struct {
 	AGUnmarshaler
 }
 
+// NewAGMapper creates a new AGMapper instance.
+// typeMap is a map of label to reflect.Type. If typeMap is nil, the mapper will use the default type map.
 func NewAGMapper(typeMap map[string]reflect.Type) *AGMapper {
 	vcache := make(map[int64]interface{})
 	if typeMap == nil {
 		typeMap = make(map[string]reflect.Type)
 	}
-	m := AGUnmarshaler{ageParser: parser.NewAgeParser(nil),
-		visitor: &MapperVisitor{UnmarshalVisitor: UnmarshalVisitor{vcache: vcache},
-			typeMap: typeMap},
+	m := AGUnmarshaler{
+		ageParser: parser.NewAgeParser(nil),
+		visitor: &MapperVisitor{
+			UnmarshalVisitor: UnmarshalVisitor{vcache: vcache},
+			typeMap:          typeMap,
+		},
 		errListener: NewAGErrorListener(),
 		vcache:      vcache,
 	}
@@ -48,10 +55,12 @@ func NewAGMapper(typeMap map[string]reflect.Type) *AGMapper {
 	return agm
 }
 
+// PutType puts a type into the mapper.
 func (m *AGMapper) PutType(label string, tp reflect.Type) {
 	m.visitor.(*MapperVisitor).PutType(label, tp)
 }
 
+// MapperVisitor is a visitor for AGE result data.
 type MapperVisitor struct {
 	UnmarshalVisitor
 	typeMap map[string]reflect.Type
@@ -66,6 +75,7 @@ func (v *MapperVisitor) VisitAgeout(ctx *parser.AgeoutContext) interface{} {
 	return rtn
 }
 
+// VisitChildren visits every child of the parse tree starting from the root.
 func (v *MapperVisitor) VisitChildren(node antlr.RuleNode) interface{} {
 	var rtn interface{}
 	for _, c := range node.GetChildren() {
@@ -75,6 +85,7 @@ func (v *MapperVisitor) VisitChildren(node antlr.RuleNode) interface{} {
 	return rtn
 }
 
+// Visit a parse tree produced by AgeParser query.
 func (v *MapperVisitor) VisitPath(ctx *parser.PathContext) interface{} {
 	entities := []interface{}{}
 
@@ -101,6 +112,7 @@ func (v *MapperVisitor) VisitPath(ctx *parser.PathContext) interface{} {
 	return path
 }
 
+// Visit a parse tree produced by parsing a vertex.
 func (v *MapperVisitor) VisitVertex(ctx *parser.VertexContext) interface{} {
 	propCtx := ctx.Properties()
 	props := propCtx.Accept(v).(map[string]interface{})
@@ -172,7 +184,7 @@ func mapStruct(tp reflect.Type, properties map[string]interface{}) (interface{},
 			if field.Type().ConvertibleTo(val.Type()) {
 				field.Set(val)
 			} else {
-				return nil, fmt.Errorf("Property[%s] value[%v] type is not convertable to %v", k, v, field.Type())
+				return nil, fmt.Errorf("Property[%s] value[%v] type is not convertible to %v", k, v, field.Type())
 			}
 		}
 	}

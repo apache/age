@@ -76,7 +76,7 @@ func execCypher(cursorProvider CursorProvider, tx *sql.Tx, graphName string, col
 
 	cypherStmt := fmt.Sprintf(cypher, args...)
 
-        buf.WriteString("SELECT * from cypher(NULL,NULL) as (v0 agtype")
+	buf.WriteString("SELECT * from cypher(NULL,NULL) as (v0 agtype")
 
 	for i := 1; i < columnCount; i++ {
 		buf.WriteString(fmt.Sprintf(", v%d agtype", i))
@@ -85,25 +85,25 @@ func execCypher(cursorProvider CursorProvider, tx *sql.Tx, graphName string, col
 
 	stmt := buf.String()
 
-        // Pass in the graph name and cypher statement via parameters to prepare
-        // the cypher function call for session info.
+	// Pass in the graph name and cypher statement via parameters to prepare
+	// the cypher function call for session info.
 
-        prepare_stmt := "SELECT * FROM age_prepare_cypher($1, $2);"
-        _, perr := tx.Exec(prepare_stmt, graphName, cypherStmt)
-        if perr != nil {
-                        fmt.Println(prepare_stmt + " " + graphName + " " + cypher)
-                        return nil, perr
-        }
+	prepare_stmt := "SELECT * FROM age_prepare_cypher($1, $2);"
+	_, perr := tx.Exec(prepare_stmt, graphName, cypherStmt)
+	if perr != nil {
+		fmt.Println(prepare_stmt + " " + graphName + " " + cypher)
+		return nil, perr
+	}
 
 	if columnCount == 0 {
-                _, err := tx.Exec(stmt)
+		_, err := tx.Exec(stmt)
 		if err != nil {
 			fmt.Println(stmt)
 			return nil, err
 		}
 		return nil, nil
 	} else {
-                rows, err := tx.Query(stmt)
+		rows, err := tx.Query(stmt)
 		if err != nil {
 			fmt.Println(stmt)
 			return nil, err
@@ -148,7 +148,8 @@ type AgeTx struct {
 	tx  *sql.Tx
 }
 
-/**
+/*
+*
 @param dsn host=127.0.0.1 port=5432 dbname=postgres user=postgres password=agens sslmode=disable
 */
 func ConnectAge(graphName string, dsn string) (*Age, error) {
@@ -171,6 +172,7 @@ func NewAge(graphName string, db *sql.DB) *Age {
 	return &Age{db: db, graphName: graphName}
 }
 
+// GetReady prepares the underlying database for use with AGE.
 func (age *Age) GetReady() (bool, error) {
 	tx, err := age.db.Begin()
 	if err != nil {
@@ -215,6 +217,7 @@ func (a *Age) DB() *sql.DB {
 	return a.db
 }
 
+// Begin starts a transaction.
 func (a *Age) Begin() (*AgeTx, error) {
 	ageTx := &AgeTx{age: a}
 	tx, err := a.db.Begin()
@@ -242,6 +245,7 @@ func (a *AgeTx) ExecCypherMap(columnCount int, cypher string, args ...interface{
 	return ExecCypherMap(a.tx, a.age.graphName, columnCount, cypher, args...)
 }
 
+// CypherCursor holds the result of a Cypher query.
 type CypherCursor struct {
 	Cursor
 	columnCount int
@@ -257,8 +261,9 @@ func (c *CypherCursor) Next() bool {
 	return c.rows.Next()
 }
 
+// GetRow returns the next row of the result.
 func (c *CypherCursor) GetRow() ([]Entity, error) {
-	var gstrs = make([]interface{}, c.columnCount)
+	gstrs := make([]interface{}, c.columnCount)
 	for i := 0; i < c.columnCount; i++ {
 		gstrs[i] = new(string)
 	}
@@ -286,7 +291,8 @@ func (c *CypherCursor) Close() error {
 	return c.rows.Close()
 }
 
-//
+// CypherMapCursor holds the result of a Cypher query
+// on a Cypher map.
 type CypherMapCursor struct {
 	CypherCursor
 	mapper *AGMapper
@@ -304,7 +310,6 @@ func (c *CypherMapCursor) PutType(label string, tp reflect.Type) {
 
 func (c *CypherMapCursor) GetRow() ([]interface{}, error) {
 	entities, err := c.CypherCursor.GetRow()
-
 	if err != nil {
 		return nil, fmt.Errorf("CypherMapCursor.GetRow:: %s", err)
 	}

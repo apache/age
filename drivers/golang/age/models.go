@@ -45,18 +45,20 @@ const (
 	G_ARR
 )
 
-var _TpV = reflect.TypeOf(&Vertex{})
-var _TpE = reflect.TypeOf(&Edge{})
-var _TpP = reflect.TypeOf(&Path{})
-var _TpMP = reflect.TypeOf(&MapPath{})
-var _TpStr = reflect.TypeOf(string(""))
-var _TpInt = reflect.TypeOf(int64(0))
-var _TpIntBig = reflect.TypeOf(big.NewInt(0))
-var _TpFloat = reflect.TypeOf(float64(0))
-var _TpFloatBig = reflect.TypeOf(big.NewFloat(0))
-var _TpBool = reflect.TypeOf(bool(false))
-var _TpMap = reflect.TypeOf(map[string]interface{}{})
-var _TpArr = reflect.TypeOf([]interface{}{})
+var (
+	_TpV        = reflect.TypeOf(&Vertex{})
+	_TpE        = reflect.TypeOf(&Edge{})
+	_TpP        = reflect.TypeOf(&Path{})
+	_TpMP       = reflect.TypeOf(&MapPath{})
+	_TpStr      = reflect.TypeOf(string(""))
+	_TpInt      = reflect.TypeOf(int64(0))
+	_TpIntBig   = reflect.TypeOf(big.NewInt(0))
+	_TpFloat    = reflect.TypeOf(float64(0))
+	_TpFloatBig = reflect.TypeOf(big.NewFloat(0))
+	_TpBool     = reflect.TypeOf(bool(false))
+	_TpMap      = reflect.TypeOf(map[string]interface{}{})
+	_TpArr      = reflect.TypeOf([]interface{}{})
+)
 
 // Entity object interface for parsed AGE result data : Vertex, Edge, Path and SimpleEntity
 type Entity interface {
@@ -64,11 +66,17 @@ type Entity interface {
 	String() string
 }
 
+// Check if the given value is Entity object.
+// An entity is assigned a set of properties,
+// each of which are uniquely identified in the set by the irrespective property keys.
+// See https://age.apache.org/age-manual/master/intro/types.html#simple-entities for more details.
 func IsEntity(v interface{}) bool {
 	_, ok := v.(Entity)
 	return ok
 }
 
+// SimpleEntity is a simple entity object that has a single value.
+// It is used to represent a simple value such as string, integer, float, boolean, null, map and array.
 type SimpleEntity struct {
 	Entity
 	typ   GTYPE
@@ -186,6 +194,8 @@ type Vertex struct {
 	*LabeledEntity
 }
 
+// NewVertex creates a new Vertex object with the given id, label and properties.
+// See https://age.apache.org/age-manual/master/intro/types.html#vertex for more details.
 func NewVertex(id int64, label string, props map[string]interface{}) *Vertex {
 	return &Vertex{newLabeledEntity(id, label, props)}
 }
@@ -194,16 +204,23 @@ func (v *Vertex) GType() GTYPE {
 	return G_VERTEX
 }
 
+// String returns a formatted string containing the vertex id, label and properties.
 func (v *Vertex) String() string {
 	return fmt.Sprintf("V{id:%d, label:%s, props:%v}", v.id, v.label, v.props)
 }
 
+// An edge is an entity that encodes a directed connection between exactly two nodes,
+// the source node and the target node. An outgoing edge is a directed relationship
+// from the point of view of its source node. An incoming edge is a directed relationship
+// from the point of view of its target node. An edge is assigned exactly one edge type.
 type Edge struct {
 	*LabeledEntity
 	start_id int64
 	end_id   int64
 }
 
+// NewEdge creates a new Edge object with the given id, label, start vertex id, end vertex id and properties.
+// See https://age.apache.org/age-manual/master/intro/types.html#edge for more details.
 func NewEdge(id int64, label string, start int64, end int64, props map[string]interface{}) *Edge {
 	return &Edge{LabeledEntity: newLabeledEntity(id, label, props), start_id: start, end_id: end}
 }
@@ -220,11 +237,14 @@ func (e *Edge) EndId() int64 {
 	return e.end_id
 }
 
+// String returns a formatted string containing the edge id, label, start vertex id, end vertex id and properties.
 func (e *Edge) String() string {
 	return fmt.Sprintf("E{id:%d, label:%s, start:%d, end:%d, props:%v}",
 		e.id, e.label, e.start_id, e.end_id, e.props)
 }
 
+// A path is a series of alternating vertices and edges.
+// A path must start with a vertex, and have at least one edge.
 type Path struct {
 	Entity
 	entities []Entity
@@ -242,6 +262,7 @@ func (e *Path) Size() int {
 	return len(e.entities)
 }
 
+// Get returns the entity at the specified position in the specified path.
 func (e *Path) Get(index int) Entity {
 	if index < 0 && index >= len(e.entities) {
 		panic(fmt.Errorf("Entity index[%d] is out of range (%d) ", index, len(e.entities)))
@@ -249,6 +270,7 @@ func (e *Path) Get(index int) Entity {
 	return e.entities[index]
 }
 
+// GetAsVertex casts the entity at the specified position in the specified path to Vertex.
 func (e *Path) GetAsVertex(index int) *Vertex {
 	v := e.Get(index)
 
