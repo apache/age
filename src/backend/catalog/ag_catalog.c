@@ -27,10 +27,8 @@
 #include "tcop/utility.h"
 #include "utils/lsyscache.h"
 
-#include "catalog/ag_catalog.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
-#include "catalog/ag_namespace.h"
 #include "utils/ag_cache.h"
 
 static object_access_hook_type prev_object_access_hook;

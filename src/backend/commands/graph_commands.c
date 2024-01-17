@@ -21,27 +21,15 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
-#include "access/xact.h"
-#include "catalog/dependency.h"
-#include "catalog/objectaddress.h"
-#include "commands/defrem.h"
 #include "commands/schemacmds.h"
 #include "commands/tablecmds.h"
-#include "fmgr.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/value.h"
 #include "parser/parser.h"
-#include "utils/rel.h"
-#include "utils/relcache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
-#include "utils/graphid.h"
 #include "utils/name_validation.h"
 
 /*
