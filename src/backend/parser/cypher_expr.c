@@ -1753,7 +1753,6 @@ static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
      * because it should not be visible outside
      */
     pstate->p_namespace = list_delete_ptr(pstate->p_namespace, pnsi);
-    cpstate->p_list_comp = false;
 
     return expr;
 }

@@ -389,9 +389,13 @@ Query *transform_cypher_clause(cypher_parsestate *cpstate,
     else if (is_ag_node(self, cypher_unwind))
     {
         cypher_unwind *n = (cypher_unwind *) self;
+        if (n->collect != NULL)
+        {
+            cpstate->p_list_comp = true;
+        }
         result = transform_cypher_clause_with_where(cpstate,
-                                            transform_cypher_unwind,
-                                            clause, n->where);
+                                                    transform_cypher_unwind,
+                                                    clause, n->where);
     }
     else if (is_ag_node(self, cypher_call))
     {
@@ -2344,14 +2348,35 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
         query->rtable = pstate->p_rtable;
         query->rteperminfos = pstate->p_rteperminfos;
 
-        if (!is_ag_node(self, cypher_match))
+        where_qual = transform_cypher_expr(cpstate, where, EXPR_KIND_WHERE);
+
+        where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
+
+        // check if we have a list comprehension in the where clause
+        if (cpstate->p_list_comp)
         {
-            where_qual = transform_cypher_expr(cpstate, where, EXPR_KIND_WHERE);
+            List *groupClause = NIL;
+            ListCell *li;
+            query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+            query->havingQual = where_qual;
 
-            where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
+            foreach (li, ((cypher_return *)self)->items)
+            {
+                ResTarget *item = lfirst(li);
+
+                groupClause = lappend(groupClause, item->val);
+            }
+            query->groupClause = transform_group_clause(cpstate, groupClause,
+                                                        &query->groupingSets,
+                                                        &query->targetList,
+                                                        query->sortClause,
+                                                        EXPR_KIND_GROUP_BY);
+            
         }
-
-        query->jointree = makeFromExpr(pstate->p_joinlist, where_qual);
+        else
+        {
+            query->jointree = makeFromExpr(pstate->p_joinlist, where_qual);
+        }
     }
     else
     {
@@ -2388,9 +2413,7 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
                                                      (Node *)r, -1);
     }
 
-    return transform_cypher_clause_with_where(
-        cpstate, transform_cypher_match_pattern, clause,
-        match_self->where);
+    return transform_cypher_match_pattern(cpstate, clause);
 }
 
 /*
@@ -3064,7 +3087,36 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
 
     query->rtable = cpstate->pstate.p_rtable;
     query->rteperminfos = cpstate->pstate.p_rteperminfos;
-    query->jointree = makeFromExpr(cpstate->pstate.p_joinlist, (Node *)expr);
+
+    if (cpstate->p_list_comp)
+    {
+        List *groupList = NIL;
+
+        query->jointree = makeFromExpr(cpstate->pstate.p_joinlist, NULL);
+        query->havingQual = (Node *)expr;
+
+        foreach (lc, query->targetList)
+        {
+            TargetEntry *te = lfirst(lc);
+            ColumnRef *cref = makeNode(ColumnRef);
+
+            cref->fields = list_make1(makeString(te->resname));
+            cref->location = exprLocation((Node *)te->expr);
+
+            groupList = lappend(groupList, cref);
+        }
+
+        query->groupClause = transform_group_clause(cpstate, groupList,
+                                                    &query->groupingSets,
+                                                    &query->targetList,
+                                                    query->sortClause,
+                                                    EXPR_KIND_GROUP_BY);
+    }
+    else
+    {
+        query->jointree = makeFromExpr(cpstate->pstate.p_joinlist,
+                                       (Node *)expr);
+    }
 }
 
 /*
@@ -5314,6 +5366,7 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
     query->rtable = pstate->p_rtable;
     query->rteperminfos = pstate->p_rteperminfos;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+    query->hasAggs = pstate->p_hasAggs;
 
     return query;
 }
@@ -5971,7 +6024,8 @@ transform_cypher_clause_as_subquery(cypher_parsestate *cpstate,
            pstate->p_expr_kind == EXPR_KIND_OTHER ||
            pstate->p_expr_kind == EXPR_KIND_WHERE ||
            pstate->p_expr_kind == EXPR_KIND_SELECT_TARGET ||
-           pstate->p_expr_kind == EXPR_KIND_FROM_SUBSELECT);
+           pstate->p_expr_kind == EXPR_KIND_FROM_SUBSELECT ||
+           pstate->p_expr_kind == EXPR_KIND_INSERT_TARGET);
 
     /*
      * As these are all sub queries, if this is just of type NONE, note it as a

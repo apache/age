@@ -27,6 +27,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
+#include "miscadmin.h"
 
 #include "parser/cypher_expr.h"
 #include "parser/cypher_item.h"
@@ -65,37 +66,93 @@ TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
  * Helper function to determine if the passed node has a list_comprehension
  * node embedded in it.
  */
-static bool has_a_cypher_list_comprehension_node(Node *expr)
+bool has_a_cypher_list_comprehension_node(Node *expr)
 {
-    /* return false on NULL input */
+    // return false on NULL input
     if (expr == NULL)
     {
         return false;
     }
 
-    /* if this is an A_Indirection, because they can operate on lists */
-    if (nodeTag(expr) == T_A_Indirection)
+    // since this function recurses, it could be driven to stack overflow
+    check_stack_depth();
+
+    switch (nodeTag(expr))
     {
-        /* set expr to the object of the indirection */
-        expr = ((A_Indirection *)expr)->arg;
-    }
-
-    /* if expr is a cypher_unwind */
-    if (nodeTag(expr) == T_ExtensibleNode &&
-        is_ag_node(expr, cypher_unwind))
+    case T_A_Expr:
     {
-        cypher_unwind *cu = NULL;
+        /*
+         * We need to recurse into the left and right nodes
+         * to check if there is an unwind node in there
+         */
+        A_Expr *a_expr = (A_Expr *)expr;
 
-        cu = (cypher_unwind *)expr;
-
-        /* if it is a list comprehension node, return true */
-        if (cu->collect != NULL)
+        // check the left node
+        if (has_a_cypher_list_comprehension_node(a_expr->lexpr))
         {
             return true;
         }
-    }
 
-    /* otherwise, return false */
+        // check the right node
+        if (has_a_cypher_list_comprehension_node(a_expr->rexpr))
+        {
+            return true;
+        }
+        break;
+    }
+    case T_A_Indirection:
+    {
+        // set expr to the object of the indirection
+        expr = ((A_Indirection *)expr)->arg;
+
+        // check the object of the indirection
+        return has_a_cypher_list_comprehension_node(expr);
+    }
+    case T_ExtensibleNode:
+    {
+        if (is_ag_node(expr, cypher_unwind))
+        {
+            cypher_unwind *cu = (cypher_unwind *)expr;
+
+            // if it has a collect node, return true
+            if (cu->collect != NULL)
+            {
+                return true;
+            }
+        }
+        if (is_ag_node(expr, cypher_map))
+        {
+            cypher_map *map;
+            int i;
+
+            map = (cypher_map *)expr;
+
+            if (map->keyvals == NULL || map->keyvals->length == 0)
+            {
+                return false;
+            }
+
+            // check each key and value for a list comprehension
+            for (i = 0; i < map->keyvals->length; i += 2)
+            {
+                Node *val;
+
+                // get the value
+                val = (Node *)map->keyvals->elements[i + 1].ptr_value;
+
+                // check the value
+                if (has_a_cypher_list_comprehension_node(val))
+                {
+                    return true;
+                }
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    // otherwise, return false
     return false;
 }
 
