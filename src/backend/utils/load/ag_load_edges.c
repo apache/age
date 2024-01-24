@@ -100,7 +100,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
         end_vertex_graph_id = make_graphid(end_vertex_type_id, end_id_int);
 
         props = create_agtype_from_list_i(cr->header, cr->fields,
-                                          n_fields, 3);
+                                          n_fields, 4);
 
         insert_edge_simple(cr->graph_oid, cr->object_name,
                            object_graph_id, start_vertex_graph_id,

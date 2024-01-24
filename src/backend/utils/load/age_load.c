@@ -18,10 +18,13 @@
  */
 
 #include "postgres.h"
+#include "utils/json.h"
 
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
+
+static agtype_value *csv_value_to_agtype_value(char *csv_val);
 
 agtype *create_empty_agtype(void)
 {
@@ -38,6 +41,50 @@ agtype *create_empty_agtype(void)
     pfree_agtype_in_state(&result);
 
     return out;
+}
+
+/*
+ * Converts the given csv value to an agtype_value.
+ *
+ * If csv_val is not a valid json, it is wrapped by double-quotes to make it a
+ * string value. Because agtype is jsonb-like, the token should be a valid
+ * json in order to be parsed into an agtype_value of appropriate type.
+ * Finally, agtype_value_from_cstring() is called for parsing.
+ */
+static agtype_value *csv_value_to_agtype_value(char *csv_val)
+{
+    char *new_csv_val;
+    agtype_value *res;
+
+    if (!json_validate(cstring_to_text(csv_val), false, false))
+    {
+        // wrap the string with double-quote
+        int oldlen;
+        int newlen;
+
+        oldlen = strlen(csv_val);
+        newlen = oldlen + 2; // +2 for double-quotes
+        new_csv_val = (char *)palloc(sizeof(char) * (newlen + 1));
+
+        new_csv_val[0] = '"';
+        strncpy(&new_csv_val[1], csv_val, oldlen);
+        new_csv_val[oldlen + 1] = '"';
+        new_csv_val[oldlen + 2] = '\0';
+    }
+    else
+    {
+        new_csv_val = csv_val;
+    }
+
+    res = agtype_value_from_cstring(new_csv_val, strlen(new_csv_val));
+
+    // extract from top-level row scalar array
+    if (res->type == AGTV_ARRAY && res->val.array.raw_scalar)
+    {
+        res = &res->val.array.elems[0];
+    }
+
+    return res;
 }
 
 agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
@@ -74,7 +121,7 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                        WAGT_KEY,
                                        key_agtype);
 
-        value_agtype = string_to_agtype_value(fields[i]);
+        value_agtype = csv_value_to_agtype_value(fields[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
@@ -117,7 +164,7 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
                                        key_agtype);
-        value_agtype = string_to_agtype_value(fields[i]);
+        value_agtype = csv_value_to_agtype_value(fields[i]);
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);

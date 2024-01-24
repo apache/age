@@ -79,3 +79,21 @@ SELECT * FROM cypher('agload_test_graph', $$
 $$) AS (result_1 agtype, result_2 agtype);
 
 SELECT drop_graph('agload_test_graph', true);
+
+--
+-- Test property type conversion
+--
+SELECT create_graph('agload_conversion');
+
+SELECT create_vlabel('agload_conversion','Person1');
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load/conversion_vertices.csv');
+SELECT * FROM cypher('agload_conversion', $$ MATCH (n) RETURN properties(n) $$) as (a agtype);
+
+SELECT create_vlabel('agload_conversion','Person2');
+SELECT load_labels_from_file('agload_conversion', 'Person2', 'age_load/conversion_vertices.csv');
+
+SELECT create_elabel('agload_conversion','Edges');
+SELECT load_edges_from_file('agload_conversion', 'Edges', 'age_load/conversion_edges.csv');
+SELECT * FROM cypher('agload_conversion', $$ MATCH ()-[e]->() RETURN properties(e) $$) as (a agtype);
+
+SELECT drop_graph('agload_conversion', true);
