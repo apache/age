@@ -24,27 +24,15 @@
 
 #include "postgres.h"
 
-#include "access/htup_details.h"
-#include "access/sysattr.h"
 #include "access/xact.h"
-#include "access/multixact.h"
-#include "nodes/extensible.h"
-#include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/nodeFuncs.h"
-#include "nodes/plannodes.h"
-#include "parser/parsetree.h"
-#include "parser/parse_relation.h"
-#include "storage/procarray.h"
 #include "utils/rel.h"
+#include "nodes/makefuncs.h"
+#include "parser/parse_relation.h"
 
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
-#include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "utils/agtype.h"
 #include "utils/ag_cache.h"
-#include "utils/graphid.h"
 
 /*
  * Given the graph name and the label name, create a ResultRelInfo for the table
