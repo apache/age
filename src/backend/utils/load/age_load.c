@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/xact.h"
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
