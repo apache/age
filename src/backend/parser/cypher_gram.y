@@ -98,8 +98,8 @@
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
-%type <list> subquery_stmt subquery_stmt_no_return single_subquery
-             single_subquery_no_return subquery_part_init
+%type <list> subquery_stmt subquery_stmt_with_return subquery_stmt_no_return
+             single_subquery single_subquery_no_return subquery_part_init
 
 /* RETURN and WITH clause */
 %type <node> return return_item sort_item skip_opt limit_opt with
@@ -613,11 +613,22 @@ updating_clause:
     ;
 
 subquery_stmt:
+    subquery_stmt_with_return
+        {
+            $$ = $1;
+        }
+    | subquery_stmt_no_return
+        {
+            $$ = $1;
+        }
+    ;
+
+subquery_stmt_with_return:
     single_subquery
         {
             $$ = $1;
         }
-    | subquery_stmt UNION all_or_distinct subquery_stmt
+    | subquery_stmt_with_return UNION all_or_distinct subquery_stmt_with_return
         {
             $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
         }
@@ -635,16 +646,42 @@ subquery_stmt_no_return:
     ;
 
 single_subquery:
-        subquery_part_init reading_clause_list return
+    subquery_part_init reading_clause_list return
         {
             $$ = list_concat($1, lappend($2, $3));  
         }
     ;
 
 single_subquery_no_return:
-        subquery_part_init reading_clause_list
+    subquery_part_init reading_clause_list
         {
-            $$ = list_concat($1, $2);  
+            ColumnRef *cr;
+            ResTarget *rt;
+            cypher_return *n;
+
+            /*
+             * since subqueries allow return-less clauses, we add a
+             * return node manually to reflect that syntax
+             */
+            cr = makeNode(ColumnRef);
+            cr->fields = list_make1(makeNode(A_Star));
+            cr->location = @1;
+
+            rt = makeNode(ResTarget);
+            rt->name = NULL;
+            rt->indirection = NIL;
+            rt->val = (Node *)cr;
+            rt->location = @1;
+
+            n = make_ag_node(cypher_return);
+            n->distinct = false;
+            n->items = list_make1((Node *)rt);
+            n->order_by = NULL;
+            n->skip = NULL;
+            n->limit = NULL;
+
+            $$ = list_concat($1, lappend($2, n));
+
         }
     ;
 
@@ -1861,6 +1898,13 @@ expr_func_subexpr:
 expr_subquery:
     EXISTS '{' anonymous_path '}'
         {
+            /*
+             * EXISTS subquery with an anonymous path is almost
+             * the same as a EXISTS sub pattern, so we reuse that
+             * logic here to simplify more complex subquery transformations.
+             * TODO: Add WHERE clause support for anonymous paths in functions.
+             */
+
             cypher_sub_pattern *sub;
             SubLink    *n;
 
@@ -1879,17 +1923,22 @@ expr_subquery:
         }
     | EXISTS '{' subquery_stmt '}'
         {
-            ereport(ERROR,
-                (errcode(ERRCODE_SYNTAX_ERROR),
-                    errmsg("EXISTS subquery not yet implemented"),
-                    ag_scanner_errposition(@1, scanner)));
-        }
-    | EXISTS '{' subquery_stmt_no_return '}'
-        {
-            ereport(ERROR,
-                (errcode(ERRCODE_SYNTAX_ERROR),
-                    errmsg("EXISTS subquery not yet implemented"),
-                    ag_scanner_errposition(@1, scanner)));
+            cypher_sub_query *sub;
+            SubLink    *n;
+
+            sub = make_ag_node(cypher_sub_query);
+            sub->kind = CSP_EXISTS;
+            sub->query = $3;
+
+            n = makeNode(SubLink);
+
+            n->subLinkType = EXISTS_SUBLINK;
+            n->subLinkId = 0;
+            n->testexpr = NULL;
+            n->operName = NIL;
+            n->subselect = (Node *) sub;
+            n->location = @1;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
         }
     ;
 
