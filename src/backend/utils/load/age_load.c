@@ -19,12 +19,15 @@
 
 #include "postgres.h"
 #include "utils/json.h"
+#include "utils/jsonfuncs.h"
+#include "common/jsonapi.h"
 
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
 
 static agtype_value *csv_value_to_agtype_value(char *csv_val);
+static bool json_validate(text *json);
 
 agtype *create_empty_agtype(void)
 {
@@ -44,6 +47,22 @@ agtype *create_empty_agtype(void)
 }
 
 /*
+ * Validate JSON text.
+ *
+ * Note: this function is borrowed from PG16. It is simplified
+ * by removing two parameters as they are not used in age.
+ */
+static bool json_validate(text *json)
+{
+    JsonLexContext *lex = makeJsonLexContext(json, false);
+    JsonParseErrorType result;
+
+    result = pg_parse_json(lex, &nullSemAction);
+
+    return result == JSON_SUCCESS;
+}
+
+/*
  * Converts the given csv value to an agtype_value.
  *
  * If csv_val is not a valid json, it is wrapped by double-quotes to make it a
@@ -56,7 +75,7 @@ static agtype_value *csv_value_to_agtype_value(char *csv_val)
     char *new_csv_val;
     agtype_value *res;
 
-    if (!json_validate(cstring_to_text(csv_val), false, false))
+    if (!json_validate(cstring_to_text(csv_val)))
     {
         // wrap the string with double-quote
         int oldlen;
