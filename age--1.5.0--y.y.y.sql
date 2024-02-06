@@ -28,3 +28,63 @@
 -- Please add all additions, deletions, and modifications to the end of this
 -- file. We need to keep the order of these changes.
 
+CREATE FUNCTION ag_catalog.agtype_contains_top_level(agtype, agtype)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE OPERATOR @>> (
+  LEFTARG = agtype,
+  RIGHTARG = agtype,
+  FUNCTION = ag_catalog.agtype_contains_top_level,
+  COMMUTATOR = '<<@',
+  RESTRICT = contsel,
+  JOIN = contjoinsel
+);
+
+CREATE FUNCTION ag_catalog.agtype_contained_by_top_level(agtype, agtype)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE OPERATOR <<@ (
+  LEFTARG = agtype,
+  RIGHTARG = agtype,
+  FUNCTION = ag_catalog.agtype_contained_by_top_level,
+  COMMUTATOR = '@>>',
+  RESTRICT = contsel,
+  JOIN = contjoinsel
+);
+
+/*
+ * Since there is no option to add or drop operator from class,
+ * we have to drop and recreate the whole operator class.
+ * Reference: https://www.postgresql.org/docs/current/sql-alteropclass.html
+ */
+
+DROP OPERATOR CLASS ag_catalog.gin_agtype_ops;
+
+CREATE OPERATOR CLASS ag_catalog.gin_agtype_ops
+DEFAULT FOR TYPE agtype USING gin AS
+  OPERATOR 7 @>(agtype, agtype),
+  OPERATOR 8 <@(agtype, agtype),
+  OPERATOR 9 ?(agtype, agtype),
+  OPERATOR 10 ?|(agtype, agtype),
+  OPERATOR 11 ?&(agtype, agtype),
+  OPERATOR 12 @>>(agtype, agtype),
+  OPERATOR 13 <<@(agtype, agtype),
+  FUNCTION 1 ag_catalog.gin_compare_agtype(text,text),
+  FUNCTION 2 ag_catalog.gin_extract_agtype(agtype, internal),
+  FUNCTION 3 ag_catalog.gin_extract_agtype_query(agtype, internal, int2,
+                                                 internal, internal),
+  FUNCTION 4 ag_catalog.gin_consistent_agtype(internal, int2, agtype, int4,
+                                              internal, internal),
+  FUNCTION 6 ag_catalog.gin_triconsistent_agtype(internal, int2, agtype, int4,
+                                                 internal, internal, internal),
+STORAGE text;
