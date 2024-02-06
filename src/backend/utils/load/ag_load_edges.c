@@ -105,7 +105,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
         end_vertex_graph_id = make_graphid(end_vertex_type_id, end_id_int);
 
         props = create_agtype_from_list_i(cr->header, cr->fields,
-                                          n_fields, 3);
+                                          n_fields, 4, cr->load_as_agtype);
 
         insert_edge_simple(cr->graph_id, cr->object_name,
                            object_graph_id, start_vertex_graph_id,
@@ -158,7 +158,8 @@ int create_edges_from_csv_file(char *file_path,
                                char *graph_name,
                                Oid graph_id,
                                char *object_name,
-                               int object_id )
+                               int object_id,
+                               bool load_as_agtype)
 {
 
     FILE *fp;
@@ -195,6 +196,7 @@ int create_edges_from_csv_file(char *file_path,
     cr.graph_id = graph_id;
     cr.object_name = object_name;
     cr.object_id = object_id;
+    cr.load_as_agtype = load_as_agtype;
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
