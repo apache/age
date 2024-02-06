@@ -33,8 +33,9 @@
 
 static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
-			       int sublevels_up, bool require_col_privs,
+			                   int sublevels_up, bool require_col_privs,
                                int location);
+bool has_a_cypher_list_comprehension_node(Node *expr);
 
 // see transformTargetEntry()
 TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
@@ -42,15 +43,60 @@ TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
                                    char *colname, bool resjunk)
 {
     ParseState *pstate = (ParseState *)cpstate;
+    bool old_p_lateral_active = pstate->p_lateral_active;
+
+    /* we want to see lateral variables */
+    pstate->p_lateral_active = true;
 
     if (!expr)
         expr = transform_cypher_expr(cpstate, node, expr_kind);
+
+    /* set lateral back to what it was */
+    pstate->p_lateral_active = old_p_lateral_active;
 
     if (!colname && !resjunk)
         colname = FigureColname(node);
 
     return makeTargetEntry((Expr *)expr, (AttrNumber)pstate->p_next_resno++,
                            colname, resjunk);
+}
+
+/*
+ * Helper function to determine if the passed node has a list_comprehension
+ * node embedded in it.
+ */
+static bool has_a_cypher_list_comprehension_node(Node *expr)
+{
+    /* return false on NULL input */
+    if (expr == NULL)
+    {
+        return false;
+    }
+
+    /* if this is an A_Indirection, because they can operate on lists */
+    if (nodeTag(expr) == T_A_Indirection)
+    {
+        /* set expr to the object of the indirection */
+        expr = ((A_Indirection *)expr)->arg;
+    }
+
+    /* if expr is a cypher_unwind */
+    if (nodeTag(expr) == T_ExtensibleNode &&
+        is_ag_node(expr, cypher_unwind))
+    {
+        cypher_unwind *cu = NULL;
+
+        cu = (cypher_unwind *)expr;
+
+        /* if it is a list comprehension node, return true */
+        if (cu->collect != NULL)
+        {
+            return true;
+        }
+    }
+
+    /* otherwise, return false */
+    return false;
 }
 
 // see transformTargetList()
@@ -117,6 +163,60 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
         else
         {
             hasAgg = true;
+        }
+
+        /*
+         * This is for a special case with list comprehension, which is embedded
+         * in a cypher_unwind node. We need to group the results but not expose
+         * the grouping expression.
+         */
+
+        /* verify that val has an embedded list_comprehension node in it */
+        if (has_a_cypher_list_comprehension_node(item->val))
+        {
+            ParseState *pstate = &cpstate->pstate;
+            ParseNamespaceItem *nsitem = NULL;
+            RangeTblEntry *rte = NULL;
+            // hasAgg = true;
+            /*
+             * There should be at least 2 entries in p_namespace. One for the
+             * variable in the reading clause and one for the variable in the
+             * list_comprehension expression. Otherwise, there is nothing to
+             * group with.
+             */
+            if (list_length(pstate->p_namespace) > 1)
+            {
+                /*
+                 * Get the first namespace item which should be the first
+                 * variable from the reading clause.
+                 */
+                nsitem = lfirst(list_head(pstate->p_namespace));
+                /* extract the rte */
+                rte = nsitem->p_rte;
+
+                /*
+                 * If we have a non-null column name make a ColumnRef to it.
+                 * Otherwise, there wasn't a variable specified in the reading
+                 * clause. If that is the case don't. Because there isn't
+                 * anything to group with.
+                 */
+                if (rte->eref->colnames != NULL)
+                {
+                    ColumnRef *cref = NULL;
+                    char *colname = NULL;
+
+                    /* get the name of the column (varname) */
+                    colname = strVal(lfirst(list_head(rte->eref->colnames)));
+
+                    /* create the ColumnRef */
+                    cref = makeNode(ColumnRef);
+                    cref->fields = list_make1(makeString(colname));
+                    cref->location = -1;
+
+                    /* add the expression for grouping */
+                    group_clause = lappend(group_clause, cref);
+                }
+            }
         }
     }
 
