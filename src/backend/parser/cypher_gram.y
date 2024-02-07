@@ -1668,7 +1668,6 @@ expr:
             $$ = make_typecast_expr($1, $3, @2);
         }
     | expr_atom
-    | list_comprehension
     ;
 
 expr_opt:
@@ -1879,13 +1878,9 @@ list:
 
             $$ = (Node *)n;
         }
-    ;
-
-list_comprehension:
-    '[' FOR var_name IN expr where_opt mapping_expr_opt ']'
+    | '[' list_comprehension ']'
         {
-            $$ = build_list_comprehension_node($3, $5, $6, $7,
-                                               @3, @5, @6, @7);
+            $$ = $2;
         }
     ;
 
@@ -1960,6 +1955,14 @@ expr_case_default:
             $$ = NULL;
         }
     ;
+
+list_comprehension:
+    var_name IN expr where_opt mapping_expr_opt
+        {
+            $$ = build_list_comprehension_node($1, $3, $4, $5,
+                                               @1, @3, @4, @5);
+        }
+;
 
 expr_var:
     var_name
@@ -2068,7 +2071,6 @@ safe_keywords:
     | ENDS       { $$ = pnstrdup($1, 4); }
     | EXISTS     { $$ = pnstrdup($1, 6); }
     | EXPLAIN    { $$ = pnstrdup($1, 7); }
-    | FOR        { $$ = pnstrdup($1, 3); }
     | IN         { $$ = pnstrdup($1, 2); }
     | IS         { $$ = pnstrdup($1, 2); }
     | LIMIT      { $$ = pnstrdup($1, 6); }

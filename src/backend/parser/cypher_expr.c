@@ -338,7 +338,8 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 colname = strVal(field1);
 
                 if (cpstate->p_list_comp &&
-                    (pstate->p_expr_kind == EXPR_KIND_WHERE))
+                    (pstate->p_expr_kind == EXPR_KIND_WHERE ||
+                     pstate->p_expr_kind == EXPR_KIND_SELECT_TARGET))
                 {
                     /*
                      * Just scan through the last pnsi(that is for list comp)

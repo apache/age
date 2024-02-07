@@ -1,0 +1,225 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('list_comprehension');
+NOTICE:  graph "list_comprehension" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * from cypher('list_comprehension', $$ CREATE (u {list: [0, 2, 4, 6, 8, 10, 12]}) RETURN u $$) as (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+(1 row)
+
+SELECT * from cypher('list_comprehension', $$ CREATE (u {list: [1, 3, 5, 7, 9, 11, 13]}) RETURN u $$) as (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+(1 row)
+
+SELECT * from cypher('list_comprehension', $$ CREATE (u {list: []}) RETURN u $$) as (result agtype);
+                                  result                                  
+--------------------------------------------------------------------------
+ {"id": 281474976710659, "label": "", "properties": {"list": []}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2)] $$) AS (result agtype);
+                         result                          
+---------------------------------------------------------
+ [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2)][2] $$) AS (result agtype);
+ result 
+--------
+ 5
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2)][1..4] $$) AS (result agtype);
+  result   
+-----------
+ [3, 5, 7]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0] $$) AS (result agtype);
+       result       
+--------------------
+ [3, 9, 15, 21, 27]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0][2] $$) AS (result agtype);
+ result 
+--------
+ 15
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0][0..4] $$) AS (result agtype);
+     result     
+----------------
+ [3, 9, 15, 21]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0 | u^2 ] $$) AS (result agtype);
+              result              
+----------------------------------
+ [9.0, 81.0, 225.0, 441.0, 729.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0 | u^2 ][3] $$) AS (result agtype);
+ result 
+--------
+ 441.0
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) where u % 3 = 0 | u^2 ][1..5] $$) AS (result agtype);
+           result            
+-----------------------------
+ [81.0, 225.0, 441.0, 729.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) | u^2 ] $$) AS (result agtype);
+                                               result                                               
+----------------------------------------------------------------------------------------------------
+ [1.0, 9.0, 25.0, 49.0, 81.0, 121.0, 169.0, 225.0, 289.0, 361.0, 441.0, 529.0, 625.0, 729.0, 841.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) | u^2 ][0] $$) AS (result agtype);
+ result 
+--------
+ 1.0
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN range(1, 30, 2) | u^2 ][0..2] $$) AS (result agtype);
+   result   
+------------
+ [1.0, 9.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN (u) $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"list": []}}::vertex
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH () RETURN [i IN range(0, 20, 2) where i % 3 = 0 ] $$) AS (result agtype);
+     result     
+----------------
+ [0, 6, 12, 18]
+ [0, 6, 12, 18]
+ [0, 6, 12, 18]
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH () RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
+          result           
+---------------------------
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
+          result           
+---------------------------
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH p=() RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
+          result           
+---------------------------
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH p=(u) RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
+          result           
+---------------------------
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+ [0.0, 36.0, 144.0, 324.0]
+(3 rows)
+
+SELECT * from cypher('list_comprehension', $$ CREATE (u) RETURN u $$) as (result agtype);
+                             result                             
+----------------------------------------------------------------
+ {"id": 281474976710660, "label": "", "properties": {}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list] $$) AS (result agtype);
+         result          
+-------------------------
+ [1, 3, 5, 7, 9, 11, 13]
+ []
+ []
+ [0, 2, 4, 6, 8, 10, 12]
+(4 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0] $$) AS (result agtype);
+   result   
+------------
+ [0, 6, 12]
+ [3, 9]
+(2 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3] $$) AS (result agtype);
+  result   
+-----------
+ [0, 2, 4]
+ [1, 3]
+(2 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][1] $$) AS (result agtype);
+ result 
+--------
+ 2
+ 3
+(2 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][0..2] $$) AS (result agtype);
+ result 
+--------
+ [0, 2]
+ [1, 3]
+(2 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][0..2][1] $$) AS (result agtype);
+ result 
+--------
+ 2
+ 3
+(2 rows)
+
+SELECT * FROM drop_graph('list_comprehension', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table list_comprehension._ag_label_vertex
+drop cascades to table list_comprehension._ag_label_edge
+NOTICE:  graph "list_comprehension" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
