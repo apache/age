@@ -257,7 +257,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                  * clause. If that is the case don't. Because there isn't
                  * anything to group with.
                  */
-                if (rte->eref->colnames != NULL)
+                if (rte->eref->colnames != NULL && nsitem->p_cols_visible)
                 {
                     ColumnRef *cref = NULL;
                     char *colname = NULL;

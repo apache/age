@@ -2328,6 +2328,7 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
         
         Assert(pnsi != NULL);
         rtindex = list_length(pstate->p_rtable);
+
         // rte is the only RangeTblEntry in pstate
         if (rtindex != 1)
         {
@@ -2353,7 +2354,8 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
         where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
 
         // check if we have a list comprehension in the where clause
-        if (cpstate->p_list_comp)
+        if (cpstate->p_list_comp &&
+            has_a_cypher_list_comprehension_node(where))
         {
             List *groupClause = NIL;
             ListCell *li;

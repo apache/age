@@ -337,7 +337,8 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 Assert(IsA(field1, String));
                 colname = strVal(field1);
 
-                if (cpstate->p_list_comp)
+                if (cpstate->p_list_comp &&
+                    (pstate->p_expr_kind == EXPR_KIND_WHERE))
                 {
                     /*
                      * Just scan through the last pnsi(that is for list comp)
@@ -1737,6 +1738,7 @@ static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
     ParseState *pstate = (ParseState *)cpstate;
 
     cpstate->p_list_comp = true;
+    pstate->p_lateral_active = true;
 
     cc.prev = NULL;
     cc.next = NULL;
@@ -1748,11 +1750,8 @@ static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
     expr = transform_cypher_expr(cpstate, unwind->collect,
                                  EXPR_KIND_SELECT_TARGET);
 
-    /*
-     * Remove the namespace item for listcomp subquery
-     * because it should not be visible outside
-     */
-    pstate->p_namespace = list_delete_ptr(pstate->p_namespace, pnsi);
+    pnsi->p_cols_visible = false;
+    pstate->p_lateral_active = false;
 
     return expr;
 }
