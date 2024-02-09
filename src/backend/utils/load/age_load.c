@@ -18,9 +18,7 @@
  */
 
 #include "postgres.h"
-#include "utils/json.h"
-#include "utils/jsonfuncs.h"
-#include "common/jsonapi.h"
+#include "utils/jsonapi.h"
 
 #include "access/xact.h"
 #include "utils/load/ag_load_edges.h"
@@ -48,6 +46,16 @@ agtype *create_empty_agtype(void)
 }
 
 /*
+ * the null action object used for pure validation
+ * Note: borrowed from PG.
+ */
+static JsonSemAction nullSemAction =
+{
+    NULL, NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL
+};
+
+/*
  * Validate JSON text.
  *
  * Note: this function is borrowed from PG16. It is simplified
@@ -55,12 +63,27 @@ agtype *create_empty_agtype(void)
  */
 static bool json_validate(text *json)
 {
-    JsonLexContext *lex = makeJsonLexContext(json, false);
-    JsonParseErrorType result;
+    bool result;
+    MemoryContext ccxt;
+    JsonLexContext *lex;
 
-    result = pg_parse_json(lex, &nullSemAction);
+    ccxt = CurrentMemoryContext;
+    lex = makeJsonLexContext(json, false);
 
-    return result == JSON_SUCCESS;
+    PG_TRY();
+    {
+        pg_parse_json(lex, &nullSemAction);
+        result = true;
+    }
+    PG_CATCH();
+    {
+        (void) MemoryContextSwitchTo(ccxt);
+        FlushErrorState();
+        result = false;
+    }
+    PG_END_TRY();
+
+    return result;
 }
 
 /*
