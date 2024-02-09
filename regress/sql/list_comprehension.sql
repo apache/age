@@ -48,12 +48,47 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH () RETURN [i IN range(0, 20,
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH p=() RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH p=(u) RETURN [i IN range(0, 20, 2) where i % 3 = 0 | i^2 ] $$) AS (result agtype);
-SELECT * from cypher('list_comprehension', $$ CREATE (u) RETURN u $$) as (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][1] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][0..2] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0 | i/3][0..2][1] $$) AS (result agtype);
+
+-- Nested cases
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]]] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [i in [1,2,3]]]] $$) AS (result agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1]] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]] where i>1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1] where i>2] $$) AS (result agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2]] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]] where i>1 | i^2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1] where i>2 | i^2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2] where i>4] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2] where i>4 | i^2] $$) AS (result agtype);
+-- .... will add more tests
+
+-- List comprehension inside where and property constraints
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN range(0,12,2)] RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN range(1,13,2)] RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list@>[i in range(0,6,2)] RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) MATCH (v) WHERE v.list=[i in u.list] RETURN v $$) AS (result agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list:[i IN range(0,12,2)]}) RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list:[i IN range(1,13,2)]}) RETURN u $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) MATCH (v {list:[i in u.list]}) RETURN v $$) AS (result agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ CREATE (u {list:[i IN range(12,24,2)]}) RETURN u $$) AS (result agtype);
+
+-- .... will add more tests
+
+-- List comprehension variable scoping
+SELECT * FROM cypher('list_comprehension', $$ WITH 1 AS m, [m IN [1, 2, 3]] AS n RETURN [m IN [1, 2, 3]] $$) AS (result agtype);
+
+-- Should error out
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2)],i $$) AS (result agtype, i agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2) where i>5 | i^2],i $$) AS (result agtype, i agtype);
 
 SELECT * FROM drop_graph('list_comprehension', true);

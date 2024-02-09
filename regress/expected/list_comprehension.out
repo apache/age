@@ -163,20 +163,13 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH p=(u) RETURN [i IN range(0, 
  [0.0, 36.0, 144.0, 324.0]
 (3 rows)
 
-SELECT * from cypher('list_comprehension', $$ CREATE (u) RETURN u $$) as (result agtype);
-                             result                             
-----------------------------------------------------------------
- {"id": 281474976710660, "label": "", "properties": {}}::vertex
-(1 row)
-
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list] $$) AS (result agtype);
          result          
 -------------------------
  [1, 3, 5, 7, 9, 11, 13]
  []
- []
  [0, 2, 4, 6, 8, 10, 12]
-(4 rows)
+(3 rows)
 
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list where i % 3 = 0] $$) AS (result agtype);
    result   
@@ -213,6 +206,140 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u) RETURN [i IN u.list wher
  3
 (2 rows)
 
+-- Nested cases
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]]] $$) AS (result agtype);
+  result   
+-----------
+ [1, 2, 3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [i in [1,2,3]]]] $$) AS (result agtype);
+  result   
+-----------
+ [1, 2, 3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1]] $$) AS (result agtype);
+ result 
+--------
+ [2, 3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]] where i>1] $$) AS (result agtype);
+ result 
+--------
+ [2, 3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1] where i>2] $$) AS (result agtype);
+ result 
+--------
+ [3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2]] $$) AS (result agtype);
+   result   
+------------
+ [4.0, 9.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3]] where i>1 | i^2] $$) AS (result agtype);
+   result   
+------------
+ [4.0, 9.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1] where i>2 | i^2] $$) AS (result agtype);
+ result 
+--------
+ [9.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2] where i>4] $$) AS (result agtype);
+ result 
+--------
+ [9.0]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN [i IN [1,2,3] where i>1 | i^2] where i>4 | i^2] $$) AS (result agtype);
+ result 
+--------
+ [81.0]
+(1 row)
+
+-- .... will add more tests
+-- List comprehension inside where and property constraints
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN range(0,12,2)] RETURN u $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN range(1,13,2)] RETURN u $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list@>[i in range(0,6,2)] RETURN u $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) MATCH (v) WHERE v.list=[i in u.list] RETURN v $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710659, "label": "", "properties": {"list": []}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+(3 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list:[i IN range(0,12,2)]}) RETURN u $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list:[i IN range(1,13,2)]}) RETURN u $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) MATCH (v {list:[i in u.list]}) RETURN v $$) AS (result agtype);
+                                            result                                             
+-----------------------------------------------------------------------------------------------
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"list": []}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 3, 5, 7, 9, 11, 13]}}::vertex
+(5 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ CREATE (u {list:[i IN range(12,24,2)]}) RETURN u $$) AS (result agtype);
+                                               result                                               
+----------------------------------------------------------------------------------------------------
+ {"id": 281474976710660, "label": "", "properties": {"list": [12, 14, 16, 18, 20, 22, 24]}}::vertex
+(1 row)
+
+-- .... will add more tests
+-- List comprehension variable scoping
+SELECT * FROM cypher('list_comprehension', $$ WITH 1 AS m, [m IN [1, 2, 3]] AS n RETURN [m IN [1, 2, 3]] $$) AS (result agtype);
+  result   
+-----------
+ [1, 2, 3]
+(1 row)
+
+-- Should error out
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2)],i $$) AS (result agtype, i agtype);
+ERROR:  could not find rte for i
+LINE 1: ..._comprehension', $$ RETURN [i IN range(0, 10, 2)],i $$) AS (...
+                                                             ^
+SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2) where i>5 | i^2],i $$) AS (result agtype, i agtype);
+ERROR:  could not find rte for i
+LINE 1: ... $$ RETURN [i IN range(0, 10, 2) where i>5 | i^2],i $$) AS (...
+                                                             ^
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table list_comprehension._ag_label_vertex
