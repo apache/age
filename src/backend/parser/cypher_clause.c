@@ -6380,6 +6380,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     query->rtable = pstate->p_rtable;
     query->rteperminfos = pstate->p_rteperminfos;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+    query->hasAggs = pstate->p_hasAggs;
 
     query->hasSubLinks = pstate->p_hasSubLinks;
 

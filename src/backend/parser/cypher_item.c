@@ -31,6 +31,7 @@
 
 #include "parser/cypher_expr.h"
 #include "parser/cypher_item.h"
+#include "parser/cypher_clause.h"
 
 static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
@@ -172,6 +173,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
     {
         ResTarget *item = lfirst(li);
         TargetEntry *te;
+        bool has_list_comp = false;
 
         if (expand_star)
         {
@@ -199,14 +201,48 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                 }
             }
         }
-        /* clear the exprHasAgg flag to check transform for an aggregate */
+
+        // Check if we have a list comprehension
+        has_list_comp = has_a_cypher_list_comprehension_node(item->val);
+
+        // Clear the exprHasAgg flag to check transform for an aggregate
         cpstate->exprHasAgg = false;
 
-        /* transform the item */
-        te = transform_cypher_item(cpstate, item->val, NULL, expr_kind,
-                                   item->name, false);
+        if (has_list_comp && item_list->length > 1)
+        {
+            /*
+             * Create a subquery for the list comprehension and transform it
+             * as a subquery. Then expand the target list of the subquery.
+             * This is to avoid multiple unnest functions in the same query
+             * level and collect not able to distinguish correctly.
+             */
+            ParseNamespaceItem *pnsi;
+            cypher_return *cr;
+            cypher_clause cc;
 
-        target_list = lappend(target_list, te);
+            cr = make_ag_node(cypher_return);
+            cr->items = list_make1(item);
+
+            cc.prev = NULL;
+            cc.next = NULL;
+            cc.self = (Node *)cr;
+
+            pnsi = transform_cypher_clause_as_subquery(cpstate,
+                                                       transform_cypher_clause,
+                                                       &cc, NULL, true);
+
+            target_list = list_concat(target_list,
+                                      expandNSItemAttrs(&cpstate->pstate, pnsi,
+                                                        0, true, -1));
+        }
+        else
+        {
+            /* transform the item */
+            te = transform_cypher_item(cpstate, item->val, NULL, expr_kind,
+                                       item->name, false);
+
+            target_list = lappend(target_list, te);
+        }
 
         /*
          * Did the transformed item contain an aggregate function? If it didn't,
@@ -227,9 +263,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
          * in a cypher_unwind node. We need to group the results but not expose
          * the grouping expression.
          */
-
-        /* verify that val has an embedded list_comprehension node in it */
-        if (has_a_cypher_list_comprehension_node(item->val))
+        if (has_list_comp)
         {
             ParseState *pstate = &cpstate->pstate;
             ParseNamespaceItem *nsitem = NULL;
@@ -265,12 +299,12 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                     /* get the name of the column (varname) */
                     colname = strVal(lfirst(list_head(rte->eref->colnames)));
 
-                    /* create the ColumnRef */
+                    // create the ColumnRef
                     cref = makeNode(ColumnRef);
                     cref->fields = list_make1(makeString(colname));
                     cref->location = -1;
 
-                    /* add the expression for grouping */
+                    // add the expression for grouping
                     group_clause = lappend(group_clause, cref);
                 }
             }
