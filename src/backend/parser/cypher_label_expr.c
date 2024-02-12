@@ -260,6 +260,7 @@ List *get_label_expr_relations(cypher_label_expr *label_expr,
 
     case LABEL_EXPR_TYPE_AND:
     case LABEL_EXPR_TYPE_OR:
+    {
         List *reloids;
         List *(*merge_lists)(List *, const List *);
         ListCell *lc;
@@ -322,7 +323,7 @@ List *get_label_expr_relations(cypher_label_expr *label_expr,
             }
         }
         return reloids;
-
+    }
     default:
         elog(ERROR, "invalid cypher_label_expr type");
         return NIL;
@@ -378,6 +379,7 @@ char *label_expr_relname(cypher_label_expr *label_expr, char label_expr_kind)
         return (char *)strVal(linitial(label_expr->label_names));
 
     case LABEL_EXPR_TYPE_AND:
+    {
         /*
          * generates a name for intersection relation
          * i.e. for CREATE (:A:B:C), _agr_ABC
@@ -401,6 +403,7 @@ char *label_expr_relname(cypher_label_expr *label_expr, char label_expr_kind)
         pfree(relname_strinfo);
 
         return relname;
+    }
 
     case LABEL_EXPR_TYPE_OR:
         elog(ERROR, "label expression type OR cannot have a table");
