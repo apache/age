@@ -1270,7 +1270,23 @@ path_node:
             n->parsed_name = $2;
             n->label = $3;
             n->parsed_label = $3;
+            n->use_equals = false;
             n->props = $4;
+            n->location = @2;
+
+            $$ = (Node *)n;
+        }
+    | '(' var_name_opt label_opt '='properties_opt ')'
+        {
+            cypher_node *n;
+
+            n = make_ag_node(cypher_node);
+            n->name = $2;
+            n->parsed_name = $2;
+            n->label = $3;
+            n->parsed_label = $3;
+            n->use_equals = true;
+            n->props = $5;
             n->location = @2;
 
             $$ = (Node *)n;
@@ -1318,7 +1334,23 @@ path_relationship_body:
             n->label = $3;
             n->parsed_label = $3;
             n->varlen = $4;
+            n->use_equals = false;
             n->props = $5;
+
+            $$ = (Node *)n;
+        }
+    | '[' var_name_opt label_opt cypher_varlen_opt '='properties_opt ']'
+        {
+            cypher_relationship *n;
+
+            n = make_ag_node(cypher_relationship);
+            n->name = $2;
+            n->parsed_name = $2;
+            n->label = $3;
+            n->parsed_label = $3;
+            n->varlen = $4;
+            n->use_equals = true;
+            n->props = $6;
 
             $$ = (Node *)n;
         }
@@ -1333,6 +1365,7 @@ path_relationship_body:
             n->label = NULL;
             n->parsed_label = NULL;
             n->varlen = NULL;
+            n->use_equals = false;
             n->props = NULL;
 
             $$ = (Node *)n;
