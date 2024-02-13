@@ -77,7 +77,7 @@
                  CALL CASE COALESCE CONTAINS CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
                  ELSE END_P ENDS EXISTS EXPLAIN
-                 FALSE_P FOR
+                 FALSE_P
                  IN IS
                  LIMIT
                  MATCH MERGE

@@ -88,16 +88,23 @@ bool has_a_cypher_list_comprehension_node(Node *expr)
          */
         A_Expr *a_expr = (A_Expr *)expr;
 
-        // check the left node
-        if (has_a_cypher_list_comprehension_node(a_expr->lexpr))
-        {
-            return true;
-        }
+        return (has_a_cypher_list_comprehension_node(a_expr->lexpr) ||
+                has_a_cypher_list_comprehension_node(a_expr->rexpr));
+    }
+    case T_BoolExpr:
+    {
+        BoolExpr *bexpr = (BoolExpr *)expr;
+        ListCell *lc;
 
-        // check the right node
-        if (has_a_cypher_list_comprehension_node(a_expr->rexpr))
+        // is any of the boolean expression argument a list comprehension?
+        foreach(lc, bexpr->args)
         {
-            return true;
+            Node *arg = lfirst(lc);
+
+            if (has_a_cypher_list_comprehension_node(arg))
+            {
+                return true;
+            }
         }
         break;
     }
@@ -115,13 +122,10 @@ bool has_a_cypher_list_comprehension_node(Node *expr)
         {
             cypher_unwind *cu = (cypher_unwind *)expr;
 
-            // if it has a collect node, return true
-            if (cu->collect != NULL)
-            {
-                return true;
-            }
+            // it is a list comprehension if it has a collect node
+            return cu->collect != NULL;
         }
-        if (is_ag_node(expr, cypher_map))
+        else if (is_ag_node(expr, cypher_map))
         {
             cypher_map *map;
             int i;
@@ -143,6 +147,45 @@ bool has_a_cypher_list_comprehension_node(Node *expr)
 
                 // check the value
                 if (has_a_cypher_list_comprehension_node(val))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (is_ag_node(expr, cypher_string_match))
+        {
+            cypher_string_match *csm_match = (cypher_string_match *)expr;
+
+            // is lhs or rhs of the string match a list comprehension?
+            return (has_a_cypher_list_comprehension_node(csm_match->lhs) ||
+                    has_a_cypher_list_comprehension_node(csm_match->rhs));
+        }
+        else if (is_ag_node(expr, cypher_typecast))
+        {
+            cypher_typecast *ctypecast = (cypher_typecast *)expr;
+
+            // is expr being typecasted a list comprehension?
+            return has_a_cypher_list_comprehension_node(ctypecast->expr);
+        }
+        else if (is_ag_node(expr, cypher_comparison_aexpr))
+        {
+            cypher_comparison_aexpr *aexpr = (cypher_comparison_aexpr *)expr;
+
+            // is left or right argument a list comprehension?
+            return (has_a_cypher_list_comprehension_node(aexpr->lexpr) ||
+                    has_a_cypher_list_comprehension_node(aexpr->rexpr));
+        }
+        else if (is_ag_node(expr, cypher_comparison_boolexpr))
+        {
+            cypher_comparison_boolexpr *bexpr = (cypher_comparison_boolexpr *)expr;
+            ListCell *lc;
+
+            // is any of the boolean expression argument a list comprehension?
+            foreach(lc, bexpr->args)
+            {
+                Node *arg = lfirst(lc);
+
+                if (has_a_cypher_list_comprehension_node(arg))
                 {
                     return true;
                 }

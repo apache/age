@@ -1328,6 +1328,8 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     TargetEntry *te;
     ParseNamespaceItem *pnsi;
     bool is_list_comp = self->collect != NULL;
+    bool has_agg =
+        is_list_comp || has_a_cypher_list_comprehension_node(self->target->val);
 
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
@@ -1362,6 +1364,13 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     expr = transform_cypher_expr(cpstate, self->target->val,
                                  EXPR_KIND_SELECT_TARGET);
 
+    if (!has_agg && nodeTag(expr) == T_Aggref)
+    {
+        ereport(ERROR, errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                errmsg("Invalid use of aggregation in this context"),
+                parser_errposition(pstate, self->target->location));
+    }
+
     unwind = makeFuncCall(list_make1(makeString("age_unnest")), NIL,
                           COERCE_SQL_SYNTAX, -1);
 
@@ -1373,7 +1382,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                                  target_syntax_loc);
 
     pstate->p_expr_kind = old_expr_kind;
-    pstate->p_hasAggs = is_list_comp;
+    pstate->p_hasAggs = has_agg;
 
     te = makeTargetEntry((Expr *) funcexpr,
                          (AttrNumber) pstate->p_next_resno++,
@@ -1799,6 +1808,19 @@ cypher_update_information *transform_cypher_set_item_list(
         target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
                                             EXPR_KIND_SELECT_TARGET, NULL,
                                             false);
+
+        if (has_a_cypher_list_comprehension_node(set_item->expr))
+        {
+            query->hasAggs = true;
+        }
+
+        if (!query->hasAggs && nodeTag(target_item->expr) == T_Aggref)
+        {
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                    errmsg("Invalid use of aggregation in this context"),
+                    parser_errposition(pstate, set_item->location)));
+        }
+
         target_item->expr = add_volatile_wrapper(target_item->expr);
 
         query->targetList = lappend(query->targetList, target_item);
