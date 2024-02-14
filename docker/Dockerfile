@@ -38,7 +38,7 @@ COPY . /age
 
 WORKDIR /age
 
-RUN make clean && make install
+RUN make && make install
 
 COPY docker/docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
