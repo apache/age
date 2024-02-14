@@ -91,6 +91,7 @@ static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
 static ArrayExpr *make_agtype_array_expr(List *args);
 static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
                                                   ColumnRef *cr);
+static bool verify_common_type_coercion(Oid common_type, List *exprs);
 
 /* transform a cypher expression */
 Node *transform_cypher_expr(cypher_parsestate *cpstate, Node *expr,
@@ -493,6 +494,29 @@ static Node *transform_cypher_comparison_aexpr_OP(cypher_parsestate *cpstate,
     return (Node *)transform_AEXPR_OP(cpstate, n);
 }
 
+/*
+ * Copied from PGs verify_common_type -
+ *      Verify that all input types can be coerced to a proposed common type.
+ *      Return true if so, false if not all coercions are possible.
+ */
+static bool verify_common_type_coercion(Oid common_type, List *exprs)
+{
+    ListCell *lc;
+
+    foreach(lc, exprs)
+    {
+        Node *nexpr = (Node *) lfirst(lc);
+        Oid ntype = exprType(nexpr);
+
+        if (!can_coerce_type(1, &ntype, &common_type, COERCION_IMPLICIT))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
 {
     ParseState *pstate = (ParseState *)cpstate;
@@ -578,7 +602,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
 
         scalar_type = AGTYPEOID;
 
-        if (verify_common_type(scalar_type, allexprs) != true)
+        if (verify_common_type_coercion(scalar_type, allexprs) != true)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_CANNOT_COERCE),
