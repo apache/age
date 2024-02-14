@@ -578,7 +578,13 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
 
         scalar_type = AGTYPEOID;
 
-        Assert (verify_common_type(scalar_type, allexprs));
+        if (verify_common_type(scalar_type, allexprs) != true)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_CANNOT_COERCE),
+                     errmsg_internal("not a common type")));
+        }
+
         /*
          * coerce all the right-hand non-Var inputs to the common type
          * and build an ArrayExpr for them.
