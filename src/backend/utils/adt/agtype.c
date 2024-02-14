@@ -10574,16 +10574,6 @@ Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
                 {
                     agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
                 }
-
-                /* if agtv_value is null, we have an empty list [], so add it */
-                // // we need this for list_comprehension
-                // if (agtv_value == NULL)
-                // {
-                //     castate->res = push_agtype_value(&castate->parse_state,
-                //                          WAGT_BEGIN_ARRAY, NULL);
-                //     castate->res = push_agtype_value(&castate->parse_state,
-                //                          WAGT_END_ARRAY, NULL);
-                // }
             }
 
             /* skip the arg if agtype null */

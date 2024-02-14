@@ -168,38 +168,61 @@ static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
     case T_CoalesceExpr:
         return transform_CoalesceExpr(cpstate, (CoalesceExpr *) expr);
     case T_ExtensibleNode:
+    {
         if (is_ag_node(expr, cypher_bool_const))
+        {
             return transform_cypher_bool_const(cpstate,
                                                (cypher_bool_const *)expr);
+        }
         if (is_ag_node(expr, cypher_integer_const))
+        {
             return transform_cypher_integer_const(cpstate,
                                                   (cypher_integer_const *)expr);
+        }
         if (is_ag_node(expr, cypher_param))
+        {
             return transform_cypher_param(cpstate, (cypher_param *)expr);
+        }
         if (is_ag_node(expr, cypher_map))
+        {
             return transform_cypher_map(cpstate, (cypher_map *)expr);
+        }
         if (is_ag_node(expr, cypher_list))
+        {
             return transform_cypher_list(cpstate, (cypher_list *)expr);
+        }
         if (is_ag_node(expr, cypher_string_match))
+        {
             return transform_cypher_string_match(cpstate,
                                                  (cypher_string_match *)expr);
+        }
         if (is_ag_node(expr, cypher_typecast))
+        {
             return transform_cypher_typecast(cpstate,
                                              (cypher_typecast *)expr);
+        }
         if (is_ag_node(expr, cypher_comparison_aexpr))
+        {
             return transform_cypher_comparison_aexpr_OP(cpstate,
                                              (cypher_comparison_aexpr *)expr);
+        }
         if (is_ag_node(expr, cypher_comparison_boolexpr))
+        {
             return transform_cypher_comparison_boolexpr(cpstate,
                                              (cypher_comparison_boolexpr *)expr);
+        }
         if (is_ag_node(expr, cypher_unwind))
+        {
             return transform_cypher_list_comprehension(cpstate,
                                                        (cypher_unwind *) expr);
+        }
 
         ereport(ERROR,
                 (errmsg_internal("unrecognized ExtensibleNode: %s",
                                  ((ExtensibleNode *)expr)->extnodename)));
+        
         return NULL;
+    }
     case T_FuncCall:
         return transform_FuncCall(cpstate, (FuncCall *)expr);
     case T_SubLink:
@@ -1746,8 +1769,9 @@ static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
     cc.next = NULL;
     cc.self = (Node *)unwind;
 
-    pnsi = transform_cypher_clause_as_subquery(cpstate, transform_cypher_clause, &cc,
-                                               NULL, true);
+    pnsi = transform_cypher_clause_as_subquery(cpstate,
+                                               transform_cypher_clause,
+                                               &cc, NULL, true);
 
     expr = transform_cypher_expr(cpstate, unwind->collect,
                                  EXPR_KIND_SELECT_TARGET);

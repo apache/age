@@ -35,7 +35,7 @@
 
 static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
-			                   int sublevels_up, bool require_col_privs,
+			       int sublevels_up, bool require_col_privs,
                                int location);
 bool has_a_cypher_list_comprehension_node(Node *expr);
 
@@ -47,13 +47,13 @@ TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
     ParseState *pstate = (ParseState *)cpstate;
     bool old_p_lateral_active = pstate->p_lateral_active;
 
-    /* we want to see lateral variables */
+    // we want to see lateral variables
     pstate->p_lateral_active = true;
 
     if (!expr)
         expr = transform_cypher_expr(cpstate, node, expr_kind);
 
-    /* set lateral back to what it was */
+    // set lateral back to what it was
     pstate->p_lateral_active = old_p_lateral_active;
 
     if (!colname && !resjunk)
@@ -280,7 +280,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
         }
         else
         {
-            /* transform the item */
+            // transform the item
             te = transform_cypher_item(cpstate, item->val, NULL, expr_kind,
                                        item->name, false);
 
@@ -311,7 +311,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
             ParseState *pstate = &cpstate->pstate;
             ParseNamespaceItem *nsitem = NULL;
             RangeTblEntry *rte = NULL;
-            // hasAgg = true;
+
             /*
              * There should be at least 2 entries in p_namespace. One for the
              * variable in the reading clause and one for the variable in the
@@ -339,7 +339,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                     ColumnRef *cref = NULL;
                     char *colname = NULL;
 
-                    /* get the name of the column (varname) */
+                    // get the name of the column (varname)
                     colname = strVal(lfirst(list_head(rte->eref->colnames)));
 
                     // create the ColumnRef
