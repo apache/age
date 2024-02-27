@@ -77,7 +77,7 @@
                  CALL CASE COALESCE CONTAINS CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
                  ELSE END_P ENDS EXISTS EXPLAIN
-                 FALSE_P
+                 FALSE_P FROM
                  IN IS
                  LIMIT
                  MATCH MERGE
@@ -1990,7 +1990,7 @@ expr_case_default:
     ;
 
 list_comprehension:
-    var_name IN expr where_opt mapping_expr_opt
+    var_name FROM expr where_opt mapping_expr_opt
         {
             $$ = build_list_comprehension_node($1, $3, $4, $5,
                                                @1, @3, @4, @5);
@@ -2104,6 +2104,7 @@ safe_keywords:
     | ENDS       { $$ = pnstrdup($1, 4); }
     | EXISTS     { $$ = pnstrdup($1, 6); }
     | EXPLAIN    { $$ = pnstrdup($1, 7); }
+    | FROM       { $$ = pnstrdup($1, 4); }
     | IN         { $$ = pnstrdup($1, 2); }
     | IS         { $$ = pnstrdup($1, 2); }
     | LIMIT      { $$ = pnstrdup($1, 6); }
