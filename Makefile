@@ -103,6 +103,7 @@ REGRESS = scan \
           cypher_union \
           cypher_call \
           cypher_merge \
+	  cypher_subquery \
           age_global_graph \
           age_load \
           index \
