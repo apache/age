@@ -313,6 +313,8 @@ CREATE OPERATOR >= (
 --
 
 -- comparison support
+--
+
 CREATE FUNCTION ag_catalog.graphid_btree_cmp(graphid, graphid)
     RETURNS int
     LANGUAGE c
@@ -348,6 +350,9 @@ AS 'MODULE_PATHNAME';
 --   2: return the addresses of C-callable sort support function(s) (optional)
 --   3: compare a test value to a base value plus/minus an offset, and return
 --      true or false according to the comparison result (optional)
+--
+--
+
 CREATE OPERATOR CLASS graphid_ops DEFAULT FOR TYPE graphid USING btree AS
   OPERATOR 1 <,
   OPERATOR 2 <=,
