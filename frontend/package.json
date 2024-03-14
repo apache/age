@@ -51,6 +51,18 @@
     "redux-thunk": "^2.3.0",
     "serve": "^11.3.2"
   },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
   "devDependencies": {
     "@babel/core": "^7.16.0",
     "@testing-library/jest-dom": "^5.14.1",
@@ -59,8 +71,9 @@
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
     "@vitejs/plugin-react": "^2.0.1",
+    "eslint": "^8.2.0",
+    "eslint-config-airbnb-base": "^15.0.0",
     "babel-eslint": "^10.1.0",
-    "eslint": "^7.32.0",
     "eslint-config-airbnb": "^18.2.1",
     "eslint-import-resolver-alias": "^1.1.2",
     "eslint-plugin-babel": "^5.3.1",
