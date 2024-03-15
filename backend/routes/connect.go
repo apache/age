@@ -80,6 +80,9 @@ func DisconnectFromDb(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(500, "error saving session")
 	}
+
+	// Enable CORS for all origins
+	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	return c.JSON(200, map[string]string{"status": "disconnected"})
 }
 
