@@ -11,11 +11,14 @@
     </a>
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
-     is a leading multi-model graph database </h3>
+     is a leading multi-model graph database 
+     </h3>
      
 </h3>
 
-<h3 align="center">Graph Processing & Analytics for Relational Databases</h3>
+<center>
+  <h3>Graph Processing & Analytics for Relational Databases</h3>
+</center>
 
 <br>
 
