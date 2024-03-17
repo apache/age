@@ -1,6 +1,6 @@
 # Contributing to Apache AGE
 
-Welcome, future Contributor! 
+Welcome, future Contributor!! 
 
 First off, thank you for considering contributing to Apache AGE. Team AGE welcomes anyone who is willing to help us mature AGE to become a fully-featured graph database extension for PostgreSQL.
 
