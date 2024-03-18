@@ -1,0 +1,110 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+ 
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('meta_test_graph');
+NOTICE:  graph "meta_test_graph" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT list_graphs();
+   list_graphs   
+-----------------
+ meta_test_graph
+(1 row)
+
+SELECT list_vertex_labels('meta_test_graph');
+ list_vertex_labels 
+--------------------
+ _ag_label_vertex
+(1 row)
+
+SELECT count_vertex_labels('meta_test_graph');
+ count_vertex_labels 
+---------------------
+                   1
+(1 row)
+
+SELECT create_vlabel('meta_test_graph','vertex_a');
+NOTICE:  VLabel "vertex_a" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT list_vertex_labels('meta_test_graph');
+ list_vertex_labels 
+--------------------
+ _ag_label_vertex
+ vertex_a
+(2 rows)
+
+SELECT count_vertex_labels('meta_test_graph');
+ count_vertex_labels 
+---------------------
+                   2
+(1 row)
+
+SELECT list_edge_labels('meta_test_graph');
+ list_edge_labels 
+------------------
+ _ag_label_edge
+(1 row)
+
+SELECT count_edge_labels('meta_test_graph');
+ count_edge_labels 
+-------------------
+                 1
+(1 row)
+
+SELECT create_elabel('meta_test_graph','edge_a');
+NOTICE:  ELabel "edge_a" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT list_edge_labels('meta_test_graph');
+ list_edge_labels 
+------------------
+ _ag_label_edge
+ edge_a
+(2 rows)
+
+SELECT count_edge_labels('meta_test_graph');
+ count_edge_labels 
+-------------------
+                 2
+(1 row)
+
+SELECT drop_graph('meta_test_graph', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table meta_test_graph._ag_label_vertex
+drop cascades to table meta_test_graph._ag_label_edge
+drop cascades to table meta_test_graph.vertex_a
+drop cascades to table meta_test_graph.edge_a
+NOTICE:  graph "meta_test_graph" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

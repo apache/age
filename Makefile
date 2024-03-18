@@ -111,6 +111,7 @@ REGRESS = scan \
           name_validation \
           jsonb_operators \
           list_comprehension \
+          age_meta \
           drop
 
 srcdir=`pwd`
