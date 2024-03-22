@@ -15,9 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
-MODULE_big = age
+MODULE_big   = age
+EXTENSION    = $(MODULE_big)
+EXTVERSION   = $(shell grep -m 1 '[[:space:]]\{6\}"version":' META.json | \
+               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
+DISTVERSION  = $(shell grep -m 1 '[[:space:]]\{3\}"version":' META.json | \
+               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
 
-age_sql = age--1.5.0.sql
+age_sql = age--$(DISTVERSION).sql
 
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
@@ -72,8 +77,6 @@ OBJS = src/backend/age.o \
        src/backend/utils/load/libcsv.o \
        src/backend/utils/name_validation.o \
        src/backend/utils/ag_guc.o
-
-EXTENSION = age
 
 # to allow cleaning of previous (old) age--.sql files
 all_age_sql = $(shell find . -maxdepth 1 -type f -regex './age--[0-9]+\.[0-9]+\.[0-9]+\.sql')
@@ -149,3 +152,6 @@ $(age_sql):
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
 
 installcheck: export LC_COLLATE=C
+
+dist:
+	git archive --format zip --prefix=$(EXTENSION)-$(DISTVERSION)/ -o $(EXTENSION)-$(DISTVERSION).zip HEAD
