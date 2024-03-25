@@ -23,6 +23,7 @@ import (
 	"fmt"
 )
 
+// AgeError wraps the cause and message of an error.
 type AgeError struct {
 	cause error
 	msg   string
