@@ -20,8 +20,6 @@
 #include "postgres.h"
 
 #include "nodes/extensible.h"
-#include "nodes/nodes.h"
-#include "nodes/pg_list.h"
 
 #include "optimizer/cypher_createplan.h"
 #include "optimizer/cypher_pathnode.h"
@@ -151,7 +149,7 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
 }
 
 /*
- * Creates a Delete Path. Makes the original path a child of the new
+ * Creates a merge path. Makes the original path a child of the new
  * path. We leave it to the caller to replace the pathlist of the rel.
  */
 CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,

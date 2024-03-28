@@ -20,10 +20,7 @@
 #ifndef AG_AG_NODES_H
 #define AG_AG_NODES_H
 
-#include "postgres.h"
-
 #include "nodes/extensible.h"
-#include "nodes/nodes.h"
 
 // This list must match node_names and node_methods.
 typedef enum ag_node_tag
@@ -50,15 +47,21 @@ typedef enum ag_node_tag
     cypher_bool_const_t,
     cypher_param_t,
     cypher_map_t,
+    cypher_map_projection_t,
+    cypher_map_projection_element_t,
     cypher_list_t,
+    // comparison expression
+    cypher_comparison_aexpr_t,
+    cypher_comparison_boolexpr_t,
     // string match
     cypher_string_match_t,
     // typecast
     cypher_typecast_t,
     // integer constant
     cypher_integer_const_t,
-    // sub patterns
+    // sub patterns/queries
     cypher_sub_pattern_t,
+    cypher_sub_query_t,
     // procedure calls
     cypher_call_t,
     // create data structures
@@ -103,5 +106,6 @@ static inline bool _is_ag_node(Node *node, const char *extnodename)
 }
 
 #define is_ag_node(node, type) _is_ag_node((Node *)(node), CppAsString(type))
+#define get_ag_node_tag(node) ((ag_node_tag)(((ExtensibleNode *)(node))->extnodename))
 
 #endif

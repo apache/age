@@ -19,22 +19,9 @@
 
 #include "postgres.h"
 
-#include "access/htup_details.h"
-#include "access/table.h"
-#include "access/xact.h"
-#include "executor/tuptable.h"
-#include "nodes/execnodes.h"
-#include "nodes/extensible.h"
-#include "nodes/nodes.h"
-#include "nodes/plannodes.h"
-#include "utils/rel.h"
-
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
                                int eflags);
@@ -472,8 +459,9 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              * So we will need to create a TupleTableSlot and populate with the
              * information from the newly created path that the query needs.
              */
-            ExprContext *econtext = node->ss.ps.ps_ExprContext;
-            SubqueryScanState *sss = (SubqueryScanState *)node->ss.ps.lefttree;
+            SubqueryScanState *sss = NULL;
+            econtext = node->ss.ps.ps_ExprContext;
+            sss = (SubqueryScanState *)node->ss.ps.lefttree;
 
             /*
              * Our child execution node is always a subquery. If not there

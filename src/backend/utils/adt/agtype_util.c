@@ -39,9 +39,7 @@
 #include "utils/memutils.h"
 #include "utils/varlena.h"
 
-#include "utils/agtype.h"
 #include "utils/agtype_ext.h"
-#include "utils/graphid.h"
 
 /*
  * Maximum number of elements in an array (or key/value pairs in an object).
@@ -1123,7 +1121,9 @@ static agtype_iterator *free_and_get_parent(agtype_iterator *it)
  * "val" is lhs agtype, and m_contained is rhs agtype when called from top
  * level. We determine if m_contained is contained within val.
  */
-bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
+bool agtype_deep_contains(agtype_iterator **val,
+                          agtype_iterator **m_contained,
+                          bool skip_nested)
 {
     agtype_value vval;
     agtype_value vcontained;
@@ -1213,6 +1213,19 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                 if (!equals_agtype_scalar_value(lhs_val, &vcontained))
                     return false;
             }
+            else if (skip_nested)
+            {
+                Assert(lhs_val->type == AGTV_BINARY);
+                Assert(vcontained.type == AGTV_BINARY);
+
+                // We will just check if the rhs value is equal to lhs
+                if (compare_agtype_containers_orderability(
+                                             lhs_val->val.binary.data,
+                                             vcontained.val.binary.data) != 0)
+                {
+                    return false;
+                }
+            }
             else
             {
                 /* Nested container value (object or array) */
@@ -1246,8 +1259,10 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                  * of containment (plus of course the mapped nodes must be
                  * equal).
                  */
-                if (!agtype_deep_contains(&nestval, &nest_contained))
+                if (!agtype_deep_contains(&nestval, &nest_contained, false))
+                {
                     return false;
+                }
             }
         }
     }
@@ -1339,7 +1354,7 @@ bool agtype_deep_contains(agtype_iterator **val, agtype_iterator **m_contained)
                     nest_contained =
                         agtype_iterator_init(vcontained.val.binary.data);
 
-                    contains = agtype_deep_contains(&nestval, &nest_contained);
+                    contains = agtype_deep_contains(&nestval, &nest_contained, false);
 
                     if (nestval)
                         pfree(nestval);
@@ -2384,4 +2399,106 @@ void pfree_agtype_in_state(agtype_in_state* value)
 {
     pfree_agtype_value(value->res);
     free(value->parse_state);
+}
+
+/*
+ * helper function that recursively unpacks the agtype_value to be copied
+ * and pushes the scalar values into the copied agtype_value.
+ * this helps skip the serialization part at some places where the original
+ * properties passed to the function are in agtype_value format and
+ * converting it to agtype for iteration can be expensive.
+ * the caller of this function will need to push start and end object tokens
+ * on its own as this function might be used in places where pushing only start
+ * object token at top level is required (for example in alter_properties)
+ */
+void copy_agtype_value(agtype_parse_state* pstate,
+                       agtype_value* original_agtype_value,
+                       agtype_value **copied_agtype_value, bool is_top_level)
+{
+    int i = 0;
+
+    /*
+     * guards against stack overflow due to deeply nested agtype_value
+     */
+    check_stack_depth();
+
+    /*
+     * directly pass the agtype_value to be pushed into the copied result
+     * if type is scalar or binary (array or object) as push_agtype_value
+     * can unpack binary on its own
+     */
+    if (IS_A_AGTYPE_SCALAR(original_agtype_value) ||
+        original_agtype_value->type == AGTV_BINARY)
+    {
+        *copied_agtype_value = push_agtype_value(&pstate, WAGT_ELEM,
+                                                 original_agtype_value);
+    }
+    /*
+     * if the passed in type is object or array, unpack it
+     * until we are left with a scalar value to push to copied result
+     */
+    else if (original_agtype_value->type == AGTV_OBJECT)
+    {
+        if (!is_top_level)
+        {
+            *copied_agtype_value = push_agtype_value(&pstate,
+                                                     WAGT_BEGIN_OBJECT,
+                                                     NULL);
+        }
+
+        for (; i < original_agtype_value->val.object.num_pairs; i ++)
+        {
+            agtype_pair *pair = original_agtype_value->val.object.pairs + i;
+            *copied_agtype_value = push_agtype_value(&pstate, WAGT_KEY,
+                                                     &pair->key);
+
+            if (IS_A_AGTYPE_SCALAR(&pair->value))
+            {
+                *copied_agtype_value = push_agtype_value(&pstate, WAGT_VALUE,
+                                                         &pair->value);
+            }
+            else
+            {
+                /* do a recursive call once a non-scalar value is reached */
+                copy_agtype_value(pstate, &pair->value, copied_agtype_value,
+                                  false);
+            }
+        }
+
+        if (!is_top_level)
+        {
+            *copied_agtype_value = push_agtype_value(&pstate, WAGT_END_OBJECT,
+                                                     NULL);
+        }
+    }
+    else if (original_agtype_value->type == AGTV_ARRAY)
+    {
+        *copied_agtype_value = push_agtype_value(&pstate, WAGT_BEGIN_ARRAY,
+                                                 NULL);
+
+        for (; i < original_agtype_value->val.array.num_elems; i++)
+        {
+            agtype_value elem = original_agtype_value->val.array.elems[i];
+
+            if (IS_A_AGTYPE_SCALAR(&elem))
+            {
+                *copied_agtype_value = push_agtype_value(&pstate, WAGT_ELEM,
+                                                         &elem);
+            }
+            else
+            {
+                /* do a recursive call once a non-scalar value is reached */
+                copy_agtype_value(pstate, &elem, copied_agtype_value, false);
+            }
+        }
+
+        *copied_agtype_value = push_agtype_value(&pstate, WAGT_END_ARRAY,
+                                                 NULL);
+    }
+    else
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("invalid type provided for copy_agtype_value")));
+    }
 }

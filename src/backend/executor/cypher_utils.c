@@ -24,43 +24,30 @@
 
 #include "postgres.h"
 
-#include "access/htup_details.h"
-#include "access/sysattr.h"
-#include "access/xact.h"
-#include "access/heapam.h"
-#include "access/multixact.h"
-#include "access/xact.h"
-#include "nodes/extensible.h"
 #include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/nodeFuncs.h"
-#include "nodes/plannodes.h"
-#include "parser/parsetree.h"
 #include "parser/parse_relation.h"
-#include "storage/procarray.h"
-#include "utils/rel.h"
 
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
-#include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "utils/agtype.h"
 #include "utils/ag_cache.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 
 /*
  * Given the graph name and the label name, create a ResultRelInfo for the table
- * those to variables represent. Open the Indices too.
+ * those two variables represent. Open the Indices too.
  */
 ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
                                              char *label_name)
 {
-    RangeVar *rv;
-    Relation label_relation;
-    ResultRelInfo *resultRelInfo;
+    RangeVar *rv = NULL;
+    Relation label_relation = NULL;
+    ResultRelInfo *resultRelInfo = NULL;
+    ParseState *pstate = NULL;
+    RangeTblEntry *rte = NULL;
+    int pii = 0;
 
-    ParseState *pstate = make_parsestate(NULL);
+    /* create a new parse state for this operation */
+    pstate = make_parsestate(NULL);
 
     resultRelInfo = palloc(sizeof(ResultRelInfo));
 
@@ -75,12 +62,33 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
 
     label_relation = parserOpenTable(pstate, rv, RowExclusiveLock);
 
-    // initialize the resultRelInfo
-    InitResultRelInfo(resultRelInfo, label_relation,
-                      list_length(estate->es_range_table), NULL,
+    /*
+     * Get the rte to determine the correct perminfoindex value. Some rtes
+     * may have it set up, some created here (executor) may not.
+     *
+     * Note: The RTEPermissionInfo structure was added in PostgreSQL version 16.
+     *
+     * Note: We use the list_length because exec_rt_fetch starts at 1, not 0.
+     *       Doing this gives us the last rte in the es_range_table list, which
+     *       is the rte in question.
+     *
+     *       If the rte is created here and doesn't have a perminfoindex, we
+     *       need to pass on a 0. Otherwise, later on GetResultRTEPermissionInfo
+     *       will attempt to get the rte's RTEPermissionInfo data, which doesn't
+     *       exist.
+     *
+     * TODO: Ideally, we should consider creating the RTEPermissionInfo data,
+     *       but as this is just a read of the label relation, it is likely
+     *       unnecessary.
+     */
+    rte = exec_rt_fetch(list_length(estate->es_range_table), estate);
+    pii = (rte->perminfoindex == 0) ? 0 : list_length(estate->es_range_table);
+
+    /* initialize the resultRelInfo */
+    InitResultRelInfo(resultRelInfo, label_relation, pii, NULL,
                       estate->es_instrument);
 
-    // open the parse state
+    /* open the indices */
     ExecOpenIndices(resultRelInfo, false);
 
     free_parsestate(pstate);
@@ -254,8 +262,8 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
     // Insert index entries for the tuple
     if (resultRelInfo->ri_NumIndices > 0)
     {
-        ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false,
-                              false, NULL, NIL);
+        ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate,
+                              false, false, NULL, NIL, false);
     }
 
     return tuple;

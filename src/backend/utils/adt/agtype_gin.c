@@ -27,17 +27,15 @@
  */
 
 #include "postgres.h"
+#include "varatt.h"
 
 #include "access/gin.h"
 #include "access/hash.h"
-#include "access/stratnum.h"
 #include "catalog/pg_collation.h"
-#include "catalog/pg_type.h"
+#include "utils/agtype.h"
 #include "utils/float.h"
 #include "utils/builtins.h"
 #include "utils/varlena.h"
-
-#include "utils/agtype.h"
 
 typedef struct PathHashStack
 {
@@ -197,7 +195,8 @@ Datum gin_extract_agtype_query(PG_FUNCTION_ARGS)
     strategy = PG_GETARG_UINT16(2);
     searchMode = (int32 *) PG_GETARG_POINTER(6);
 
-    if (strategy == AGTYPE_CONTAINS_STRATEGY_NUMBER)
+    if (strategy == AGTYPE_CONTAINS_STRATEGY_NUMBER ||
+        strategy == AGTYPE_CONTAINS_TOP_LEVEL_STRATEGY_NUMBER)
     {
         /* Query is a agtype, so just apply gin_extract_agtype... */
         entries = (Datum *)
@@ -224,33 +223,45 @@ Datum gin_extract_agtype_query(PG_FUNCTION_ARGS)
              strategy == AGTYPE_EXISTS_ALL_STRATEGY_NUMBER)
     {
         /* Query is a text array; each element is treated as a key */
-        ArrayType *query = PG_GETARG_ARRAYTYPE_P(0);
-        Datum *key_datums;
-        bool *key_nulls;
-        int key_count;
-        int i, j;
+        agtype *agt = AG_GET_ARG_AGTYPE_P(0);
+        agtype_iterator *it = NULL;
+        agtype_value elem;
+        agtype_iterator_token itok;
+        int key_count = AGTYPE_CONTAINER_SIZE(&agt->root);
+        int index = 0;
 
-        deconstruct_array(query, TEXTOID, -1, false, 'i',
-                          &key_datums, &key_nulls, &key_count);
-
-        entries = (Datum *) palloc(sizeof(Datum) * key_count);
-
-        for (i = 0, j = 0; i < key_count; i++)
+        if (AGTYPE_CONTAINER_IS_SCALAR(&agt->root) ||
+            !AGTYPE_CONTAINER_IS_ARRAY(&agt->root))
         {
-            /* Nulls in the array are ignored */
-            if (key_nulls[i])
-            {
-                continue;
-            }
-
-            entries[j++] = make_text_key(AGT_GIN_FLAG_KEY,
-                                         VARDATA(key_datums[i]),
-                                         VARSIZE(key_datums[i]) - VARHDRSZ);
+            elog(ERROR, "GIN query requires an agtype array");
         }
 
-        *nentries = j;
+        entries = (Datum *) palloc(sizeof(Datum) * key_count);
+        it = agtype_iterator_init(&agt->root);
+
+        /* it should be WAGT_BEGIN_ARRAY */
+        itok = agtype_iterator_next(&it, &elem, true);
+        if (itok != WAGT_BEGIN_ARRAY)
+        {
+            elog(ERROR, "unexpected iterator token: %d", itok);
+        }
+
+        while (WAGT_END_ARRAY != agtype_iterator_next(&it, &elem, true))
+        {
+            if (elem.type != AGTV_STRING)
+            {
+                elog(ERROR, "unsupport agtype for GIN lookup: %d", elem.type);
+            }
+
+            entries[index++] = make_text_key(AGT_GIN_FLAG_KEY,
+                                         elem.val.string.val,
+                                         elem.val.string.len);
+        }
+
+        *nentries = index;
+
         /* ExistsAll with no keys should match everything */
-        if (j == 0 && strategy == AGTYPE_EXISTS_ALL_STRATEGY_NUMBER)
+        if (index == 0 && strategy == AGTYPE_EXISTS_ALL_STRATEGY_NUMBER)
         {
             *searchMode = GIN_SEARCH_MODE_ALL;
         }
@@ -315,7 +326,8 @@ Datum gin_consistent_agtype(PG_FUNCTION_ARGS)
     nkeys = PG_GETARG_INT32(3);
     recheck = (bool *) PG_GETARG_POINTER(5);
 
-    if (strategy == AGTYPE_CONTAINS_STRATEGY_NUMBER)
+    if (strategy == AGTYPE_CONTAINS_STRATEGY_NUMBER ||
+        strategy == AGTYPE_CONTAINS_TOP_LEVEL_STRATEGY_NUMBER)
     {
         /*
          * We must always recheck, since we can't tell from the index whether
@@ -416,6 +428,7 @@ Datum gin_triconsistent_agtype(PG_FUNCTION_ARGS)
      * function, for the reasons listed there.
      */
     if (strategy == AGTYPE_CONTAINS_STRATEGY_NUMBER ||
+        strategy == AGTYPE_CONTAINS_TOP_LEVEL_STRATEGY_NUMBER ||
         strategy == AGTYPE_EXISTS_ALL_STRATEGY_NUMBER)
     {
         /* All extracted keys must be present */

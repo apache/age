@@ -19,27 +19,15 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
 #include "access/xact.h"
-#include "catalog/dependency.h"
 #include "catalog/namespace.h"
-#include "catalog/objectaddress.h"
 #include "catalog/pg_class_d.h"
 #include "commands/defrem.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/plannodes.h"
-#include "nodes/primnodes.h"
-#include "nodes/value.h"
-#include "parser/parse_node.h"
 #include "parser/parser.h"
-#include "storage/lockdefs.h"
-#include "tcop/dest.h"
 #include "tcop/utility.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
@@ -50,8 +38,6 @@
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "utils/ag_cache.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 #include "utils/name_validation.h"
 
 /*
@@ -767,8 +753,27 @@ Datum drop_label(PG_FUNCTION_ARGS)
                         errmsg("force option is not supported yet")));
     }
 
+    /* validate schema_name */
     schema_name = get_namespace_name(nsp_id);
+    if (schema_name == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("schema_name not found for namespace id \"%d\"",
+                        nsp_id)));
+    }
+
+    /* validate rel_name */
     rel_name = get_rel_name(label_relation);
+    if (rel_name == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("rel_name not found for label \"%s\"",
+                        label_name_str)));
+    }
+
+    /* build qualified name */
     qname = list_make2(makeString(schema_name), makeString(rel_name));
 
     remove_relation(qname);
@@ -789,7 +794,7 @@ static void remove_relation(List *qname)
     Oid rel_oid;
     ObjectAddress address;
 
-    AssertArg(list_length(qname) == 2);
+    Assert(list_length(qname) == 2);
 
     // concurrent is false so lockmode is AccessExclusiveLock
 
@@ -849,8 +854,7 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
 
     // relkind == expected_relkind
 
-    if (!pg_class_ownercheck(rel_oid, GetUserId()) &&
-        !pg_namespace_ownercheck(get_rel_namespace(rel_oid), GetUserId()))
+    if (!object_ownercheck(rel_oid, get_rel_namespace(rel_oid), GetUserId()))
     {
         aclcheck_error(ACLCHECK_NOT_OWNER,
                        get_relkind_objtype(get_rel_relkind(rel_oid)),

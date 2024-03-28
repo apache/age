@@ -20,10 +20,6 @@
 #ifndef AG_CYPHER_TRANSFORM_ENTITY_H
 #define AG_CYPHER_TRANSFORM_ENTITY_H
 
-#include "nodes/primnodes.h"
-#include "parser/parse_node.h"
-
-#include "nodes/cypher_nodes.h"
 #include "nodes/makefuncs.h"
 #include "parser/cypher_parse_node.h"
 
@@ -31,7 +27,8 @@ enum transform_entity_type
 {
     ENT_VERTEX = 0x0,
     ENT_EDGE,
-    ENT_VLE_EDGE
+    ENT_VLE_EDGE,
+    ENT_PATH
 };
 
 enum transform_entity_join_side
@@ -83,6 +80,7 @@ typedef struct
     {
         cypher_node *node;
         cypher_relationship *rel;
+        cypher_path *path;
     } entity;
 } transform_entity;
 

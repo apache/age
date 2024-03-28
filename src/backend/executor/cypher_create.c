@@ -19,23 +19,9 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
-#include "access/htup_details.h"
-#include "access/xact.h"
-#include "executor/tuptable.h"
-#include "nodes/execnodes.h"
-#include "nodes/extensible.h"
-#include "nodes/nodes.h"
-#include "nodes/plannodes.h"
-#include "rewrite/rewriteHandler.h"
-#include "utils/rel.h"
-
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -438,7 +424,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
         result = make_edge(
             id, start_id, end_id, CStringGetDatum(node->label_name),
-            PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+            scanTupleSlot->tts_values[node->prop_attr_num]);
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
         {
@@ -528,7 +514,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
             // make the vertex agtype
             result = make_vertex(id, CStringGetDatum(node->label_name),
-                PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+                scanTupleSlot->tts_values[node->prop_attr_num]);
 
             // append to the path list
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

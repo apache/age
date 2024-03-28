@@ -19,23 +19,10 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
-#include "access/htup_details.h"
-#include "access/xact.h"
-#include "executor/tuptable.h"
-#include "nodes/execnodes.h"
-#include "nodes/extensible.h"
-#include "nodes/nodes.h"
-#include "nodes/plannodes.h"
-#include "rewrite/rewriteHandler.h"
 #include "storage/bufmgr.h"
-#include "utils/rel.h"
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -111,7 +98,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     TM_FailureData hufd;
     TM_Result lock_result;
     Buffer buffer;
-    bool update_indexes;
+    TU_UpdateIndexes update_indexes;
     TM_Result   result;
     CommandId cid = GetCurrentCommandId(true);
     ResultRelInfo **saved_resultRels = estate->es_result_relations;
@@ -167,9 +154,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         }
 
         // Insert index entries for the tuple
-        if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
+        if (resultRelInfo->ri_NumIndices > 0 && update_indexes != TU_None)
         {
-          ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false, false, NULL, NIL);
+          ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false, false, NULL, NIL,
+                                (update_indexes == TU_Summarizing));
         }
 
         ExecCloseIndices(resultRelInfo);
@@ -484,7 +472,8 @@ static void process_update_list(CustomScanState *node)
         }
 
         // Alter the properties Agtype value.
-        if (strcmp(update_item->prop_name, ""))
+        if (update_item->prop_name != NULL &&
+            strcmp(update_item->prop_name, "") != 0)
         {
             altered_properties = alter_property_value(original_properties,
                                                       update_item->prop_name,

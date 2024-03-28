@@ -20,14 +20,15 @@ with open("README.md", "r", encoding='utf8') as fh:
     long_description = fh.read()
 
 setup(
-    name             = 'age',
-    version          = VERSION.VERSION,
+    name             = 'apache-age-python',
+    version          = '0.0.7',
     description      = 'Python driver support for Apache AGE',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author           = 'Apache AGE',
+    author           = 'Ikchan Kwon, Apache AGE',
     author_email     = 'dev-subscribe@age.apache.org',
-    url              = 'https://github.com/apache/age',
+    url              = 'https://github.com/apache/age/tree/master/drivers/python',
+    download_url     = 'https://github.com/apache/age/releases' ,
     license          = 'Apache2.0',
     install_requires = [ 'psycopg2', 'antlr4-python3-runtime==4.11.1'],
     packages         = ['age', 'age.gen','age.networkx'],

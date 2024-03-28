@@ -21,18 +21,11 @@
 #include "postgres.h"
 
 #include "nodes/makefuncs.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/primnodes.h"
-#include "nodes/value.h"
 #include "parser/parser.h"
 
-#include "nodes/ag_nodes.h"
-#include "nodes/cypher_nodes.h"
-#include "parser/ag_scanner.h"
 #include "parser/cypher_gram.h"
 #include "parser/cypher_parse_node.h"
+#include "parser/scansup.h"
 
 // override the default action for locations
 #define YYLLOC_DEFAULT(current, rhs, n) \
@@ -75,7 +68,8 @@
 %token <string> PARAMETER
 
 /* operators that have more than 1 character */
-%token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE
+%token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ EQ_TILDE CONCAT
+%token ACCESS_PATH LEFT_CONTAINS RIGHT_CONTAINS ANY_EXISTS ALL_EXISTS
 
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
@@ -104,6 +98,9 @@
              reading_clause_list updating_clause_list_0 updating_clause_list_1
 %type <node> reading_clause updating_clause
 
+%type <list> subquery_stmt subquery_stmt_with_return subquery_stmt_no_return
+             single_subquery single_subquery_no_return subquery_part_init
+
 /* RETURN and WITH clause */
 %type <node> return return_item sort_item skip_opt limit_opt with
 %type <list> return_item_list order_by_opt sort_item_list
@@ -120,6 +117,9 @@
 
 /* UNWIND clause */
 %type <node> unwind
+
+/* list comprehension */
+%type <node> list_comprehension
 
 /* SET and REMOVE clause */
 %type <node> set set_item remove remove_item
@@ -139,6 +139,9 @@
 /* common */
 %type <node> where_opt
 
+/* list comprehension optional mapping expression */
+%type <node> mapping_expr_opt
+
 /* pattern */
 %type <list> pattern simple_path_opt_parens simple_path
 %type <node> path anonymous_path
@@ -152,9 +155,14 @@
 %type <node> expr_case expr_case_when expr_case_default
 %type <list> expr_case_when_list
 
+%type <node> map_projection map_projection_elem
+%type <list> map_projection_elem_list
+
 %type <node> expr_var expr_func expr_func_norm expr_func_subexpr
 %type <list> expr_list expr_list_opt map_keyval_list_opt map_keyval_list
 %type <node> property_value
+
+%type <node> expr_subquery
 
 /* names */
 %type <string> property_key_name var_name var_name_opt label_name
@@ -169,18 +177,24 @@
 %left XOR
 %right NOT
 %left '=' NOT_EQ '<' LT_EQ '>' GT_EQ
-%left '+' '-'
+%left '@' '|' '&' '?' LEFT_CONTAINS RIGHT_CONTAINS ANY_EXISTS ALL_EXISTS
+%left '+' '-' CONCAT
 %left '*' '/' '%'
 %left '^'
 %nonassoc IN IS
 %right UNARY_MINUS
 %nonassoc CONTAINS ENDS EQ_TILDE STARTS
 %left '[' ']' '(' ')'
-%left '.'
+%left '.' ACCESS_PATH
 %left TYPECAST
 
 /*set operations*/
 %type <boolean> all_or_distinct
+
+/* utility options */
+%type <list> utility_option_list
+%type <node> utility_option_elem utility_option_arg
+%type <string> utility_option_name
 
 %{
 //
@@ -197,6 +211,12 @@ static Node *make_or_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_and_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_xor_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_not_expr(Node *expr, int location);
+static Node *make_comparison_and_expr(Node *lexpr, Node *rexpr, int location);
+static Node *make_cypher_comparison_aexpr(A_Expr_Kind kind, char *name,
+                                          Node *lexpr, Node *rexpr,
+                                          int location);
+static Node *make_cypher_comparison_boolexpr(BoolExprType boolop, List *args,
+                                               int location);
 
 // arithmetic operators
 static Node *do_negate(Node *n, int location);
@@ -217,6 +237,9 @@ static Node *make_typecast_expr(Node *expr, char *typecast, int location);
 
 // functions
 static Node *make_function_expr(List *func_name, List *exprs, int location);
+static Node *make_star_function_expr(List *func_name, List *exprs, int location);
+static Node *make_distinct_function_expr(List *func_name, List *exprs, int location);
+static FuncCall *node_to_agtype(Node* fnode, char *type, int location);
 
 // setops
 static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
@@ -229,10 +252,17 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
                                                int left_arg_location,
                                                int cr_location);
 // comparison
-static bool is_A_Expr_a_comparison_operation(A_Expr *a);
+static bool is_A_Expr_a_comparison_operation(cypher_comparison_aexpr *a);
 static Node *build_comparison_expression(Node *left_grammar_node,
                                          Node *right_grammar_node,
                                          char *opr_name, int location);
+
+// list_comprehension
+static Node *build_list_comprehension_node(char *var_name, Node *expr,
+                                           Node *where, Node *mapping_expr,
+                                           int var_loc, int expr_loc,
+                                           int where_loc,int mapping_loc);
+
 %}
 %%
 
@@ -317,6 +347,20 @@ stmt:
             estmt->query = NULL;
             estmt->options = list_make2(makeDefElem("analyze", NULL, @2),
                                         makeDefElem("verbose", NULL, @3));;
+            extra->extra = (Node *)estmt;
+        }
+    | EXPLAIN '(' utility_option_list ')' cypher_stmt semicolon_opt
+        {
+            ExplainStmt *estmt = NULL;
+
+            if (yychar != YYEOF)
+                yyerror(&yylloc, scanner, extra, "syntax error");
+
+            extra->result = $5;
+
+            estmt = makeNode(ExplainStmt);
+            estmt->query = NULL;
+            estmt->options = $3;
             extra->extra = (Node *)estmt;
         }
     ;
@@ -569,6 +613,90 @@ updating_clause:
     | remove
     | delete
     | merge
+    ;
+
+subquery_stmt:
+    subquery_stmt_with_return
+        {
+            $$ = $1;
+        }
+    | subquery_stmt_no_return
+        {
+            $$ = $1;
+        }
+    ;
+
+subquery_stmt_with_return:
+    single_subquery
+        {
+            $$ = $1;
+        }
+    | subquery_stmt_with_return UNION all_or_distinct subquery_stmt_with_return
+        {
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+        }
+    ;
+
+subquery_stmt_no_return:
+    single_subquery_no_return
+        {
+            $$ = $1;
+        }
+    | subquery_stmt_no_return UNION all_or_distinct subquery_stmt_no_return
+        {
+            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+        }
+    ;
+
+single_subquery:
+    subquery_part_init reading_clause_list return
+        {
+            $$ = list_concat($1, lappend($2, $3));  
+        }
+    ;
+
+single_subquery_no_return:
+    subquery_part_init reading_clause_list
+        {
+            ColumnRef *cr;
+            ResTarget *rt;
+            cypher_return *n;
+
+            /*
+             * since subqueries allow return-less clauses, we add a
+             * return node manually to reflect that syntax
+             */
+            cr = makeNode(ColumnRef);
+            cr->fields = list_make1(makeNode(A_Star));
+            cr->location = @1;
+
+            rt = makeNode(ResTarget);
+            rt->name = NULL;
+            rt->indirection = NIL;
+            rt->val = (Node *)cr;
+            rt->location = @1;
+
+            n = make_ag_node(cypher_return);
+            n->distinct = false;
+            n->items = list_make1((Node *)rt);
+            n->order_by = NULL;
+            n->skip = NULL;
+            n->limit = NULL;
+
+            $$ = list_concat($1, lappend($2, n));
+
+        }
+    ;
+
+subquery_part_init:
+    /* empty */
+        {
+            $$ = NIL;
+        }
+    | subquery_part_init reading_clause_list with
+        {
+            $$ = lappend(list_concat($1, $2), $3);    
+        }
     ;
 
 cypher_varlen_opt:
@@ -917,6 +1045,8 @@ unwind:
 
             n = make_ag_node(cypher_unwind);
             n->target = res;
+            n->where = NULL;
+            n->collect = NULL;
             $$ = (Node *) n;
         }
 
@@ -1090,6 +1220,66 @@ where_opt:
         }
     ;
 
+utility_option_list:
+    utility_option_elem
+        {
+            $$ = list_make1($1);
+        }
+    | utility_option_list ',' utility_option_elem
+        {
+            $$ = lappend($1, $3);
+        }
+    ;
+
+utility_option_elem:
+    utility_option_name utility_option_arg
+        {
+            $$ = (Node *)makeDefElem($1, $2, @1);
+        }
+    ;
+
+utility_option_name:
+    IDENTIFIER
+        {
+            char *modified_name = downcase_truncate_identifier($1, strlen($1),
+                                                               true);
+            $$ = modified_name;
+        }
+    | safe_keywords
+        {
+            char *name = pstrdup($1);
+            char *modified_name = downcase_truncate_identifier(name,
+                                                               strlen(name),
+                                                               true);
+            $$ = modified_name;
+        }
+    ;
+
+utility_option_arg:
+    IDENTIFIER
+        {
+            char *modified_val = downcase_truncate_identifier($1, strlen($1),
+                                                              true);
+            $$ = (Node *)makeString(modified_val);
+        }
+    | INTEGER
+        {
+            $$ = (Node *)makeInteger($1);
+        }
+    | TRUE_P
+        {
+            $$ = (Node *)makeString("true");
+        }
+    | FALSE_P
+        {
+            $$ = (Node *)makeString("false");
+        }
+    | /* EMPTY */
+        {
+            $$ = NULL;
+        }
+    ;
+
 /*
  * pattern
  */
@@ -1115,6 +1305,7 @@ path:
 
             p = (cypher_path *)$3;
             p->var_name = $1;
+            p->parsed_var_name = $1;
             p->location = @1;
 
             $$ = (Node *)p;
@@ -1130,6 +1321,7 @@ anonymous_path:
             n = make_ag_node(cypher_path);
             n->path = $1;
             n->var_name = NULL;
+            n->parsed_var_name = NULL;
             n->location = @1;
 
             $$ = (Node *)n;
@@ -1180,9 +1372,26 @@ path_node:
 
             n = make_ag_node(cypher_node);
             n->name = $2;
+            n->parsed_name = $2;
             n->label = $3;
             n->parsed_label = $3;
+            n->use_equals = false;
             n->props = $4;
+            n->location = @2;
+
+            $$ = (Node *)n;
+        }
+    | '(' var_name_opt label_opt '='properties_opt ')'
+        {
+            cypher_node *n;
+
+            n = make_ag_node(cypher_node);
+            n->name = $2;
+            n->parsed_name = $2;
+            n->label = $3;
+            n->parsed_label = $3;
+            n->use_equals = true;
+            n->props = $5;
             n->location = @2;
 
             $$ = (Node *)n;
@@ -1226,10 +1435,27 @@ path_relationship_body:
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
+            n->parsed_name = $2;
             n->label = $3;
             n->parsed_label = $3;
             n->varlen = $4;
+            n->use_equals = false;
             n->props = $5;
+
+            $$ = (Node *)n;
+        }
+    | '[' var_name_opt label_opt cypher_varlen_opt '='properties_opt ']'
+        {
+            cypher_relationship *n;
+
+            n = make_ag_node(cypher_relationship);
+            n->name = $2;
+            n->parsed_name = $2;
+            n->label = $3;
+            n->parsed_label = $3;
+            n->varlen = $4;
+            n->use_equals = true;
+            n->props = $6;
 
             $$ = (Node *)n;
         }
@@ -1240,9 +1466,11 @@ path_relationship_body:
 
             n = make_ag_node(cypher_relationship);
             n->name = NULL;
+            n->parsed_name = NULL;
             n->label = NULL;
             n->parsed_label = NULL;
             n->varlen = NULL;
+            n->use_equals = false;
             n->props = NULL;
 
             $$ = (Node *)n;
@@ -1323,6 +1551,34 @@ expr:
     | expr GT_EQ expr
         {
             $$ = build_comparison_expression($1, $3, ">=", @2);
+        }
+    | expr LEFT_CONTAINS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "<@", $1, $3, @2);
+        }
+    | expr RIGHT_CONTAINS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "@>", $1, $3, @2);
+        }
+    | expr '?' expr %prec '.'
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?", $1, $3, @2);
+        }
+    | expr ANY_EXISTS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?|", $1, $3, @2);
+        }
+    | expr ALL_EXISTS expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "?&", $1, $3, @2);
+        }
+    | expr CONCAT expr
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "||", $1, $3, @2);
+        }
+    | expr ACCESS_PATH expr
+        {
+	        $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "#>", $1, $3, @2);
         }
     | expr '+' expr
         {
@@ -1528,6 +1784,10 @@ expr:
                          ag_scanner_errposition(@1, scanner)));
             }
         }
+    | expr '-' '>' expr %prec '.'
+        {
+            $$ = (Node *)makeSimpleA_Expr(AEXPR_OP, "->", $1, $4, @2);
+        }
     | expr TYPECAST symbolic_name
         {
             $$ = make_typecast_expr($1, $3, @2);
@@ -1585,19 +1845,16 @@ expr_func_norm:
              * and there are no other aggregates in SQL that accept
              * '*' as parameter.
              *
-             * The FuncCall node is also marked agg_star = true,
+             * The FuncCall node is marked agg_star = true by make_star_function_expr,
              * so that later processing can detect what the argument
              * really was.
              */
-             FuncCall *n = (FuncCall *)make_function_expr($1, NIL, @1);
-             n->agg_star = true;
-             $$ = (Node *)n;
+            FuncCall *n = (FuncCall *)make_star_function_expr($1, NIL, @1);
+            $$ = (Node *)n;
          }
     | func_name '(' DISTINCT  expr_list ')'
         {
-            FuncCall *n = (FuncCall *)make_function_expr($1, $4, @1);
-            n->agg_order = NIL;
-            n->agg_distinct = true;
+            FuncCall *n = (FuncCall *)make_distinct_function_expr($1, $4, @1);
             $$ = (Node *)n;
         }
     ;
@@ -1628,12 +1885,63 @@ expr_func_subexpr:
             n->operName = NIL;
             n->subselect = (Node *) sub;
             n->location = @1;
-            $$ = (Node *) n;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
         }
     | EXISTS '(' property_value ')'
         {
-            $$ = make_function_expr(list_make1(makeString("exists")),
-                                    list_make1($3), @2);
+            FuncCall *n;
+            n = makeFuncCall(list_make1(makeString("exists")),
+                                    list_make1($3), COERCE_SQL_SYNTAX, @2);
+
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @2);
+
+        }
+    ;
+
+expr_subquery:
+    EXISTS '{' anonymous_path '}'
+        {
+            /*
+             * EXISTS subquery with an anonymous path is almost
+             * the same as a EXISTS sub pattern, so we reuse that
+             * logic here to simplify more complex subquery transformations.
+             * TODO: Add WHERE clause support for anonymous paths in functions.
+             */
+
+            cypher_sub_pattern *sub;
+            SubLink    *n;
+
+            sub = make_ag_node(cypher_sub_pattern);
+            sub->kind = CSP_EXISTS;
+            sub->pattern = list_make1($3);
+
+            n = makeNode(SubLink);
+            n->subLinkType = EXISTS_SUBLINK;
+            n->subLinkId = 0;
+            n->testexpr = NULL;
+            n->operName = NIL;
+            n->subselect = (Node *) sub;
+            n->location = @1;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
+        }
+    | EXISTS '{' subquery_stmt '}'
+        {
+            cypher_sub_query *sub;
+            SubLink    *n;
+
+            sub = make_ag_node(cypher_sub_query);
+            sub->kind = CSP_EXISTS;
+            sub->query = $3;
+
+            n = makeNode(SubLink);
+
+            n->subLinkType = EXISTS_SUBLINK;
+            n->subLinkId = 0;
+            n->testexpr = NULL;
+            n->operName = NIL;
+            n->subselect = (Node *) sub;
+            n->location = @1;
+            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
         }
     ;
 
@@ -1658,11 +1966,19 @@ expr_atom:
         }
     | '(' expr ')'
         {
-            $$ = $2;
+            Node *n = $2;
+
+            if (is_ag_node(n, cypher_comparison_aexpr) ||
+                is_ag_node(n, cypher_comparison_boolexpr))
+            {
+                n = (Node *)node_to_agtype(n, "boolean", @2);
+            }
+            $$ = n;
         }
     | expr_case
     | expr_var
     | expr_func
+    | expr_subquery
     ;
 
 expr_literal:
@@ -1691,6 +2007,7 @@ expr_literal:
             $$ = make_null_const(@1);
         }
     | map
+    | map_projection
     | list
     ;
 
@@ -1725,6 +2042,82 @@ map_keyval_list:
         }
     ;
 
+map_projection:
+    expr_var '{' map_projection_elem_list '}'
+        {
+            cypher_map_projection *n;
+
+            n = make_ag_node(cypher_map_projection);
+            n->map_var = (ColumnRef *)$1;
+            n->map_elements = $3;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    ;
+
+map_projection_elem_list:
+    map_projection_elem
+        {
+            $$ = list_make1($1);
+        }
+    | map_projection_elem_list ',' map_projection_elem
+        {
+            $$ = lappend($1, $3);
+        }
+    ;
+
+map_projection_elem:
+    '.' property_key_name
+        {
+            cypher_map_projection_element *n;
+
+            n = make_ag_node(cypher_map_projection_element);
+            n->type = PROPERTY_SELECTOR;
+            n->key = $2;
+            n->value = NULL;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    | expr_var
+        {
+            cypher_map_projection_element *n;
+
+            n = make_ag_node(cypher_map_projection_element);
+            n->type = VARIABLE_SELECTOR;
+            n->key = NULL;
+            n->value = (Node *)$1;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    | property_key_name ':' expr
+        {
+            cypher_map_projection_element *n;
+
+            n = make_ag_node(cypher_map_projection_element);
+            n->type = LITERAL_ENTRY;
+            n->key = $1;
+            n->value = (Node *)$3;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    | '.' '*'
+        {
+            cypher_map_projection_element *n;
+
+            n = make_ag_node(cypher_map_projection_element);
+            n->type = ALL_PROPERTIES_SELECTOR;
+            n->key = NULL;
+            n->value = NULL;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    ;
+
 list:
     '[' expr_list_opt ']'
         {
@@ -1734,6 +2127,21 @@ list:
             n->elems = $2;
 
             $$ = (Node *)n;
+        }
+    | '[' list_comprehension ']'
+        {
+            $$ = $2;
+        }
+    ;
+
+mapping_expr_opt:
+    /* empty */
+        {
+            $$ = NULL;
+        }
+    | '|' expr
+        {
+            $$ = $2;
         }
     ;
 
@@ -1797,6 +2205,14 @@ expr_case_default:
             $$ = NULL;
         }
     ;
+
+list_comprehension:
+    var_name IN expr where_opt mapping_expr_opt
+        {
+            $$ = build_list_comprehension_node($1, $3, $4, $5,
+                                               @1, @3, @4, @5);
+        }
+;
 
 expr_var:
     var_name
@@ -1998,6 +2414,51 @@ static Node *make_not_expr(Node *expr, int location)
 }
 
 /*
+ * chained expression comparison operators
+ */
+
+static Node *make_cypher_comparison_aexpr(A_Expr_Kind kind, char *name,
+                 Node *lexpr, Node *rexpr, int location)
+{
+    cypher_comparison_aexpr *a = make_ag_node(cypher_comparison_aexpr);
+
+    a->kind = kind;
+    a->name = list_make1(makeString((char *) name));
+    a->lexpr = lexpr;
+    a->rexpr = rexpr;
+    a->location = location;
+    return (Node *)a;
+}
+
+static Node *make_cypher_comparison_boolexpr(BoolExprType boolop, List *args, int location)
+{
+    cypher_comparison_boolexpr *b = make_ag_node(cypher_comparison_boolexpr);
+
+    b->boolop = boolop;
+    b->args = args;
+    b->location = location;
+    return (Node *)b;
+}
+
+static Node *make_comparison_and_expr(Node *lexpr, Node *rexpr, int location)
+{
+    // flatten "a AND b AND c ..." to a single BoolExpr on sight
+    if (is_ag_node(lexpr, cypher_comparison_boolexpr))
+    {
+        cypher_comparison_boolexpr *bexpr = (cypher_comparison_boolexpr *)lexpr;
+
+        if (bexpr->boolop == AND_EXPR)
+        {
+            bexpr->args = lappend(bexpr->args, rexpr);
+
+            return (Node *)bexpr;
+        }
+    }
+
+    return (Node *)make_cypher_comparison_boolexpr(AND_EXPR, list_make2(lexpr, rexpr), location);
+}
+
+/*
  * arithmetic operators
  */
 
@@ -2168,23 +2629,184 @@ static Node *make_function_expr(List *func_name, List *exprs, int location)
          * could be many.
          */
         if (pg_strcasecmp(name, "count") == 0)
+        {
             funcname = SystemFuncName("count");
+
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+
+            /* build the cast to wrap the function call to return agtype. */
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
+
+            return (Node *)fnode;
+        }
         else
+        {
             /*
              * We don't qualify AGE functions here. This is done in the
              * transform layer and allows us to know which functions are ours.
              */
             funcname = func_name;
 
-        /* build the function call */
-        fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+        }
     }
     /* all other functions are passed as is */
     else
+    {
         fnode = makeFuncCall(func_name, exprs, COERCE_SQL_SYNTAX, location);
+    }
 
     /* return the node */
     return (Node *)fnode;
+}
+
+/*
+ * function to make a function that has received a star-argument
+ */
+static Node *make_star_function_expr(List *func_name, List *exprs, int location)
+{
+    FuncCall *fnode;
+
+    /* AGE function names are unqualified. So, their list size = 1 */
+    if (list_length(func_name) == 1)
+    {
+        List *funcname;
+        char *name;
+
+        /* get the name of the function */
+        name = ((String*)linitial(func_name))->sval;
+
+        /*
+         * Check for openCypher functions that are directly mapped to PG
+         * functions. We may want to find a better way to do this, as there
+         * could be many.
+         */
+        if (pg_strcasecmp(name, "count") == 0)
+        {
+            funcname = SystemFuncName("count");
+
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+            fnode->agg_star = true;
+
+            /* build the cast to wrap the function call to return agtype. */
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
+
+            return (Node *)fnode;
+        }
+        else
+        {
+            /*
+             * We don't qualify AGE functions here. This is done in the
+             * transform layer and allows us to know which functions are ours.
+             */
+            funcname = func_name;
+
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+        }
+    }
+    /* all other functions are passed as is */
+    else
+    {
+        fnode = makeFuncCall(func_name, exprs, COERCE_SQL_SYNTAX, location);
+    }
+
+    /* return the node */
+    fnode->agg_star = true;
+    return (Node *)fnode;
+}
+
+/*
+ * function to make a function that has received a distinct keyword
+ */
+static Node *make_distinct_function_expr(List *func_name, List *exprs, int location)
+{
+    FuncCall *fnode;
+
+    /* AGE function names are unqualified. So, their list size = 1 */
+    if (list_length(func_name) == 1)
+    {
+        List *funcname;
+        char *name;
+
+        /* get the name of the function */
+        name = ((String*)linitial(func_name))->sval;
+
+        /*
+         * Check for openCypher functions that are directly mapped to PG
+         * functions. We may want to find a better way to do this, as there
+         * could be many.
+         */
+        if (pg_strcasecmp(name, "count") == 0)
+        {
+            funcname = SystemFuncName("count");
+
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+            fnode->agg_order = NIL;
+            fnode->agg_distinct = true;
+
+            /* build the cast to wrap the function call to return agtype. */
+            fnode = node_to_agtype((Node *)fnode, "integer", location);
+            return (Node *)fnode;
+        }
+        else
+        {
+            /*
+             * We don't qualify AGE functions here. This is done in the
+             * transform layer and allows us to know which functions are ours.
+             */
+            funcname = func_name;
+
+            /* build the function call */
+            fnode = makeFuncCall(funcname, exprs, COERCE_SQL_SYNTAX, location);
+        }
+    }
+    /* all other functions are passed as is */
+    else
+    {
+        fnode = makeFuncCall(func_name, exprs, COERCE_SQL_SYNTAX, location);
+    }
+
+    /* return the node */
+    fnode->agg_order = NIL;
+    fnode->agg_distinct = true;
+    return (Node *)fnode;
+}
+
+/*
+ * helper function to wrap pg_function in the appropiate typecast function to
+ * interface with AGE components
+ */
+static FuncCall *node_to_agtype(Node * fnode, char *type, int location)
+{
+    List *funcname = list_make1(makeString("ag_catalog"));
+
+    if (pg_strcasecmp(type, "float") == 0)
+    {
+        funcname = lappend(funcname, makeString("float8_to_agtype"));
+    }
+    else if (pg_strcasecmp(type, "int") == 0 ||
+             pg_strcasecmp(type, "integer") == 0)
+    {
+        funcname = lappend(funcname, makeString("int8_to_agtype"));
+    }
+    else if (pg_strcasecmp(type, "bool") == 0 ||
+             pg_strcasecmp(type, "boolean") == 0)
+    {
+        funcname = lappend(funcname, makeString("bool_to_agtype"));
+    }
+    else
+    {
+        ereport(ERROR,
+            (errmsg_internal("type \'%s\' not supported by AGE functions",
+                             type)));
+    }
+
+    return makeFuncCall(funcname, list_make1(fnode), COERCE_EXPLICIT_CAST, location);
 }
 
 /* function to create a unique name given a prefix */
@@ -2256,7 +2878,7 @@ static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
 }
 
 /* check if A_Expr is a comparison expression */
-static bool is_A_Expr_a_comparison_operation(A_Expr *a)
+static bool is_A_Expr_a_comparison_operation(cypher_comparison_aexpr *a)
 {
     String *v = NULL;
     char *opr_name = NULL;
@@ -2322,75 +2944,77 @@ static Node *build_comparison_expression(Node *left_grammar_node,
 
     /*
      * Case 1:
-     *    If the previous expression is an A_Expr and it is also a
+     *    If the left expression is an A_Expr and it is also a
      *    comparison, then this is part of a chained comparison. In this
      *    specific case, the second chained element.
      */
-    if (IsA(left_grammar_node, A_Expr) &&
-        is_A_Expr_a_comparison_operation((A_Expr *)left_grammar_node))
+    if (is_ag_node(left_grammar_node, cypher_comparison_aexpr) &&
+        is_A_Expr_a_comparison_operation((cypher_comparison_aexpr *)left_grammar_node))
     {
-        A_Expr *aexpr = NULL;
+        cypher_comparison_aexpr *aexpr = NULL;
         Node *lexpr = NULL;
         Node *n = NULL;
 
         /* get the A_Expr on the left side */
-        aexpr = (A_Expr *) left_grammar_node;
+        aexpr = (cypher_comparison_aexpr *)left_grammar_node;
         /* get its rexpr which will be our lexpr */
         lexpr = aexpr->rexpr;
         /* build our comparison operator */
-        n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+        n = (Node *)make_cypher_comparison_aexpr(AEXPR_OP, opr_name, lexpr,
                                      right_grammar_node, location);
 
         /* now add it (AND) to the other comparison */
-        result_expr = make_and_expr(left_grammar_node, n, location);
+        result_expr = make_comparison_and_expr(left_grammar_node, n, location);
     }
 
     /*
      * Case 2:
-     *    If the previous expression is a boolean AND and its right most
+     *    If the left expression is a boolean AND and its right most
      *    expression is an A_Expr and a comparison, then this is part of
      *    a chained comparison. In this specific case, the third and
      *    beyond chained element.
      */
-    if (IsA(left_grammar_node, BoolExpr) &&
-        ((BoolExpr*)left_grammar_node)->boolop == AND_EXPR)
+    else if (is_ag_node(left_grammar_node, cypher_comparison_boolexpr) &&
+        ((cypher_comparison_boolexpr*)left_grammar_node)->boolop == AND_EXPR)
     {
-        BoolExpr *bexpr = NULL;
+        cypher_comparison_boolexpr *bexpr = NULL;
         Node *last = NULL;
 
         /* cast the left to a boolean */
-        bexpr = (BoolExpr *)left_grammar_node;
+        bexpr = (cypher_comparison_boolexpr *)left_grammar_node;
         /* extract the last node - ANDs are chained in a flat list */
         last = llast(bexpr->args);
 
         /* is the last node an A_Expr and a comparison operator */
-        if (IsA(last, A_Expr) &&
-            is_A_Expr_a_comparison_operation((A_Expr *)last))
+        if (is_ag_node(last, cypher_comparison_aexpr) &&
+            is_A_Expr_a_comparison_operation((cypher_comparison_aexpr *)last))
         {
-            A_Expr *aexpr = NULL;
+            cypher_comparison_aexpr *aexpr = NULL;
             Node *lexpr = NULL;
             Node *n = NULL;
 
             /* get the last expressions right expression */
-            aexpr = (A_Expr *) last;
+            aexpr = (cypher_comparison_aexpr *) last;
             lexpr = aexpr->rexpr;
             /* make our comparison operator */
-            n = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name, lexpr,
+            n = (Node *)make_cypher_comparison_aexpr(AEXPR_OP, opr_name, lexpr,
                                          right_grammar_node, location);
 
             /* now add it (AND) to the other comparisons */
-            result_expr = make_and_expr(left_grammar_node, n, location);
+            result_expr = make_comparison_and_expr(left_grammar_node, n, location);
         }
     }
 
+
     /*
      * Case 3:
-     *    The previous expression isn't a chained comparison. So, treat
-     *    it as a regular comparison expression.
+     *    The left expression isn't a chained comparison. So, treat
+     *    it as a regular comparison expression. This is usually an initial
+     *    comparison expression.
      */
-    if (result_expr == NULL)
+    else if (result_expr == NULL)
     {
-        result_expr = (Node *)makeSimpleA_Expr(AEXPR_OP, opr_name,
+        result_expr = (Node *)make_cypher_comparison_aexpr(AEXPR_OP, opr_name,
                                                left_grammar_node,
                                                right_grammar_node, location);
     }
@@ -2553,4 +3177,59 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
                                     cr_location);
     /* return the VLE relation node */
     return cr;
+}
+
+/* helper function to build a list_comprehension grammar node */
+static Node *build_list_comprehension_node(char *var_name, Node *expr,
+                                           Node *where, Node *mapping_expr,
+                                           int var_loc, int expr_loc,
+                                           int where_loc, int mapping_loc)
+{
+    ResTarget *res = NULL;
+    cypher_unwind *unwind = NULL;
+    ColumnRef *cref = NULL;
+
+    /*
+     * Build the ResTarget node for the UNWIND variable var_name attached to
+     * expr.
+     */
+    res = makeNode(ResTarget);
+    res->name = var_name;
+    res->val = (Node *)expr;
+    res->location = expr_loc;
+
+    /* build the UNWIND node */
+    unwind = make_ag_node(cypher_unwind);
+    unwind->target = res;
+
+    /*
+     * We need to make a ColumnRef of var_name so that it can be used as an expr
+     * for the where clause part of unwind.
+     */
+    cref = makeNode(ColumnRef);
+    cref->fields = list_make1(makeString(var_name));
+    cref->location = var_loc;
+
+    unwind->where = where;
+
+    /* if there is a mapping function, add its arg to collect */
+    if (mapping_expr != NULL)
+    {
+        unwind->collect = make_function_expr(list_make1(makeString("collect")),
+                                             list_make1(mapping_expr),
+                                             mapping_loc);
+    }
+    /*
+     * Otherwise, we need to add in the ColumnRef of the variable var_name as
+     * the arg to collect instead. This implies that the RETURN variable is
+     * var_name.
+     */
+    else
+    {
+        unwind->collect = make_function_expr(list_make1(makeString("collect")),
+                                             list_make1(cref), mapping_loc);
+    }
+
+    /* return the UNWIND node */
+    return (Node *)unwind;
 }
