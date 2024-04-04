@@ -145,4 +145,8 @@ SELECT * FROM cypher('list_comprehension', $$ WITH [u IN [1,2,3]] AS u, [u IN [1
 SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2)],i $$) AS (result agtype, i agtype);
 SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2) WHERE i>5 | i^2], i $$) AS (result agtype, i agtype);
 
+-- Invalid list comprehension
+SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) WHERE 2>5] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) | 1] $$) AS (result agtype);
+
 SELECT * FROM drop_graph('list_comprehension', true);
