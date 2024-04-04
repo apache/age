@@ -571,6 +571,15 @@ SELECT * FROM cypher('list_comprehension', $$ RETURN [i IN range(0, 10, 2) WHERE
 ERROR:  could not find rte for i
 LINE 1: ...$$ RETURN [i IN range(0, 10, 2) WHERE i>5 | i^2], i $$) AS (...
                                                              ^
+-- Invalid list comprehension
+SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) WHERE 2>5] $$) AS (result agtype);
+ERROR:  Syntax error at or near IN
+LINE 1: SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN r...
+                                                    ^
+SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) | 1] $$) AS (result agtype);
+ERROR:  Syntax error at or near IN
+LINE 1: SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN r...
+                                                    ^
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table list_comprehension._ag_label_vertex
