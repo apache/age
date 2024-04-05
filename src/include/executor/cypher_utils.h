@@ -106,6 +106,7 @@ typedef struct cypher_merge_custom_scan_state
     bool created_new_path;
     bool found_a_path;
     CommandId base_currentCommandId;
+    struct created_path *created_paths_list;
 } cypher_merge_custom_scan_state;
 
 TupleTableSlot *populate_vertex_tts(TupleTableSlot *elemTupleSlot,
@@ -125,5 +126,8 @@ HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
 HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
                                   TupleTableSlot *elemTupleSlot,
                                   EState *estate, CommandId cid);
+
+/* This function is copied directly from PG14 src */
+uint32 datum_image_hash(Datum value, bool typByVal, int typLen);
 
 #endif
