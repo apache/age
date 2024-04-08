@@ -55,8 +55,15 @@
 void create_label(char *graph_name, char *label_name, char label_type,
                   List *parents);
 
+void create_computed_label(char *graph_name, char *label_name, char *rel_name, 
+                           char label_type);
+
 Datum create_vlabel(PG_FUNCTION_ARGS);
 
 Datum create_elabel(PG_FUNCTION_ARGS);
+
+Datum create_computed_vlabel(PG_FUNCTION_ARGS);
+
+Datum create_computed_elabel(PG_FUNCTION_ARGS);
 
 #endif

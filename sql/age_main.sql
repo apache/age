@@ -110,6 +110,16 @@ CREATE FUNCTION ag_catalog.create_elabel(graph_name name, label_name name)
     LANGUAGE c
     AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.create_computed_vlabel(graph_name name, label_name name, view_name name)
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.create_computed_elabel(graph_name name, label_name name, view_name name)
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';    
+
 CREATE FUNCTION ag_catalog.alter_graph(graph_name name, operation cstring,
                                        new_value name)
     RETURNS void

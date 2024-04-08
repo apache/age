@@ -241,6 +241,190 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     PG_RETURN_VOID();
 }
 
+PG_FUNCTION_INFO_V1(create_computed_vlabel);
+
+/*
+ * This is a callback function
+ * This function will be called when the user will call SELECT create_vlabel.
+ * The function takes two parameters
+ * 1. Graph name
+ * 2. Label Name
+ * Function will create a vertex label
+ * Function returns an error if graph or label names or not provided
+*/
+
+Datum create_computed_vlabel(PG_FUNCTION_ARGS)
+{
+    char *graph;
+    Name graph_name;
+    char *graph_name_str;
+    Oid graph_oid;
+
+
+    RangeVar *rv;
+
+    char *label;
+    Name label_name;
+    char *label_name_str;
+
+    char *view;
+    Name view_name;
+    char *view_name_str;
+
+    // checking if user has not provided the graph name
+    if (PG_ARGISNULL(0))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("graph name must not be NULL")));
+    }
+
+    // checking if user has not provided the label name
+    if (PG_ARGISNULL(1))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("label name must not be NULL")));
+    }
+
+    // checking if user has not provided the view name
+    if (PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("view name must not be NULL")));
+    }
+
+    graph_name = PG_GETARG_NAME(0);
+    label_name = PG_GETARG_NAME(1);
+    view_name = PG_GETARG_NAME(2);
+
+    graph_name_str = NameStr(*graph_name);
+    label_name_str = NameStr(*label_name);
+    view_name_str = NameStr(*view_name);
+
+    // Check if graph does not exist
+    if (!graph_exists(graph_name_str))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("graph \"%s\" does not exist.", graph_name_str)));
+    }
+
+    graph_oid = get_graph_oid(graph_name_str);
+
+    // Check if label with the input name already exists
+    if (label_exists(label_name_str, graph_oid))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label \"%s\" already exists", label_name_str)));
+    }
+
+    //Create the default label tables
+    graph = graph_name->data;
+    label = label_name->data;
+    view = view_name->data;
+
+    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+
+    create_computed_label(graph, label, view, LABEL_TYPE_VERTEX);
+
+    ereport(NOTICE,
+            (errmsg("Computed VLabel \"%s\" has been created", NameStr(*label_name))));
+
+    PG_RETURN_VOID();
+}
+
+PG_FUNCTION_INFO_V1(create_computed_elabel);
+
+/*
+ * This is a callback function
+ * This function will be called when the user will call SELECT create_elabel.
+ * The function takes two parameters
+ * 1. Graph name
+ * 2. Label Name
+ * Function will create an edge label
+ * Function returns an error if graph or label names or not provided
+*/
+
+Datum create_computed_elabel(PG_FUNCTION_ARGS)
+{
+    char *graph;
+    Name graph_name;
+    char *graph_name_str;
+    Oid graph_oid;
+
+    RangeVar *rv;
+
+    char *label;
+    Name label_name;
+    char *label_name_str;
+
+    char *view;
+    Name view_name;
+    char *view_name_str;
+
+    // checking if user has not provided the graph name
+    if (PG_ARGISNULL(0))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("graph name must not be NULL")));
+    }
+
+    // checking if user has not provided the label name
+    if (PG_ARGISNULL(1))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("label name must not be NULL")));
+    }
+
+    // checking if user has not provided the view name
+    if (PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                errmsg("view name must not be NULL")));
+    }
+
+    graph_name = PG_GETARG_NAME(0);
+    label_name = PG_GETARG_NAME(1);
+    view_name = PG_GETARG_NAME(2);
+
+    graph_name_str = NameStr(*graph_name);
+    label_name_str = NameStr(*label_name);
+    view_name_str = NameStr(*view_name);
+
+    // Check if graph does not exist
+    if (!graph_exists(graph_name_str))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                 errmsg("graph \"%s\" does not exist.", graph_name_str)));
+    }
+
+    graph_oid = get_graph_oid(graph_name_str);
+
+    // Check if label with the input name already exists
+    if (label_exists(label_name_str, graph_oid))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label \"%s\" already exists", label_name_str)));
+    }
+
+    //Create the default label tables
+    graph = graph_name->data;
+    label = label_name->data;
+    view = view_name->data;
+    
+    rv = get_label_range_var(graph, graph_oid, AG_DEFAULT_LABEL_EDGE);
+
+    create_computed_label(graph, label, view, LABEL_TYPE_EDGE);
+
+    ereport(NOTICE,
+            (errmsg("Computed ELabel \"%s\" has been created", NameStr(*label_name))));
+
+    PG_RETURN_VOID();
+}
+
+
 /*
  * For the new label, create an entry in ag_catalog.ag_label, create a
  * new table and sequence. Returns the oid from the new tuple in
@@ -301,6 +485,54 @@ void create_label(char *graph_name, char *label_name, char label_type,
 
     // associate the sequence with the "id" column
     alter_sequence_owned_by_for_label(seq_range_var, rel_name);
+
+    // get a new "id" for the new label
+    label_id = get_new_label_id(graph_oid, nsp_id);
+
+    insert_label(label_name, graph_oid, label_id, label_type,
+                 relation_id, seq_name);
+
+    CommandCounterIncrement();
+}
+
+/*
+ * For the new computed label, create an entry in ag_catalog.ag_label, and
+ * check the underlying view. Returns the oid from the new tuple in
+ * ag_catalog.ag_label.
+ */
+void create_computed_label(char *graph_name, char *label_name, char *rel_name,
+                           char label_type)
+{
+    graph_cache_data *cache_data;
+    Oid graph_oid;
+    Oid nsp_id;
+    char *schema_name;
+    char *seq_name;
+    int32 label_id;
+    Oid relation_id;
+
+    if (!is_valid_label(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
+
+    cache_data = search_graph_name_cache(graph_name);
+    if (!cache_data)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("graph \"%s\" does not exist", graph_name)));
+    }
+    graph_oid = cache_data->oid;
+    nsp_id = cache_data->namespace;
+
+    // create a sequence for the new label to generate unique IDs for vertices
+    schema_name = get_namespace_name(nsp_id);
+    seq_name = ChooseRelationName(rel_name, "id", "seq", nsp_id, false);
+   
+
+    // record the new label in ag_label
+    relation_id = get_relname_relid(rel_name, nsp_id);
 
     // get a new "id" for the new label
     label_id = get_new_label_id(graph_oid, nsp_id);
