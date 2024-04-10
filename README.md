@@ -225,58 +225,23 @@ To create a graph, use the create_graph function located in the ag_catalog names
 SELECT create_graph('graph_name');
 ```
 
-To create a single vertex, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (n)
-$$) as (v agtype);
-```
-
-
-To create a single vertex with the label, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (:label)
-$$) as (v agtype);
-```
-
 To create a single vertex with label and properties, use the CREATE clause.
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    CREATE (:label {property:value})
+    CREATE (:label {property:"Node A"})
 $$) as (v agtype);
 ```
-
-To query the graph, you can use the MATCH clause.  
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    MATCH (v)
-    RETURN v
+    CREATE (:label {property:"Node B"})
 $$) as (v agtype);
 ```
 
-You can use the following to create an edge, for example, between two nodes. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:label), (b:label)
-    WHERE a.property = 'Node A' AND b.property = 'Node B'
-    CREATE (a)-[e:RELTYPE]->(b)
-    RETURN e
-$$) as (e agtype);
-```
-
-
-To create an edge and set properties.
+To create an edge between two nodes and set its properties:
 
 ```bash
 SELECT * 
@@ -288,19 +253,14 @@ FROM cypher('graph_name', $$
 $$) as (e agtype);
 ```
 
-Example 
+And to query the connected nodes:
 
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:Person), (b:Person)
-    WHERE a.name = 'Node A' AND b.name = 'Node B'
-    CREATE (a)-[e:RELTYPE {name:a.name + '<->' + b.name}]->(b)
-    RETURN e
-$$) as (e agtype);
 ```
-
-
+SELECT * from cypher('graph_name', $$
+        MATCH (V)-[R]-(V2)
+        RETURN V,R,V2
+$$) as (V agtype, R agtype, V2 agtype);
+```
 
 <h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
 
