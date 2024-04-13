@@ -139,9 +139,6 @@
 /* common */
 %type <node> where_opt
 
-/* list comprehension optional mapping expression */
-%type <node> mapping_expr_opt
-
 /* pattern */
 %type <list> pattern simple_path_opt_parens simple_path
 %type <node> path anonymous_path
@@ -258,7 +255,12 @@ static Node *build_comparison_expression(Node *left_grammar_node,
                                          char *opr_name, int location);
 
 // list_comprehension
-static Node *build_list_comprehension_node(char *var_name, Node *expr,
+static Node *verify_rule_as_list_comprehension(Node *expr, Node *expr2,
+                                               Node *where, Node *mapping_expr,
+                                               int var_loc, int expr_loc,
+                                               int where_loc, int mapping_loc);
+
+static Node *build_list_comprehension_node(ColumnRef *var_name, Node *expr,
                                            Node *where, Node *mapping_expr,
                                            int var_loc, int expr_loc,
                                            int where_loc,int mapping_loc);
@@ -2128,20 +2130,51 @@ list:
 
             $$ = (Node *)n;
         }
-    | '[' list_comprehension ']'
-        {
-            $$ = $2;
-        }
+    | list_comprehension
     ;
 
-mapping_expr_opt:
-    /* empty */
+/*
+ * This grammar rule is generic to some extent. It can
+ * evaluate to either IN operator or list comprehension.
+ * This avoids shift/reduce errors between the two rules.
+ */
+list_comprehension:
+    '[' expr IN expr ']'
         {
-            $$ = NULL;
+            Node *n = $2;
+            Node *result = NULL;
+            
+            /*
+             * If the first expr is a ColumnRef(variable), then the rule
+             * should evaluate as a list comprehension. Otherwise, it should
+             * evaluate as an IN operator.
+             */
+            if (nodeTag(n) == T_ColumnRef)
+            {
+                ColumnRef *cref = (ColumnRef *)n;
+                result = build_list_comprehension_node(cref, $4, NULL, NULL,
+                                                       @2, @4, 0, 0);
+            }
+            else
+            {
+                result = (Node *)makeSimpleA_Expr(AEXPR_IN, "=", n, $4, @3);
+            }
+            $$ = result;
         }
-    | '|' expr
+    | '[' expr IN expr WHERE expr ']'
         {
-            $$ = $2;
+            $$ = verify_rule_as_list_comprehension($2, $4, $6, NULL,
+                                                   @2, @4, @6, 0);
+        }
+    | '[' expr IN expr '|' expr ']'
+        {
+            $$ = verify_rule_as_list_comprehension($2, $4, NULL, $6,
+                                                   @2, @4, 0, @6);
+        }
+    | '[' expr IN expr WHERE expr '|' expr ']'
+        {
+            $$ = verify_rule_as_list_comprehension($2, $4, $6, $8,
+                                                   @2, @4, @6, @8);
         }
     ;
 
@@ -2205,14 +2238,6 @@ expr_case_default:
             $$ = NULL;
         }
     ;
-
-list_comprehension:
-    var_name IN expr where_opt mapping_expr_opt
-        {
-            $$ = build_list_comprehension_node($1, $3, $4, $5,
-                                               @1, @3, @4, @5);
-        }
-;
 
 expr_var:
     var_name
@@ -3179,15 +3204,57 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
     return cr;
 }
 
+// Helper function to verify that the rule is a list comprehension
+static Node *verify_rule_as_list_comprehension(Node *expr, Node *expr2,
+                                               Node *where, Node *mapping_expr,
+                                               int var_loc, int expr_loc,
+                                               int where_loc, int mapping_loc)
+{
+    Node *result = NULL;
+    
+    /*
+     * If the first expression is a ColumnRef, then we can build a
+     * list_comprehension node.
+     * Else its an invalid use of IN operator.
+     */
+    if (nodeTag(expr) == T_ColumnRef)
+    {
+        ColumnRef *cref = (ColumnRef *)expr;
+        result = build_list_comprehension_node(cref, expr2, where,
+                                               mapping_expr, var_loc,
+                                               expr_loc, where_loc,
+                                               mapping_loc);
+    }
+    else
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("Syntax error at or near IN")));
+    }
+    return result;
+}
+
 /* helper function to build a list_comprehension grammar node */
-static Node *build_list_comprehension_node(char *var_name, Node *expr,
+static Node *build_list_comprehension_node(ColumnRef *cref, Node *expr,
                                            Node *where, Node *mapping_expr,
                                            int var_loc, int expr_loc,
                                            int where_loc, int mapping_loc)
 {
     ResTarget *res = NULL;
     cypher_unwind *unwind = NULL;
-    ColumnRef *cref = NULL;
+    char *var_name = NULL;
+    String *val;
+
+    // Extract name from cref
+    val = linitial(cref->fields);
+
+    if (!IsA(val, String))
+    {
+        ereport(ERROR,
+                (errmsg_internal("unexpected Node for cypher_clause")));
+    }
+
+    var_name = val->sval;
 
     /*
      * Build the ResTarget node for the UNWIND variable var_name attached to
@@ -3201,15 +3268,6 @@ static Node *build_list_comprehension_node(char *var_name, Node *expr,
     /* build the UNWIND node */
     unwind = make_ag_node(cypher_unwind);
     unwind->target = res;
-
-    /*
-     * We need to make a ColumnRef of var_name so that it can be used as an expr
-     * for the where clause part of unwind.
-     */
-    cref = makeNode(ColumnRef);
-    cref->fields = list_make1(makeString(var_name));
-    cref->location = var_loc;
-
     unwind->where = where;
 
     /* if there is a mapping function, add its arg to collect */

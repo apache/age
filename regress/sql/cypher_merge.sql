@@ -606,8 +606,8 @@ SELECT * FROM cypher('cypher_merge', $$
   CREATE (n), (m) WITH n AS r MERGE (m)
 $$) as (a agtype);
 
----
---- Issue 1630 MERGE using array not working in some cases
+--
+-- Issue 1630 - MERGE using array not working in some cases
 --
 SELECT * FROM create_graph('issue_1630');
 SELECT * FROM cypher('issue_1630', $$ MATCH (u) RETURN (u) $$) AS (u agtype);
@@ -670,13 +670,111 @@ SELECT * FROM cypher('issue_1630',
                         MERGE (v:PERSION {first: cols.first, last: cols.last})
                         RETURN v, cols $$) AS (v agtype, cols agtype);
 
+--
+-- Issue 1691 - MERGE incorrectly creates multiple vertices
+--
+SELECT * FROM create_graph('issue_1691');
+SELECT * FROM cypher('issue_1691', $$ MATCH (u) RETURN (u) $$) AS (u agtype);
 
---clean up
-SELECT * FROM cypher('cypher_merge', $$MATCH (n) DETACH DELETE n $$) AS (a agtype);
-SELECT * FROM cypher('issue_1630', $$MATCH (n) DETACH DELETE n $$) AS (a agtype);
+-- should only create 2 distinct rows but return 4, the extra 2 being duplicates
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "bar", "foo", "foo"] as n
+                                      MERGE (u {name: n})-[e:knows]->(v)
+                                      RETURN u, e, v  $$) AS (u agtype, e agtype, v agtype);
+-- should only return the same above 4 rows
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "bar", "foo", "foo"] as n
+                                      MERGE (u {name: n})-[e:knows]->(v)
+                                      RETURN u, e, v  $$) AS (u agtype, e agtype, v agtype);
+-- should only return 2 distinct rows from above
+SELECT * FROM cypher('issue_1691', $$ MATCH (u)-[e]->(v)
+                                      RETURN u, e, v  $$) AS (u agtype, e agtype, v agtype);
 
-/*
- * Clean up graph
- */
+SELECT * FROM cypher('issue_1691', $$MATCH ()-[e]->() DELETE e $$) AS (a agtype);
+SELECT * FROM cypher('issue_1691', $$MATCH (u) DELETE u $$) AS (a agtype);
+
+-- should only create 1 record but return 2, one a dup of the other
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "foo"] AS each
+                                      MERGE (v:TEST {name: each})
+                                      RETURN v $$) AS (v agtype);
+
+SELECT * FROM cypher('issue_1691', $$ MATCH (u) RETURN (u) $$) AS (u agtype);
+
+-- should just return 5 foo records that are all the same one
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "foo", "bar", "foo", "bar"] AS each
+                                      MERGE (v:TEST {name: "foo"})
+                                      RETURN v $$) AS (v agtype);
+
+SELECT * FROM cypher('issue_1691', $$ MATCH (u) RETURN (u) $$) AS (u agtype);
+
+-- should just return 5 bar records that are all the same one
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "foo", "bar", "foo", "bar"] AS each
+                                      MERGE (v:TEST {name: "bar"})
+                                      RETURN v $$) AS (v agtype);
+
+SELECT * FROM cypher('issue_1691', $$ MATCH (u) RETURN (u) $$) AS (u agtype);
+SELECT * FROM cypher('issue_1691', $$MATCH (u) DELETE u $$) AS (a agtype);
+
+-- should create 2 rows foo->bar and bar->bar and the other 3 are just returning dups
+SELECT * FROM cypher('issue_1691', $$ UNWIND ["foo", "bar", "foo", "foo", "bar"] as n
+                                      MERGE (u {name: n})-[e1:knows]->(v {name: "bar"})-[e2:knows]->(w)
+                                      RETURN u, e1, v, e2, w  $$) AS (u agtype, e1 agtype, v agtype, e2 agtype, w agtype);
+
+-- clean up
+SELECT * FROM cypher('issue_1691', $$MATCH ()-[e]->() DELETE e $$) AS (a agtype);
+SELECT * FROM cypher('issue_1691', $$MATCH (u) DELETE u $$) AS (a agtype);
+
+--
+-- Issue 1709 - MERGE creates incomplete vertices after the first one
+--              This is actually an issue with MERGE not using the correct command id
+--
+SELECT * FROM create_graph('issue_1709');
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) RETURN u $$) AS (u agtype);
+
+SELECT * FROM cypher('issue_1709', $$ UNWIND [{first: 'jon', last: 'snow'}, {first: 'ned', last: 'stark'}] AS map
+                                      MERGE (v:PERSON {first: map.first})
+                                      SET v=map
+                                      RETURN v $$) AS (v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) DELETE u $$) AS (a agtype);
+
+SELECT * FROM cypher('issue_1709', $$ UNWIND [{first: 'jon', last: 'snow'}, {first: 'ned', last: 'stark', middle: 'jim'}, {first: 'jane', last: 'doe'}, {first: 'ned', last: 'flanders'}, {first: 'wanda', last: 'cosmo'}] AS map
+                                      MERGE (v:PERSON {first: map.first})
+                                      SET v=map
+                                      RETURN v $$) AS (v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) DELETE u $$) AS (a agtype);
+
+SELECT * FROM cypher('issue_1709', $$ UNWIND [{first: 'jon', last: 'snow'}, {first: 'ned', last: 'stark'}] AS map
+                                      MERGE (u: PERSON {last: map.last})-[e:KNOWS]->(v:PERSON {first: map.first})
+                                      SET v=map
+                                      RETURN u,e,v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u)-[e]->(v) RETURN u,e,v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH ()-[e]->() DELETE e $$) AS (a agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) DELETE u $$) AS (a agtype);
+
+SELECT * FROM cypher('issue_1709', $$ UNWIND [{first: 'jon', last: 'snow'}, {first: 'ned', last: 'stark'}] AS map
+                                      MERGE (u: PERSON {last: map.last})-[e:KNOWS]->(v:PERSON {first: map.first})
+                                      SET u=map SET v=map
+                                      RETURN u,e,v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (u)-[e]->(v) RETURN u,e,v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH ()-[e]->() DELETE e $$) AS (a agtype);
+-- clean up
+SELECT * FROM cypher('issue_1709', $$ MATCH (u) DELETE u $$) AS (a agtype);
+
+--
+-- clean up graphs
+--
+SELECT * FROM cypher('cypher_merge', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1630', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+
+--
+-- delete graphs
+--
 SELECT drop_graph('cypher_merge', true);
 SELECT drop_graph('issue_1630', true);
+SELECT drop_graph('issue_1691', true);
+SELECT drop_graph('issue_1709', true);
+
+--
+-- End
+--

@@ -56,7 +56,7 @@
 
 <h2><img height="30" src="/img/AGE.png">&nbsp;&nbsp;What is Apache AGE?</h2>
 
-[Apache AGE](https://age.apache.org/#) is an extension for PostgreSQL that enables users to leverage a graph database on top of the existing relational databases. AGE is an acronym for A Graph Extension and is inspired by Bitnine's AgensGraph, a multi-model database fork of PostgreSQL. The basic principle of the project is to create a single storage that handles both the relational and graph data model so that the users can use the standard ANSI SQL along with openCypher, one of the most popular graph query languages today. 
+[Apache AGE](https://age.apache.org/#) is an extension for PostgreSQL that enables users to leverage a graph database on top of the existing relational databases. AGE is an acronym for A Graph Extension and is inspired by Bitnine's AgensGraph, a multi-model database fork of PostgreSQL. The basic principle of the project is to create a single storage that handles both the relational and graph data model so that the users can use the standard ANSI SQL along with openCypher, one of the most popular graph query languages today. There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 </br>
 </br>
 </br>
@@ -66,10 +66,6 @@
 </p>
 
 </br>
-
-Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust database features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational database background who require graph data analytics can use this extension with minimal effort because they can use existing data without going through migration. 
-
-There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 
 
 <h2><img height="30" src="/img/tick.svg">&nbsp;&nbsp;Overview</h2>
@@ -229,58 +225,23 @@ To create a graph, use the create_graph function located in the ag_catalog names
 SELECT create_graph('graph_name');
 ```
 
-To create a single vertex, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (n)
-$$) as (v agtype);
-```
-
-
-To create a single vertex with the label, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (:label)
-$$) as (v agtype);
-```
-
 To create a single vertex with label and properties, use the CREATE clause.
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    CREATE (:label {property:value})
+    CREATE (:label {property:"Node A"})
 $$) as (v agtype);
 ```
-
-To query the graph, you can use the MATCH clause.  
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    MATCH (v)
-    RETURN v
+    CREATE (:label {property:"Node B"})
 $$) as (v agtype);
 ```
 
-You can use the following to create an edge, for example, between two nodes. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:label), (b:label)
-    WHERE a.property = 'Node A' AND b.property = 'Node B'
-    CREATE (a)-[e:RELTYPE]->(b)
-    RETURN e
-$$) as (e agtype);
-```
-
-
-To create an edge and set properties.
+To create an edge between two nodes and set its properties:
 
 ```bash
 SELECT * 
@@ -292,19 +253,14 @@ FROM cypher('graph_name', $$
 $$) as (e agtype);
 ```
 
-Example 
+And to query the connected nodes:
 
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:Person), (b:Person)
-    WHERE a.name = 'Node A' AND b.name = 'Node B'
-    CREATE (a)-[e:RELTYPE {name:a.name + '<->' + b.name}]->(b)
-    RETURN e
-$$) as (e agtype);
 ```
-
-
+SELECT * from cypher('graph_name', $$
+        MATCH (V)-[R]-(V2)
+        RETURN V,R,V2
+$$) as (V agtype, R agtype, V2 agtype);
+```
 
 <h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
 
@@ -329,19 +285,6 @@ Starting with Apache AGE is very simple. You can easily select your platform and
 - [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
 
 
-
-
-<h2><img height="20" src="/img/contributing.svg">&nbsp;&nbsp;Community</h2>
-
-Join the AGE community for help, questions, discussions, and contributions. 
-
-- Check our [website](https://age.apache.org/)
-- Ask your AGE-related questions and answers on [Stack overflow](https://stackoverflow.com/questions/tagged/apache-age)
-- Discuss about AGE on [GitHub Discussions](https://github.com/apache/age/discussions)
-- Share your feedback on [GitHub Issues](https://github.com/apache/age/issues)
-- Follow us on [X](https://twitter.com/apache_age)
-- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
-- Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
 
 
 <h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
