@@ -74,7 +74,7 @@
 /* keywords in alphabetical order */
 %token <keyword> ALL ANALYZE AND AS ASC ASCENDING
                  BY
-                 CALL CASE COALESCE CONTAINS CREATE
+                 CALL CASE COALESCE CONTAINS COUNT CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
                  ELSE END_P ENDS EXISTS EXPLAIN
                  FALSE_P
@@ -647,7 +647,9 @@ subquery_stmt_no_return:
         }
     | subquery_stmt_no_return UNION all_or_distinct subquery_stmt_no_return
         {
-            $$ = list_make1(make_set_op(SETOP_UNION, $3, $1, $4));
+            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
+                errmsg("Subquery UNION without returns not yet implemented"),
+                ag_scanner_errposition(@2, scanner)));
         }
     ;
 
@@ -971,7 +973,7 @@ with:
             cypher_with *n;
 
             // check expressions are aliased
-            foreach (li, $3)
+            foreach(li, $3)
             {
                 ResTarget *item = lfirst(li);
 
@@ -1924,6 +1926,26 @@ expr_func_subexpr:
             $$ = (Node *)node_to_agtype((Node *)n, "boolean", @2);
 
         }
+    | COUNT '(' ')'
+		{
+            $$ = make_function_expr(list_make1(makeString("count")), NIL, @1);
+		}
+    | COUNT '(' expr_list ')'
+		{
+            $$ = make_function_expr(list_make1(makeString("count")), $3, @2);
+		}
+    | COUNT '(' DISTINCT expr_list ')'
+		{
+            FuncCall *n = (FuncCall *)make_distinct_function_expr(
+									  list_make1(makeString("count")), $4, @1);
+            $$ = (Node *)n;
+        }
+    | COUNT '(' '*' ')'
+		{
+            FuncCall *n = (FuncCall *)make_star_function_expr(
+									  list_make1(makeString("count")), NIL, @1);
+            $$ = (Node *)n;
+		}
     ;
 
 expr_subquery:
@@ -1946,62 +1968,38 @@ expr_subquery:
             n->location = @1;
             $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
         }
-    | func_name '{' subquery_stmt '}'
+    | COUNT '{' subquery_stmt '}'
         {
-            List *func_name = $1;
-            if(list_length(func_name) != 1)
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("Invalid subquery function"),
-                         ag_scanner_errposition(@3, scanner)));
-            }
-            else
-            {
-                char *name;
+            SubLink    *n;
+            cypher_sub_query *sub;
+            cypher_return *r;
+            ResTarget *rt;
+            FuncCall *func;
 
-                name = ((String*)linitial(func_name))->sval;
+            func = (FuncCall *)make_star_function_expr(
+								list_make1(makeString("count")), NIL, @1);
 
-                if (pg_strcasecmp(name, "count") == 0)
-                {
-                    SubLink    *n;
-                    cypher_sub_query *sub;
-                    cypher_return *r;
-                    ResTarget *rt;
-                    FuncCall *func;
+            rt = makeNode(ResTarget);
+            rt->name = NULL;
+            rt->indirection = NIL;
+            rt->val = (Node *)func;
+            rt->location = @1;
 
-                    func = (FuncCall *)make_star_function_expr($1, NIL, @1);
+            r = make_ag_node(cypher_return);
+            r->items = list_make1((Node *)rt);
 
-                    rt = makeNode(ResTarget);
-                    rt->name = NULL;
-                    rt->indirection = NIL;
-                    rt->val = (Node *)func;
-                    rt->location = @1;
+            sub = make_ag_node(cypher_sub_query);
+            sub->query = lappend($3, r);
 
-                    r = make_ag_node(cypher_return);
-                    r->items = list_make1((Node *)rt);
+            n = makeNode(SubLink);
+            n->subLinkType = EXPR_SUBLINK;
+            n->subLinkId = 0;
+            n->testexpr = NULL;
+            n->operName = NIL;
+            n->subselect = (Node *)sub;
+            n->location = @1;
 
-                    sub = make_ag_node(cypher_sub_query);
-                    sub->query = lappend($3, r);
-
-                    n = makeNode(SubLink);
-                    n->subLinkType = EXPR_SUBLINK;
-                    n->subLinkId = 0;
-                    n->testexpr = NULL;
-                    n->operName = NIL;
-                    n->subselect = (Node *)sub;
-                    n->location = @1;
-
-                    $$ = (Node *) n;
-                }
-                else
-                {
-                    ereport(ERROR,
-                            (errcode(ERRCODE_SYNTAX_ERROR),
-                             errmsg("Invalid subquery function"),
-                             ag_scanner_errposition(@3, scanner)));
-                }
-            }
+            $$ = (Node *) n;
         }
     ;
 
@@ -2407,6 +2405,7 @@ safe_keywords:
     | CASE       { $$ = pnstrdup($1, 4); }
     | COALESCE   { $$ = pnstrdup($1, 8); }
     | CONTAINS   { $$ = pnstrdup($1, 8); }
+    | COUNT      { $$ = pnstrdup($1 ,5); }
     | CREATE     { $$ = pnstrdup($1, 6); }
     | DELETE     { $$ = pnstrdup($1, 6); }
     | DESC       { $$ = pnstrdup($1, 4); }
