@@ -19,10 +19,6 @@
 
 #include "postgres.h"
 
-#include "lib/stringinfo.h"
-#include "nodes/extensible.h"
-#include "nodes/nodes.h"
-
 #include "nodes/cypher_nodes.h"
 #include "nodes/cypher_outfuncs.h"
 
@@ -178,6 +174,7 @@ void out_cypher_unwind(StringInfo str, const ExtensibleNode *node)
     DEFINE_AG_NODE(cypher_unwind);
 
     WRITE_NODE_FIELD(target);
+    WRITE_NODE_FIELD(collect);
 }
 
 // serialization function for the cypher_delete ExtensibleNode.
@@ -194,6 +191,8 @@ void out_cypher_path(StringInfo str, const ExtensibleNode *node)
     DEFINE_AG_NODE(cypher_path);
 
     WRITE_NODE_FIELD(path);
+    WRITE_STRING_FIELD(var_name);
+    WRITE_STRING_FIELD(parsed_var_name);
     WRITE_LOCATION_FIELD(location);
 }
 
@@ -203,6 +202,7 @@ void out_cypher_node(StringInfo str, const ExtensibleNode *node)
     DEFINE_AG_NODE(cypher_node);
 
     WRITE_STRING_FIELD(name);
+    WRITE_STRING_FIELD(parsed_name);
     WRITE_STRING_FIELD(label);
     WRITE_STRING_FIELD(parsed_label);
     WRITE_NODE_FIELD(props);
@@ -215,6 +215,7 @@ void out_cypher_relationship(StringInfo str, const ExtensibleNode *node)
     DEFINE_AG_NODE(cypher_relationship);
 
     WRITE_STRING_FIELD(name);
+    WRITE_STRING_FIELD(parsed_name);
     WRITE_STRING_FIELD(label);
     WRITE_STRING_FIELD(parsed_label);
     WRITE_NODE_FIELD(props);
@@ -250,12 +251,43 @@ void out_cypher_map(StringInfo str, const ExtensibleNode *node)
     WRITE_LOCATION_FIELD(location);
 }
 
+void out_cypher_map_projection(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_map_projection);
+
+    WRITE_NODE_FIELD(map_var);
+    WRITE_NODE_FIELD(map_elements);
+    WRITE_LOCATION_FIELD(location);
+}
+
 // serialization function for the cypher_list ExtensibleNode.
 void out_cypher_list(StringInfo str, const ExtensibleNode *node)
 {
     DEFINE_AG_NODE(cypher_list);
 
     WRITE_NODE_FIELD(elems);
+    WRITE_LOCATION_FIELD(location);
+}
+
+// serialization function for the cypher_comparison_aexpr ExtensibleNode.
+void out_cypher_comparison_aexpr(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_comparison_aexpr);
+
+    WRITE_ENUM_FIELD(kind, A_Expr_Kind);
+    WRITE_NODE_FIELD(name);
+    WRITE_NODE_FIELD(lexpr);
+    WRITE_NODE_FIELD(rexpr);
+    WRITE_LOCATION_FIELD(location);
+}
+
+// serialization function for the cypher_comparison_boolexpr ExtensibleNode.
+void out_cypher_comparison_boolexpr(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_comparison_boolexpr);
+
+    WRITE_ENUM_FIELD(boolop, BoolExprType);
+    WRITE_NODE_FIELD(args);
     WRITE_LOCATION_FIELD(location);
 }
 
@@ -296,6 +328,15 @@ void out_cypher_sub_pattern(StringInfo str, const ExtensibleNode *node)
 
     WRITE_ENUM_FIELD(kind, csp_kind);
     WRITE_NODE_FIELD(pattern);
+}
+
+// serialization function for the cypher_sub_pattern ExtensibleNode.
+void out_cypher_sub_query(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_sub_query);
+
+    WRITE_ENUM_FIELD(kind, csp_kind);
+    WRITE_NODE_FIELD(query);
 }
 
 // serialization function for the cypher_call ExtensibleNode.

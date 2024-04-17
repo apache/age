@@ -30,11 +30,11 @@
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.4.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.5.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
-  <a href="https://www.postgresql.org/docs/15/index.html">
-    <img src="https://img.shields.io/badge/Version-Postgresql 15-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/15/index.html"/>
+  <a href="https://www.postgresql.org/docs/16/index.html">
+    <img src="https://img.shields.io/badge/Version-Postgresql 16-00008B?labelColor=gray&style=flat&link=https://www.postgresql.org/docs/16/index.html"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/issues">
@@ -48,9 +48,7 @@
   <a href="https://github.com/apache/age/stargazers">
     <img src="https://img.shields.io/github/stars/apache/age"/>
   </a>
-  &nbsp;
-  <a href="https://discord.gg/NMsBs9X8Ss">
-    <img src="https://img.shields.io/discord/1022177873127280680.svg?label=discord&style=flat&color=5a66f6"></a>
+
 </p>
 
 <br>
@@ -58,7 +56,7 @@
 
 <h2><img height="30" src="/img/AGE.png">&nbsp;&nbsp;What is Apache AGE?</h2>
 
-[Apache AGE](https://age.apache.org/#) is an extension for PostgreSQL that enables users to leverage a graph database on top of the existing relational databases. AGE is an acronym for A Graph Extension and is inspired by Bitnine's AgensGraph, a multi-model database fork of PostgreSQL. The basic principle of the project is to create a single storage that handles both the relational and graph data model so that the users can use the standard ANSI SQL along with openCypher, one of the most popular graph query languages today. 
+[Apache AGE](https://age.apache.org/#) is an extension for PostgreSQL that enables users to leverage a graph database on top of the existing relational databases. AGE is an acronym for A Graph Extension and is inspired by Bitnine's AgensGraph, a multi-model database fork of PostgreSQL. The basic principle of the project is to create a single storage that handles both the relational and graph data model so that the users can use the standard ANSI SQL along with openCypher, one of the most popular graph query languages today. There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 </br>
 </br>
 </br>
@@ -68,10 +66,6 @@
 </p>
 
 </br>
-
-Since AGE is based on the powerful PostgreSQL RDBMS, it is robust and fully featured. AGE is optimized for handling complex connected graph data. It provides plenty of robust database features essential to the database environment, including ACID transactions, multi-version concurrency control (MVCC), stored procedure, triggers, constraints, sophisticated monitoring, and a flexible data model (JSON). Users with a relational database background who require graph data analytics can use this extension with minimal effort because they can use existing data without going through migration. 
-
-There is a strong need for cohesive, easy-to-implement multi-model databases. As an extension of PostgreSQL, AGE supports all the functionalities and features of PostgreSQL while also offering a graph model to boot.
 
 
 <h2><img height="30" src="/img/tick.svg">&nbsp;&nbsp;Overview</h2>
@@ -131,7 +125,7 @@ Apache AGE is intended to be simple to install and run. It can be installed with
 &nbsp;Install PostgreSQL
 </h4>
 
-You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, 13, 14 & 15. Supporting the latest versions is on AGE roadmap.
+You will need to install an AGE compatible version of Postgres<a>, for now AGE supports Postgres 11, 12, 13, 14, 15 & 16. Supporting the latest versions is on AGE roadmap.
 
 <h4>
 &nbsp;Installation via Package Manager
@@ -149,7 +143,7 @@ sudo apt install postgresql
 &nbsp;Installation From Source Code
 </h4>
 
-You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/15/installation.html">official Postgres Website.</a>
+You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres </a> source code and install your own instance of Postgres. You can read instructions on how to install from source code for different versions on the <a href="https://www.postgresql.org/docs/16/installation.html">official Postgres Website.</a>
 
 
 
@@ -158,7 +152,7 @@ You can <a href="https://www.postgresql.org/ftp/source/"> download the Postgres 
 
 Clone the <a href="https://github.com/apache/age">github repository</a> or download the <a href="https://github.com/apache/age/releases">download an official release.
 </a>
-Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, 14 & 15 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, 14, or 15.
+Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, 14, 15 & 16 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, 14, 15, or 16.
 <br>
     
 ```bash
@@ -199,6 +193,12 @@ docker run \
     apache/age
 ```
 
+<h5> Enter PostgreSQL's psql: </h5>
+
+```bash
+docker exec -it age psql -d postgresDB -U postgresUser
+```
+
 
 
 <h2><img height="20" src="/img/contents.svg">&nbsp;&nbsp;Post Installation</h2>
@@ -225,58 +225,23 @@ To create a graph, use the create_graph function located in the ag_catalog names
 SELECT create_graph('graph_name');
 ```
 
-To create a single vertex, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (n)
-$$) as (v agtype);
-```
-
-
-To create a single vertex with the label, use the CREATE clause. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    CREATE (:label)
-$$) as (v agtype);
-```
-
 To create a single vertex with label and properties, use the CREATE clause.
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    CREATE (:label {property:value})
+    CREATE (:label {property:"Node A"})
 $$) as (v agtype);
 ```
-
-To query the graph, you can use the MATCH clause.  
 
 ```bash
 SELECT * 
 FROM cypher('graph_name', $$
-    MATCH (v)
-    RETURN v
+    CREATE (:label {property:"Node B"})
 $$) as (v agtype);
 ```
 
-You can use the following to create an edge, for example, between two nodes. 
-
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:label), (b:label)
-    WHERE a.property = 'Node A' AND b.property = 'Node B'
-    CREATE (a)-[e:RELTYPE]->(b)
-    RETURN e
-$$) as (e agtype);
-```
-
-
-To create an edge and set properties.
+To create an edge between two nodes and set its properties:
 
 ```bash
 SELECT * 
@@ -288,19 +253,14 @@ FROM cypher('graph_name', $$
 $$) as (e agtype);
 ```
 
-Example 
+And to query the connected nodes:
 
-```bash
-SELECT * 
-FROM cypher('graph_name', $$
-    MATCH (a:Person), (b:Person)
-    WHERE a.name = 'Node A' AND b.name = 'Node B'
-    CREATE (a)-[e:RELTYPE {name:a.name + '<->' + b.name}]->(b)
-    RETURN e
-$$) as (e agtype);
 ```
-
-
+SELECT * from cypher('graph_name', $$
+        MATCH (V)-[R]-(V2)
+        RETURN V,R,V2
+$$) as (V agtype, R agtype, V2 agtype);
+```
 
 <h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
 
@@ -325,18 +285,6 @@ Starting with Apache AGE is very simple. You can easily select your platform and
 - [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
 
 
-
-
-<h2><img height="20" src="/img/contributing.svg">&nbsp;&nbsp;Community</h2>
-
-Join the AGE community for help, questions, discussions, and contributions. 
-
-- Check our [website](https://age.apache.org/)
-- Join the Live Chat on [Discord](https://discord.com/invite/NMsBs9X8Ss/)
-- Follow us on [Twitter](https://twitter.com/apache_age?s=20&t=7Hu8Txk4vjvuEp-ryakacg)
-- Subscribe to our developer mailing list by sending an email to dev-subscribe@age.apache.org
-- Subscribe to our user mailing list by sending an email to users-subscribe@age.apache.org
-- Subscribe to our committer mailing list (To become a committer) by sending an email to commits-subscribe@age.apache.org
 
 
 <h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>

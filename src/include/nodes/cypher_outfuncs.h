@@ -20,11 +20,6 @@
 #ifndef AG_CYPHER_OUTFUNCS_H
 #define AG_CYPHER_OUTFUNCS_H
 
-#include "postgres.h"
-
-#include "nodes/extensible.h"
-#include "nodes/nodes.h"
-
 /*
  * Serialization functions for AGE's ExtensibleNodes. We assign
  * each node to its serialized function in the DEFINE_NODE_METHODS
@@ -51,7 +46,12 @@ void out_cypher_relationship(StringInfo str, const ExtensibleNode *node);
 void out_cypher_bool_const(StringInfo str, const ExtensibleNode *node);
 void out_cypher_param(StringInfo str, const ExtensibleNode *node);
 void out_cypher_map(StringInfo str, const ExtensibleNode *node);
+void out_cypher_map_projection(StringInfo str, const ExtensibleNode *node);
 void out_cypher_list(StringInfo str, const ExtensibleNode *node);
+
+// comparison expression
+void out_cypher_comparison_aexpr(StringInfo str, const ExtensibleNode *node);
+void out_cypher_comparison_boolexpr(StringInfo str, const ExtensibleNode *node);
 
 // string match
 void out_cypher_string_match(StringInfo str, const ExtensibleNode *node);
@@ -62,8 +62,9 @@ void out_cypher_typecast(StringInfo str, const ExtensibleNode *node);
 // integer constant
 void out_cypher_integer_const(StringInfo str, const ExtensibleNode *node);
 
-// sub pattern
+// sub patterns/queries
 void out_cypher_sub_pattern(StringInfo str, const ExtensibleNode *node);
+void out_cypher_sub_query(StringInfo str, const ExtensibleNode *node);
 
 // procedure call
 

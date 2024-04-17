@@ -20,29 +20,16 @@
 #include "postgres.h"
 
 #include "access/genam.h"
-#include "access/heapam.h"
-#include "access/htup.h"
-#include "access/htup_details.h"
-#include "access/skey.h"
-#include "access/stratnum.h"
 #include "catalog/indexing.h"
-#include "catalog/namespace.h"
-#include "fmgr.h"
-#include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
-#include "storage/lockdefs.h"
 #include "utils/builtins.h"
-#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
-#include "utils/rel.h"
-#include "utils/relcache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
-#include "utils/graphid.h"
 
 /*
  * INSERT INTO ag_catalog.ag_label
@@ -63,12 +50,12 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
      * NOTE: Is it better to make use of label_id and label_kind domain types
      *       than to use assert to check label_id and label_kind are valid?
      */
-    AssertArg(label_name);
-    AssertArg(label_id_is_valid(label_id));
-    AssertArg(label_kind == LABEL_KIND_VERTEX ||
+    Assert(label_name);
+    Assert(label_id_is_valid(label_id));
+    Assert(label_kind == LABEL_KIND_VERTEX ||
               label_kind == LABEL_KIND_EDGE);
-    AssertArg(OidIsValid(label_relation));
-    AssertArg(seq_name);
+    Assert(OidIsValid(label_relation));
+    Assert(seq_name);
 
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
 
@@ -188,8 +175,10 @@ Datum _label_name(PG_FUNCTION_ARGS)
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
         ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
                         errmsg("graph_oid and label_id must not be null")));
+    }
 
     graph = PG_GETARG_OID(0);
 

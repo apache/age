@@ -24,7 +24,6 @@
 
 #include "postgres.h"
 
-#include "access/htup.h"
 #include "access/htup_details.h"
 #include "catalog/pg_proc.h"
 #include "utils/builtins.h"
@@ -42,8 +41,8 @@ bool is_oid_ag_func(Oid func_oid, const char *func_name)
     Oid nspid;
     const char *nspname;
 
-    AssertArg(OidIsValid(func_oid));
-    AssertArg(func_name);
+    Assert(OidIsValid(func_oid));
+    Assert(func_name);
 
     proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(func_oid));
     Assert(HeapTupleIsValid(proctup));
@@ -71,8 +70,8 @@ Oid get_ag_func_oid(const char *func_name, const int nargs, ...)
     oidvector *arg_types;
     Oid func_oid;
 
-    AssertArg(func_name);
-    AssertArg(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
+    Assert(func_name);
+    Assert(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
 
     va_start(ap, nargs);
     for (i = 0; i < nargs; i++)
@@ -102,8 +101,8 @@ Oid get_pg_func_oid(const char *func_name, const int nargs, ...)
     oidvector *arg_types;
     Oid func_oid;
 
-    AssertArg(func_name);
-    AssertArg(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
+    Assert(func_name);
+    Assert(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
 
     va_start(ap, nargs);
     for (i = 0; i < nargs; i++)

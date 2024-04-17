@@ -20,15 +20,9 @@
 #ifndef AG_CYPHER_NODE_H
 #define AG_CYPHER_NODE_H
 
-#include "postgres.h"
-
-#include "nodes/extensible.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-
 #include "nodes/ag_nodes.h"
 
-/* cypher sub patterns */
+/* cypher sub patterns/queries */
 typedef enum csp_kind
 {
         CSP_EXISTS,
@@ -42,6 +36,13 @@ typedef struct cypher_sub_pattern
         csp_kind kind;
         List *pattern;
 } cypher_sub_pattern;
+
+typedef struct cypher_sub_query
+{
+        ExtensibleNode extensible;
+        csp_kind kind;
+        List *query;
+} cypher_sub_query;
 
 /*
  * clauses
@@ -116,6 +117,10 @@ typedef struct cypher_unwind
 {
     ExtensibleNode extensible;
     ResTarget *target;
+
+    /* for list comprehension */
+    Node *where;
+    Node *collect;
 } cypher_unwind;
 
 typedef struct cypher_merge
@@ -133,6 +138,7 @@ typedef struct cypher_path
     ExtensibleNode extensible;
     List *path; // [ node ( , relationship , node , ... ) ]
     char *var_name;
+    char *parsed_var_name;
     int location;
 } cypher_path;
 
@@ -141,8 +147,10 @@ typedef struct cypher_node
 {
     ExtensibleNode extensible;
     char *name;
+    char *parsed_name;
     char *label;
     char *parsed_label;
+    bool use_equals;
     Node *props; // map or parameter
     int location;
 } cypher_node;
@@ -159,8 +167,10 @@ typedef struct cypher_relationship
 {
     ExtensibleNode extensible;
     char *name;
+    char *parsed_name;
     char *label;
     char *parsed_label;
+    bool use_equals;
     Node *props; // map or parameter
     Node *varlen; // variable length relationships (A_Indices)
     cypher_rel_dir dir;
@@ -200,6 +210,40 @@ typedef struct cypher_map
     bool keep_null; // if false, keyvals with null value are removed
 } cypher_map;
 
+typedef struct cypher_map_projection
+{
+    ExtensibleNode extensible;
+    ColumnRef *map_var; /* must be a map, vertex or an edge */
+    List *map_elements; /* list of cypher_map_projection_element */
+    int location;
+} cypher_map_projection;
+
+typedef enum cypher_map_projection_element_type
+{
+    PROPERTY_SELECTOR = 0,  /* map_var { .key } */
+    VARIABLE_SELECTOR,      /* map_var { value } */
+    LITERAL_ENTRY,          /* map_var { key: value } */
+    ALL_PROPERTIES_SELECTOR /* map_var { .* } */
+} cypher_map_projection_element_type;
+
+typedef struct cypher_map_projection_element
+{
+    ExtensibleNode extensible;
+    cypher_map_projection_element_type type;
+
+    /*
+     * key and/or value can be null depending on the type
+     *
+     * For PROPERTY_SELECTOR, value is null.
+     * For VARIABLE_SELECTOR, key is null, and value is a ColumnRef.
+     * For LITERAL_ENTRY, none is null (value is an Expr).
+     * For ALL_PROPERTIES_SELECTOR, both are null.
+     */
+    char *key;
+    Node *value;
+    int location;
+} cypher_map_projection_element;
+
 typedef struct cypher_list
 {
     ExtensibleNode extensible;
@@ -238,6 +282,29 @@ typedef struct cypher_create_path
     AttrNumber path_attr_num;
     char *var_name;
 } cypher_create_path;
+
+/*
+ * comparison expressions
+ */
+
+typedef struct cypher_comparison_aexpr
+{
+    ExtensibleNode extensible;
+    A_Expr_Kind kind; /* see above */
+    List *name; /* possibly-qualified name of operator */
+    Node *lexpr; /* left argument, or NULL if none */
+    Node *rexpr; /* right argument, or NULL if none */
+    int location; /* token location, or -1 if unknown */
+} cypher_comparison_aexpr;
+
+typedef struct cypher_comparison_boolexpr
+{
+    ExtensibleNode extensible;
+    BoolExprType boolop;
+    List       *args;           /* arguments to this expression */
+    int         location;       /* token location, or -1 if unknown */
+} cypher_comparison_boolexpr;
+
 
 /*
  * procedure call
