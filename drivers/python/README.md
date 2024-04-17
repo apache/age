@@ -89,7 +89,7 @@ Apache-2.0 License
 
 
 ## Networkx
-### Netowkx Unit test
+### Networkx Unit test
 ```
 python test_networkx.py \
 -host "127.0.0.1" \
@@ -136,7 +136,7 @@ networkx_to_age(connection, G, graphName)
 
 
 
-### AGE to Netowkx
+### AGE to Networkx
 
 Converts data from a Apache AGE graph database into a Networkx directed graph.
 
