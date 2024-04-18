@@ -68,31 +68,6 @@
 </br>
 
 
-<h2><img height="30" src="/img/tick.svg">&nbsp;&nbsp;Overview</h2>
-
-Apache AGE is :
-
-- **Powerful**: adds graph database support to the already popular PostgreSQL database: PostgreSQL is used by organizations including Apple, Spotify, and NASA.
-- **Flexible**: allows you to perform openCypher queries, which makes complex queries much easier to write. It also enables querying multiple graphs at the same time.
-- **Intelligent**: allows you to perform graph queries that are the basis for many next-level web services such as fraud detection, master data management, product recommendations, identity and relationship management, experience personalization, knowledge management, and more.
-
-<h2><img height="30" src="/img/features.svg">&nbsp;&nbsp;Features</h2>
-</br>
-</br>
-
-<p align="center">
-<img src="/img/age-03.png" width="80%" height="80%">
-</p>
-</br>
-
-- **Cypher Query**: supports graph query language
-- **Hybrid Querying**: enables SQL and/or Cypher
-- **Querying**: enables multiple graphs
-- **Hierarchical**: graph label organization
-- **Property Indexes**: on both vertices(nodes) and edges
-- **Full PostgreSQL**: supports PG features
-
-
 
 <h2><img height="30" src="/img/documentation.svg">&nbsp;&nbsp;Documentation</h2>
 
@@ -261,53 +236,6 @@ SELECT * from cypher('graph_name', $$
         RETURN V,R,V2
 $$) as (V agtype, R agtype, V2 agtype);
 ```
-
-<h2><img height="20" src="/img/gettingstarted.svg">&nbsp;&nbsp;Language Specific Drivers</h2>
-
-Starting with Apache AGE is very simple. You can easily select your platform and incorporate the relevant SDK into your code.
-</br>
-</br>
-
-<p align="center">
-<img src="/img/age-02.png" width="80%" height="80%">
-</p>
-
-
-<h4>Built-in</h4>
-
-- [Go driver](./drivers/golang)
-- [Java driver](./drivers/jdbc)
-- [NodeJs driver](./drivers/nodejs)
-- [Python driver](./drivers/python)
-
-<h4>Community-driven Driver</h4>
-
-- [Apache AGE Rust Driver](https://github.com/Dzordzu/rust-apache-age.git)
-
-
-
-
-<h2><img height="20" src="/img/visualization.svg">&nbsp;&nbsp;Graph Visualization Tool for AGE</h2>
-
-
-Apache AGE Viewer is a user interface for Apache AGE that provides visualization and exploration of data.
-This web visualization tool allows users to enter complex graph queries and explore the results in graph and table forms.
-Apache AGE Viewer is enhanced to proceed with extensive graph data and discover insights through various graph algorithms.
-Apache AGE Viewer will become a graph data administration and development platform for Apache AGE to support multiple relational databases: <https://github.com/apache/age-viewer>.
-
-**This is a visualization tool.**
-After installing AGE Extension, you may use this tool to get access to the visualization features.
-
-
-![Viewer gdb, and graph](/img/agce.gif)
-
-
-<h2><img height="20" src="/img/videos.png">&nbsp;&nbsp;Video Links</h2>
-
-You can also get help from these videos. 
-
-- Install on [Windows](https://www.youtube.com/watch?v=ddk8VX8Hm-I&list=PLGp3huJbWNDjgwP7s99Q-9_w1vxpjNHXG)
-- Install on [MacOS](https://www.youtube.com/watch?v=0-qMwpDh0CA)
 
 
 
