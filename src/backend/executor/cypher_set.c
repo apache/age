@@ -602,49 +602,43 @@ static void process_update_list(CustomScanState *node)
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
-    ResultRelInfo **saved_resultRels;
     EState *estate = css->css.ss.ps.state;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
-    TupleTableSlot *slot;
+    TupleTableSlot *slot = NULL;
 
-    saved_resultRels = estate->es_result_relations;
-
-    //Process the subtree first
+    // Process the subtree first
     Decrement_Estate_CommandId(estate);
     slot = ExecProcNode(node->ss.ps.lefttree);
     Increment_Estate_CommandId(estate);
 
-    if (TupIsNull(slot))
+    // Only continue if the slot is not null
+    if (!TupIsNull(slot))
     {
-        return NULL;
-    }
+        econtext->ecxt_scantuple =
+            node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
 
-    econtext->ecxt_scantuple =
-        node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
+        // Handle different conditions based on whether the clause is terminal or not
+        if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
+        {
+            process_update_list(node);
+            econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
+            slot = ExecProject(node->ss.ps.ps_ProjInfo);
+        }
+        else 
+        {
+            // Note: If process_all_tuples function doesn't affect the 'slot', 
+            // 'slot' remains NULL as initialized, and NULL will be returned if this clause is terminal
+            process_all_tuples(node);
+        }
 
-    if (CYPHER_CLAUSE_IS_TERMINAL(css->flags))
-    {
-        estate->es_result_relations = saved_resultRels;
-
-        process_all_tuples(node);
-
-        /* increment the command counter to reflect the updates */
+        // Increment the command counter to reflect the updates
         CommandCounterIncrement();
-
-        return NULL;
     }
-
-    process_update_list(node);
-
-    /* increment the command counter to reflect the updates */
-    CommandCounterIncrement();
-
-    estate->es_result_relations = saved_resultRels;
-
-    econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
-
-    return ExecProject(node->ss.ps.ps_ProjInfo);
+    
+    // Return the resulting slot, or NULL if the slot was null to begin with or if the clause was terminal
+    return slot;
 }
+
 
 static void end_cypher_set(CustomScanState *node)
 {
