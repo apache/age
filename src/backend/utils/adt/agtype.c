@@ -5696,8 +5696,8 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
 
     /*
-     * toBoolean() supports bool, text, cstring, or the agtype bool, and string
-     * input.
+     * toBoolean() supports bool, text, cstring, integer or the agtype bool,
+     * string and integer input.
      */
     arg = args[0];
     type = types[0];
@@ -5719,6 +5719,10 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
                 result = false;
             else
                 PG_RETURN_NULL();
+        }
+        else if (type == INT2OID || type == INT4OID || type == INT8OID)
+        {
+            result = DatumGetBool(DirectFunctionCall1(int4_bool, arg));
         }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -5753,6 +5757,11 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
                 result = false;
             else
                 PG_RETURN_NULL();
+        }
+        else if (agtv_value->type == AGTV_INTEGER)
+        {
+            result = DatumGetBool(DirectFunctionCall1(int4_bool,
+                                                      Int64GetDatum(agtv_value->val.int_value)));
         }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -5838,6 +5847,13 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
             	agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &bool_elem);
 				break;
 
+            case AGTV_INTEGER:
+
+                bool_elem.val.boolean = DatumGetBool(DirectFunctionCall1(int4_bool,
+                                                                         Int64GetDatum(elem->val.int_value)));
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &bool_elem);
+                break;
 
 			default:
 				bool_elem.type = AGTV_NULL;
@@ -6031,7 +6047,7 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     /* iterate through the list */
     for (i = 0; i < count; i++)
     {
-        // TODO: check element's type, it's value, and convert it to float if possible.
+        // check element's type, it's value, and convert it to float if possible.
         elem = get_ith_agtype_value_from_container(&agt_arg->root, i);
         float_elem.type = AGTV_FLOAT;
 
@@ -6045,12 +6061,14 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
                 float_elem.type = AGTV_FLOAT;
                 float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision",
                                             string, &is_valid); 
-                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &float_elem);
             }
             else 
             {
                 float_elem.type = AGTV_NULL;
-                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &float_elem);
             }
             
             break;
@@ -6062,19 +6080,22 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
             sprintf(buffer, "%f", float_num);
             string = buffer;
             float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision", string, &is_valid);
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &float_elem);
 
             break;
             
         default:
 
             float_elem.type = AGTV_NULL;
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &float_elem);
 
             break;
         }
     }
-    agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_END_ARRAY, NULL);
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
 }
