@@ -9,7 +9,6 @@
    "license": "apache_2_0",
    "provides": {
       "ApacheAGE": {
-         "abstract": "Apache AGE is a PostgreSQL Extension that provides graph database functionality",
          "file": "age--1.3.0.sql",
          "docfile": "README.md",
          "version": "1.3.0"
