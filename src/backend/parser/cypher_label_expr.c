@@ -13,6 +13,7 @@
 #include "parser/cypher_label_expr.h"
 #include "parser/cypher_transform_entity.h"
 #include "utils/ag_cache.h"
+#include "utils/array.h"
 
 static void append_to_allrelations(Relation ag_label, char *label_name,
                                    char *intr_relname, Oid graphoid);
