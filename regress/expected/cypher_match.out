@@ -3298,9 +3298,9 @@ $$) AS (n1 agtype, n2 agtype, n3 agtype, e1 agtype);
 --
 -- Using the test_enable_containment graph for these tests
 SELECT * FROM cypher('test_enable_containment', $$ CREATE p=(:Customer)-[:bought {store:'Amazon', addr:{city: 'Vancouver', street: 30}}]->(y:Product) RETURN p $$) as (a agtype);
-                                                                                                                                                                         a                                                                                                                                                                          
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 844424930131970, "label": "Customer", "properties": {}}::vertex, {"id": 1125899906842625, "label": "bought", "end_id": 1407374883553281, "start_id": 844424930131970, "properties": {"addr": {"city": "Vancouver", "street": 30}, "store": "Amazon"}}::edge, {"id": 1407374883553281, "label": "Product", "properties": {}}::vertex]::path
+                                                                                                                                                                           a                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 844424930131970, "label": ["Customer"], "properties": {}}::vertex, {"id": 1125899906842625, "label": "bought", "end_id": 1407374883553281, "start_id": 844424930131970, "properties": {"addr": {"city": "Vancouver", "street": 30}, "store": "Amazon"}}::edge, {"id": 1407374883553281, "label": ["Product"], "properties": {}}::vertex]::path
 (1 row)
 
 -- With enable_containment on

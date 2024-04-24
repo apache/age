@@ -54,6 +54,7 @@
 #include "utils/ag_cache.h"
 #include "utils/ag_func.h"
 #include "utils/ag_guc.h"
+#include "utils/lsyscache.h"
 
 /*
  * Variable string names for makeTargetEntry. As they are going to be variable

@@ -2371,7 +2371,7 @@ Datum _agtype_build_vertex_cstringlabel(PG_FUNCTION_ARGS)
 
     if (fcinfo->args[2].isnull)
     {
-        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
         properties = build_agtype(bstate);
         pfree_agtype_build_state(bstate);
     }
