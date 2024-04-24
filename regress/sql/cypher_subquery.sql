@@ -8,7 +8,7 @@ SELECT * FROM cypher('subquery', $$
 										  (:person {name: "Chan", age: 45})<-[:knows]-(:person {name: "Faye", age: 25})-[:knows]->
 										  (:person {name: "Tony", age: 34})-[:loved]->(:person {name : "Valerie", age: 33}),
 										  (:person {name: "Calvin", age: 6})-[:knows]->(:pet {name: "Hobbes"}),
-										  (:person {name: "Charlie", age: 8})-[:knows]->(:pet {name : "Snoopy"}),
+										  (:person {name: "Lucy", age: 8})<-[:knows]-(:person {name: "Charlie", age: 8})-[:knows]->(:pet {name : "Snoopy"}),
 										  (:pet {name: "Odie"})<-[:knows]-(:person {name: "Jon", age: 29})-[:knows]->(:pet {name: "Garfield"})
 								 $$) AS (result agtype);
 
@@ -73,13 +73,24 @@ SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 												 }
 									RETURN (a) $$) AS (result agtype);
 
---union, no returns, not yet implemented, should error out
+--union, no returns
 SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 									WHERE EXISTS {
 												  MATCH (a:person)-[]->(b:pet)
 												  WHERE a.name = 'Charlie'
 												  UNION
-												  MATCH (c:person)-[]->(d:person)
+												  MATCH (a:person)-[]->(c:person)
+												 }
+									RETURN (a) $$) AS (result agtype);
+
+--union, mismatched number of return columns for returns 
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a:person)-[]->(b:pet)
+												  RETURN a, b
+												  UNION
+												  MATCH (a:person)-[]->(c:person)
+												  RETURN c
 												 }
 									RETURN (a) $$) AS (result agtype);
 
