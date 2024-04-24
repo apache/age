@@ -895,7 +895,7 @@ SELECT * FROM cypher('cypher_create', $$
 $$) as (r agtype);
                                r                                
 ----------------------------------------------------------------
- {"id": 281474976710685, "label": "", "properties": {}}::vertex
+ {"id": 281474976710685, "label": [], "properties": {}}::vertex
 (1 row)
 
 SELECT * FROM cypher('cypher_create', $$
@@ -903,7 +903,7 @@ SELECT * FROM cypher('cypher_create', $$
 $$) as (m agtype);
                                m                                
 ----------------------------------------------------------------
- {"id": 281474976710689, "label": "", "properties": {}}::vertex
+ {"id": 281474976710689, "label": [], "properties": {}}::vertex
 (1 row)
 
 --

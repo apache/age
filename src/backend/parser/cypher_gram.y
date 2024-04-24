@@ -1379,16 +1379,13 @@ path_node:
             n->name = $2;
             n->parsed_name = $2;
             n->label_expr = (cypher_label_expr *) $3;
-            n->label_expr->kind = LABEL_KIND_VERTEX;
-            n->label = NULL;        // TODO: to be deprecated
-            n->parsed_label = NULL; // TODO; to be deprecated
             n->use_equals = false;
             n->props = $4;
             n->location = @2;
 
             $$ = (Node *)n;
         }
-    | '(' var_name_opt label_opt '='properties_opt ')'
+    | '(' var_name_opt label_expr '='properties_opt ')'
         {
             cypher_node *n;
 
@@ -1396,9 +1393,6 @@ path_node:
             n->name = $2;
             n->parsed_name = $2;
             n->label_expr = (cypher_label_expr *) $3;
-            n->label_expr->kind = LABEL_KIND_VERTEX;
-            n->label = NULL;        // TODO: to be deprecated
-            n->parsed_label = NULL; // TODO; to be deprecated
             n->use_equals = true;
             n->props = $5;
             n->location = @2;
@@ -1460,9 +1454,6 @@ path_relationship_body:
             n->name = $2;
             n->parsed_name = $2;
             n->label_expr = (cypher_label_expr *) $3;
-            n->label_expr->kind = LABEL_KIND_EDGE;
-            n->label = NULL;        // TODO: to be deprecated
-            n->parsed_label = NULL; // TODO; to be deprecated
             n->varlen = $4;
             n->use_equals = true;
             n->props = $6;

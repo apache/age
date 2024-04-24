@@ -1237,7 +1237,7 @@ List *search_label_allrelations_cache(Oid relation)
     label_allrelations_cache_entry *entry;
     bool found;
 
-    AssertArg(relation);
+    Assert(relation);
 
     initialize_caches();
 

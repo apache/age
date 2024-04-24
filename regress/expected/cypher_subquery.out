@@ -18,26 +18,26 @@ SELECT * FROM cypher('exists_subquery', $$
 (0 rows)
 
 SELECT * FROM cypher('exists_subquery', $$ MATCH (a) RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
- {"id": 1688849860263937, "label": "pet", "properties": {"name": "Hobbes"}}::vertex
- {"id": 1688849860263938, "label": "pet", "properties": {"name": "Snoopy"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
+ {"id": 1688849860263937, "label": ["pet"], "properties": {"name": "Hobbes"}}::vertex
+ {"id": 1688849860263938, "label": ["pet"], "properties": {"name": "Snoopy"}}::vertex
 (9 rows)
 
 SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person) 
 										   WHERE EXISTS {(a:person)-[]->(:pet)}
 										   RETURN (a) $$) AS (result agtype);
-                                             result                                              
--------------------------------------------------------------------------------------------------
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                              result                                               
+---------------------------------------------------------------------------------------------------
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (2 rows)
 
 --trying to use b when not defined, should fail
@@ -54,15 +54,15 @@ LINE 2:              WHERE EXISTS {(a:person)-[]->(b:pet)}
 SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   WHERE EXISTS {MATCH (a:person)-[]->(b:pet) RETURN b}
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --repeat variable in match
@@ -76,15 +76,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 						   				 			     RETURN a
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --query inside, with WHERE
@@ -105,15 +105,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   WHERE EXISTS {MATCH (a:person)-[]->(b:pet)
 										   				 WHERE a.name = 'Calvin'}
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --union
@@ -130,15 +130,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 RETURN c
 										   				}
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 -- union, mismatched var, should fail
@@ -164,15 +164,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 MATCH (c:person)-[]->(d:person)
 										   				}
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --union, mismatched returns, should fail
@@ -202,15 +202,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 			  }
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --nesting, accessing var in outer scope
@@ -227,15 +227,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 			  }
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --nesting, accessing indirection in outer scope
@@ -252,15 +252,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 			  }
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --nesting, accessing var 2+ levels up
@@ -277,15 +277,15 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 			  }
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --nesting, accessing indirection 2+ levels up
@@ -302,30 +302,30 @@ SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person)
 										   				 			  }
 										   				 }
 										   RETURN (a) $$) AS (result agtype);
-                                              result                                               
----------------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex
+                                               result                                                
+-----------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex
 (7 rows)
 
 --EXISTS outside of WHERE
 SELECT * FROM cypher('exists_subquery', $$ MATCH (a:person) 
 										   RETURN a, EXISTS {(a:person)-[]->(:pet)}
 										   $$) AS (a agtype, exists agtype);
-                                                 a                                                 | exists 
----------------------------------------------------------------------------------------------------+--------
- {"id": 844424930131969, "label": "person", "properties": {"age": 32, "name": "Briggite"}}::vertex | false
- {"id": 844424930131970, "label": "person", "properties": {"age": 28, "name": "Takeshi"}}::vertex  | false
- {"id": 844424930131971, "label": "person", "properties": {"age": 25, "name": "Faye"}}::vertex     | false
- {"id": 844424930131972, "label": "person", "properties": {"age": 34, "name": "Tony"}}::vertex     | false
- {"id": 844424930131973, "label": "person", "properties": {"age": 33, "name": "Valerie"}}::vertex  | false
- {"id": 844424930131974, "label": "person", "properties": {"age": 6, "name": "Calvin"}}::vertex    | true
- {"id": 844424930131975, "label": "person", "properties": {"age": 8, "name": "Charlie"}}::vertex   | true
+                                                  a                                                  | exists 
+-----------------------------------------------------------------------------------------------------+--------
+ {"id": 844424930131969, "label": ["person"], "properties": {"age": 32, "name": "Briggite"}}::vertex | false
+ {"id": 844424930131970, "label": ["person"], "properties": {"age": 28, "name": "Takeshi"}}::vertex  | false
+ {"id": 844424930131971, "label": ["person"], "properties": {"age": 25, "name": "Faye"}}::vertex     | false
+ {"id": 844424930131972, "label": ["person"], "properties": {"age": 34, "name": "Tony"}}::vertex     | false
+ {"id": 844424930131973, "label": ["person"], "properties": {"age": 33, "name": "Valerie"}}::vertex  | false
+ {"id": 844424930131974, "label": ["person"], "properties": {"age": 6, "name": "Calvin"}}::vertex    | true
+ {"id": 844424930131975, "label": ["person"], "properties": {"age": 8, "name": "Charlie"}}::vertex   | true
 (7 rows)
 
 --Var doesnt exist in outside scope, should fail
