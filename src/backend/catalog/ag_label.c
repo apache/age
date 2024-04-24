@@ -30,7 +30,6 @@
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
-#include "utils/graphid.h"
 #include "utils/agtype_raw.h"
 
 static label_cache_data *get_entity_lcd(graphid entity_id, Oid graph_oid);

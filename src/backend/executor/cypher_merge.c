@@ -23,9 +23,6 @@
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "utils/datum.h"
-#include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 #include "parser/cypher_label_expr.h"
 
 /*
