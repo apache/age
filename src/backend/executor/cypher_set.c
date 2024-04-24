@@ -23,9 +23,6 @@
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "nodes/cypher_nodes.h"
-#include "utils/agtype.h"
-#include "utils/graphid.h"
 #include "utils/ag_cache.h"
 #include "catalog/ag_label.h"
 
