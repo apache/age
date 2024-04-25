@@ -102,7 +102,7 @@ REGRESS = scan \
           cypher_union \
           cypher_call \
           cypher_merge \
-	  cypher_subquery \
+          cypher_subquery \
           age_global_graph \
           age_load \
           index \
@@ -110,6 +110,7 @@ REGRESS = scan \
           graph_generation \
           name_validation \
           jsonb_operators \
+          map_projection \
           drop
 
 srcdir=`pwd`
