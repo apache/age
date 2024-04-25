@@ -20,7 +20,6 @@ import decimal
 import age
 import argparse
 
-DSN = "host=localhost port=5432 dbname=postgres user=postgres password=agens"
 TEST_HOST = "localhost"
 TEST_PORT = 5432
 TEST_DB = "postgres"
@@ -30,9 +29,19 @@ TEST_GRAPH_NAME = "test_graph"
 
 class TestAgeBasic(unittest.TestCase):
     ag = None
+    args: argparse.Namespace
     def setUp(self):
         print("Connecting to Test Graph.....")
-        self.ag = age.connect(graph=TEST_GRAPH_NAME, host=TEST_HOST, port=TEST_PORT, dbname=TEST_DB, user=TEST_USER, password=TEST_PASSWORD)
+        args = dict(
+            host=self.args.host,
+            port=self.args.port,
+            dbname=self.args.database,
+            user=self.args.user,
+            password=self.args.password
+        )
+
+        dsn = "host={host} port={port} dbname={dbname} user={user} password={password}".format(**args)
+        self.ag = age.connect(dsn, graph=self.args.graphName, **args)
 
 
     def tearDown(self):
@@ -89,7 +98,7 @@ class TestAgeBasic(unittest.TestCase):
             print("EDGE:", path[1])
             print("END:", path[2])
 
-        cursor = ag.execCypher("MATCH p=(a)-[b]-(c) WHERE b.weight>2 RETURN a,label(b), b.weight, c", cols=["a","bl","bw", "c"], params=(2,))
+        cursor = ag.execCypher("MATCH p=(a)-[b]-(c) WHERE b.weight>%s RETURN a,label(b), b.weight, c", cols=["a","bl","bw", "c"], params=(2,))
         for row in cursor:
             start = row[0]
             edgel = row[1]
@@ -381,27 +390,27 @@ if __name__ == '__main__':
     parser.add_argument('-host',
                         '--host',
                         help='Optional Host Name. Default Host is "127.0.0.1" ',
-                        default="127.0.0.1")
+                        default=TEST_HOST)
     parser.add_argument('-port',
                         '--port',
                         help='Optional Port Number. Default port no is 5432',
-                        default=5432)
+                        default=TEST_PORT)
     parser.add_argument('-db',
                         '--database',
                         help='Required Database Name',
-                        required=True)
+                        default=TEST_DB)
     parser.add_argument('-u',
                         '--user',
                         help='Required Username Name',
-                        required=True)
+                        default=TEST_USER)
     parser.add_argument('-pass',
                         '--password',
                         help='Required Password for authentication',
-                        required=True)
+                        default=TEST_PASSWORD)
     parser.add_argument('-gn',
                         '--graphName',
                         help='Optional Graph Name to be created. Default graphName is "test_graph"',
-                        default="test_graph")
+                        default=TEST_GRAPH_NAME)
 
     args = parser.parse_args()
     suite = unittest.TestSuite()
