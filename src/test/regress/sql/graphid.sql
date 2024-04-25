@@ -1,0 +1,61 @@
+--
+-- GRAPHID
+--
+
+-- graphid()
+
+SELECT graphid(-1, 0);
+SELECT graphid(0, -1);
+SELECT graphid(0, 0);
+SELECT graphid(65535, 281474976710655);
+SELECT graphid(65535, 281474976710656);
+SELECT graphid(65536, 281474976710655);
+
+-- graphid_in()
+
+SELECT '-1.0'::graphid;
+SELECT '0.-1'::graphid;
+SELECT '0.0'::graphid;
+SELECT '65535.281474976710655'::graphid;
+SELECT '65535.281474976710656'::graphid;
+SELECT '65536.281474976710655'::graphid;
+
+-- Coercion from unknown and numeric to graphid
+
+SELECT '1.1'::graphid;
+SELECT 1.1::graphid;
+
+-- Insert and Operator
+
+CREATE TABLE GRAPHID_TBL(f1 graphid);
+
+INSERT INTO GRAPHID_TBL(f1) VALUES ('0.0'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.1'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.12'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.123'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12345.1234'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('12346.123'::graphid);
+INSERT INTO GRAPHID_TBL(f1) VALUES ('65535.281474976710655'::graphid);
+
+SELECT * FROM GRAPHID_TBL;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 =  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <> '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >= '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <= '12345.123'::graphid;
+
+-- Index
+
+CREATE INDEX GRAPHID_TBL_IDX ON GRAPHID_TBL USING GIN (f1);
+
+SET enable_seqscan = off;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 =  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <> '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 >= '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <  '12345.123'::graphid;
+SELECT g.* FROM GRAPHID_TBL g WHERE g.f1 <= '12345.123'::graphid;
+SET enable_seqscan = on;
+
+DROP TABLE GRAPHID_TBL;
