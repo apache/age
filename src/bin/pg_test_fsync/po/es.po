@@ -1,0 +1,183 @@
+# Spanish message translation file for pg_test_fsync
+#
+# Copyright (c) 2017-2019, PostgreSQL Global Development Group
+# This file is distributed under the same license as the PostgreSQL package.
+#
+# Carlos Chapi <carloswaldo@babelruins.org>, 2017.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: pg_test_fsync (PostgreSQL) 10\n"
+"Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
+"POT-Creation-Date: 2022-08-09 06:19+0000\n"
+"PO-Revision-Date: 2019-06-06 17:25-0400\n"
+"Last-Translator: Carlos Chapi <carloswaldo@babelruins.org>\n"
+"Language-Team: PgSQL-es-Ayuda <pgsql-es-ayuda@lists.postgresql.org>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: BlackCAT 1.0\n"
+
+#. translator: maintain alignment with NA_FORMAT
+#: pg_test_fsync.c:30
+#, c-format
+msgid "%13.3f ops/sec  %6.0f usecs/op\n"
+msgstr "%13.3f ops/seg  %6.0f usegs/op\n"
+
+#: pg_test_fsync.c:156
+#, c-format
+msgid "Usage: %s [-f FILENAME] [-s SECS-PER-TEST]\n"
+msgstr "Empleo: %s [-f ARCHIVO] [-s SEG-POR-PRUEBA]\n"
+
+#: pg_test_fsync.c:180 pg_test_fsync.c:191
+#, c-format
+msgid "Try \"%s --help\" for more information.\n"
+msgstr "Pruebe «%s --help» para mayor información.\n"
+
+#: pg_test_fsync.c:196
+#, c-format
+msgid "%d second per test\n"
+msgid_plural "%d seconds per test\n"
+msgstr[0] "%d segundo por prueba\n"
+msgstr[1] "%d segundos por prueba\n"
+
+#: pg_test_fsync.c:201
+#, c-format
+msgid "O_DIRECT supported on this platform for open_datasync and open_sync.\n"
+msgstr "O_DIRECT tiene soporte en esta plataforma para open_datasync y open_sync.\n"
+
+#: pg_test_fsync.c:203
+#, c-format
+msgid "Direct I/O is not supported on this platform.\n"
+msgstr "Direct I/O no está soportado en esta plataforma.\n"
+
+#: pg_test_fsync.c:228 pg_test_fsync.c:293 pg_test_fsync.c:317
+#: pg_test_fsync.c:340 pg_test_fsync.c:481 pg_test_fsync.c:493
+#: pg_test_fsync.c:509 pg_test_fsync.c:515 pg_test_fsync.c:540
+msgid "could not open output file"
+msgstr "no se pudo abrir el archivo de salida"
+
+#: pg_test_fsync.c:232 pg_test_fsync.c:274 pg_test_fsync.c:299
+#: pg_test_fsync.c:323 pg_test_fsync.c:346 pg_test_fsync.c:384
+#: pg_test_fsync.c:442 pg_test_fsync.c:483 pg_test_fsync.c:511
+#: pg_test_fsync.c:542
+msgid "write failed"
+msgstr "escritura falló"
+
+#: pg_test_fsync.c:236 pg_test_fsync.c:325 pg_test_fsync.c:348
+#: pg_test_fsync.c:485 pg_test_fsync.c:517
+msgid "fsync failed"
+msgstr "fsync falló"
+
+#: pg_test_fsync.c:250
+#, c-format
+msgid ""
+"\n"
+"Compare file sync methods using one %dkB write:\n"
+msgstr ""
+"\n"
+"Comparar métodos de sincronización de archivos usando una escritura de %dkB:\n"
+
+#: pg_test_fsync.c:252
+#, c-format
+msgid ""
+"\n"
+"Compare file sync methods using two %dkB writes:\n"
+msgstr ""
+"\n"
+"Comparar métodos de sincronización de archivos usando dos escrituras de %dkB:\n"
+
+#: pg_test_fsync.c:253
+#, c-format
+msgid "(in wal_sync_method preference order, except fdatasync is Linux's default)\n"
+msgstr "(en orden de preferencia de wal_sync_method, excepto en Linux donde fdatasync es el predeterminado)\n"
+
+#: pg_test_fsync.c:264 pg_test_fsync.c:367 pg_test_fsync.c:433
+msgid "n/a*"
+msgstr "n/a*"
+
+#: pg_test_fsync.c:276 pg_test_fsync.c:302 pg_test_fsync.c:327
+#: pg_test_fsync.c:350 pg_test_fsync.c:386 pg_test_fsync.c:444
+msgid "seek failed"
+msgstr "búsqueda falló"
+
+#: pg_test_fsync.c:282 pg_test_fsync.c:307 pg_test_fsync.c:355
+#: pg_test_fsync.c:392 pg_test_fsync.c:450
+msgid "n/a"
+msgstr "n/a"
+
+#: pg_test_fsync.c:397
+#, c-format
+msgid ""
+"* This file system and its mount options do not support direct\n"
+"  I/O, e.g. ext4 in journaled mode.\n"
+msgstr ""
+"* Este sistema de archivos con sus opciones de montaje no soportan\n"
+"  Direct I/O, e.g. ext4 en modo journal.\n"
+
+#: pg_test_fsync.c:405
+#, c-format
+msgid ""
+"\n"
+"Compare open_sync with different write sizes:\n"
+msgstr ""
+"\n"
+"Comparar open_sync con diferentes tamaños de escritura:\n"
+
+#: pg_test_fsync.c:406
+#, c-format
+msgid ""
+"(This is designed to compare the cost of writing 16kB in different write\n"
+"open_sync sizes.)\n"
+msgstr ""
+"(Esto está diseñado para comparar el costo de escribir 16kB en diferentes\n"
+"tamaños de escrituras open_sync.)\n"
+
+#: pg_test_fsync.c:409
+msgid " 1 * 16kB open_sync write"
+msgstr " 1 * 16kB escritura open_sync"
+
+#: pg_test_fsync.c:410
+msgid " 2 *  8kB open_sync writes"
+msgstr " 2 *  8kB escrituras open_sync"
+
+#: pg_test_fsync.c:411
+msgid " 4 *  4kB open_sync writes"
+msgstr " 4 *  4kB escrituras open_sync"
+
+#: pg_test_fsync.c:412
+msgid " 8 *  2kB open_sync writes"
+msgstr " 8 *  2kB escrituras open_sync"
+
+#: pg_test_fsync.c:413
+msgid "16 *  1kB open_sync writes"
+msgstr "16 *  1kB escrituras open_sync"
+
+#: pg_test_fsync.c:466
+#, c-format
+msgid ""
+"\n"
+"Test if fsync on non-write file descriptor is honored:\n"
+msgstr ""
+"\n"
+"Probar si se respeta fsync en un descriptor de archivo que no es de escritura:\n"
+
+#: pg_test_fsync.c:467
+#, c-format
+msgid ""
+"(If the times are similar, fsync() can sync data written on a different\n"
+"descriptor.)\n"
+msgstr ""
+"(Si los tiempos son similares, fsync() puede sincronizar datos escritos\n"
+"en un descriptor diferente.)\n"
+
+#: pg_test_fsync.c:532
+#, c-format
+msgid ""
+"\n"
+"Non-sync'ed %dkB writes:\n"
+msgstr ""
+"\n"
+"Escrituras de %dkB no sincronizadas:\n"
