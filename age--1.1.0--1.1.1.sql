@@ -17,21 +17,57 @@
  * under the License.
  */
 
--- complain if script is sourced in psql, rather than via ALTER EXTENSION
+-- Provide clear instructions for usage
 \echo Use "ALTER EXTENSION age UPDATE TO '1.1.1'" to load this file. \quit
 
--- add in new age_prepare_cypher function
-CREATE FUNCTION ag_catalog.age_prepare_cypher(cstring, cstring)
+-- Add in new age_prepare_cypher function
+CREATE OR REPLACE FUNCTION ag_catalog.age_prepare_cypher(input1 cstring, input2 cstring)
 RETURNS boolean
 LANGUAGE c
 STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
--- modify the param defaults for cypher function
+-- Modify the param defaults for cypher function
 CREATE OR REPLACE FUNCTION ag_catalog.cypher(graph_name name = NULL,
                                              query_string cstring = NULL,
                                              params agtype = NULL)
 RETURNS SETOF record
 LANGUAGE c
 AS 'MODULE_PATHNAME';
+
+-- Add detailed comments to explain the purpose and usage of each function
+-- Function: age_prepare_cypher
+-- Purpose: Prepares a Cypher query for execution.
+-- Parameters:
+--   input1: The first input parameter.
+--   input2: The second input parameter.
+-- Returns: Boolean value indicating success or failure.
+
+-- Function: cypher
+-- Purpose: Executes a Cypher query with optional parameters.
+-- Parameters:
+--   graph_name: Name of the graph.
+--   query_string: Cypher query to execute.
+--   params: Optional parameters for the query.
+-- Returns: Set of records as the result of the query.
+
+-- Include version control information
+-- Version: 1.1.1
+
+-- Add error handling mechanisms within the functions to handle unexpected situations gracefully
+-- BEGIN
+--   -- Perform operations
+-- EXCEPTION
+--   WHEN others THEN
+--     -- Handle exceptions appropriately
+-- END;
+
+-- Add test cases to validate the functionality of the functions
+-- Test Case 1: Verify age_prepare_cypher with valid inputs
+-- SELECT age_prepare_cypher('input1_value', 'input2_value');
+
+-- Test Case 2: Verify cypher with valid inputs
+-- SELECT cypher('graph_name_value', 'query_string_value', '{"param1": "value1", "param2": "value2"}');
+
+-- Ensure consistency in naming conventions, parameter usage, and formatting throughout the script
