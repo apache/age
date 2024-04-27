@@ -2,8 +2,8 @@
 *.so
 .gitignore
 build.sh
-.idea
-.deps
+.idea/
+.deps/
 .DS_Store
 *.tokens
 *.interp
