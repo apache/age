@@ -35,7 +35,14 @@ TEST_PASSWORD = "agens"
 
 class TestAgeToNetworkx(unittest.TestCase):
     ag = None
-    args: argparse.Namespace
+    args: argparse.Namespace = argparse.Namespace(
+        host=TEST_HOST,
+        port=TEST_PORT,
+        database=TEST_DB,
+        user=TEST_USER,
+        password=TEST_PASSWORD,
+        graphName=TEST_GRAPH_NAME
+    )
 
     def setUp(self):
         args = dict(
@@ -224,7 +231,14 @@ class TestNetworkxToAGE(unittest.TestCase):
     ag = None
     ag1 = None
     ag2 = None
-    args: argparse.Namespace
+    args: argparse.Namespace = argparse.Namespace(
+        host=TEST_HOST,
+        port=TEST_PORT,
+        database=TEST_DB,
+        user=TEST_USER,
+        password=TEST_PASSWORD,
+        graphName=TEST_GRAPH_NAME
+    )
 
     def setUp(self):
         args = dict(
