@@ -1,0 +1,56 @@
+apache-age-viewer-go-1.0.0
+
+Add eslintrc and define eslint rules (#1017)
+
+Output formate change as required in the frontend (#1011)
+
+Move frontend to root project, Update workspace, Reworked PR#960 (#1005)
+    * Move frontend from age-viewer to root directory
+    * Fix react-router-dom missing dependency
+    * Fix go workspaces
+
+Add date and timestamp to log output in logging middleware (#973)
+
+set API connection URL (#990)
+
+Retrieve the graphs name when connecting to DB. (#962)
+    * Function to disconnect database add to backend
+    * Added functionalities to read query response dynamically
+    * Meatdata functionalities changes to retrieve data of all graphs, rather a single graph
+    * retrieve all graph names and first graph names when user connectes to db
+
+Added functionalities to read query response dynamically (#836)
+    * Function to disconnect database add to backend
+    * Added functionalities to read query response dynamically
+
+API function for disconnecting databse and Docs for backend added (#818)
+    * Function to disconnect database add to backend
+    * Docs added for backend
+
+Backend-API functions. (#794)
+    * API functions add which needs to be called from frontend to access the backend    
+    * API functions add which needs to be called from frontend to access the backend
+
+Query endpoint (#723)    
+    * backend file and folder structure
+    * file folder structure
+    * re-run checks
+    * setup backend session handling and db connection
+    * update error handling and connection type
+    * graph type definition and graph querying
+    * graph querying and Graph type
+    * initializing graph queries and metadata implementation
+    * build
+    * handle any query
+    * error handling
+
+Basic file and folder structure for backend (#699)   
+    * README screenshot and gif included
+    * backend file and folder structure
+    * file folder structure
+    * re-run checks
+
+Update readme of Ageviewer go (#658)
+    * description and functionalities added to readme file
+    * description and functionalities added to readme file
+    * cypher(text) function is the entry point to run Cypher queries.
