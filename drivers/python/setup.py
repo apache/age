@@ -29,7 +29,7 @@ setup(
     author_email     = 'dev-subscribe@age.apache.org',
     url              = 'https://github.com/apache/age',
     license          = 'Apache2.0',
-    install_requires = [ 'psycopg2', 'antlr4-python3-runtime==4.11.1'],
+    install_requires = [ 'psycopg', 'antlr4-python3-runtime==4.11.1'],
     packages         = ['age', 'age.gen','age.networkx'],
     keywords         = ['Graph Database', 'Apache AGE', 'PostgreSQL'],
     python_requires  = '>=3.9',
