@@ -1,0 +1,1189 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+/*
+ * MATCH queries with multiple labels
+ */
+SElECT create_graph('mlabels1');
+NOTICE:  graph "mlabels1" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- create
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a     {name:'a'})   $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:b     {name:'b'})   $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:c     {name:'c'})   $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a:b   {name:'ab'})  $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE (x:a:b:c {name:'abc'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:p {name:'p'}]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:q {name:'q'}]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ CREATE ()-[:r {name:'r'}]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- match OR
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+  :a   
+-------
+ "a"
+ "ab"
+ "abc"
+(3 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b)          RETURN x.name $$) as (":a|b" agtype);
+ :a|b  
+-------
+ "a"
+ "ab"
+ "abc"
+ "b"
+(4 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b|c)        RETURN x.name $$) as (":a|b|c" agtype);
+ :a|b|c 
+--------
+ "a"
+ "ab"
+ "abc"
+ "b"
+ "c"
+(5 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p]->()     RETURN e.name $$) as (":p" agtype);
+ :p  
+-----
+ "p"
+(1 row)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q]->()   RETURN e.name $$) as (":p|q" agtype);
+ :p|q 
+------
+ "p"
+ "q"
+(2 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q|r]->() RETURN e.name $$) as (":p|q|r" agtype);
+ :p|q|r 
+--------
+ "p"
+ "q"
+ "r"
+(3 rows)
+
+-- match AND
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+  :a   
+-------
+ "a"
+ "ab"
+ "abc"
+(3 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b)          RETURN x.name $$) as (":a:b" agtype);
+ :a:b  
+-------
+ "ab"
+ "abc"
+(2 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b:c)        RETURN x.name $$) as (":a:b:c" agtype);
+ :a:b:c 
+--------
+ "abc"
+(1 row)
+
+-- mutual inclusion\exclusion
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a)            RETURN x.name $$) as (":a" agtype);
+  :a   
+-------
+ "a"
+ "ab"
+ "abc"
+(3 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b)            RETURN x.name $$) as (":b" agtype);
+  :b   
+-------
+ "b"
+ "ab"
+ "abc"
+(3 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b)          RETURN x.name $$) as (":a:b" agtype);
+ :a:b  
+-------
+ "ab"
+ "abc"
+(2 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b)          RETURN x.name $$) as (":a|b" agtype);
+ :a|b  
+-------
+ "a"
+ "ab"
+ "abc"
+ "b"
+(4 rows)
+
+-- duplicate: (a, b, a) = (a, b)
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:b:a)        RETURN x.name $$) as (":a:b:a" agtype);
+ :a:b:a 
+--------
+ "ab"
+ "abc"
+(2 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|b|a)        RETURN x.name $$) as (":a|b|a" agtype);
+ :a|b|a 
+--------
+ "a"
+ "ab"
+ "abc"
+ "b"
+(4 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|q|p]->() RETURN e.name $$) as (":p|q|p" agtype);
+ :p|q|p 
+--------
+ "p"
+ "q"
+(2 rows)
+
+-- order: (a, b) = (b, a)
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b:a)          RETURN x.name $$) as (":b:a" agtype);
+ :b:a  
+-------
+ "ab"
+ "abc"
+(2 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:b|a)          RETURN x.name $$) as (":b|a" agtype);
+ :b|a  
+-------
+ "a"
+ "ab"
+ "abc"
+ "b"
+(4 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:q|p]->()   RETURN e.name $$) as (":q|p" agtype);
+ :q|p 
+------
+ "p"
+ "q"
+(2 rows)
+
+-- some label does not exist: m and n
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a:m:b)        RETURN x.name $$) as (":a:m:b" agtype);
+ :a:m:b 
+--------
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:a|m|b)        RETURN x.name $$) as (":a|m|b" agtype);
+ :a|m|b 
+--------
+ "a"
+ "ab"
+ "abc"
+ "b"
+(4 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:p|n|q]->() RETURN e.name $$) as (":p|n|q" agtype);
+ :p|n|q 
+--------
+ "p"
+ "q"
+(2 rows)
+
+-- no label exists
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:i:j:k)        RETURN x.name $$) as (":i:j:k" agtype);
+ :i:j:k 
+--------
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH (x:i|j|k)        RETURN x.name $$) as (":i|j|j" agtype);
+ :i|j|j 
+--------
+(0 rows)
+
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:l|m|n]->() RETURN e.name $$) as (":l|m|n" agtype);
+ :l|m|n 
+--------
+(0 rows)
+
+-- unsupported label expression in match
+SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:l:m:n]->() RETURN e.name $$) as (":l|m|n" agtype);
+ERROR:  label expression type AND is not allowed for relationships in a MATCH clause
+LINE 1: SELECT * FROM cypher('mlabels1', $$ MATCH ()-[e:l:m:n]->() R...
+                                                     ^
+-- cleanup
+SElECT drop_graph('mlabels1', true);
+NOTICE:  drop cascades to 10 other objects
+DETAIL:  drop cascades to table mlabels1._ag_label_vertex
+drop cascades to table mlabels1._ag_label_edge
+drop cascades to table mlabels1.a
+drop cascades to table mlabels1.b
+drop cascades to table mlabels1.c
+drop cascades to table mlabels1._agr_ab
+drop cascades to table mlabels1._agr_abc
+drop cascades to table mlabels1.p
+drop cascades to table mlabels1.q
+drop cascades to table mlabels1.r
+NOTICE:  graph "mlabels1" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Unsupported label expressions for create\merge
+ */
+SElECT create_graph('mlabels4');
+NOTICE:  graph "mlabels4" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- for vertices
+SELECT * FROM cypher('mlabels4', $$ CREATE (:a|b) $$) as (a agtype);
+ERROR:  label expression type OR is not allowed in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ CREATE (:a|b) $$) as (a ...
+                                          ^
+SELECT * FROM cypher('mlabels4', $$ MERGE  (:a|b) $$) as (a agtype);
+ERROR:  label expression type OR is not allowed in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ MERGE  (:a|b) $$) as (a ...
+                                          ^
+-- for edges
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[]->()     $$) as (a agtype);
+ERROR:  relationships must have exactly one label in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ CREATE ()-[]->()     $$)...
+                                                      ^
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a|b]->() $$) as (a agtype);
+ERROR:  label expression type OR is not allowed in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a|b]->() $$)...
+                                                      ^
+SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a:b]->() $$) as (a agtype);
+ERROR:  relationships must have exactly one label in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ CREATE ()-[:a:b]->() $$)...
+                                                      ^
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[]->()     $$) as (a agtype);
+ERROR:  relationships must have exactly one label in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[]->()     $$)...
+                                                      ^
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a|b]->() $$) as (a agtype);
+ERROR:  label expression type OR is not allowed in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a|b]->() $$)...
+                                                      ^
+SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a:b]->() $$) as (a agtype);
+ERROR:  relationships must have exactly one label in a CREATE\MERGE clause
+LINE 1: SELECT * FROM cypher('mlabels4', $$ MERGE  ()-[:a:b]->() $$)...
+                                                      ^
+-- cleanup
+SElECT drop_graph('mlabels4', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table mlabels4._ag_label_vertex
+drop cascades to table mlabels4._ag_label_edge
+NOTICE:  graph "mlabels4" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Modelling inheritance
+ */
+SElECT create_graph('mlabels5');
+NOTICE:  graph "mlabels5" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:engineer                  {title:'engineer'})   $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:manager                   {title:'manager'})    $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:manager:engineer:techlead {title:'techlead'})   $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels5', $$ CREATE (:employee:accountant                {title:'accountant'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- match titles
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:employee)   RETURN x.title $$) as ("all"         agtype);
+     all      
+--------------
+ "engineer"
+ "manager"
+ "techlead"
+ "accountant"
+(4 rows)
+
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:engineer)   RETURN x.title $$) as ("engineers"   agtype);
+ engineers  
+------------
+ "engineer"
+ "techlead"
+(2 rows)
+
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:manager)    RETURN x.title $$) as ("managers"    agtype);
+  managers  
+------------
+ "manager"
+ "techlead"
+(2 rows)
+
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:techlead)   RETURN x.title $$) as ("techleads"   agtype);
+ techleads  
+------------
+ "techlead"
+(1 row)
+
+SELECT * FROM cypher('mlabels5', $$ MATCH (x:accountant) RETURN x.title $$) as ("accountants" agtype);
+ accountants  
+--------------
+ "accountant"
+(1 row)
+
+-- cleanup
+SElECT drop_graph('mlabels5', true);
+NOTICE:  drop cascades to 11 other objects
+DETAIL:  drop cascades to table mlabels5._ag_label_vertex
+drop cascades to table mlabels5._ag_label_edge
+drop cascades to table mlabels5._agr_employeeengineer
+drop cascades to table mlabels5.employee
+drop cascades to table mlabels5.engineer
+drop cascades to table mlabels5._agr_employeemanager
+drop cascades to table mlabels5.manager
+drop cascades to table mlabels5._agr_employeeengineermanagertechlead
+drop cascades to table mlabels5.techlead
+drop cascades to table mlabels5._agr_accountantemployee
+drop cascades to table mlabels5.accountant
+NOTICE:  graph "mlabels5" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Invalid label
+ */
+SElECT create_graph('mlabels6');
+NOTICE:  graph "mlabels6" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels6', $$ CREATE (:a)-[:x]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels6', $$ CREATE (:b)-[:y]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels6', $$ CREATE (:c)-[:z]->() $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- following fails
+SELECT * FROM cypher('mlabels6', $$ CREATE (:a:y:c) $$) as (a agtype);
+ERROR:  label y is for edges, not vertices
+LINE 1: SELECT * FROM cypher('mlabels6', $$ CREATE (:a:y:c) $$) as (...
+                                          ^
+SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) as (a agtype);
+ERROR:  label b is for vertices, not edges
+LINE 1: SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) a...
+                                                      ^
+-- cleanup
+SElECT drop_graph('mlabels6', true);
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to table mlabels6._ag_label_vertex
+drop cascades to table mlabels6._ag_label_edge
+drop cascades to table mlabels6.a
+drop cascades to table mlabels6.x
+drop cascades to table mlabels6.b
+drop cascades to table mlabels6.y
+drop cascades to table mlabels6.c
+drop cascades to table mlabels6.z
+NOTICE:  graph "mlabels6" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Mixing different label expression types
+ */
+SElECT create_graph('mlabels7');
+NOTICE:  graph "mlabels7" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels7', $$ CREATE (:a) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels7', $$ CREATE (:b) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels7', $$ CREATE (:c) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- following fails
+SELECT * FROM cypher('mlabels7', $$ MATCH (x:a|b:c) RETURN x $$) as (a agtype);
+ERROR:  cannot mix different label expressions
+LINE 1: SELECT * FROM cypher('mlabels7', $$ MATCH (x:a|b:c) RETURN x...
+                                                        ^
+-- cleanup
+SElECT drop_graph('mlabels7', true);
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to table mlabels7._ag_label_vertex
+drop cascades to table mlabels7._ag_label_edge
+drop cascades to table mlabels7.a
+drop cascades to table mlabels7.b
+drop cascades to table mlabels7.c
+NOTICE:  graph "mlabels7" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Catalog ag_label.allrelations
+ */
+SElECT create_graph('mlabels8');
+NOTICE:  graph "mlabels8" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+CREATE VIEW mlabels8.catalog AS
+    SELECT name, relation, allrelations, rel_kind
+    FROM ag_catalog.ag_label
+    WHERE graph IN
+        (SELECT graphid
+         FROM ag_catalog.ag_graph
+         WHERE name = 'mlabels8')
+    ORDER BY name ASC;
+-- creates :a, :b and :a:b
+SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b)  $$) as (":a:b" agtype);
+ :a:b 
+------
+(0 rows)
+
+SELECT * FROM mlabels8.catalog;
+       name       |         relation          |         allrelations          | rel_kind 
+------------------+---------------------------+-------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}     | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}   | d
+ _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}            | i
+ a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab} | s
+ b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab} | s
+(5 rows)
+
+-- creates :c and :bc
+SELECT * FROM cypher('mlabels8', $$ CREATE (:b:c)  $$) as (":b:c" agtype);
+ :b:c 
+------
+(0 rows)
+
+SELECT * FROM mlabels8.catalog;
+       name       |         relation          |                  allrelations                  | rel_kind 
+------------------+---------------------------+------------------------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                      | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                    | d
+ _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}                             | i
+ _agr_bc          | mlabels8._agr_bc          | {mlabels8._agr_bc}                             | i
+ a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab}                  | s
+ b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab,mlabels8._agr_bc} | s
+ c                | mlabels8.c                | {mlabels8.c,mlabels8._agr_bc}                  | s
+(7 rows)
+
+-- :a:b:c inserted in other labels' allrelations column
+SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b:c) $$) as (":a:b:c" agtype);
+ :a:b:c 
+--------
+(0 rows)
+
+SELECT * FROM mlabels8.catalog;
+       name       |         relation          |                           allrelations                           | rel_kind 
+------------------+---------------------------+------------------------------------------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                                        | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                                      | d
+ _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}                                               | i
+ _agr_abc         | mlabels8._agr_abc         | {mlabels8._agr_abc}                                              | i
+ _agr_bc          | mlabels8._agr_bc          | {mlabels8._agr_bc}                                               | i
+ a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab,mlabels8._agr_abc}                  | s
+ b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab,mlabels8._agr_bc,mlabels8._agr_abc} | s
+ c                | mlabels8.c                | {mlabels8.c,mlabels8._agr_bc,mlabels8._agr_abc}                  | s
+(8 rows)
+
+-- cleanup
+SElECT drop_graph('mlabels8', true);
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to table mlabels8._ag_label_vertex
+drop cascades to table mlabels8._ag_label_edge
+drop cascades to view mlabels8.catalog
+drop cascades to table mlabels8._agr_ab
+drop cascades to table mlabels8.a
+drop cascades to table mlabels8.b
+drop cascades to table mlabels8._agr_bc
+drop cascades to table mlabels8.c
+drop cascades to table mlabels8._agr_abc
+NOTICE:  graph "mlabels8" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Alias of union subquery in join and filter nodes
+ */
+SElECT create_graph('mlabels9');
+NOTICE:  graph "mlabels9" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels9', $$ CREATE (:a {age:22, title:'a'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ CREATE (:b {age:25, title:'b'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ CREATE (:c {age:27, title:'c'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ CREATE (:d {age:32, title:'d'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a) CREATE (x)-[:rel {start:'a'}]->(:m) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:b) CREATE (x)-[:rel {start:'b'}]->(:m) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:c) CREATE (x)-[:rel {start:'c'}]->(:m) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:d) CREATE (x)-[:rel {start:'d'}]->(:m) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- join
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c)-[e:rel]->(:m)            RETURN e.start $$) as (a agtype);
+  a  
+-----
+ "a"
+ "b"
+ "c"
+(3 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (:a|b|c)-[e:rel]->(:m)             RETURN e.start $$) as (a agtype);
+  a  
+-----
+ "a"
+ "b"
+ "c"
+(3 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c) WITH x MATCH (x)-[e]->() RETURN e.start $$) as (a agtype);
+  a  
+-----
+ "a"
+ "b"
+ "c"
+(3 rows)
+
+-- filters
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c) WHERE x.age > 24 RETURN x.title $$) as (a agtype);
+  a  
+-----
+ "b"
+ "c"
+(2 rows)
+
+SELECT * FROM cypher('mlabels9', $$ MATCH (x:a|b|c {age:27})         RETURN x.title $$) as (a agtype);
+  a  
+-----
+ "c"
+(1 row)
+
+-- plans: to check alias
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a)-[e:rel]->(:m)                RETURN e.start $$) as (a agtype);
+                     QUERY PLAN                     
+----------------------------------------------------
+ Merge Join
+   Merge Cond: (_age_default_alias_0.id = e.end_id)
+   ->  Sort
+         Sort Key: _age_default_alias_0.id
+         ->  Seq Scan on m _age_default_alias_0
+   ->  Sort
+         Sort Key: e.end_id
+         ->  Merge Join
+               Merge Cond: (e.start_id = x.id)
+               ->  Sort
+                     Sort Key: e.start_id
+                     ->  Seq Scan on rel e
+               ->  Sort
+                     Sort Key: x.id
+                     ->  Seq Scan on a x
+(15 rows)
+
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c)-[e:rel]->(:m)            RETURN e.start $$) as (a agtype);
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Merge Join
+   Merge Cond: (x_1.id = e.start_id)
+   ->  Sort
+         Sort Key: x_1.id
+         ->  Append
+               ->  Seq Scan on a x_1
+               ->  Seq Scan on b x_2
+               ->  Seq Scan on c x_3
+   ->  Sort
+         Sort Key: e.start_id
+         ->  Merge Join
+               Merge Cond: (e.end_id = _age_default_alias_0.id)
+               ->  Sort
+                     Sort Key: e.end_id
+                     ->  Seq Scan on rel e
+               ->  Sort
+                     Sort Key: _age_default_alias_0.id
+                     ->  Seq Scan on m _age_default_alias_0
+(18 rows)
+
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (:a|b|c)-[e:rel]->(:m)             RETURN e.start $$) as (a agtype);
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Merge Join
+   Merge Cond: (_age_default_alias_0_1.id = e.start_id)
+   ->  Sort
+         Sort Key: _age_default_alias_0_1.id
+         ->  Append
+               ->  Seq Scan on a _age_default_alias_0_1
+               ->  Seq Scan on b _age_default_alias_0_2
+               ->  Seq Scan on c _age_default_alias_0_3
+   ->  Sort
+         Sort Key: e.start_id
+         ->  Merge Join
+               Merge Cond: (e.end_id = _age_default_alias_1.id)
+               ->  Sort
+                     Sort Key: e.end_id
+                     ->  Seq Scan on rel e
+               ->  Sort
+                     Sort Key: _age_default_alias_1.id
+                     ->  Seq Scan on m _age_default_alias_1
+(18 rows)
+
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c) WHERE x.age > 24         RETURN x.title $$) as (a agtype);
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Result
+   ->  Append
+         ->  Seq Scan on a x_1
+               Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"age"'::agtype]) > '24'::agtype)
+         ->  Seq Scan on b x_2
+               Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"age"'::agtype]) > '24'::agtype)
+         ->  Seq Scan on c x_3
+               Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"age"'::agtype]) > '24'::agtype)
+(8 rows)
+
+SELECT * FROM cypher('mlabels9', $$ EXPLAIN (COSTS off) MATCH (x:a|b|c {age:27})                 RETURN x.title $$) as (a agtype);
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Result
+   ->  Append
+         ->  Seq Scan on a x_1
+               Filter: (properties @> '{"age": 27}'::agtype)
+         ->  Seq Scan on b x_2
+               Filter: (properties @> '{"age": 27}'::agtype)
+         ->  Seq Scan on c x_3
+               Filter: (properties @> '{"age": 27}'::agtype)
+(8 rows)
+
+-- cleanup
+SElECT drop_graph('mlabels9', true);
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to table mlabels9._ag_label_vertex
+drop cascades to table mlabels9._ag_label_edge
+drop cascades to table mlabels9.a
+drop cascades to table mlabels9.b
+drop cascades to table mlabels9.c
+drop cascades to table mlabels9.d
+drop cascades to table mlabels9.rel
+drop cascades to table mlabels9.m
+NOTICE:  graph "mlabels9" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Match without variables
+ */
+SELECT create_graph('mlabels10');
+NOTICE:  graph "mlabels10" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels10', $$ CREATE ()-[:rel {start:''}]->(:x)       $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels10', $$ CREATE (:a)-[:rel {start:'a'}]->(:x)    $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels10', $$ CREATE (:a:b)-[:rel {start:'ab'}]->(:x) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels10', $$ CREATE (:c)-[:rel {start:'c'}]->(:x)    $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels10', $$ CREATE (:d)-[:rel {start:'d'}]->(:x)    $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- _label_ids()
+WITH graph AS (
+    SELECT graphid as id
+    FROM ag_catalog.ag_graph
+    WHERE name = 'mlabels10'
+    LIMIT 1
+)
+SELECT
+    array_agg(C.name)         AS "label names derived from _label_ids",
+    E.properties -> '"start"' AS start
+FROM
+    mlabels10._ag_label_edge AS E,
+    ag_catalog.ag_label      AS C,
+    graph
+WHERE
+    C.graph = graph.id
+    AND
+    CASE
+        WHEN _label_ids(graph.id, E.start_id) = '{}' AND
+              C.kind = 'v' AND
+              c.rel_kind = 'd'
+              THEN true
+        ELSE C.id = ANY(_label_ids(graph.id, E.start_id))
+    END
+GROUP BY
+    start
+ORDER BY
+    start
+;
+ label names derived from _label_ids | start 
+-------------------------------------+-------
+ {_ag_label_vertex}                  | ""
+ {a}                                 | "a"
+ {a,b}                               | "ab"
+ {c}                                 | "c"
+ {d}                                 | "d"
+(5 rows)
+
+-- matches all
+SELECT * FROM cypher('mlabels10', $$ MATCH ()-[e:rel]->(x:x)     RETURN e.start $$) as ("()" agtype);
+  ()  
+------
+ ""
+ "a"
+ "ab"
+ "c"
+ "d"
+(5 rows)
+
+-- matches :a and :a:b
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a)-[e:rel]->(x:x)   RETURN e.start $$) as ("(:a)" agtype);
+ (:a) 
+------
+ "a"
+ "ab"
+(2 rows)
+
+-- matches only :a:b
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:b)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a:b)" agtype);
+ (:a:b) 
+--------
+ "ab"
+(1 row)
+
+-- matches none
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a:m)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a:m)" agtype);
+ (:a:m) 
+--------
+(0 rows)
+
+-- matches only :a, :a:b and :d
+SELECT * FROM cypher('mlabels10', $$ MATCH (:a|d)-[e:rel]->(x:x) RETURN e.start $$) as ("(:a|d)" agtype);
+ (:a|d) 
+--------
+ "a"
+ "ab"
+ "d"
+(3 rows)
+
+-- matches c only
+SELECT * FROM cypher('mlabels10', $$ MATCH (:c|m)-[e:rel]->(x:x) RETURN e.start $$) as ("(:c|m)" agtype);
+ (:c|m) 
+--------
+ "c"
+(1 row)
+
+-- cleanup
+SELECT drop_graph('mlabels10', true);
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to table mlabels10._ag_label_vertex
+drop cascades to table mlabels10._ag_label_edge
+drop cascades to table mlabels10.rel
+drop cascades to table mlabels10.x
+drop cascades to table mlabels10.a
+drop cascades to table mlabels10._agr_ab
+drop cascades to table mlabels10.b
+drop cascades to table mlabels10.c
+drop cascades to table mlabels10.d
+NOTICE:  graph "mlabels10" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Prevent label names with reserved prefix
+ */
+SElECT create_graph('mlabels11');
+NOTICE:  graph "mlabels11" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('mlabels11', $$ CREATE (:a:b {title:'ab'}) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels11', $$ CREATE (:_agr_ab {title:'_agr_ab'})      $$) as (a agtype);
+ERROR:  label names cannot start with the reserved word: "_agr_"
+LINE 1: SELECT * FROM cypher('mlabels11', $$ CREATE (:_agr_ab {title...
+                                           ^
+SELECT create_vlabel('mlabels11', '_agr_xy');
+ERROR:  label names cannot start with the reserved word: "_agr_"
+SELECT create_elabel('mlabels11', '_agr_pq');
+ERROR:  label names cannot start with the reserved word: "_agr_"
+-- check
+SELECT * FROM cypher('mlabels11', $$ MATCH (x:a:b) RETURN x.title      $$) as (a agtype);
+  a   
+------
+ "ab"
+(1 row)
+
+-- cleanup
+SElECT drop_graph('mlabels11', true);
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to table mlabels11._ag_label_vertex
+drop cascades to table mlabels11._ag_label_edge
+drop cascades to table mlabels11._agr_ab
+drop cascades to table mlabels11.a
+drop cascades to table mlabels11.b
+NOTICE:  graph "mlabels11" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+/*
+ * Internal functions _label_names() and _agtype_build_vertex
+ */
+SElECT create_graph('mlabels12');
+NOTICE:  graph "mlabels12" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- check create
+SELECT * FROM cypher('mlabels12', $$ CREATE (x:Person:Student {title: 'Person and Student'}) RETURN x $$) as (a agtype);
+                                                       a                                                        
+----------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Person", "Student"], "properties": {"title": "Person and Student"}}::vertex
+(1 row)
+
+SELECT * FROM cypher('mlabels12', $$ CREATE (x:Person         {title: 'Person only'}) RETURN x $$) as (a agtype);
+                                               a                                               
+-----------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": ["Person"], "properties": {"title": "Person only"}}::vertex
+(1 row)
+
+SELECT * FROM cypher('mlabels12', $$ CREATE (x {title: 'No label'})  RETURN x $$) as (a agtype);
+                                         a                                         
+-----------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"title": "No label"}}::vertex
+(1 row)
+
+-- check _label_names
+SELECT
+    v.properties -> '"title"' AS "title",
+    _label_names(g.id, v.id)
+FROM
+    mlabels12._ag_label_vertex AS v,
+    (SELECT graphid AS id
+     FROM ag_catalog.ag_graph
+     WHERE name = 'mlabels12'
+     LIMIT 1) AS g;
+        title         |     _label_names      
+----------------------+-----------------------
+ "No label"           | []
+ "Person and Student" | ["Person", "Student"]
+ "Person only"        | ["Person"]
+(3 rows)
+
+-- check match
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) RETURN x $$) as ("MATCH" agtype);
+                                                     MATCH                                                      
+----------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"title": "No label"}}::vertex
+ {"id": 844424930131969, "label": ["Person", "Student"], "properties": {"title": "Person and Student"}}::vertex
+ {"id": 1125899906842625, "label": ["Person"], "properties": {"title": "Person only"}}::vertex
+(3 rows)
+
+-- check set
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) SET x.age = 32 RETURN x $$) as ("SET" agtype);
+                                                            SET                                                            
+---------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"age": 32, "title": "No label"}}::vertex
+ {"id": 844424930131969, "label": ["Person", "Student"], "properties": {"age": 32, "title": "Person and Student"}}::vertex
+ {"id": 1125899906842625, "label": ["Person"], "properties": {"age": 32, "title": "Person only"}}::vertex
+(3 rows)
+
+-- check merge
+SELECT * FROM cypher('mlabels12', $$ MERGE (x:Teacher:Person) RETURN x $$) as ("MERGE" agtype);
+                                       MERGE                                        
+------------------------------------------------------------------------------------
+ {"id": 1688849860263937, "label": ["Person", "Teacher"], "properties": {}}::vertex
+(1 row)
+
+-- check vle
+SELECT * FROM cypher('mlabels12', $$ CREATE (:a:b)-[:r]->(:k)-[:r]->(:m:n) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels12', $$ MATCH p=()-[*2]->() RETURN p $$) as ("VLE" agtype);
+                                                                                                                                                                                                                                       VLE                                                                                                                                                                                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 2251799813685249, "label": ["a", "b"], "properties": {}}::vertex, {"id": 3096224743817218, "label": "r", "end_id": 3377699720527873, "start_id": 2251799813685249, "properties": {}}::edge, {"id": 3377699720527873, "label": ["k"], "properties": {}}::vertex, {"id": 3096224743817217, "label": "r", "end_id": 3659174697238529, "start_id": 3377699720527873, "properties": {}}::edge, {"id": 3659174697238529, "label": ["m", "n"], "properties": {}}::vertex]::path
+(1 row)
+
+-- check vertex typecast
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}'::agtype);
+                             agtype_typecast_vertex                              
+---------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}'::agtype);
+                           agtype_typecast_vertex                           
+----------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": [], "properties": {"age": 32}}'::agtype);
+                         agtype_typecast_vertex                          
+-------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": "hello", "properties": {"age": 32}}'::agtype);
+                             agtype_typecast_vertex                             
+--------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["hello"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_typecast_vertex('{"id": 281474976710657, "label": "", "properties": {"age": 32}}'::agtype);
+                         agtype_typecast_vertex                          
+-------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex
+(1 row)
+
+-- check agtype_in
+SELECT agtype_in('{"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}::vertex');
+                                    agtype_in                                    
+---------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["a", "b"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_in('{"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}::vertex');
+                                 agtype_in                                  
+----------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["a"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_in('{"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex');
+                                agtype_in                                
+-------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_in('{"id": 281474976710657, "label": "hello", "properties": {"age": 32}}::vertex');
+                                   agtype_in                                    
+--------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": ["hello"], "properties": {"age": 32}}::vertex
+(1 row)
+
+SELECT agtype_in('{"id": 281474976710657, "label": "", "properties": {"age": 32}}::vertex');
+                                agtype_in                                
+-------------------------------------------------------------------------
+ {"id": 281474976710657, "label": [], "properties": {"age": 32}}::vertex
+(1 row)
+
+-- check age_labels
+SELECT * FROM cypher('mlabels12', $$ MATCH (x) RETURN labels(x) $$) as ("labels" agtype);
+        labels         
+-----------------------
+ []
+ ["Student", "Person"]
+ ["Person"]
+ ["Person", "Teacher"]
+ ["a", "b"]
+ ["k"]
+ ["m", "n"]
+(7 rows)
+
+-- check startnode and endnode
+SELECT * FROM cypher('mlabels12', $$ MATCH ()-[e]->() RETURN startNode(e) $$) as ("startNode" agtype);
+                                startNode                                
+-------------------------------------------------------------------------
+ {"id": 2251799813685249, "label": ["a", "b"], "properties": {}}::vertex
+ {"id": 3377699720527873, "label": ["k"], "properties": {}}::vertex
+(2 rows)
+
+SELECT * FROM cypher('mlabels12', $$ MATCH ()-[e]->() RETURN endNode(e)   $$) as ("endNode" agtype);
+                                 endNode                                 
+-------------------------------------------------------------------------
+ {"id": 3377699720527873, "label": ["k"], "properties": {}}::vertex
+ {"id": 3659174697238529, "label": ["m", "n"], "properties": {}}::vertex
+(2 rows)
+
+-- cleanup
+SElECT drop_graph('mlabels12', true);
+NOTICE:  drop cascades to 15 other objects
+DETAIL:  drop cascades to table mlabels12._ag_label_vertex
+drop cascades to table mlabels12._ag_label_edge
+drop cascades to table mlabels12."_agr_PersonStudent"
+drop cascades to table mlabels12."Person"
+drop cascades to table mlabels12."Student"
+drop cascades to table mlabels12."_agr_PersonTeacher"
+drop cascades to table mlabels12."Teacher"
+drop cascades to table mlabels12._agr_ab
+drop cascades to table mlabels12.a
+drop cascades to table mlabels12.b
+drop cascades to table mlabels12.r
+drop cascades to table mlabels12.k
+drop cascades to table mlabels12._agr_mn
+drop cascades to table mlabels12.m
+drop cascades to table mlabels12.n
+NOTICE:  graph "mlabels12" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
