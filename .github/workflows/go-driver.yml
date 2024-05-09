@@ -21,14 +21,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set tag based on branch
-      run: |
-        echo "TAG=PG16_latest" >> $GITHUB_ENV
-
     - name: Run apache/age docker image
-      run: |
-        export TAG=$TAG
-        docker-compose up -d
+      run: docker-compose up -d
 
     - name: Set up Go
       uses: actions/setup-go@v3

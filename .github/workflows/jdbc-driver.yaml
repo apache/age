@@ -23,11 +23,5 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
-    - name: Set tag based on branch
-      run: |
-        echo "TAG=PG16_latest" >> $GITHUB_ENV
-
     - name: Build and Test
-      run: |
-        export TAG=$TAG
-        gradle build
+      run: gradle build
