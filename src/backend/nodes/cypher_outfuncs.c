@@ -105,6 +105,7 @@ void out_cypher_return(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(limit);
 
     WRITE_BOOL_FIELD(all_or_distinct);
+    WRITE_BOOL_FIELD(returnless_union);
     WRITE_ENUM_FIELD(op, SetOperation);
     WRITE_NODE_FIELD(larg);
     WRITE_NODE_FIELD(rarg);

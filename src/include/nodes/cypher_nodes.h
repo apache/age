@@ -58,6 +58,7 @@ typedef struct cypher_return
     Node *limit;
 
     bool all_or_distinct;
+    bool returnless_union;
     SetOperation op;
     List *larg; /* lefthand argument of the unions */
     List *rarg; /*righthand argument of the unions */

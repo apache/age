@@ -254,6 +254,10 @@ static FuncCall *node_to_agtype(Node* fnode, char *type, int location);
 /* setops */
 static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
                          List *rarg);
+static Node *make_subquery_returnless_set_op(SetOperation op,
+                                             bool all_or_distinct,
+                                             List *larg,
+                                             List *rarg);
 
 /* VLE */
 static cypher_relationship *build_VLE_relation(List *left_arg,
@@ -652,9 +656,7 @@ subquery_stmt_no_return:
         }
     | subquery_stmt_no_return UNION all_or_distinct subquery_stmt_no_return
         {
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
-                errmsg("Subquery UNION without returns not yet implemented"),
-                ag_scanner_errposition(@2, scanner)));
+            $$ = list_make1(make_subquery_returnless_set_op(SETOP_UNION, $3, $1, $4));
         }
     ;
 
@@ -3043,6 +3045,20 @@ static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
 
     n->op = op;
     n->all_or_distinct = all_or_distinct;
+    n->larg = (List *) larg;
+    n->rarg = (List *) rarg;
+    return (Node *) n;
+}
+
+/*set operation function node to make a returnless set op node for subqueries*/
+static Node *make_subquery_returnless_set_op(SetOperation op, bool all_or_distinct, List *larg,
+                         List *rarg)
+{
+    cypher_return *n = make_ag_node(cypher_return);
+
+    n->op = op;
+    n->all_or_distinct = all_or_distinct;
+    n->returnless_union = true;
     n->larg = (List *) larg;
     n->rarg = (List *) rarg;
     return (Node *) n;
