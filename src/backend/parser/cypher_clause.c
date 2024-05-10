@@ -800,6 +800,8 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         /*
          * Extract a list of the non-junk TLEs for upper-level processing.
          */
+
+        //mechanism to check for top level query list items here?
         if (targetlist)
         {
             *targetlist = NIL;
@@ -880,8 +882,11 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         /*
          * Verify that the two children have the same number of non-junk
          * columns, and determine the types of the merged output columns.
+         * If we are in a returnless subquery, we do not care about the columns
+         * matching, because they are not relevant to the end result.
          */
-        if (list_length(ltargetlist) != list_length(rtargetlist))
+        if (list_length(ltargetlist) != list_length(rtargetlist) &&
+            self->returnless_union == false)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_SYNTAX_ERROR),
