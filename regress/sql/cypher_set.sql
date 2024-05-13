@@ -39,7 +39,7 @@ SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3 RETURN n$$) AS (a agt
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
 
 --Test assigning properties to rand() and pi()
-SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = rand() RETURN n.i < 1 AND n.i >= 0$$) AS (a agtype);
+SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = rand() RETURN n$$) AS (a agtype);
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = pi() RETURN n$$) AS (a agtype);
 
 --Handle Inheritance
@@ -57,17 +57,17 @@ SELECT * FROM cypher('cypher_set', $$MATCH ()-[n]->(:other_v) RETURN n$$) AS (a 
 
 SELECT * FROM cypher('cypher_set', $$
         MATCH (n {j: 5})
-        SET n.y = 50
-        SET n.z = 99
+        SET n.y = 50,
+            n.z = 99
         RETURN n
 $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_set', $$
         MATCH (n {j: 5})
-        SET n.y = 53
-        SET n.y = 50
-        SET n.z = 99
-        SET n.arr = [n.y, n.z]
+        SET n.y = 53,
+            n.y = 50,
+            n.z = 99,
+            n.arr = [n.y, n.z]
         RETURN n
 $$) AS (a agtype);
 
@@ -84,17 +84,17 @@ $$) AS (a agtype);
 
 --Create a loop and see that set can work after create
 SELECT * FROM cypher('cypher_set', $$
-	MATCH (n {j: 5})
-	CREATE p=(n)-[e:e {j:34}]->(n)
-	SET n.y = 99
-	RETURN n, p
+    MATCH (n {j: 5})
+    CREATE p=(n)-[e:e {j:34}]->(n)
+    SET n.y = 99
+    RETURN n, p
 $$) AS (a agtype, b agtype);
 
 --Create a loop and see that set can work after create
 SELECT * FROM cypher('cypher_set', $$
-	CREATE ()-[e:e {j:34}]->()
-	SET e.y = 99
-	RETURN e
+    CREATE ()-[e:e {j:34}]->()
+    SET e.y = 99
+    RETURN e
 $$) AS (a agtype);
 
 SELECT * FROM cypher('cypher_set', $$
@@ -158,7 +158,7 @@ LANGUAGE plpgsql
 VOLATILE
 AS $BODY$
 BEGIN
-	RETURN QUERY SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 7 RETURN n $$) AS (a agtype);
+    RETURN QUERY SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 7 RETURN n $$) AS (a agtype);
 END
 $BODY$;
 
