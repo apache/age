@@ -315,6 +315,7 @@ static Index transform_group_clause_expr(List **flatresult,
 static List *add_target_to_group_list(cypher_parsestate *cpstate,
                                       TargetEntry *tle, List *grouplist,
                                       List *targetlist, int location);
+static List *build_grouplist_from_targetlist(List *targetlist);
 static void advance_transform_entities_to_next_clause(List *entities);
 
 static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
@@ -1360,6 +1361,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     Node *funcexpr;
     TargetEntry *te;
     ParseNamespaceItem *pnsi;
+    Node *last_srf;
     bool is_list_comp = self->collect != NULL;
     bool has_agg =
         is_list_comp || has_a_cypher_list_comprehension_node(self->target->val);
@@ -1394,6 +1396,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                         parser_errposition(pstate, target_syntax_loc)));
     }
 
+    last_srf = pstate->p_last_srf;
     expr = transform_cypher_expr(cpstate, self->target->val,
                                  EXPR_KIND_SELECT_TARGET);
 
@@ -1411,7 +1414,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
     pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
     funcexpr = ParseFuncOrColumn(pstate, unwind->funcname,
                                  list_make2(expr, makeBoolConst(is_list_comp, false)),
-                                 pstate->p_last_srf, unwind, false,
+                                 last_srf, unwind, false,
                                  target_syntax_loc);
 
     pstate->p_expr_kind = old_expr_kind;
@@ -1510,6 +1513,7 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
     TargetEntry *tle;
     FuncExpr *func_expr;
     char *clause_name;
+    List *targetlist;
 
     query = makeNode(Query);
     query->commandType = CMD_SELECT;
@@ -1537,6 +1541,9 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
         handle_prev_clause(cpstate, query, clause->prev, true);
     }
 
+    // Copy the target list for grouping if needed
+    targetlist = list_copy(query->targetList);
+
     if (self->is_remove == true)
     {
         set_items_target_list = transform_cypher_remove_item_list(cpstate,
@@ -1548,6 +1555,19 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
         set_items_target_list = transform_cypher_set_item_list(cpstate,
                                                                self->items,
                                                                query);
+    }
+
+    if (cpstate->p_list_comp)
+    {
+        List *groupList;
+
+        groupList = build_grouplist_from_targetlist(targetlist);
+        query->groupClause = transform_group_clause(cpstate, groupList,
+                                                    &query->groupingSets,
+                                                    &query->targetList,
+                                                    query->sortClause,
+                                                    EXPR_KIND_GROUP_BY);
+        query->hasAggs = true;
     }
 
     set_items_target_list->clause_name = clause_name;
@@ -1569,6 +1589,7 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
     query->rtable = pstate->p_rtable;
     query->rteperminfos = pstate->p_rteperminfos;
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
+    list_free(targetlist);
 
     return query;
 }
@@ -1842,16 +1863,12 @@ cypher_update_information *transform_cypher_set_item_list(
                                             EXPR_KIND_SELECT_TARGET, NULL,
                                             false);
 
-        if (has_a_cypher_list_comprehension_node(set_item->expr))
-        {
-            query->hasAggs = true;
-        }
-
-        if (!query->hasAggs && nodeTag(target_item->expr) == T_Aggref)
+        if (!cpstate->p_list_comp && nodeTag(target_item->expr) == T_Aggref)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                     errmsg("Invalid use of aggregation in this context"),
-                    parser_errposition(pstate, set_item->location)));
+                    errdetail("Aggregate functions are not allowed in SET clause"),
+                    parser_errposition(pstate, exprLocation(set_item->expr))));
         }
 
         target_item->expr = add_volatile_wrapper(target_item->expr);
@@ -1861,6 +1878,35 @@ cypher_update_information *transform_cypher_set_item_list(
     }
 
     return info;
+}
+
+/*
+ * Helper function to build grouplist from targetlist.
+ */
+static List *build_grouplist_from_targetlist(List *targetList)
+{
+    ListCell *lc;
+    List *groupList = NIL;
+    
+    foreach (lc, targetList)
+    {
+        TargetEntry *te = lfirst(lc);
+        ColumnRef *cref = makeNode(ColumnRef);
+
+        if (te->resjunk ||
+            strcmp(te->resname, "?column?") == 0 ||
+            strncmp(AGE_DEFAULT_PREFIX, te->resname, strlen(AGE_DEFAULT_PREFIX)) == 0)
+        {
+            continue;
+        }
+
+        cref->fields = list_make1(makeString(te->resname));
+        cref->location = exprLocation((Node *)te->expr);
+
+        groupList = lappend(groupList, cref);
+    }
+    
+    return groupList;
 }
 
 /* from PG's static helper function */
@@ -2412,7 +2458,7 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
         if (cpstate->p_list_comp &&
             has_a_cypher_list_comprehension_node(where))
         {
-            List *groupClause = NIL;
+            List *groupList = NIL;
             ListCell *li;
             bool has_a_star;
 
@@ -2439,7 +2485,7 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
                     }
                 }
 
-                groupClause = lappend(groupClause, item->val);
+                groupList = lappend(groupList, item->val);
             }
 
             /*
@@ -2448,19 +2494,11 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
              */
             if (has_a_star)
             {
-                ListCell *lc;
-                foreach (lc, query->targetList)
-                {
-                    TargetEntry *te = lfirst(lc);
-                    ColumnRef *cref = makeNode(ColumnRef);
-
-                    cref->fields = list_make1(makeString(te->resname));
-                    cref->location = exprLocation((Node *)te->expr);
-
-                    groupClause = lappend(groupClause, cref);
-                }
+                groupList = list_concat_unique(groupList,
+                                              build_grouplist_from_targetlist(
+                                                     query->targetList));
             }
-            query->groupClause = transform_group_clause(cpstate, groupClause,
+            query->groupClause = transform_group_clause(cpstate, groupList,
                                                         &query->groupingSets,
                                                         &query->targetList,
                                                         query->sortClause,
@@ -3251,17 +3289,7 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
         query->jointree = makeFromExpr(cpstate->pstate.p_joinlist, NULL);
         query->havingQual = (Node *)expr;
 
-        foreach (lc, query->targetList)
-        {
-            TargetEntry *te = lfirst(lc);
-            ColumnRef *cref = makeNode(ColumnRef);
-
-            cref->fields = list_make1(makeString(te->resname));
-            cref->location = exprLocation((Node *)te->expr);
-
-            groupList = lappend(groupList, cref);
-        }
-
+        groupList = build_grouplist_from_targetlist(query->targetList);
         query->groupClause = transform_group_clause(cpstate, groupList,
                                                     &query->groupingSets,
                                                     &query->targetList,
@@ -5577,6 +5605,7 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
     FuncExpr *func_expr;
     Query *query;
     TargetEntry *tle;
+    List *targetlist;    
 
     target_nodes = make_ag_node(cypher_create_target_nodes);
     target_nodes->flags = CYPHER_CLAUSE_FLAG_NONE;
@@ -5592,6 +5621,9 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
 
         target_nodes->flags |= CYPHER_CLAUSE_FLAG_PREVIOUS_CLAUSE;
     }
+
+    // Copy the target list for grouping if needed
+    targetlist = list_copy(query->targetList);
 
     null_const = makeNullConst(AGTYPEOID, -1, InvalidOid);
     tle = makeTargetEntry((Expr *)null_const, pstate->p_next_resno++,
@@ -5612,7 +5644,6 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
         target_nodes->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
     }
 
-
     func_expr = make_clause_func_expr(CREATE_CLAUSE_FUNCTION_NAME,
                                       (Node *)target_nodes);
 
@@ -5620,6 +5651,18 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
     tle = makeTargetEntry((Expr *)func_expr, pstate->p_next_resno++,
                           AGE_VARNAME_CREATE_CLAUSE, false);
     query->targetList = lappend(query->targetList, tle);
+
+    if (cpstate->p_list_comp && clause->prev)
+    {
+        List *groupList;
+
+        groupList = build_grouplist_from_targetlist(targetlist);
+        query->groupClause = transform_group_clause(cpstate, groupList,
+                                                    &query->groupingSets,
+                                                    &query->targetList,
+                                                    query->sortClause,
+                                                    EXPR_KIND_GROUP_BY);
+    }
 
     query->rtable = pstate->p_rtable;
     query->rteperminfos = pstate->p_rteperminfos;

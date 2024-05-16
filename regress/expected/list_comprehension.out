@@ -471,8 +471,9 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH(u {list: [0, 2, 4, 6, 8, 10,
 -- invalid use of aggregation in SET
 SELECT * FROM cypher('list_comprehension', $$ MATCH(u {list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = collect(u.list) RETURN u $$) AS (u agtype);
 ERROR:  Invalid use of aggregation in this context
-LINE 1: ..., $$ MATCH(u {list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = coll...
+LINE 1: ...{list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = collect(u.list) R...
                                                              ^
+DETAIL:  Aggregate functions are not allowed in SET clause
 -- Known issue
 SELECT * FROM cypher('list_comprehension', $$ MERGE (u {list:[i IN [1,2,3]]}) RETURN u $$) AS (result agtype);
 ERROR:  Aggref found in non-Agg plan node
@@ -616,6 +617,255 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WITH *, [i in [1,2,3]] a
 -----------
  [1, 2, 3]
 (1 row)
+
+--
+-- Issue 1805 - crash when using list comprehension in SET
+-- and CREATE clause subsequent to a MATCH clause with no rows
+--
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in [1,2,3]] RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.map = {list: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u += {a: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in u.list] $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.map = {list: [u in u.list]} RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u += {a: [u in u.list]} $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in [1,2,3]] SET u += {a: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in u.list] SET u += {a: [u in u.list]} RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) WITh u, collect(u.list) AS v SET u += {b: [u IN range(0, 5)]} SET u.c = [u IN v[0]] RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.list = [u in [1,2,3]] RETURN u $$) AS (u agtype);
+                                                                        u                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710664, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710663, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710665, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710661, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 844424930131969, "label": "csm_match", "properties": {"list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.map = {list: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+                                                                                      u                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710664, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710663, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710665, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710661, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 844424930131969, "label": "csm_match", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u += {list2: [u in range(0,5)]} RETURN u $$) AS (u agtype);
+                                                                                                    u                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710664, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710663, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710665, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710661, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 844424930131969, "label": "csm_match", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u = {} $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.list = [u in [1,2,3]] SET u.map = {list: [u in [1,2,3]]} SET u += {list2: [u in range(0,5)]} RETURN u $$) AS (u agtype);
+                                                                         u                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710664, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710663, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710665, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 281474976710661, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+ {"id": 844424930131969, "label": "csm_match", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3], "list2": [0, 1, 2, 3, 4, 5]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) RETURN a $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in u.list]}) RETURN a $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) CREATE ({list:[u in u.list]}) $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a.list = [u in [1,2,3]] $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a.map = {list: [u in [1,2,3]]} $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) RETURN a LIMIT 10 $$) AS (a agtype);
+                                        a                                        
+---------------------------------------------------------------------------------
+ {"id": 281474976710666, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710667, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710668, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710669, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710670, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710671, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710672, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710673, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710674, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710675, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in u.list]}) RETURN a LIMIT 10 $$) AS (a agtype);
+                                        a                                        
+---------------------------------------------------------------------------------
+ {"id": 281474976710676, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710677, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710678, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710679, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710680, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710681, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710682, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710683, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710684, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710685, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) CREATE (b {list:[u in u.list]}) RETURN a, b LIMIT 10 $$) AS (a agtype, b agtype);
+                                        a                                        |                                        b                                        
+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------
+ {"id": 281474976710708, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710716, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710699, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710717, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710688, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710718, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710694, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710719, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710687, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710720, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710712, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710721, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710686, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710722, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710711, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710723, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710697, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710724, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710705, "label": "", "properties": {"list": [1, 2, 3]}}::vertex | {"id": 281474976710725, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a.list = [u in [1,2,3]] RETURN a LIMIT 10 $$) AS (a agtype);
+                                        a                                        
+---------------------------------------------------------------------------------
+ {"id": 281474976710771, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710732, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710751, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710795, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710785, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710787, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710749, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710748, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710733, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+ {"id": 281474976710753, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a.map = {list: [u in [1,2,3]]} RETURN a LIMIT 10 $$) AS (a agtype);
+                                                      a                                                      
+-------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710878, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710846, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710921, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710822, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710849, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710828, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710813, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710837, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710872, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710798, "label": "", "properties": {"map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} RETURN a LIMIT 10 $$) AS (a agtype);
+                                                a                                                
+-------------------------------------------------------------------------------------------------
+ {"id": 281474976710971, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711118, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711155, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711175, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711025, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711016, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711179, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710996, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976710949, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711054, "label": "", "properties": {"a": [1, 2, 3], "list": [1, 2, 3]}}::vertex
+(10 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} SET a.map = {list: [u in [1,2,3]]} RETURN a LIMIT 10 $$) AS (a agtype);
+                                                              a                                                              
+-----------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976711327, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711759, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711559, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711570, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711677, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711393, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711576, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711217, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711742, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+ {"id": 281474976711552, "label": "", "properties": {"a": [1, 2, 3], "map": {"list": [1, 2, 3]}, "list": [1, 2, 3]}}::vertex
+(10 rows)
 
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 4 other objects

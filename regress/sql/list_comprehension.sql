@@ -157,4 +157,39 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WITH * WHERE u.list=[i I
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WITH * WITH *, [i in [1,2,3]] as list RETURN list LIMIT 1 $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WITH *, [i in [1,2,3]] as list WITH * RETURN list LIMIT 1 $$) AS (result agtype);
 
+--
+-- Issue 1805 - crash when using list comprehension in SET
+-- and CREATE clause subsequent to a MATCH clause with no rows
+--
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in [1,2,3]] RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.map = {list: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u += {a: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in u.list] $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.map = {list: [u in u.list]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u += {a: [u in u.list]} $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in [1,2,3]] SET u += {a: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) SET u.list = [u in u.list] SET u += {a: [u in u.list]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) WITh u, collect(u.list) AS v SET u += {b: [u IN range(0, 5)]} SET u.c = [u IN v[0]] RETURN u $$) AS (u agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.list = [u in [1,2,3]] RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.map = {list: [u in [1,2,3]]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u += {list2: [u in range(0,5)]} RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u = {} $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) SET u.list = [u in [1,2,3]] SET u.map = {list: [u in [1,2,3]]} SET u += {list2: [u in range(0,5)]} RETURN u $$) AS (u agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) RETURN a $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in u.list]}) RETURN a $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) CREATE ({list:[u in u.list]}) $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a.list = [u in [1,2,3]] $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a.map = {list: [u in [1,2,3]]} $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {wont_match:true}) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} $$) AS (u agtype);
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) RETURN a LIMIT 10 $$) AS (a agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in u.list]}) RETURN a LIMIT 10 $$) AS (a agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) CREATE (b {list:[u in u.list]}) RETURN a, b LIMIT 10 $$) AS (a agtype, b agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a.list = [u in [1,2,3]] RETURN a LIMIT 10 $$) AS (a agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a.map = {list: [u in [1,2,3]]} RETURN a LIMIT 10 $$) AS (a agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} RETURN a LIMIT 10 $$) AS (a agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u) CREATE (a {list:[u in [1,2,3]]}) SET a += {a: [u in u.list]} SET a.map = {list: [u in [1,2,3]]} RETURN a LIMIT 10 $$) AS (a agtype);
+
 SELECT * FROM drop_graph('list_comprehension', true);
