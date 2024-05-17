@@ -380,6 +380,23 @@ SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSION {id: '1'})
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
 
 --
+-- Issue 1884: column reference is ambiguous error when returning variable used in the RHS of SET clause
+--
+
+SELECT create_graph('issue_1884');
+
+SELECT * FROM cypher('issue_1884', $$ CREATE (n:A), (m:B), (n)-[e:EDGE]->(m) $$) AS (result agtype);
+
+SELECT * FROM cypher('issue_1884', $$ MATCH (n) SET n.node=n RETURN n $$) AS (result agtype);
+SELECT * FROM cypher('issue_1884', $$ MATCH (n)-[e]->() SET n.edge=e SET e.startNode = n RETURN n, e $$) AS (n agtype, e agtype);
+SELECT * FROM cypher('issue_1884', $$ MATCH (n) WITH n, {a: 1} AS m SET n.int=m.a RETURN n, m $$) AS (n agtype, m agtype);
+SELECT * FROM cypher('issue_1884', $$ MATCH (n)-[e]->(m) SET e.edge=e, e.endNode=m RETURN m, e $$) AS (m agtype, e agtype);
+SELECT * FROM cypher('issue_1884', $$ MATCH (n)-[e]->(m) WITH 1 AS a, n, e SET e.int=a, n.int=a RETURN a, n, e $$) AS (a agtype, n agtype, e agtype);
+SELECT * FROM cypher('issue_1884', $$ MERGE (n: C) WITH [u IN [1, 2, 3]] AS u, n SET n.a = u RETURN n, u $$) AS (n agtype, u agtype);
+
+SELECT * FROM cypher('issue_1884', $$ MATCH (n) DETACH DELETE n $$) AS (result agtype);
+
+--
 -- Clean up
 --
 DROP TABLE tbl;
@@ -387,6 +404,7 @@ DROP FUNCTION set_test;
 SELECT drop_graph('cypher_set', true);
 SELECT drop_graph('cypher_set_1', true);
 SELECT drop_graph('issue_1634', true);
+SELECT drop_graph('issue_1884', true);
 
 --
 -- End

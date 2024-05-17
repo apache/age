@@ -1701,6 +1701,7 @@ cypher_update_information *transform_cypher_set_item_list(
         char *variable_name, *property_name;
         String *property_node, *variable_node;
         int is_entire_prop_update = 0; // true if a map is assigned to variable
+        bool rhs_var_exists = false;
 
         // LHS of set_item must be a variable or an indirection.
         if (IsA(set_item->prop, ColumnRef))
@@ -1836,27 +1837,59 @@ cypher_update_information *transform_cypher_set_item_list(
             ((cypher_map*)set_item->expr)->keep_null = set_item->is_add;
         }
 
-        // create target entry for the new property value
-        item->prop_position = (AttrNumber)pstate->p_next_resno;
-        target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
-                                            EXPR_KIND_SELECT_TARGET, NULL,
-                                            false);
-
-        if (has_a_cypher_list_comprehension_node(set_item->expr))
+        /*
+         * if the RHS is a ColumnRef and the TargetEntry for the variable
+         * already exists, no need to transform the RHS item,
+         * just add volatile wrapper to the target entry of the existing item
+         */
+        if (IsA(set_item->expr, ColumnRef))
         {
-            query->hasAggs = true;
+            ColumnRef *cref = (ColumnRef *)set_item->expr;
+            String *cref_str = linitial(cref->fields);
+            char *prop_name = cref_str->sval;
+
+            int prop_resno = get_target_entry_resno(query->targetList, prop_name);
+
+            if (prop_resno != -1)
+            {
+                // RHS variable already exists
+                rhs_var_exists = true;
+                item->prop_position = prop_resno;
+                target_item = findTarget(query->targetList, prop_name);
+                add_volatile_wrapper_to_target_entry(query->targetList,
+                                                     item->prop_position);
+            }
         }
 
-        if (!query->hasAggs && nodeTag(target_item->expr) == T_Aggref)
+        /*
+         * if a TargetEntry could not be found for the RHS item, transform the
+         * item and add to the tl
+         */
+        if (!rhs_var_exists)
         {
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                    errmsg("Invalid use of aggregation in this context"),
-                    parser_errposition(pstate, set_item->location)));
+            // create target entry for the new property value
+            item->prop_position = (AttrNumber)pstate->p_next_resno;
+
+            target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
+                                                EXPR_KIND_SELECT_TARGET, NULL,
+                                                false);
+
+            if (has_a_cypher_list_comprehension_node(set_item->expr))
+            {
+                query->hasAggs = true;
+            }
+
+            if (!query->hasAggs && nodeTag(target_item->expr) == T_Aggref)
+            {
+                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("Invalid use of aggregation in this context"),
+                        parser_errposition(pstate, set_item->location)));
+            }
+
+            target_item->expr = add_volatile_wrapper(target_item->expr);
+            query->targetList = lappend(query->targetList, target_item);
         }
 
-        target_item->expr = add_volatile_wrapper(target_item->expr);
-
-        query->targetList = lappend(query->targetList, target_item);
         info->set_items = lappend(info->set_items, item);
     }
 
