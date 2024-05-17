@@ -391,44 +391,35 @@ call_stmt:
 
             $$ = (Node *)n;
         }
-    | CALL expr '.' expr
+    | CALL expr_var '.' expr_func_norm
         {
             cypher_call *n = make_ag_node(cypher_call);
+            FuncCall *fc = (FuncCall*)$4;
+            ColumnRef *cr = (ColumnRef*)$2;
+            List *fields = cr->fields;
+            String *string = linitial(fields);
 
-            if (IsA($4, FuncCall) && IsA($2, ColumnRef))
+            /*
+             * A function can only be qualified with a single schema. So, we
+             * check to see that the function isn't already qualified. There
+             * may be unforeseen cases where we might need to remove this in
+             * the future.
+             */
+            if (list_length(fc->funcname) == 1)
             {
-                FuncCall *fc = (FuncCall*)$4;
-                ColumnRef *cr = (ColumnRef*)$2;
-                List *fields = cr->fields;
-                String *string = linitial(fields);
-
-                /*
-                 * A function can only be qualified with a single schema. So, we
-                 * check to see that the function isn't already qualified. There
-                 * may be unforeseen cases where we might need to remove this in
-                 * the future.
-                 */
-                if (list_length(fc->funcname) == 1)
-                {
-                    fc->funcname = lcons(string, fc->funcname);
-                    $$ = (Node*)fc;
-                }
-                else
-                    ereport(ERROR,
-                            (errcode(ERRCODE_SYNTAX_ERROR),
-                             errmsg("function already qualified"),
-                             ag_scanner_errposition(@1, scanner)));
-
-                n->funccall = fc;
-                $$ = (Node *)n;
+                fc->funcname = lcons(string, fc->funcname);
+                $$ = (Node*)fc;
             }
             else
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("CALL statement must be a qualified function"),
-                         ag_scanner_errposition(@1, scanner)));
+                            errmsg("function already qualified"),
+                            ag_scanner_errposition(@1, scanner)));
             }
+
+            n->funccall = fc;
+            $$ = (Node *)n;
         }
     | CALL expr_func_norm YIELD yield_item_list where_opt
         {
@@ -438,46 +429,37 @@ call_stmt:
             n->where = $5;
             $$ = (Node *)n;
         }
-    | CALL expr '.' expr YIELD yield_item_list where_opt
+    | CALL expr_var '.' expr_func_norm YIELD yield_item_list where_opt
         {
             cypher_call *n = make_ag_node(cypher_call);
+            FuncCall *fc = (FuncCall*)$4;
+            ColumnRef *cr = (ColumnRef*)$2;
+            List *fields = cr->fields;
+            String *string = linitial(fields);
 
-            if (IsA($4, FuncCall) && IsA($2, ColumnRef))
+            /*
+             * A function can only be qualified with a single schema. So, we
+             * check to see that the function isn't already qualified. There
+             * may be unforeseen cases where we might need to remove this in
+             * the future.
+             */
+            if (list_length(fc->funcname) == 1)
             {
-                FuncCall *fc = (FuncCall*)$4;
-                ColumnRef *cr = (ColumnRef*)$2;
-                List *fields = cr->fields;
-                String *string = linitial(fields);
-
-                /*
-                 * A function can only be qualified with a single schema. So, we
-                 * check to see that the function isn't already qualified. There
-                 * may be unforeseen cases where we might need to remove this in
-                 * the future.
-                 */
-                if (list_length(fc->funcname) == 1)
-                {
-                    fc->funcname = lcons(string, fc->funcname);
-                    $$ = (Node*)fc;
-                }
-                else
-                    ereport(ERROR,
-                            (errcode(ERRCODE_SYNTAX_ERROR),
-                             errmsg("function already qualified"),
-                             ag_scanner_errposition(@1, scanner)));
-
-                n->funccall = fc;
-                n->yield_items = $6;
-                n->where = $7;
-                $$ = (Node *)n;
+                fc->funcname = lcons(string, fc->funcname);
+                $$ = (Node*)fc;
             }
             else
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("CALL statement must be a qualified function"),
-                         ag_scanner_errposition(@1, scanner)));
+                            errmsg("function already qualified"),
+                            ag_scanner_errposition(@1, scanner)));
             }
+
+            n->funccall = fc;
+            n->yield_items = $6;
+            n->where = $7;
+            $$ = (Node *)n;
         }
     ;
 
