@@ -27,7 +27,7 @@
 #include "parser/cypher_parse_node.h"
 #include "parser/scansup.h"
 
-// override the default action for locations
+/* override the default action for locations */
 #define YYLLOC_DEFAULT(current, rhs, n) \
     do \
     { \
@@ -195,16 +195,16 @@
 %type <string> utility_option_name
 
 %{
-//
-// internal alias check
+
+/* internal alias check */
 static bool has_internal_default_prefix(char *str);
 
-// unique name generation
+/* unique name generation */
 #define UNIQUE_NAME_NULL_PREFIX AGE_DEFAULT_PREFIX"unique_null_prefix"
 static char *create_unique_name(char *prefix_name);
 static unsigned long get_a_unique_number(void);
 
-// logical operators
+/* logical operators */
 static Node *make_or_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_and_expr(Node *lexpr, Node *rexpr, int location);
 static Node *make_xor_expr(Node *lexpr, Node *rexpr, int location);
@@ -216,30 +216,30 @@ static Node *make_cypher_comparison_aexpr(A_Expr_Kind kind, char *name,
 static Node *make_cypher_comparison_boolexpr(BoolExprType boolop, List *args,
                                                int location);
 
-// arithmetic operators
+/* arithmetic operators */
 static Node *do_negate(Node *n, int location);
 static void do_negate_float(Float *v);
 
-// indirection
+/* indirection */
 static Node *append_indirection(Node *expr, Node *selector);
 
-// literals
+/* literals */
 static Node *make_int_const(int i, int location);
 static Node *make_float_const(char *s, int location);
 static Node *make_string_const(char *s, int location);
 static Node *make_bool_const(bool b, int location);
 static Node *make_null_const(int location);
 
-// typecast
+/* typecast */
 static Node *make_typecast_expr(Node *expr, char *typecast, int location);
 
-// functions
+/* functions */
 static Node *make_function_expr(List *func_name, List *exprs, int location);
 static Node *make_star_function_expr(List *func_name, List *exprs, int location);
 static Node *make_distinct_function_expr(List *func_name, List *exprs, int location);
 static FuncCall *node_to_agtype(Node* fnode, char *type, int location);
 
-// setops
+/* setops */
 static Node *make_set_op(SetOperation op, bool all_or_distinct, List *larg,
                          List *rarg);
 static Node *make_subquery_returnless_set_op(SetOperation op,
@@ -247,19 +247,19 @@ static Node *make_subquery_returnless_set_op(SetOperation op,
                                              List *larg,
                                              List *rarg);
 
-// VLE
+/* VLE */
 static cypher_relationship *build_VLE_relation(List *left_arg,
                                                cypher_relationship *cr,
                                                Node *right_arg,
                                                int left_arg_location,
                                                int cr_location);
-// comparison
+/* comparison */
 static bool is_A_Expr_a_comparison_operation(cypher_comparison_aexpr *a);
 static Node *build_comparison_expression(Node *left_grammar_node,
                                          Node *right_grammar_node,
                                          char *opr_name, int location);
 
-// list_comprehension
+/* list_comprehension */
 static Node *verify_rule_as_list_comprehension(Node *expr, Node *expr2,
                                                Node *where, Node *mapping_expr,
                                                int var_loc, int expr_loc,
@@ -899,7 +899,7 @@ sort_item:
             n->sortby_dir = $2;
             n->sortby_nulls = SORTBY_NULLS_DEFAULT;
             n->useOp = NIL;
-            n->location = -1; // no operator
+            n->location = -1; /* no operator */
 
             $$ = (Node *)n;
         }
@@ -908,7 +908,7 @@ sort_item:
 order_opt:
     /* empty */
         {
-            $$ = SORTBY_DEFAULT; // is the same with SORTBY_ASC
+            $$ = SORTBY_DEFAULT; /* is the same with SORTBY_ASC */
         }
     | ASC
         {
@@ -956,12 +956,12 @@ with:
             ListCell *li;
             cypher_with *n;
 
-            // check expressions are aliased
+            /* check expressions are aliased */
             foreach(li, $3)
             {
                 ResTarget *item = lfirst(li);
 
-                // variable does not have to be aliased
+                /* variable does not have to be aliased */
                 if (IsA(item->val, ColumnRef) || item->name)
                     continue;
 
@@ -988,12 +988,12 @@ with:
             ListCell *li;
             cypher_with *n;
 
-            // check expressions are aliased
+            /* check expressions are aliased */
             foreach (li, $2)
             {
                 ResTarget *item = lfirst(li);
 
-                // variable does not have to be aliased
+                /* variable does not have to be aliased */
                 if (IsA(item->val, ColumnRef) || item->name)
                     continue;
 
@@ -2439,7 +2439,7 @@ conflicted_keywords:
 
 static Node *make_or_expr(Node *lexpr, Node *rexpr, int location)
 {
-    // flatten "a OR b OR c ..." to a single BoolExpr on sight
+    /* flatten "a OR b OR c ..." to a single BoolExpr on sight */
     if (IsA(lexpr, BoolExpr))
     {
         BoolExpr *bexpr = (BoolExpr *)lexpr;
@@ -2457,7 +2457,7 @@ static Node *make_or_expr(Node *lexpr, Node *rexpr, int location)
 
 static Node *make_and_expr(Node *lexpr, Node *rexpr, int location)
 {
-    // flatten "a AND b AND c ..." to a single BoolExpr on sight
+    /* flatten "a AND b AND c ..." to a single BoolExpr on sight */
     if (IsA(lexpr, BoolExpr))
     {
         BoolExpr *bexpr = (BoolExpr *)lexpr;
@@ -2478,7 +2478,7 @@ static Node *make_xor_expr(Node *lexpr, Node *rexpr, int location)
     Expr *aorb;
     Expr *notaandb;
 
-    // XOR is (A OR B) AND (NOT (A AND B))
+    /* XOR is (A OR B) AND (NOT (A AND B)) */
     aorb = makeBoolExpr(OR_EXPR, list_make2(lexpr, rexpr), location);
 
     notaandb = makeBoolExpr(AND_EXPR, list_make2(lexpr, rexpr), location);
@@ -2521,7 +2521,7 @@ static Node *make_cypher_comparison_boolexpr(BoolExprType boolop, List *args, in
 
 static Node *make_comparison_and_expr(Node *lexpr, Node *rexpr, int location)
 {
-    // flatten "a AND b AND c ..." to a single BoolExpr on sight
+    /* flatten "a AND b AND c ..." to a single BoolExpr on sight */
     if (is_ag_node(lexpr, cypher_comparison_boolexpr))
     {
         cypher_comparison_boolexpr *bexpr = (cypher_comparison_boolexpr *)lexpr;
@@ -2547,7 +2547,7 @@ static Node *do_negate(Node *n, int location)
     {
         A_Const *c = (A_Const *)n;
 
-        // report the constant's location as that of the '-' sign
+        /* report the constant's location as that of the '-' sign */
         c->location = location;
 
         if (c->val.ival.type == T_Integer)
@@ -3272,7 +3272,7 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
     return cr;
 }
 
-// Helper function to verify that the rule is a list comprehension
+/* Helper function to verify that the rule is a list comprehension */
 static Node *verify_rule_as_list_comprehension(Node *expr, Node *expr2,
                                                Node *where, Node *mapping_expr,
                                                int var_loc, int expr_loc,
@@ -3313,7 +3313,7 @@ static Node *build_list_comprehension_node(ColumnRef *cref, Node *expr,
     char *var_name = NULL;
     String *val;
 
-    // Extract name from cref
+    /* Extract name from cref */
     val = linitial(cref->fields);
 
     if (!IsA(val, String))
