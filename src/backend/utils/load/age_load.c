@@ -145,7 +145,7 @@ void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
     Relation label_relation;
     HeapTuple tuple;
 
-    // Check if label provided exists as vertex label, then throw error
+    /* Check if label provided exists as vertex label, then throw error */
     if (get_label_kind(label_name, graph_oid) == LABEL_KIND_VERTEX)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -177,7 +177,7 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     Relation label_relation;
     HeapTuple tuple;
 
-    // Check if label provided exists as edge label, then throw error
+    /* Check if label provided exists as edge label, then throw error */
     if (get_label_kind(label_name, graph_oid) == LABEL_KIND_EDGE)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),

@@ -48,5 +48,5 @@ void edge_row_cb(int delim __attribute__((unused)), void *data);
 int create_edges_from_csv_file(char *file_path, char *graph_name, Oid graph_oid,
                                 char *object_name, int object_id );
 
-#endif //AG_LOAD_EDGES_H
+#endif /* AG_LOAD_EDGES_H */
 
