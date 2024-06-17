@@ -96,13 +96,13 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     return resultRelInfo;
 }
 
-// close the result_rel_info and close all the indices
+/* close the result_rel_info and close all the indices */
 void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info)
 {
-    // close the indices
+    /* close the indices */
     ExecCloseIndices(result_rel_info);
 
-    // close the rel
+    /* close the rel */
     table_close(result_rel_info->ri_RelationDesc, RowExclusiveLock);
 }
 
@@ -193,7 +193,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
      */
     label = search_label_graph_oid_cache(graph_oid, GET_LABEL_ID(id));
 
-    // Setup the scan key to be the graphid
+    /* Setup the scan key to be the graphid */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                 F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
 
@@ -255,11 +255,11 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
         ExecConstraints(resultRelInfo, elemTupleSlot, estate);
     }
 
-    // Insert the tuple normally
+    /* Insert the tuple normally */
     table_tuple_insert(resultRelInfo->ri_RelationDesc, elemTupleSlot, cid, 0,
                        NULL);
 
-    // Insert index entries for the tuple
+    /* Insert index entries for the tuple */
     if (resultRelInfo->ri_NumIndices > 0)
     {
         ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate,
