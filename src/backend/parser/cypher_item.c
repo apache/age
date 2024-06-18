@@ -35,7 +35,7 @@ static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_rel_attrs(ParseState *pstate, RangeTblEntry *rte,
                               int rtindex, int sublevels_up, int location);
 
-// see transformTargetEntry()
+/* see transformTargetEntry() */
 TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
                                    Node *expr, ParseExprKind expr_kind,
                                    char *colname, bool resjunk)
@@ -52,7 +52,7 @@ TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
                            colname, resjunk);
 }
 
-// see transformTargetList()
+/* see transformTargetList() */
 List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                                  List **groupClause, ParseExprKind expr_kind)
 {
