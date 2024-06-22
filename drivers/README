@@ -15,9 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-This folder contains drivers for specific languages
+This folder contains drivers for specific languages.
 
-### For more information about [Apache AGE](https://age.apache.org/)
-* Apache Age : https://age.apache.org/
-* GitHub : https://github.com/apache/age
-* Document : https://age.apache.org/age-manual/master/index.html
+**See more about Apache AGE:**
+
+* Website: https://age.apache.org/
+* GitHub: https://github.com/apache/age
+* Documentation: https://age.apache.org/age-manual/master/index.html
