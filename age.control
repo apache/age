@@ -17,6 +17,6 @@
 
 default_version = '1.2.0'
 comment = 'AGE database extension'
-module_pathname = '$libdir/age'
+module_pathname =~chino
 
 schema = 'ag_catalog'
