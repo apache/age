@@ -46,7 +46,13 @@ typedef enum ag_token_type
     AG_TOKEN_TYPECAST,
     AG_TOKEN_PLUS_EQ,
     AG_TOKEN_EQ_TILDE,
-    AG_TOKEN_CHAR
+    AG_TOKEN_LEFT_CONTAINS,
+    AG_TOKEN_RIGHT_CONTAINS,
+    AG_TOKEN_ACCESS_PATH,
+    AG_TOKEN_ANY_EXISTS,
+    AG_TOKEN_ALL_EXISTS,
+    AG_TOKEN_CONCAT,
+    AG_TOKEN_CHAR,
 } ag_token_type;
 
 /*
@@ -74,7 +80,7 @@ typedef struct ag_token
     int location;
 } ag_token;
 
-// an opaque data structure encapsulating the current state of the scanner
+/* an opaque data structure encapsulating the current state of the scanner */
 typedef void *ag_scanner_t;
 
 ag_scanner_t ag_scanner_create(const char *s);

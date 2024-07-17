@@ -27,10 +27,8 @@
 #include "tcop/utility.h"
 #include "utils/lsyscache.h"
 
-#include "catalog/ag_catalog.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
-#include "catalog/ag_namespace.h"
 #include "utils/ag_cache.h"
 
 static object_access_hook_type prev_object_access_hook;
@@ -86,27 +84,37 @@ void process_utility_hook_fini(void)
  * from being thrown, we need to disable the object_access_hook before dropping
  * the extension.
  */
-void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
-                             ProcessUtilityContext context, ParamListInfo params,
-                             QueryEnvironment *queryEnv, DestReceiver *dest,
-                             QueryCompletion *qc)
+void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
+                            bool readOnlyTree, ProcessUtilityContext context,
+                            ParamListInfo params, QueryEnvironment *queryEnv,
+                            DestReceiver *dest, QueryCompletion *qc)
 {
     if (is_age_drop(pstmt))
+    {
         drop_age_extension((DropStmt *)pstmt->utilityStmt);
+    }
     else if (prev_process_utility_hook)
-        (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree, context, params,
-                                      queryEnv, dest, qc);
+    {
+        (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree, context,
+                                      params, queryEnv, dest, qc);
+    }
     else
-        standard_ProcessUtility(pstmt, queryString, readOnlyTree, context, params, queryEnv,
-                                dest, qc);
+    {
+        Assert(IsA(pstmt, PlannedStmt));
+        Assert(pstmt->commandType == CMD_UTILITY);
+        Assert(queryString != NULL);	/* required as of 8.4 */
+        Assert(qc == NULL || qc->commandTag == CMDTAG_UNKNOWN);
+        standard_ProcessUtility(pstmt, queryString, readOnlyTree, context,
+                                params, queryEnv, dest, qc);
+    }
 }
 
 static void drop_age_extension(DropStmt *stmt)
 {
-    // Remove all graphs
+    /* Remove all graphs */
     drop_graphs(get_graphnames());
 
-    // Remove the object access hook
+    /* Remove the object access hook */
     object_access_hook_fini();
 
     /*
@@ -120,7 +128,7 @@ static void drop_age_extension(DropStmt *stmt)
     clear_global_Oids_GRAPHID();
 }
 
-// Check to see if the Utility Command is to drop the AGE Extension.
+/* Check to see if the Utility Command is to drop the AGE Extension. */
 static bool is_age_drop(PlannedStmt *pstmt)
 {
     ListCell *lc;
@@ -162,7 +170,7 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
     if (prev_object_access_hook)
         prev_object_access_hook(access, class_id, object_id, sub_id, arg);
 
-    // We are interested in DROP SCHEMA and DROP TABLE commands.
+    /* We are interested in DROP SCHEMA and DROP TABLE commands. */
     if (access != OAT_DROP)
         return;
 
@@ -204,7 +212,7 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
 
         cache_data = search_label_relation_cache(object_id);
 
-        // We are interested in only tables that are labels.
+        /* We are interested in only tables that are labels. */
         if (!cache_data)
             return;
 

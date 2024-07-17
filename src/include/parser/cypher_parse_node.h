@@ -20,9 +20,6 @@
 #ifndef AG_CYPHER_PARSE_NODE_H
 #define AG_CYPHER_PARSE_NODE_H
 
-#include "nodes/primnodes.h"
-#include "parser/parse_node.h"
-
 #include "nodes/cypher_nodes.h"
 
 /*
@@ -43,6 +40,7 @@ typedef struct cypher_parsestate
     int default_alias_num;
     List *entities;
     List *property_constraint_quals;
+    bool subquery_where_flag; /* flag for knowing we are in a subquery where */
     /*
      * To flag when an aggregate has been found in an expression during an
      * expression transform. This is used during the return_item list transform
@@ -52,13 +50,14 @@ typedef struct cypher_parsestate
      */
     bool exprHasAgg;
     bool p_opt_match;
+    bool p_list_comp;
 } cypher_parsestate;
 
 typedef struct errpos_ecb_state
 {
     ErrorContextCallback ecb;
-    ParseState *pstate; // ParseState of query that has subquery being parsed
-    int query_loc; // location of subquery starting from p_sourcetext
+    ParseState *pstate; /* ParseState of query that has subquery being parsed */
+    int query_loc; /* location of subquery starting from p_sourcetext */
 } errpos_ecb_state;
 
 cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate);

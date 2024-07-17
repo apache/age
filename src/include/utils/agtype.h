@@ -31,22 +31,15 @@
 #ifndef AG_AGTYPE_H
 #define AG_AGTYPE_H
 
-#include "access/htup_details.h"
-#include "fmgr.h"
-#include "lib/stringinfo.h"
-#include "nodes/pg_list.h"
 #include "utils/array.h"
 #include "utils/numeric.h"
-#include "utils/syscache.h"
 
-#include "catalog/ag_namespace.h"
-#include "catalog/pg_type.h"
 #include "utils/graphid.h"
 
 /* Tokens used when sequentially processing an agtype value */
 typedef enum
 {
-    WAGT_DONE,
+    WAGT_DONE = 0x0,
     WAGT_KEY,
     WAGT_VALUE,
     WAGT_ELEM,
@@ -64,6 +57,7 @@ typedef enum
 #define AGTYPE_EXISTS_STRATEGY_NUMBER 9
 #define AGTYPE_EXISTS_ANY_STRATEGY_NUMBER 10
 #define AGTYPE_EXISTS_ALL_STRATEGY_NUMBER 11
+#define AGTYPE_CONTAINS_TOP_LEVEL_STRATEGY_NUMBER 12
 
 /*
  * In the standard agtype_ops GIN opclass for agtype, we choose to index both
@@ -294,6 +288,8 @@ typedef struct
     ((*(uint32 *)VARDATA(agtp_) & AGT_FBINARY) != 0)
 #define AGT_ROOT_BINARY_FLAGS(agtp_) \
     (*(uint32 *)VARDATA(agtp_) & AGT_FBINARY_MASK)
+#define AGT_ROOT_IS_VPC(agtp_) \
+    (AGT_ROOT_IS_BINARY(agtp_) && (AGT_ROOT_BINARY_FLAGS(agtp_) == AGT_FBINARY_TYPE_VLE_PATH))
 
 /* values for the AGTYPE header field to denote the stored data type */
 #define AGT_HEADER_INTEGER 0x00000000
@@ -479,7 +475,7 @@ agtype_iterator_token agtype_iterator_next(agtype_iterator **it,
                                            bool skip_nested);
 agtype *agtype_value_to_agtype(agtype_value *val);
 bool agtype_deep_contains(agtype_iterator **val,
-                          agtype_iterator **m_contained);
+                          agtype_iterator **m_contained, bool skip_nested);
 void agtype_hash_scalar_value(const agtype_value *scalar_val, uint32 *hash);
 void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
                                        uint64 *hash, uint64 seed);
@@ -489,6 +485,9 @@ void convert_extended_object(StringInfo buffer, agtentry *pheader,
                              agtype_value *val);
 Datum get_numeric_datum_from_agtype_value(agtype_value *agtv);
 bool is_numeric_result(agtype_value *lhs, agtype_value *rhs);
+void copy_agtype_value(agtype_parse_state* pstate,
+                       agtype_value* original_agtype_value,
+                       agtype_value **copied_agtype_value, bool is_top_level);
 
 /* agtype.c support functions */
 /*
@@ -547,9 +546,14 @@ agtype_value *string_to_agtype_value(char *s);
 agtype_value *integer_to_agtype_value(int64 int_value);
 void add_agtype(Datum val, bool is_null, agtype_in_state *result, Oid val_type,
                 bool key_scalar);
+agtype_value *extract_entity_properties(agtype *object, bool error_on_scalar);
+agtype_iterator *get_next_list_element(agtype_iterator *it,
+                                       agtype_container *agtc,
+                                       agtype_value *elem);
 void pfree_agtype_value(agtype_value* value);
 void pfree_agtype_value_content(agtype_value* value);
 void pfree_agtype_in_state(agtype_in_state* value);
+agtype_value *agtype_value_from_cstring(char *str, int len);
 
 /* Oid accessors for AGTYPE */
 Oid get_AGTYPEOID(void);

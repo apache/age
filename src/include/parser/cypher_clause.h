@@ -20,19 +20,15 @@
 #ifndef AG_CYPHER_CLAUSE_H
 #define AG_CYPHER_CLAUSE_H
 
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "parser/parse_node.h"
-
 #include "parser/cypher_parse_node.h"
 
 typedef struct cypher_clause cypher_clause;
 
 struct cypher_clause
 {
-    cypher_clause *next; //next clause
+    cypher_clause *next; /* next clause */
     Node *self;
-    cypher_clause *prev; // previous clause
+    cypher_clause *prev; /* previous clause */
 };
 
 Query *transform_cypher_clause(cypher_parsestate *cpstate,
@@ -43,4 +39,13 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
                                 CommonTableExpr *parentCTE,
                                 bool locked_from_parent,
                                 bool resolve_unknowns);
+
+typedef Query *(*transform_method)(cypher_parsestate *cpstate,
+                                   cypher_clause *clause);
+
+ParseNamespaceItem *transform_cypher_clause_as_subquery(cypher_parsestate *cpstate,
+                                                        transform_method transform,
+                                                        cypher_clause *clause,
+                                                        Alias *alias,
+                                                        bool add_rte_to_query);
 #endif

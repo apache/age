@@ -19,8 +19,6 @@
 
 #include "postgres.h"
 
-#include "nodes/extensible.h"
-
 #include "nodes/ag_nodes.h"
 #include "nodes/cypher_copyfuncs.h"
 #include "nodes/cypher_outfuncs.h"
@@ -29,7 +27,7 @@
 
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b);
 
-// This list must match ag_node_tag.
+/* This list must match ag_node_tag. */
 const char *node_names[] = {
     "ag_node_invalid",
     "cypher_return",
@@ -47,11 +45,16 @@ const char *node_names[] = {
     "cypher_bool_const",
     "cypher_param",
     "cypher_map",
+    "cypher_map_projection",
+    "cypher_map_projection_element",
     "cypher_list",
+    "cypher_comparison_aexpr",
+    "cypher_comparison_boolexpr",
     "cypher_string_match",
     "cypher_typecast",
     "cypher_integer_const",
     "cypher_sub_pattern",
+    "cypher_sub_query",
     "cypher_call",
     "cypher_create_target_nodes",
     "cypher_create_path",
@@ -93,7 +96,7 @@ const char *node_names[] = {
         CppConcat(read_, type) \
     }
 
-// This list must match ag_node_tag.
+/* This list must match ag_node_tag. */
 const ExtensibleNodeMethods node_methods[] = {
     DEFINE_NODE_METHODS(cypher_return),
     DEFINE_NODE_METHODS(cypher_with),
@@ -110,11 +113,15 @@ const ExtensibleNodeMethods node_methods[] = {
     DEFINE_NODE_METHODS(cypher_bool_const),
     DEFINE_NODE_METHODS(cypher_param),
     DEFINE_NODE_METHODS(cypher_map),
+    DEFINE_NODE_METHODS(cypher_map_projection),
     DEFINE_NODE_METHODS(cypher_list),
+    DEFINE_NODE_METHODS(cypher_comparison_aexpr),
+    DEFINE_NODE_METHODS(cypher_comparison_boolexpr),
     DEFINE_NODE_METHODS(cypher_string_match),
     DEFINE_NODE_METHODS(cypher_typecast),
     DEFINE_NODE_METHODS(cypher_integer_const),
     DEFINE_NODE_METHODS(cypher_sub_pattern),
+    DEFINE_NODE_METHODS(cypher_sub_query),
     DEFINE_NODE_METHODS(cypher_call),
     DEFINE_NODE_METHODS_EXTENDED(cypher_create_target_nodes),
     DEFINE_NODE_METHODS_EXTENDED(cypher_create_path),

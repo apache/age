@@ -20,9 +20,6 @@
 #ifndef AG_GRAPHID_H
 #define AG_GRAPHID_H
 
-#include "postgres.h"
-
-#include "fmgr.h"
 #include "utils/fmgroids.h"
 #include "utils/syscache.h"
 
@@ -30,6 +27,7 @@
 #include "catalog/pg_type.h"
 
 typedef int64 graphid;
+
 #define F_GRAPHIDEQ F_INT8EQ
 
 #define LABEL_ID_MIN 1
@@ -39,7 +37,8 @@ typedef int64 graphid;
 #define label_id_is_valid(id) (id >= LABEL_ID_MIN && id <= LABEL_ID_MAX)
 
 #define ENTRY_ID_MIN INT64CONST(1)
-#define ENTRY_ID_MAX INT64CONST(281474976710655) // 0x0000ffffffffffff
+/* 0x0000ffffffffffff */
+#define ENTRY_ID_MAX INT64CONST(281474976710655)
 #define INVALID_ENTRY_ID INT64CONST(0)
 
 #define entry_id_is_valid(id) (id >= ENTRY_ID_MIN && id <= ENTRY_ID_MAX)

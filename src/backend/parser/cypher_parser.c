@@ -19,10 +19,8 @@
 
 #include "postgres.h"
 
-#include "nodes/pg_list.h"
 #include "parser/scansup.h"
 
-#include "parser/ag_scanner.h"
 #include "parser/cypher_gram.h"
 #include "parser/cypher_keywords.h"
 #include "parser/cypher_parser.h"
@@ -46,7 +44,13 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
         DOT_DOT,
         TYPECAST,
         PLUS_EQ,
-        EQ_TILDE
+        EQ_TILDE,
+        LEFT_CONTAINS,
+        RIGHT_CONTAINS,
+        ACCESS_PATH,
+        ANY_EXISTS,
+        ALL_EXISTS,
+        CONCAT
     };
 
     ag_token token;
@@ -98,6 +102,12 @@ int cypher_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, ag_scanner_t scanner)
     case AG_TOKEN_DOT_DOT:
     case AG_TOKEN_PLUS_EQ:
     case AG_TOKEN_EQ_TILDE:
+    case AG_TOKEN_ACCESS_PATH:
+    case AG_TOKEN_ALL_EXISTS:
+    case AG_TOKEN_ANY_EXISTS:
+    case AG_TOKEN_LEFT_CONTAINS:
+    case AG_TOKEN_RIGHT_CONTAINS:
+    case AG_TOKEN_CONCAT:
         break;
     case AG_TOKEN_TYPECAST:
         break;

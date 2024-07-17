@@ -20,29 +20,16 @@
 #include "postgres.h"
 
 #include "access/genam.h"
-#include "access/heapam.h"
-#include "access/htup.h"
-#include "access/htup_details.h"
-#include "access/skey.h"
-#include "access/stratnum.h"
 #include "catalog/indexing.h"
-#include "catalog/namespace.h"
-#include "fmgr.h"
-#include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
-#include "storage/lockdefs.h"
 #include "utils/builtins.h"
-#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
-#include "utils/rel.h"
-#include "utils/relcache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
-#include "utils/graphid.h"
 
 /*
  * INSERT INTO ag_catalog.ag_label
@@ -63,12 +50,12 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
      * NOTE: Is it better to make use of label_id and label_kind domain types
      *       than to use assert to check label_id and label_kind are valid?
      */
-    AssertArg(label_name);
-    AssertArg(label_id_is_valid(label_id));
-    AssertArg(label_kind == LABEL_KIND_VERTEX ||
+    Assert(label_name);
+    Assert(label_id_is_valid(label_id));
+    Assert(label_kind == LABEL_KIND_VERTEX ||
               label_kind == LABEL_KIND_EDGE);
-    AssertArg(OidIsValid(label_relation));
-    AssertArg(seq_name);
+    Assert(OidIsValid(label_relation));
+    Assert(seq_name);
 
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
 
@@ -103,7 +90,7 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
     table_close(ag_label, RowExclusiveLock);
 }
 
-// DELETE FROM ag_catalog.ag_label WHERE relation = relation
+/* DELETE FROM ag_catalog.ag_label WHERE relation = relation */
 void delete_label(Oid relation)
 {
     ScanKeyData scan_keys[1];
@@ -188,8 +175,10 @@ Datum _label_name(PG_FUNCTION_ARGS)
     uint32 label_id;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
         ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
                         errmsg("graph_oid and label_id must not be null")));
+    }
 
     graph = PG_GETARG_OID(0);
 
@@ -288,13 +277,13 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     TupleTableSlot *slot;
     ResultRelInfo *resultRelInfo;
 
-    // setup scan keys to get all edges for the given graph oid
+    /* setup scan keys to get all edges for the given graph oid */
     ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
                 F_OIDEQ, ObjectIdGetDatum(graph_oid));
     ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                 F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
 
-    // setup the table to be scanned
+    /* setup the table to be scanned */
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
     scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
 
@@ -305,7 +294,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
         estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
         &TTSOpsHeapTuple);
 
-    // scan through the results and get all the label names.
+    /* scan through the results and get all the label names. */
     while(true)
     {
         Name label;
@@ -314,7 +303,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
-        // no more labels to process
+        /* no more labels to process */
         if (!HeapTupleIsValid(tuple))
             break;
 

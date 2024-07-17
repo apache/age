@@ -20,11 +20,7 @@
 #ifndef AG_AG_LABEL_H
 #define AG_AG_LABEL_H
 
-#include "postgres.h"
-
 #include "nodes/execnodes.h"
-
-#include "catalog/ag_catalog.h"
 
 #define Anum_ag_label_vertex_table_id 1
 #define Anum_ag_label_vertex_table_properties 2
@@ -76,7 +72,6 @@ void delete_label(Oid relation);
 int32 get_label_id(const char *label_name, Oid graph_oid);
 Oid get_label_relation(const char *label_name, Oid graph_oid);
 char *get_label_relation_name(const char *label_name, Oid graph_oid);
-Oid get_label_oid(const char *label_name, Oid label_graph);
 char get_label_kind(const char *label_name, Oid label_graph);
 
 bool label_id_exists(Oid graph_oid, int32 label_id);

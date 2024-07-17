@@ -20,10 +20,7 @@
 #ifndef AG_CYPHER_READFUNCS_H
 #define AG_CYPHER_READFUNCS_H
 
-#include "postgres.h"
-
 #include "nodes/extensible.h"
-#include "nodes/nodes.h"
 
 /*
  * Deserialization functions for AGE's ExtensibleNodes. We assign
@@ -39,16 +36,16 @@
 
 void read_ag_node(ExtensibleNode *node);
 
-// create data structures
+/* create data structures */
 void read_cypher_create_target_nodes(struct ExtensibleNode *node);
 void read_cypher_create_path(struct ExtensibleNode *node);
 void read_cypher_target_node(struct ExtensibleNode *node);
 
-// set/remove data structures
+/* set/remove data structures */
 void read_cypher_update_information(struct ExtensibleNode *node);
 void read_cypher_update_item(struct ExtensibleNode *node);
 
-// delete data structures
+/* delete data structures */
 void read_cypher_delete_information(struct ExtensibleNode *node);
 void read_cypher_delete_item(struct ExtensibleNode *node);
 
