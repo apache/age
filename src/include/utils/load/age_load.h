@@ -36,6 +36,7 @@ typedef struct
     TupleTableSlot **slots;
     int num_tuples;
     int max_tuples;
+    int seq_num;
 } batch_insert_state;
 
 agtype* create_empty_agtype(void);

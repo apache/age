@@ -68,7 +68,8 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     graphid end_vertex_graph_id;
     int end_vertex_type_id;
 
-    graphid object_graph_id;
+    graphid edge_id;
+    int64 entry_id;
     TupleTableSlot *slot;
 
     n_fields = cr->cur_field;
@@ -88,7 +89,8 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     }
     else
     {
-        object_graph_id = make_graphid(cr->label_id, (int64)cr->row);
+        entry_id = nextval_internal(cr->label_seq_relid, true);
+        edge_id = make_graphid(cr->label_id, entry_id);
 
         start_id_int = strtol(cr->fields[0], NULL, 10);
         start_vertex_type_id = get_label_id(cr->fields[1], cr->graph_oid);
@@ -105,7 +107,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
         ExecClearTuple(slot);
 
         /* Fill the values in the slot */
-        slot->tts_values[0] = GRAPHID_GET_DATUM(object_graph_id);
+        slot->tts_values[0] = GRAPHID_GET_DATUM(edge_id);
         slot->tts_values[1] = GRAPHID_GET_DATUM(start_vertex_graph_id);
         slot->tts_values[2] = GRAPHID_GET_DATUM(end_vertex_graph_id);
         slot->tts_values[3] = AGTYPE_P_GET_DATUM(
@@ -138,7 +140,6 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     {
         ereport(NOTICE,(errmsg("THere is some error")));
     }
-
 
     cr->cur_field = 0;
     cr->curr_row_length = 0;
@@ -183,6 +184,7 @@ int create_edges_from_csv_file(char *file_path,
     size_t bytes_read;
     unsigned char options = 0;
     csv_edge_reader cr;
+    char *label_seq_name;
 
     if (csv_init(&p, options) != 0)
     {
@@ -200,6 +202,7 @@ int create_edges_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    label_seq_name = get_label_seq_relation_name(label_name);
 
     memset((void*)&cr, 0, sizeof(csv_edge_reader));
     cr.alloc = 128;
@@ -211,6 +214,7 @@ int create_edges_from_csv_file(char *file_path,
     cr.graph_oid = graph_oid;
     cr.label_name = label_name;
     cr.label_id = label_id;
+    cr.label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
     cr.load_as_agtype = load_as_agtype;
 
     init_batch_insert(&cr.batch_state, label_name, graph_oid);

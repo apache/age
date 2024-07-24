@@ -50,6 +50,7 @@ typedef struct {
     Oid graph_oid;
     char *label_name;
     int label_id;
+    Oid label_seq_relid;
     bool id_field_exists;
     bool load_as_agtype;
     batch_insert_state *batch_state;

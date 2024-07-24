@@ -38,6 +38,7 @@ typedef struct {
     Oid graph_oid;
     char *label_name;
     int label_id;
+    Oid label_seq_relid;
     char *start_vertex;
     char *end_vertex;
     bool load_as_agtype;

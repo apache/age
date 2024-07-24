@@ -57,8 +57,8 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
     batch_insert_state *batch_state = cr->batch_state;
     size_t i, n_fields;
-    graphid object_graph_id;
-    int64 label_id_int;
+    graphid vertex_id;
+    int64 entry_id;
     TupleTableSlot *slot;
 
     n_fields = cr->cur_field;
@@ -80,14 +80,14 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
     {
         if (cr->id_field_exists)
         {
-            label_id_int = strtol(cr->fields[0], NULL, 10);
+            entry_id = strtol(cr->fields[0], NULL, 10);
         }
         else
         {
-            label_id_int = (int64)cr->row;
+            entry_id = nextval_internal(cr->label_seq_relid, true);
         }
 
-        object_graph_id = make_graphid(cr->label_id, label_id_int);
+        vertex_id = make_graphid(cr->label_id, entry_id);
 
         /* Get the appropriate slot from the batch state */
         slot = batch_state->slots[batch_state->num_tuples];
@@ -96,10 +96,10 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
         ExecClearTuple(slot);
 
         /* Fill the values in the slot */
-        slot->tts_values[0] = GRAPHID_GET_DATUM(object_graph_id);
+        slot->tts_values[0] = GRAPHID_GET_DATUM(vertex_id);
         slot->tts_values[1] = AGTYPE_P_GET_DATUM(
                                 create_agtype_from_list(cr->header, cr->fields,
-                                                        n_fields, label_id_int,
+                                                        n_fields, entry_id,
                                                         cr->load_as_agtype));
         slot->tts_isnull[0] = false;
         slot->tts_isnull[1] = false;
@@ -170,6 +170,7 @@ int create_labels_from_csv_file(char *file_path,
     size_t bytes_read;
     unsigned char options = 0;
     csv_vertex_reader cr;
+    char *label_seq_name;
 
     if (csv_init(&p, options) != 0)
     {
@@ -187,6 +188,7 @@ int create_labels_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    label_seq_name = get_label_seq_relation_name(label_name);
 
     memset((void*)&cr, 0, sizeof(csv_vertex_reader));
 
@@ -200,6 +202,7 @@ int create_labels_from_csv_file(char *file_path,
     cr.label_name = label_name;
     cr.label_id = label_id;
     cr.id_field_exists = id_field_exists;
+    cr.label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
     cr.load_as_agtype = load_as_agtype;
 
     init_batch_insert(&cr.batch_state, label_name, graph_oid);
