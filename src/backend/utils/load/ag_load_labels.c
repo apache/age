@@ -19,7 +19,6 @@
 #include "postgres.h"
 
 #include "utils/load/ag_load_labels.h"
-#include "utils/load/age_load.h"
 #include "utils/load/csv.h"
 
 void vertex_field_cb(void *field, size_t field_len, void *data)
@@ -55,15 +54,14 @@ void vertex_field_cb(void *field, size_t field_len, void *data)
 
 void vertex_row_cb(int delim __attribute__((unused)), void *data)
 {
-
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
-    agtype *props = NULL;
+    batch_insert_state *batch_state = cr->batch_state;
     size_t i, n_fields;
     graphid object_graph_id;
     int64 label_id_int;
+    TupleTableSlot *slot;
 
     n_fields = cr->cur_field;
-
 
     if (cr->row == 0)
     {
@@ -89,28 +87,44 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
             label_id_int = (int64)cr->row;
         }
 
-        object_graph_id = make_graphid(cr->object_id, label_id_int);
+        object_graph_id = make_graphid(cr->label_id, label_id_int);
 
-        props = create_agtype_from_list(cr->header, cr->fields,
-                                        n_fields, label_id_int,
-                                        cr->load_as_agtype);
-        insert_vertex_simple(cr->graph_oid, cr->object_name,
-                             object_graph_id, props);
-        pfree(props);
+        /* Get the appropriate slot from the batch state */
+        slot = batch_state->slots[batch_state->num_tuples];
+
+        /* Clear the slots contents */
+        ExecClearTuple(slot);
+
+        /* Fill the values in the slot */
+        slot->tts_values[0] = GRAPHID_GET_DATUM(object_graph_id);
+        slot->tts_values[1] = AGTYPE_P_GET_DATUM(
+                                create_agtype_from_list(cr->header, cr->fields,
+                                                        n_fields, label_id_int,
+                                                        cr->load_as_agtype));
+        slot->tts_isnull[0] = false;
+        slot->tts_isnull[1] = false;
+
+        /* Make the slot as containing virtual tuple */
+        ExecStoreVirtualTuple(slot);
+        batch_state->num_tuples++;
+
+        if (batch_state->num_tuples >= batch_state->max_tuples)
+        {
+            /* Insert the batch when it is full (i.e. BATCH_SIZE) */
+            insert_batch(batch_state, cr->label_name, cr->graph_oid);
+            batch_state->num_tuples = 0;
+        }
     }
-
 
     for (i = 0; i < n_fields; ++i)
     {
         free(cr->fields[i]);
     }
 
-
     if (cr->error)
     {
         ereport(NOTICE,(errmsg("THere is some error")));
     }
-
 
     cr->cur_field = 0;
     cr->curr_row_length = 0;
@@ -144,8 +158,8 @@ static int is_term(unsigned char c)
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
                                 Oid graph_oid,
-                                char *object_name,
-                                int object_id,
+                                char *label_name,
+                                int label_id,
                                 bool id_field_exists,
                                 bool load_as_agtype)
 {
@@ -183,12 +197,12 @@ int create_labels_from_csv_file(char *file_path,
     cr.curr_row_length = 0;
     cr.graph_name = graph_name;
     cr.graph_oid = graph_oid;
-    cr.object_name = object_name;
-    cr.object_id = object_id;
+    cr.label_name = label_name;
+    cr.label_id = label_id;
     cr.id_field_exists = id_field_exists;
     cr.load_as_agtype = load_as_agtype;
 
-
+    init_batch_insert(&cr.batch_state, label_name, graph_oid);
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
@@ -201,6 +215,9 @@ int create_labels_from_csv_file(char *file_path,
     }
 
     csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
+
+    /* Finish any remaining batch inserts */
+    finish_batch_insert(&cr.batch_state, label_name, graph_oid);
 
     if (ferror(fp))
     {

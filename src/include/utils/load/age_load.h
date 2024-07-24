@@ -29,6 +29,15 @@
 #ifndef AGE_ENTITY_CREATOR_H
 #define AGE_ENTITY_CREATOR_H
 
+#define BATCH_SIZE 1000
+
+typedef struct
+{
+    TupleTableSlot **slots;
+    int num_tuples;
+    int max_tuples;
+} batch_insert_state;
+
 agtype* create_empty_agtype(void);
 
 agtype* create_agtype_from_list(char **header, char **fields,
@@ -42,5 +51,12 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
 void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
                         agtype* end_properties);
+void insert_batch(batch_insert_state *batch_state, char *label_name,
+                  Oid graph_oid);
+
+void init_batch_insert(batch_insert_state **batch_state,
+                       char *label_name, Oid graph_oid);
+void finish_batch_insert(batch_insert_state **batch_state,
+                         char *label_name, Oid graph_oid);
 
 #endif /* AGE_ENTITY_CREATOR_H */

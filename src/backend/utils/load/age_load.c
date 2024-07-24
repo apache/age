@@ -262,6 +262,34 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     CommandCounterIncrement();
 }
 
+void insert_batch(batch_insert_state *batch_state, char *label_name,
+                  Oid graph_oid)
+{
+    Relation label_relation;
+    BulkInsertState bistate;
+    Oid relid;
+
+    // Get the relation OID
+    relid = get_label_relation(label_name, graph_oid);
+
+    // Open the relation
+    label_relation = table_open(relid, RowExclusiveLock);
+
+    // Prepare the BulkInsertState
+    bistate = GetBulkInsertState();
+
+    // Perform the bulk insert
+    heap_multi_insert(label_relation, batch_state->slots,
+                      batch_state->num_tuples, GetCurrentCommandId(true),
+                      0, bistate);
+
+    // Clean up
+    FreeBulkInsertState(bistate);
+    table_close(label_relation, RowExclusiveLock);
+
+    CommandCounterIncrement();
+}
+
 PG_FUNCTION_INFO_V1(load_labels_from_file);
 Datum load_labels_from_file(PG_FUNCTION_ARGS)
 {
@@ -363,4 +391,57 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
                                label_name_str, label_id, load_as_agtype);
     PG_RETURN_VOID();
 
+}
+
+void init_batch_insert(batch_insert_state **batch_state,
+                       char *label_name, Oid graph_oid)
+{
+    Relation temp_relation;
+    int i;
+
+    // Open a temporary relation to get the tuple descriptor
+    temp_relation = table_open(get_label_relation(label_name, graph_oid), AccessShareLock);
+
+    // Initialize the batch insert state
+    *batch_state = (batch_insert_state *) palloc0(sizeof(batch_insert_state));
+    (*batch_state)->max_tuples = BATCH_SIZE;
+    (*batch_state)->slots = palloc(sizeof(TupleTableSlot *) * BATCH_SIZE);
+    (*batch_state)->num_tuples = 0;
+
+    // Create slots
+    for (i = 0; i < BATCH_SIZE; i++)
+    {
+        (*batch_state)->slots[i] = MakeSingleTupleTableSlot(
+                                            RelationGetDescr(temp_relation),
+                                            &TTSOpsHeapTuple);
+    }
+
+    table_close(temp_relation, AccessShareLock);
+}
+
+void finish_batch_insert(batch_insert_state **batch_state,
+                         char *label_name, Oid graph_oid)
+{
+    int i;
+    Relation temp_relation;
+
+    if ((*batch_state)->num_tuples > 0)
+    {
+        insert_batch(*batch_state, label_name, graph_oid);
+        (*batch_state)->num_tuples = 0;
+    }
+
+    // Open a temporary relation to ensure resources are properly cleaned up
+    temp_relation = table_open(get_label_relation(label_name, graph_oid), AccessShareLock);
+
+    // Free the batch state memory
+    for (i = 0; i < BATCH_SIZE; i++)
+    {
+        ExecDropSingleTupleTableSlot((*batch_state)->slots[i]);
+    }
+    pfree((*batch_state)->slots);
+    pfree(*batch_state);
+    *batch_state = NULL;
+
+    table_close(temp_relation, AccessShareLock);
 }
