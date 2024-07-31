@@ -12,11 +12,11 @@ The community members of Apache AGE are expected to follow the 'Apache Way'. Ple
 
 ## How to Start
 
-A great way to get involved in the project is to ask questions on the mailing lists, Apache AGE Discord, or the Apache Reddit forum (r/apacheage). Reviewing the list of projects in the Apache AGE and AGE Viewer GitHubs may help you understand the overall roadmap. 
+A great way to get involved in the project is to ask questions on the mailing lists or the Apache Reddit forum (r/apacheage). Reviewing the list of projects in the Apache AGE and AGE Viewer GitHubs may help you understand the overall roadmap. 
 
 Once you understand the ins and outs of Apache AGE, share your knowledge by helping the newcomers as well. Spending a few minutes to answer questions are a valuable open source community service, which also demonstrates your expertise. 
 
-We strongly recommend you to subscribe the mailing lists, join the Apache AGE Discord and Apache AGE Reddit community (r/apacheage) to keep up to date on what's happening in AGE. Visit [joinus](https://age.apache.org/joinus) for pathways you can follow to help you get started.
+We strongly recommend you to subscribe the mailing lists and join the Apache AGE Reddit community (r/apacheage) to keep up to date on what's happening in AGE. Visit [joinus](https://age.apache.org/joinus) for pathways you can follow to help you get started.
 
 ## Pull Requests
 
