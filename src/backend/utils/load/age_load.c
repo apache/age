@@ -340,7 +340,6 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
                                 label_name_str, label_id, id_field_exists,
                                 load_as_agtype);
     PG_RETURN_VOID();
-
 }
 
 PG_FUNCTION_INFO_V1(load_edges_from_file);

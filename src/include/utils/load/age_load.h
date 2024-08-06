@@ -29,6 +29,10 @@
 #ifndef AGE_ENTITY_CREATOR_H
 #define AGE_ENTITY_CREATOR_H
 
+#define TEMP_VERTEX_ID_TABLE_SUFFIX "_ag_vertex_ids"
+#define GET_TEMP_VERTEX_ID_TABLE(graph_name) \
+    psprintf("_%s%s", graph_name, TEMP_VERTEX_ID_TABLE_SUFFIX)
+
 #define BATCH_SIZE 1000
 
 typedef struct
