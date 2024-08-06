@@ -19,12 +19,10 @@ jobs:
         working-directory: drivers/golang/age/
   
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Run apache/age docker image
-      run: |
-        export TAG=$TAG
-        docker-compose up -d
+      run: docker compose up -d
 
     - name: Set up Go
       uses: actions/setup-go@v3
