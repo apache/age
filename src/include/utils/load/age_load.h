@@ -38,9 +38,9 @@
 typedef struct
 {
     TupleTableSlot **slots;
+    TupleTableSlot **temp_id_slots;
     int num_tuples;
     int max_tuples;
-    int seq_num;
 } batch_insert_state;
 
 agtype* create_empty_agtype(void);
@@ -58,10 +58,5 @@ void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
                         agtype* end_properties);
 void insert_batch(batch_insert_state *batch_state, char *label_name,
                   Oid graph_oid);
-
-void init_batch_insert(batch_insert_state **batch_state,
-                       char *label_name, Oid graph_oid);
-void finish_batch_insert(batch_insert_state **batch_state,
-                         char *label_name, Oid graph_oid);
 
 #endif /* AGE_ENTITY_CREATOR_H */

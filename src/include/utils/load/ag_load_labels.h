@@ -54,6 +54,7 @@ typedef struct {
     Oid temp_table_relid;
     bool id_field_exists;
     bool load_as_agtype;
+    int curr_seq_num;
     batch_insert_state *batch_state;
 } csv_vertex_reader;
 

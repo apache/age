@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include "access/heapam.h"
 #include "utils/load/age_load.h"
 
 #ifndef AG_LOAD_EDGES_H
