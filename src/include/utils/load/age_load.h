@@ -24,6 +24,7 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
+#include "commands/graph_commands.h"
 #include "utils/ag_cache.h"
 
 #ifndef AGE_ENTITY_CREATOR_H
