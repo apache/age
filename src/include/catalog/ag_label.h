@@ -74,6 +74,8 @@ Oid get_label_relation(const char *label_name, Oid graph_oid);
 char *get_label_relation_name(const char *label_name, Oid graph_oid);
 Oid get_label_oid(const char *label_name, Oid label_graph);
 char get_label_kind(const char *label_name, Oid label_graph);
+char *get_label_seq_relation_name(const char *label_name);
+
 
 bool label_id_exists(Oid graph_oid, int32 label_id);
 RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
