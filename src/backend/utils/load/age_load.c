@@ -88,7 +88,7 @@ static agtype_value *csv_value_to_agtype_value(char *csv_val)
 }
 
 agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
-                                int64 vertex_id)
+                                int64 vertex_id, bool load_as_agtype)
 {
     agtype* out;
     agtype_value* key_agtype;
@@ -121,7 +121,15 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                        WAGT_KEY,
                                        key_agtype);
 
-        value_agtype = csv_value_to_agtype_value(fields[i]);
+        if (load_as_agtype)
+        {
+            value_agtype = csv_value_to_agtype_value(fields[i]);
+        }
+        else
+        {
+            value_agtype = string_to_agtype_value(fields[i]);
+        }
+
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
@@ -140,7 +148,8 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
 }
 
 agtype* create_agtype_from_list_i(char **header, char **fields,
-                                  size_t fields_len, size_t start_index)
+                                  size_t fields_len, size_t start_index,
+                                  bool load_as_agtype)
 {
     agtype* out;
     agtype_value* key_agtype;
@@ -164,7 +173,16 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_KEY,
                                        key_agtype);
-        value_agtype = csv_value_to_agtype_value(fields[i]);
+
+        if (load_as_agtype)
+        {
+            value_agtype = csv_value_to_agtype_value(fields[i]);
+        }
+        else
+        {
+            value_agtype = string_to_agtype_value(fields[i]);
+        }
+
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
@@ -256,6 +274,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     Oid graph_oid;
     int32 label_id;
     bool id_field_exists;
+    bool load_as_agtype;
 
     if (PG_ARGISNULL(0))
     {
@@ -279,6 +298,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     label_name = PG_GETARG_NAME(1);
     file_path = PG_GETARG_TEXT_P(2);
     id_field_exists = PG_GETARG_BOOL(3);
+    load_as_agtype = PG_GETARG_BOOL(4);
 
 
     graph_name_str = NameStr(*graph_name);
@@ -289,7 +309,8 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     label_id = get_label_id(label_name_str, graph_oid);
 
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
-                                label_name_str, label_id, id_field_exists);
+                                label_name_str, label_id, id_field_exists,
+                                load_as_agtype);
     PG_RETURN_VOID();
 
 }
@@ -306,6 +327,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     char* file_path_str;
     Oid graph_oid;
     int32 label_id;
+    bool load_as_agtype;
 
     if (PG_ARGISNULL(0))
     {
@@ -328,6 +350,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
     file_path = PG_GETARG_TEXT_P(2);
+    load_as_agtype = PG_GETARG_BOOL(3);
 
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
@@ -337,7 +360,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     label_id = get_label_id(label_name_str, graph_oid);
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
-                               label_name_str, label_id);
+                               label_name_str, label_id, load_as_agtype);
     PG_RETURN_VOID();
 
 }
