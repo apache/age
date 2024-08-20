@@ -101,4 +101,16 @@ describe('Parsing', () => {
       }))
     })))
   })
+
+  it("Nested Array Parsing", () => {
+    expect(
+      AGTypeParse(
+        '{"id": 1125899906842627, "label": "car", "properties": {"wheels": [ "a", ["d"] ]}}::vertex',
+      ),
+    ).toStrictEqual(new Map<string, any>(Object.entries({
+      id: 1125899906842627,
+      label: "car",
+      properties: new Map<string, any>(Object.entries({ wheels: ["a", ["d"]] })),
+    })));
+  });
 })

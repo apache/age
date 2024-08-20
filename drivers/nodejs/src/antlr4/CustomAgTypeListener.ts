@@ -145,6 +145,10 @@ class CustomAgTypeListener implements AgtypeListener, ParseTreeListener {
     this.mergeArray()
   }
 
+  exitArrayValue(): void {
+    this.mergeArray();
+  }
+
   exitPair (ctx: PairContext): void {
     const name = this.stripQuotes(ctx.STRING().text)
 
