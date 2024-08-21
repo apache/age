@@ -17,10 +17,27 @@
  * under the License.
  */
 #include "postgres.h"
+#include "executor/spi.h"
+#include "catalog/namespace.h"
+#include "executor/executor.h"
+#include "access/xact.h"
+#include "executor/tuptable.h"
+#include "utils/rel.h"
 
 #include "utils/load/ag_load_labels.h"
-#include "utils/load/age_load.h"
 #include "utils/load/csv.h"
+
+static void setup_temp_table_for_vertex_ids(char *graph_name);
+static void insert_batch_in_temp_table(batch_insert_state *batch_state,
+                                       Oid graph_oid, Oid relid);
+static void init_vertex_batch_insert(batch_insert_state **batch_state,
+                                     char *label_name, Oid graph_oid,
+                                     Oid temp_table_relid);
+static void finish_vertex_batch_insert(batch_insert_state **batch_state,
+                                       char *label_name, Oid graph_oid,
+                                       Oid temp_table_relid);
+static void insert_vertex_batch(batch_insert_state *batch_state, char *label_name,
+                                Oid graph_oid, Oid temp_table_relid);
 
 void vertex_field_cb(void *field, size_t field_len, void *data)
 {
@@ -55,15 +72,19 @@ void vertex_field_cb(void *field, size_t field_len, void *data)
 
 void vertex_row_cb(int delim __attribute__((unused)), void *data)
 {
-
     csv_vertex_reader *cr = (csv_vertex_reader*)data;
-    agtype *props = NULL;
+    batch_insert_state *batch_state = cr->batch_state;
     size_t i, n_fields;
-    graphid object_graph_id;
-    int64 label_id_int;
+    graphid vertex_id;
+    int64 entry_id;
+    Datum values[2];
+    bool nulls[2] = {false, false};
+    Datum temp_table_values[1];
+    bool temp_table_nulls[1] = {false};
+    HeapTuple tuple;
+    HeapTuple temp_table_tuple;
 
     n_fields = cr->cur_field;
-
 
     if (cr->row == 0)
     {
@@ -82,35 +103,60 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
     {
         if (cr->id_field_exists)
         {
-            label_id_int = strtol(cr->fields[0], NULL, 10);
+            entry_id = strtol(cr->fields[0], NULL, 10);
+            if (entry_id > cr->curr_seq_num)
+            {
+                DirectFunctionCall2(setval_oid,
+                                    ObjectIdGetDatum(cr->label_seq_relid),
+                                    Int64GetDatum(entry_id));
+                cr->curr_seq_num = entry_id;
+            }
         }
         else
         {
-            label_id_int = (int64)cr->row;
+            entry_id = nextval_internal(cr->label_seq_relid, true);
         }
 
-        object_graph_id = make_graphid(cr->object_id, label_id_int);
+        vertex_id = make_graphid(cr->label_id, entry_id);
 
-        props = create_agtype_from_list(cr->header, cr->fields,
-                                        n_fields, label_id_int,
-                                        cr->load_as_agtype);
-        insert_vertex_simple(cr->graph_id, cr->object_name,
-                             object_graph_id, props);
-        pfree(props);
+        /* Fill the values */
+        values[0] = GRAPHID_GET_DATUM(vertex_id);
+        values[1] = AGTYPE_P_GET_DATUM(
+                                create_agtype_from_list(cr->header, cr->fields,
+                                                        n_fields, entry_id,
+                                                        cr->load_as_agtype));
+
+        temp_table_values[0] = GRAPHID_GET_DATUM(vertex_id);
+
+        /* Create the tuple */
+        tuple = heap_form_tuple(batch_state->desc, values, nulls);
+        temp_table_tuple = heap_form_tuple(batch_state->id_desc, temp_table_values,
+                                           temp_table_nulls);
+
+        /* Store the tuple in the batch state */
+        batch_state->buffered_tuples[batch_state->num_tuples] = tuple;
+        batch_state->buffered_id_tuples[batch_state->num_tuples] = temp_table_tuple;
+
+        batch_state->num_tuples++;
+
+        if (batch_state->num_tuples >= batch_state->max_tuples)
+        {
+            /* Insert the batch when it is full (i.e. BATCH_SIZE) */
+            insert_vertex_batch(batch_state, cr->label_name, cr->graph_oid,
+                                cr->temp_table_relid);
+            batch_state->num_tuples = 0;
+        }
     }
-
 
     for (i = 0; i < n_fields; ++i)
     {
         free(cr->fields[i]);
     }
 
-
     if (cr->error)
     {
         ereport(NOTICE,(errmsg("THere is some error")));
     }
-
 
     cr->cur_field = 0;
     cr->curr_row_length = 0;
@@ -143,9 +189,9 @@ static int is_term(unsigned char c)
 
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
-                                Oid graph_id,
-                                char *object_name,
-                                int object_id,
+                                Oid graph_oid,
+                                char *label_name,
+                                int label_id,
                                 bool id_field_exists,
                                 bool load_as_agtype)
 {
@@ -156,11 +202,21 @@ int create_labels_from_csv_file(char *file_path,
     size_t bytes_read;
     unsigned char options = 0;
     csv_vertex_reader cr;
+    char *label_seq_name;
+    Oid temp_table_relid;
+    Oid nsp_id;
 
     if (csv_init(&p, options) != 0)
     {
         ereport(ERROR,
                 (errmsg("Failed to initialize csv parser\n")));
+    }
+
+    temp_table_relid = RelnameGetRelid(GET_TEMP_VERTEX_ID_TABLE(graph_name));
+    if (!OidIsValid(temp_table_relid))
+    {
+        setup_temp_table_for_vertex_ids(graph_name);
+        temp_table_relid = RelnameGetRelid(GET_TEMP_VERTEX_ID_TABLE(graph_name));
     }
 
     csv_set_space_func(&p, is_space);
@@ -173,6 +229,8 @@ int create_labels_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    nsp_id = get_graph_namespace(graph_name);
+    label_seq_name = get_label_seq_relation_name(label_name);
 
     memset((void*)&cr, 0, sizeof(csv_vertex_reader));
 
@@ -182,13 +240,29 @@ int create_labels_from_csv_file(char *file_path,
     cr.header_row_length = 0;
     cr.curr_row_length = 0;
     cr.graph_name = graph_name;
-    cr.graph_id = graph_id;
-    cr.object_name = object_name;
-    cr.object_id = object_id;
+    cr.graph_oid = graph_oid;
+    cr.label_name = label_name;
+    cr.label_id = label_id;
     cr.id_field_exists = id_field_exists;
+    cr.label_seq_relid = get_relname_relid(label_seq_name, nsp_id);
     cr.load_as_agtype = load_as_agtype;
+    cr.temp_table_relid = temp_table_relid;
+    
+    if (cr.id_field_exists)
+    {
+        /*
+         * Set the curr_seq_num since we will need it to compare with
+         * incoming entry_id.
+         * 
+         * We cant use currval because it will error out if nextval was
+         * not called before in the session.
+         */
+        cr.curr_seq_num = nextval_internal(cr.label_seq_relid, true);
+    }
 
-
+    /* Initialize the batch insert state */
+    init_vertex_batch_insert(&cr.batch_state, label_name, graph_oid,
+                             cr.temp_table_relid);
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
@@ -202,6 +276,10 @@ int create_labels_from_csv_file(char *file_path,
 
     csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
 
+    /* Finish any remaining batch inserts */
+    finish_vertex_batch_insert(&cr.batch_state, label_name, graph_oid,
+                               cr.temp_table_relid);
+
     if (ferror(fp))
     {
         ereport(ERROR, (errmsg("Error while reading file %s\n",
@@ -213,4 +291,159 @@ int create_labels_from_csv_file(char *file_path,
     free(cr.fields);
     csv_free(&p);
     return EXIT_SUCCESS;
+}
+
+static void insert_vertex_batch(batch_insert_state *batch_state, char *label_name,
+                                Oid graph_oid, Oid temp_table_relid)
+{
+    insert_batch_in_temp_table(batch_state, graph_oid, temp_table_relid);
+    insert_batch(batch_state, label_name, graph_oid);
+}
+
+/*
+ * Create and populate a temporary table with vertex ids that are already
+ * present in the graph. This table will be used to check if the new vertex
+ * id generated by loader is a duplicate.
+ * Unique index is created to enforce uniqueness of the ids.
+ * 
+ * We dont need this for loading edges since the ids are generated using
+ * sequence and are unique.
+ */ 
+static void setup_temp_table_for_vertex_ids(char *graph_name)
+{
+    char *create_as_query;
+    char *index_query;
+
+    create_as_query = psprintf("CREATE TEMP TABLE IF NOT EXISTS %s AS "
+                               "SELECT DISTINCT id FROM \"%s\".%s",
+                                GET_TEMP_VERTEX_ID_TABLE(graph_name), graph_name,
+                                AG_DEFAULT_LABEL_VERTEX);
+
+    index_query = psprintf("CREATE UNIQUE INDEX ON %s (id)",
+                            GET_TEMP_VERTEX_ID_TABLE(graph_name));
+    SPI_connect();
+    SPI_execute(create_as_query, false, 0);
+    SPI_execute(index_query, false, 0);
+
+    SPI_finish();
+
+    pfree(create_as_query);
+    pfree(index_query);
+}
+
+/*
+ * Inserts batch of tuples into the temporary table.
+ * This function also updates the index to check for
+ * uniqueness of the ids.
+ */
+static void insert_batch_in_temp_table(batch_insert_state *batch_state,
+                                       Oid graph_oid, Oid relid)
+{
+    int i;
+    EState *estate;
+    ResultRelInfo *resultRelInfo;
+    Relation rel;
+    List *result;
+
+    rel = heap_open(relid, RowExclusiveLock);
+
+    /* Initialize executor state */
+    estate = CreateExecutorState();
+
+    /* Initialize result relation information */
+    resultRelInfo = makeNode(ResultRelInfo);
+    InitResultRelInfo(resultRelInfo, rel, 1, NULL, estate->es_instrument);
+    estate->es_result_relation_info = resultRelInfo;
+
+    /* Open the indices */
+    ExecOpenIndices(resultRelInfo, false);
+
+    /* Insert the batch into the temporary table */
+    heap_multi_insert(rel, batch_state->buffered_id_tuples,
+                      batch_state->num_tuples, GetCurrentCommandId(true),
+                      false, NULL);
+
+    for (i = 0; i < batch_state->num_tuples; i++)
+    {
+        TupleTableSlot *slot;
+        
+        slot = MakeSingleTupleTableSlot(batch_state->id_desc);
+        ExecStoreTuple(batch_state->buffered_id_tuples[i],
+                       slot, InvalidBuffer, false);
+        result = ExecInsertIndexTuples(slot, &(batch_state->buffered_id_tuples[i]->t_self),
+                                       estate, true, NULL, NIL);
+        /* Check if the unique cnstraint is violated */
+        if (list_length(result) != 0)
+        {
+            Datum id;
+            bool isnull;
+
+            id = slot_getattr(slot, 1, &isnull);
+            pfree(slot);
+            ereport(ERROR, (errmsg("Cannot insert duplicate vertex id: %ld",
+                                    DATUM_GET_GRAPHID(id)),
+                            errhint("Entry id %ld is already used",
+                                    get_graphid_entry_id(id))));
+        }
+
+        pfree(slot);
+    }
+    /* Clean up and close the indices */
+    ExecCloseIndices(resultRelInfo);
+
+    FreeExecutorState(estate);
+    heap_close(rel, RowExclusiveLock);
+
+    CommandCounterIncrement();
+}
+
+/*
+ * Initialize the batch insert state for vertices.
+ */
+static void init_vertex_batch_insert(batch_insert_state **batch_state,
+                                     char *label_name, Oid graph_oid,
+                                     Oid temp_table_relid)
+{
+    Relation relation;
+    Oid relid;
+    Relation temp_table_relation;
+
+    /* Open a temporary relation to get the tuple descriptor */
+    relid = get_label_relation(label_name, graph_oid);
+    relation = heap_open(relid, AccessShareLock);
+
+    temp_table_relation = heap_open(temp_table_relid, AccessShareLock);
+
+    /* Initialize the batch insert state */
+    *batch_state = palloc(sizeof(batch_insert_state));
+    (*batch_state)->max_tuples = BATCH_SIZE;
+    (*batch_state)->buffered_tuples = palloc(BATCH_SIZE * sizeof(HeapTuple));
+    (*batch_state)->desc = CreateTupleDescCopy(RelationGetDescr(relation));
+    (*batch_state)->id_desc = CreateTupleDescCopy(RelationGetDescr(temp_table_relation));
+    (*batch_state)->buffered_id_tuples = palloc(BATCH_SIZE * sizeof(HeapTuple));
+    (*batch_state)->num_tuples = 0;
+
+    heap_close(relation, AccessShareLock);
+    heap_close(temp_table_relation, AccessShareLock);
+}
+
+/*
+ * Finish the batch insert for vertices. Insert the
+ * remaining tuples in the batch state and clean up.
+ */
+static void finish_vertex_batch_insert(batch_insert_state **batch_state,
+                                       char *label_name, Oid graph_oid,
+                                       Oid temp_table_relid)
+{
+    if ((*batch_state)->num_tuples > 0)
+    {
+        insert_vertex_batch(*batch_state, label_name, graph_oid, temp_table_relid);
+        (*batch_state)->num_tuples = 0;
+    }
+
+    /* Clean up batch state */
+    pfree((*batch_state)->buffered_tuples);
+    pfree((*batch_state)->buffered_id_tuples);
+    pfree(*batch_state);
+    *batch_state = NULL;
 }
