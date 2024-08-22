@@ -36,8 +36,6 @@
 #include "catalog/ag_graph.h"
 #include "utils/ag_cache.h"
 
-static Oid get_graph_namespace(const char *graph_name);
-
 // INSERT INTO ag_catalog.ag_graph VALUES (graph_name, nsp_id)
 Oid insert_graph(const Name graph_name, const Oid nsp_id)
 {
@@ -160,7 +158,7 @@ Oid get_graph_oid(const char *graph_name)
         return InvalidOid;
 }
 
-static Oid get_graph_namespace(const char *graph_name)
+Oid get_graph_namespace(const char *graph_name)
 {
     graph_cache_data *cache_data;
 

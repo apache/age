@@ -16,21 +16,18 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include "postgres.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-#include "utils/load/csv.h"
 #include "utils/load/ag_load_edges.h"
-#include "utils/load/age_load.h"
+#include "utils/load/csv.h"
 
+static void init_edge_batch_insert(batch_insert_state **batch_state,
+                            char *label_name, Oid graph_oid);
+static void finish_edge_batch_insert(batch_insert_state **batch_state,
+                              char *label_name, Oid graph_oid);
 
 void edge_field_cb(void *field, size_t field_len, void *data)
 {
-
     csv_edge_reader *cr = (csv_edge_reader*)data;
     if (cr->error)
     {
@@ -61,8 +58,8 @@ void edge_field_cb(void *field, size_t field_len, void *data)
 // Parser calls this function when it detects end of a row
 void edge_row_cb(int delim __attribute__((unused)), void *data)
 {
-
     csv_edge_reader *cr = (csv_edge_reader*)data;
+    batch_insert_state *batch_state = cr->batch_state;
 
     size_t i, n_fields;
     int64 start_id_int;
@@ -73,9 +70,12 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     graphid end_vertex_graph_id;
     int end_vertex_type_id;
 
-    graphid object_graph_id;
+    graphid edge_id;
+    int64 entry_id;
 
-    agtype* props = NULL;
+    Datum values[4];
+    bool isnull[4] = {false, false, false, false};
+    HeapTuple tuple;
 
     n_fields = cr->cur_field;
 
@@ -94,24 +94,38 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     }
     else
     {
-        object_graph_id = make_graphid(cr->object_id, (int64)cr->row);
+        entry_id = nextval_internal(cr->label_seq_relid, true);
+        edge_id = make_graphid(cr->label_id, entry_id);
 
         start_id_int = strtol(cr->fields[0], NULL, 10);
-        start_vertex_type_id = get_label_id(cr->fields[1], cr->graph_id);
+        start_vertex_type_id = get_label_id(cr->fields[1], cr->graph_oid);
         end_id_int = strtol(cr->fields[2], NULL, 10);
-        end_vertex_type_id = get_label_id(cr->fields[3], cr->graph_id);
+        end_vertex_type_id = get_label_id(cr->fields[3], cr->graph_oid);
 
         start_vertex_graph_id = make_graphid(start_vertex_type_id, start_id_int);
         end_vertex_graph_id = make_graphid(end_vertex_type_id, end_id_int);
 
-        props = create_agtype_from_list_i(cr->header, cr->fields,
-                                          n_fields, 4, cr->load_as_agtype);
+        /* Fill the values */
+        values[0] = GRAPHID_GET_DATUM(edge_id);
+        values[1] = GRAPHID_GET_DATUM(start_vertex_graph_id);
+        values[2] = GRAPHID_GET_DATUM(end_vertex_graph_id);
+        values[3] = AGTYPE_P_GET_DATUM(
+                                create_agtype_from_list_i(
+                                    cr->header, cr->fields,
+                                    n_fields, 4, cr->load_as_agtype));
 
-        insert_edge_simple(cr->graph_id, cr->object_name,
-                           object_graph_id, start_vertex_graph_id,
-                           end_vertex_graph_id, props);
+        /* Create and insert the tuple into the batch state */
+        tuple = heap_form_tuple(batch_state->desc, values, isnull);
+        batch_state->buffered_tuples[batch_state->num_tuples] = tuple;
 
-        pfree(props);
+        batch_state->num_tuples++;
+
+        if (batch_state->num_tuples >= batch_state->max_tuples)
+        {
+            /* Insert the batch when it is full (i.e. BATCH_SIZE) */
+            insert_batch(batch_state, cr->label_name, cr->graph_oid);
+            batch_state->num_tuples = 0;
+        }
     }
 
     for (i = 0; i < n_fields; ++i)
@@ -123,7 +137,6 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     {
         ereport(NOTICE,(errmsg("THere is some error")));
     }
-
 
     cr->cur_field = 0;
     cr->curr_row_length = 0;
@@ -156,9 +169,9 @@ static int is_term(unsigned char c)
 
 int create_edges_from_csv_file(char *file_path,
                                char *graph_name,
-                               Oid graph_id,
-                               char *object_name,
-                               int object_id,
+                               Oid graph_oid,
+                               char *label_name,
+                               int label_id,
                                bool load_as_agtype)
 {
 
@@ -168,6 +181,8 @@ int create_edges_from_csv_file(char *file_path,
     size_t bytes_read;
     unsigned char options = 0;
     csv_edge_reader cr;
+    char *label_seq_name;
+    Oid nsp_id;
 
     if (csv_init(&p, options) != 0)
     {
@@ -185,6 +200,8 @@ int create_edges_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
+    nsp_id = get_graph_namespace(graph_name);
+    label_seq_name = get_label_seq_relation_name(label_name);
 
     memset((void*)&cr, 0, sizeof(csv_edge_reader));
     cr.alloc = 128;
@@ -193,10 +210,14 @@ int create_edges_from_csv_file(char *file_path,
     cr.header_row_length = 0;
     cr.curr_row_length = 0;
     cr.graph_name = graph_name;
-    cr.graph_id = graph_id;
-    cr.object_name = object_name;
-    cr.object_id = object_id;
+    cr.graph_oid = graph_oid;
+    cr.label_name = label_name;
+    cr.label_id = label_id;
+    cr.label_seq_relid = get_relname_relid(label_seq_name, nsp_id);
     cr.load_as_agtype = load_as_agtype;
+
+    /* Initialize the batch insert state */
+    init_edge_batch_insert(&cr.batch_state, label_name, graph_oid);
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
     {
@@ -210,6 +231,9 @@ int create_edges_from_csv_file(char *file_path,
 
     csv_fini(&p, edge_field_cb, edge_row_cb, &cr);
 
+    /* Finish any remaining batch inserts */
+    finish_edge_batch_insert(&cr.batch_state, label_name, graph_oid);
+
     if (ferror(fp))
     {
         ereport(ERROR, (errmsg("Error while reading file %s\n", file_path)));
@@ -220,4 +244,44 @@ int create_edges_from_csv_file(char *file_path,
     free(cr.fields);
     csv_free(&p);
     return EXIT_SUCCESS;
+}
+
+/*
+ * Initialize the batch insert state for edges.
+ */
+static void init_edge_batch_insert(batch_insert_state **batch_state,
+                            char *label_name, Oid graph_oid)
+{
+    Relation relation;
+
+    // Open a temporary relation to get the tuple descriptor
+    relation = heap_open(get_label_relation(label_name, graph_oid), AccessShareLock);
+
+    // Initialize the batch insert state
+    *batch_state = palloc(sizeof(batch_insert_state));
+    (*batch_state)->max_tuples = BATCH_SIZE;
+    (*batch_state)->buffered_tuples = palloc(BATCH_SIZE * sizeof(HeapTuple));
+    (*batch_state)->desc = CreateTupleDescCopy(RelationGetDescr(relation));
+    (*batch_state)->num_tuples = 0;
+
+    heap_close(relation, AccessShareLock);
+}
+
+/*
+ * Finish the batch insert for edges. Insert the
+ * remaining tuples in the batch state and clean up.
+ */
+static void finish_edge_batch_insert(batch_insert_state **batch_state,
+                              char *label_name, Oid graph_oid)
+{
+    if ((*batch_state)->num_tuples > 0)
+    {
+        insert_batch(*batch_state, label_name, graph_oid);
+        (*batch_state)->num_tuples = 0;
+    }
+
+    // Clean up batch state
+    pfree((*batch_state)->buffered_tuples);
+    pfree(*batch_state);
+    *batch_state = NULL;
 }
