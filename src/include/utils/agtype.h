@@ -466,6 +466,8 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
                                                agtype_value *key);
 agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
                                                   uint32 i);
+enum agtype_value_type get_ith_agtype_value_type(agtype_container *container,
+                                                 uint32 i);
 agtype_value *push_agtype_value(agtype_parse_state **pstate,
                                 agtype_iterator_token seq,
                                 agtype_value *agtval);
@@ -553,7 +555,6 @@ agtype_iterator *get_next_list_element(agtype_iterator *it,
 void pfree_agtype_value(agtype_value* value);
 void pfree_agtype_in_state(agtype_in_state* value);
 agtype_value *agtype_value_from_cstring(char *str, int len);
-
 /* Oid accessors for AGTYPE */
 Oid get_AGTYPEOID(void);
 Oid get_AGTYPEARRAYOID(void);
