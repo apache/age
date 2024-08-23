@@ -158,9 +158,6 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                    WAGT_VALUE,
                                    value_agtype);
 
-    pfree_agtype_value(key_agtype);
-    pfree_agtype_value(value_agtype);
-
     for (i = 0; i<fields_len; i++)
     {
         key_agtype = string_to_agtype_value(header[i]);
@@ -180,15 +177,15 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
-
-        pfree_agtype_value(key_agtype);
-        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
+    /* serialize it */
     out = agtype_value_to_agtype(result.res);
+
+    /* now that it is serialized we can free the in memory structure */
     pfree_agtype_in_state(&result);
 
     return out;
@@ -232,15 +229,15 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
-
-        pfree_agtype_value(key_agtype);
-        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
+    /* serialize it */
     out = agtype_value_to_agtype(result.res);
+
+    /* now that it is serialized we can free the in memory structure */
     pfree_agtype_in_state(&result);
 
     return out;
