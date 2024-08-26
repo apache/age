@@ -299,6 +299,9 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * For the new label, create an entry in ag_catalog.ag_label, create a
  * new table and sequence. Returns the oid from the new tuple in
  * ag_catalog.ag_label.
+ *
+ * Note: parameter label_type accepts macros LABEL_TYPE_*, rel_kind
+ * accepts macros LABEL_REL_KIND_*.
  */
 void create_label(char *graph_name, char *label_name, char label_type,
                   char rel_kind, List *parents)

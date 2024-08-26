@@ -173,16 +173,16 @@ CREATE TABLE my_detailed_paths AS
 SELECT * FROM my_vertices;
                                u                                
 ----------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {}}::vertex
- {"id": 281474976710658, "label": "", "properties": {}}::vertex
- {"id": 281474976710659, "label": "", "properties": {}}::vertex
- {"id": 281474976710660, "label": "", "properties": {}}::vertex
- {"id": 281474976710661, "label": "", "properties": {}}::vertex
- {"id": 281474976710662, "label": "", "properties": {}}::vertex
- {"id": 281474976710663, "label": "", "properties": {}}::vertex
- {"id": 281474976710664, "label": "", "properties": {}}::vertex
- {"id": 281474976710665, "label": "", "properties": {}}::vertex
- {"id": 281474976710666, "label": "", "properties": {}}::vertex
+ {"id": 281474976710657, "label": [], "properties": {}}::vertex
+ {"id": 281474976710658, "label": [], "properties": {}}::vertex
+ {"id": 281474976710659, "label": [], "properties": {}}::vertex
+ {"id": 281474976710660, "label": [], "properties": {}}::vertex
+ {"id": 281474976710661, "label": [], "properties": {}}::vertex
+ {"id": 281474976710662, "label": [], "properties": {}}::vertex
+ {"id": 281474976710663, "label": [], "properties": {}}::vertex
+ {"id": 281474976710664, "label": [], "properties": {}}::vertex
+ {"id": 281474976710665, "label": [], "properties": {}}::vertex
+ {"id": 281474976710666, "label": [], "properties": {}}::vertex
 (10 rows)
 
 SELECT * FROM my_edges;
@@ -198,11 +198,11 @@ SELECT * FROM my_edges;
 SELECT * FROM my_detailed_paths;
                                u                                |                                                             e                                                             |                               v                                |                                                                                                                                 p                                                                                                                                 
 ----------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {}}::vertex | {"id": 844424930131969, "label": "knows", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge | {"id": 281474976710658, "label": "", "properties": {}}::vertex | [{"id": 281474976710657, "label": "", "properties": {}}::vertex, {"id": 844424930131969, "label": "knows", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge, {"id": 281474976710658, "label": "", "properties": {}}::vertex]::path
- {"id": 281474976710659, "label": "", "properties": {}}::vertex | {"id": 844424930131970, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge | {"id": 281474976710660, "label": "", "properties": {}}::vertex | [{"id": 281474976710659, "label": "", "properties": {}}::vertex, {"id": 844424930131970, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710660, "label": "", "properties": {}}::vertex]::path
- {"id": 281474976710661, "label": "", "properties": {}}::vertex | {"id": 844424930131971, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge | {"id": 281474976710662, "label": "", "properties": {}}::vertex | [{"id": 281474976710661, "label": "", "properties": {}}::vertex, {"id": 844424930131971, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge, {"id": 281474976710662, "label": "", "properties": {}}::vertex]::path
- {"id": 281474976710663, "label": "", "properties": {}}::vertex | {"id": 844424930131972, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge | {"id": 281474976710664, "label": "", "properties": {}}::vertex | [{"id": 281474976710663, "label": "", "properties": {}}::vertex, {"id": 844424930131972, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge, {"id": 281474976710664, "label": "", "properties": {}}::vertex]::path
- {"id": 281474976710665, "label": "", "properties": {}}::vertex | {"id": 844424930131973, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge | {"id": 281474976710666, "label": "", "properties": {}}::vertex | [{"id": 281474976710665, "label": "", "properties": {}}::vertex, {"id": 844424930131973, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge, {"id": 281474976710666, "label": "", "properties": {}}::vertex]::path
+ {"id": 281474976710657, "label": [], "properties": {}}::vertex | {"id": 844424930131969, "label": "knows", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge | {"id": 281474976710658, "label": [], "properties": {}}::vertex | [{"id": 281474976710657, "label": [], "properties": {}}::vertex, {"id": 844424930131969, "label": "knows", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge, {"id": 281474976710658, "label": [], "properties": {}}::vertex]::path
+ {"id": 281474976710659, "label": [], "properties": {}}::vertex | {"id": 844424930131970, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge | {"id": 281474976710660, "label": [], "properties": {}}::vertex | [{"id": 281474976710659, "label": [], "properties": {}}::vertex, {"id": 844424930131970, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710660, "label": [], "properties": {}}::vertex]::path
+ {"id": 281474976710661, "label": [], "properties": {}}::vertex | {"id": 844424930131971, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge | {"id": 281474976710662, "label": [], "properties": {}}::vertex | [{"id": 281474976710661, "label": [], "properties": {}}::vertex, {"id": 844424930131971, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge, {"id": 281474976710662, "label": [], "properties": {}}::vertex]::path
+ {"id": 281474976710663, "label": [], "properties": {}}::vertex | {"id": 844424930131972, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge | {"id": 281474976710664, "label": [], "properties": {}}::vertex | [{"id": 281474976710663, "label": [], "properties": {}}::vertex, {"id": 844424930131972, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge, {"id": 281474976710664, "label": [], "properties": {}}::vertex]::path
+ {"id": 281474976710665, "label": [], "properties": {}}::vertex | {"id": 844424930131973, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge | {"id": 281474976710666, "label": [], "properties": {}}::vertex | [{"id": 281474976710665, "label": [], "properties": {}}::vertex, {"id": 844424930131973, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge, {"id": 281474976710666, "label": [], "properties": {}}::vertex]::path
 (5 rows)
 
 -- cleanup

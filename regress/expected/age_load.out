@@ -28,9 +28,9 @@ NOTICE:  graph "agload_test_graph" has been created
 (1 row)
 
 SELECT * FROM cypher('agload_test_graph', $$CREATE (n:Country {__id__:1}) RETURN n$$) as (n agtype);
-                                        n                                         
-----------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "Country", "properties": {"__id__": 1}}::vertex
+                                         n                                          
+------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Country"], "properties": {"__id__": 1}}::vertex
 (1 row)
 
 --
