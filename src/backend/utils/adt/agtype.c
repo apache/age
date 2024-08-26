@@ -2402,7 +2402,7 @@ Datum _agtype_build_vertex_cstringlabel(PG_FUNCTION_ARGS)
     rawscalar = build_agtype(bstate);
     pfree_agtype_build_state(bstate);
 
-    PG_FREE_IF_COPY(label, 1);
+    PG_FREE_IF_COPY(label_name, 1);
     PG_FREE_IF_COPY(properties, 2);
 
     PG_RETURN_POINTER(rawscalar);

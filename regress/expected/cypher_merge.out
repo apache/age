@@ -1662,16 +1662,16 @@ NOTICE:  graph "issue_1907" has been created
 
 SELECT * from cypher('issue_1907', $$ CREATE (n:Testnode {name: 'Test Node A'})
                                       RETURN n $$) as (n agtype);
-                                              n                                              
----------------------------------------------------------------------------------------------
- {"id": 844424930131969, "label": "Testnode", "properties": {"name": "Test Node A"}}::vertex
+                                               n                                               
+-----------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": ["Testnode"], "properties": {"name": "Test Node A"}}::vertex
 (1 row)
 
 SELECT * from cypher('issue_1907', $$ CREATE (n:Testnode {name: 'Test Node B'})
                                       RETURN n $$) as (n agtype);
-                                              n                                              
----------------------------------------------------------------------------------------------
- {"id": 844424930131970, "label": "Testnode", "properties": {"name": "Test Node B"}}::vertex
+                                               n                                               
+-----------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": ["Testnode"], "properties": {"name": "Test Node B"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1907', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype);
