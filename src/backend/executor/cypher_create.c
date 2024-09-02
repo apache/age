@@ -22,6 +22,7 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "parser/cypher_label_expr.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -421,9 +422,13 @@ static void create_edge(cypher_create_custom_scan_state *css,
         PlanState *ps = css->css.ss.ps.lefttree;
         TupleTableSlot *scantuple = ps->ps_ExprContext->ecxt_scantuple;
         Datum result;
+        char *label_name =
+            !LABEL_EXPR_IS_EMPTY(node->label_expr) ?
+                (char *)strVal(linitial(node->label_expr->label_names)) :
+                "";
 
         result = make_edge(
-            id, start_id, end_id, CStringGetDatum(node->label_name),
+            id, start_id, end_id, CStringGetDatum(label_name),
             scanTupleSlot->tts_values[node->prop_attr_num]);
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
@@ -508,13 +513,15 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             TupleTableSlot *scantuple;
             PlanState *ps;
             Datum result;
+            Datum labels;
 
             ps = css->css.ss.ps.lefttree;
             scantuple = ps->ps_ExprContext->ecxt_scantuple;
+            labels = get_entity_labels(id, css->graph_oid);
 
-            /* make the vertex agtype */
-            result = make_vertex(id, CStringGetDatum(node->label_name),
-                scanTupleSlot->tts_values[node->prop_attr_num]);
+            // make the vertex agtype
+            result = make_vertex(id, labels,
+                                 scanTupleSlot->tts_values[node->prop_attr_num]);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

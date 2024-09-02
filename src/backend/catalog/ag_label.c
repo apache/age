@@ -30,14 +30,19 @@
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
+#include "utils/agtype_raw.h"
+
+static label_cache_data *get_entity_lcd(graphid entity_id, Oid graph_oid);
+Datum _label_names(PG_FUNCTION_ARGS);
 
 /*
  * INSERT INTO ag_catalog.ag_label
  * VALUES (label_name, label_graph, label_id, label_kind,
- *         label_relation, seq_name)
+ *         label_relation, seq_name, rel_kind)
  */
 void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
-                  char label_kind, Oid label_relation, const char *seq_name)
+                  char label_kind, Oid label_relation, const char *seq_name,
+                  char rel_kind)
 {
     NameData label_name_data;
     NameData seq_name_data;
@@ -45,6 +50,8 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
     bool nulls[Natts_ag_label];
     Relation ag_label;
     HeapTuple tuple;
+    Datum relation;
+    ArrayType *allrelations;
 
     /*
      * NOTE: Is it better to make use of label_id and label_kind domain types
@@ -72,12 +79,25 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
     values[Anum_ag_label_kind - 1] = CharGetDatum(label_kind);
     nulls[Anum_ag_label_kind - 1] = false;
 
-    values[Anum_ag_label_relation - 1] = ObjectIdGetDatum(label_relation);
+    relation = ObjectIdGetDatum(label_relation);
+    values[Anum_ag_label_relation - 1] = relation;
     nulls[Anum_ag_label_relation - 1] = false;
 
     namestrcpy(&seq_name_data, seq_name);
     values[Anum_ag_label_seq_name - 1] = NameGetDatum(&seq_name_data);
     nulls[Anum_ag_label_seq_name - 1] = false;
+
+    /*
+     * By default, allrelations starts with 1 element = ag_label.relation.
+     * Note: the regclass type info are taken from bootstrap.c.
+     */
+    allrelations = construct_array(&relation, 1, REGCLASSOID, 4, true,
+                                   TYPALIGN_INT);
+    values[Anum_ag_label_allrelations - 1] = PointerGetDatum(allrelations);
+    nulls[Anum_ag_label_allrelations - 1] = false;
+
+    values[Anum_ag_label_rel_kind - 1] = CharGetDatum(rel_kind);
+    nulls[Anum_ag_label_rel_kind - 1] = false;
 
     tuple = heap_form_tuple(RelationGetDescr(ag_label), values, nulls);
 
@@ -166,6 +186,35 @@ char *get_label_seq_relation_name(const char *label_name)
     return psprintf("%s_id_seq", label_name);
 }
 
+static label_cache_data *get_entity_lcd(graphid entity_id, Oid graph_oid)
+{
+    label_cache_data *lcd;
+    int32 label_id;
+
+    label_id = GET_LABEL_ID(entity_id);
+    lcd = search_label_graph_oid_cache(graph_oid, label_id);
+    Assert(lcd);
+
+    return lcd;
+}
+
+Oid get_entity_reloid(graphid entity_id, Oid graph_oid)
+{
+    label_cache_data *lcd = get_entity_lcd(entity_id, graph_oid);
+    return lcd->relation;
+}
+
+char *get_entity_relname(graphid entity_id, Oid graph_oid)
+{
+    label_cache_data *lcd = get_entity_lcd(entity_id, graph_oid);
+    return NameStr(lcd->name);
+}
+
+Datum get_entity_labels(graphid entity_id, Oid graph_oid)
+{
+    return DirectFunctionCall2(_label_names, graph_oid, entity_id);
+}
+
 PG_FUNCTION_INFO_V1(_label_name);
 
 /*
@@ -191,12 +240,105 @@ Datum _label_name(PG_FUNCTION_ARGS)
 
     label_cache = search_label_graph_oid_cache(graph, label_id);
 
+    if (label_cache->kind == LABEL_KIND_VERTEX)
+    {
+        elog(ERROR, "_label_name is not supported for vertices; "
+                    "try _label_names instead");
+    }
+
     label_name = NameStr(label_cache->name);
 
     if (IS_AG_DEFAULT_LABEL(label_name))
         PG_RETURN_CSTRING("");
 
     PG_RETURN_CSTRING(label_name);
+}
+
+PG_FUNCTION_INFO_V1(_label_names);
+
+/*
+ * Arguments:
+ *      [0] = graph OID
+ *      [1] = entity (vertex\edge) ID
+ *
+ * Returns:
+ *      an array of string as agtype
+ */
+Datum _label_names(PG_FUNCTION_ARGS)
+{
+    Oid graph_oid;
+    graphid entity_id;
+    agtype *res;
+    List *lcds;
+    ListCell *lc;
+    agtype_build_state *bstate;
+
+    Assert(!PG_ARGISNULL(0));
+    Assert(!PG_ARGISNULL(1));
+
+    graph_oid = PG_GETARG_OID(0);
+    entity_id = AG_GETARG_GRAPHID(1);
+
+    lcds = search_label_allrelations_cache(
+        get_entity_reloid(entity_id, graph_oid));
+
+    bstate = init_agtype_build_state(list_length(lcds), AGT_FARRAY);
+
+    foreach (lc, lcds)
+    {
+        label_cache_data *lcd = lfirst(lc);
+        write_string(bstate, NameStr(lcd->name));
+    }
+
+    res = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    AG_RETURN_AGTYPE_P(res);
+}
+
+PG_FUNCTION_INFO_V1(_label_ids);
+
+/*
+ * Arguments:
+ *      [0] = graph OID
+ *      [1] = entity (vertex\edge) ID
+ *
+ * Returns:
+ *      a int32 array of label IDs
+ */
+Datum _label_ids(PG_FUNCTION_ARGS)
+{
+    Oid graph_oid;
+    graphid entity_id;
+    ArrayType *res;
+    List *lcds;
+    ListCell *lc;
+    Datum *label_ids;
+    int len;
+    int i;
+
+    Assert(!PG_ARGISNULL(0));
+    Assert(!PG_ARGISNULL(1));
+
+    graph_oid = PG_GETARG_OID(0);
+    entity_id = AG_GETARG_GRAPHID(1);
+
+    lcds = search_label_allrelations_cache(
+        get_entity_reloid(entity_id, graph_oid));
+    len = list_length(lcds);
+    label_ids = (Datum *)palloc(sizeof(Datum) * len);
+
+    i = 0;
+    foreach (lc, lcds)
+    {
+        label_cache_data *lcd = lfirst(lc);
+        label_ids[i] = Int32GetDatum(lcd->id);
+        i++;
+    }
+
+    res = construct_array(label_ids, len, INT4OID, 4, true, TYPALIGN_INT);
+
+    PG_RETURN_ARRAYTYPE_P(res);
 }
 
 PG_FUNCTION_INFO_V1(_label_id);

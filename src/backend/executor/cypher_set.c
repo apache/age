@@ -23,6 +23,8 @@
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/ag_cache.h"
+#include "catalog/ag_label.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -396,12 +398,12 @@ static void process_update_list(CustomScanState *node)
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc;
         bool remove_property;
-        char *label_name;
         cypher_update_item *update_item;
         Datum new_entity;
         HeapTuple heap_tuple;
         char *clause_name = css->set_list->clause_name;
         int cid;
+        graph_cache_data *gcd;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -438,7 +440,6 @@ static void process_update_list(CustomScanState *node)
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
         label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
 
-        label_name = pnstrdup(label->val.string.val, label->val.string.len);
         /* get the properties we need to update */
         original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
                                                             "properties");
@@ -498,8 +499,10 @@ static void process_update_list(CustomScanState *node)
             }
         }
 
+        gcd = search_graph_name_cache(css->set_list->graph_name);
         resultRelInfo = create_entity_result_rel_info(
-            estate, css->set_list->graph_name, label_name);
+            estate, css->set_list->graph_name,
+            get_entity_relname(id->val.int_value, gcd->oid));
 
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
@@ -512,14 +515,18 @@ static void process_update_list(CustomScanState *node)
          */
         if (original_entity_value->type == AGTV_VERTEX)
         {
-            new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
-                                     CStringGetDatum(label_name),
-                                     AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
+            new_entity =
+                make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
+                            AGTYPE_P_GET_DATUM(agtype_value_to_agtype(label)),
+                            AGTYPE_P_GET_DATUM(
+                                agtype_value_to_agtype(altered_properties)));
 
             slot = populate_vertex_tts(slot, id, altered_properties);
         }
         else if (original_entity_value->type == AGTV_EDGE)
         {
+            char *label_name = pnstrdup(label->val.string.val,
+                                        label->val.string.len);
             agtype_value *startid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "start_id");
             agtype_value *endid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "end_id");
 

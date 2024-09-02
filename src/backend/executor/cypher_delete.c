@@ -370,12 +370,11 @@ static void process_delete_list(CustomScanState *node)
     foreach(lc, css->delete_data->delete_items)
     {
         cypher_delete_item *item;
-        agtype_value *original_entity_value, *id, *label;
+        agtype_value *original_entity_value, *id;
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple;
-        char *label_name;
         Integer *pos;
         int entity_position;
 
@@ -392,10 +391,11 @@ static void process_delete_list(CustomScanState *node)
                                                entity_position);
 
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
-        label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
-        label_name = pnstrdup(label->val.string.val, label->val.string.len);
 
-        resultRelInfo = create_entity_result_rel_info(estate, css->delete_data->graph_name, label_name);
+        resultRelInfo = create_entity_result_rel_info(
+            estate, css->delete_data->graph_name,
+            get_entity_relname(id->val.int_value,
+                               css->delete_data->graph_oid));
 
         /*
          * Setup the scan key to require the id field on-disc to match the

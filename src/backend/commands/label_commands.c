@@ -39,6 +39,7 @@
 #include "commands/label_commands.h"
 #include "utils/ag_cache.h"
 #include "utils/name_validation.h"
+#include "parser/cypher_label_expr.h"
 
 /*
  * Relation name doesn't have to be label name but the same name is used so
@@ -177,6 +178,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
                 errmsg("label name is invalid")));
     }
 
+    check_reserved_label_name(label_name);
+
     /* Check if graph does not exist */
     if (!graph_exists(graph_name))
     {
@@ -200,7 +203,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
     parent = list_make1(rv);
 
-    create_label(graph_name, label_name, LABEL_TYPE_VERTEX, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_VERTEX,
+                 LABEL_REL_KIND_SINGLE, parent);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", label_name)));
@@ -258,6 +262,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
                 errmsg("label name is invalid")));
     }
 
+    check_reserved_label_name(label_name);
+
     /* Check if graph does not exist */
     if (!graph_exists(graph_name))
     {
@@ -280,7 +286,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_EDGE);
 
     parent = list_make1(rv);
-    create_label(graph_name, label_name, LABEL_TYPE_EDGE, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_EDGE,
+                 LABEL_REL_KIND_SINGLE, parent);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", label_name)));
@@ -292,9 +299,12 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * For the new label, create an entry in ag_catalog.ag_label, create a
  * new table and sequence. Returns the oid from the new tuple in
  * ag_catalog.ag_label.
+ *
+ * Note: parameter label_type accepts macros LABEL_TYPE_*, rel_kind
+ * accepts macros LABEL_REL_KIND_*.
  */
 void create_label(char *graph_name, char *label_name, char label_type,
-                  List *parents)
+                  char rel_kind, List *parents)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -347,7 +357,7 @@ void create_label(char *graph_name, char *label_name, char label_type,
     label_id = get_new_label_id(graph_oid, nsp_id);
 
     insert_label(label_name, graph_oid, label_id, label_type,
-                 relation_id, seq_name);
+                 relation_id, seq_name, rel_kind);
 
     CommandCounterIncrement();
 }

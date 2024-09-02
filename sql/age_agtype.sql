@@ -1064,3 +1064,17 @@ CREATE FUNCTION ag_catalog.graph_exists(graph_name name)
     RETURNS agtype
     LANGUAGE c
     AS 'MODULE_PATHNAME', 'age_graph_exists';
+
+CREATE FUNCTION ag_catalog._label_names(graph_oid oid, graphid)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._label_ids(graph_oid oid, graphid)
+    RETURNS int4[]
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';

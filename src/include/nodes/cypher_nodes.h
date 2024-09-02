@@ -144,14 +144,62 @@ typedef struct cypher_path
     int location;
 } cypher_path;
 
+typedef enum
+{
+    LABEL_EXPR_TYPE_EMPTY = 0,    // (x)
+    LABEL_EXPR_TYPE_SINGLE,       // (x:label)
+    LABEL_EXPR_TYPE_AND,          // (x:label1:label2: ..)
+    LABEL_EXPR_TYPE_OR            // (x:label1|label2| ..)
+} cypher_label_expr_type;
+
+/*
+ * Represents a label expression. A label expression is either single label,
+ * multiple labels or no label at all. See `cypher_label_expr_type` for
+ * examples.
+ *
+ * Label expressions are mainly used in a cypher path. Cypher clauses that
+ * deals with paths have to deal with label expressions as well. Different
+ * clauses process label expressions differently.
+ *
+ * To see how CREATE and MERGE clause use label expressions to store entities,
+ * refer to-
+ *	    create_label_expr_relations()
+ *
+ * To see how the MATCH clause uses label expressions to build queries, refer
+ * to-
+ *	    get_label_expr_relations()
+ *
+ * For now, SET and REMOVE clause does not deal with label expressions.
+ *
+ * Additional notes:
+ * -----------------
+ * There is a comparator function for this struct defined in
+ * cypher_label_expr.c. If new fields are added to it, that function may need
+ * to be updated.
+ */
+typedef struct cypher_label_expr
+{
+    ExtensibleNode extensible;
+    cypher_label_expr_type type;
+
+    /*
+     * List of String nodes.
+     *
+     * The list must be unique and sorted in ascending order. This is
+     * done in the grammar during parsing.
+     *
+     * Note: It is assigned to rel->label_names. Be careful before free'ing.
+     */
+    List *label_names;
+} cypher_label_expr;
+
 /* ( name :label props ) */
 typedef struct cypher_node
 {
     ExtensibleNode extensible;
     char *name;
     char *parsed_name;
-    char *label;
-    char *parsed_label;
+    cypher_label_expr *label_expr;
     bool use_equals;
     Node *props; /* map or parameter */
     int location;
@@ -170,8 +218,7 @@ typedef struct cypher_relationship
     ExtensibleNode extensible;
     char *name;
     char *parsed_name;
-    char *label;
-    char *parsed_label;
+    cypher_label_expr *label_expr;
     bool use_equals;
     Node *props; /* map or parameter */
     Node *varlen; /* variable length relationships (A_Indices) */
@@ -376,7 +423,7 @@ typedef struct cypher_target_node
     /* relid that the label stores its entity */
     Oid relid;
     /* label this entity belongs to. */
-    char *label_name;
+    cypher_label_expr *label_expr;
     /* variable name for this entity */
     char *variable_name;
     /*

@@ -21,6 +21,8 @@
 #define AG_AG_LABEL_H
 
 #include "nodes/execnodes.h"
+#include "utils/graphid.h"
+#include "catalog/ag_catalog.h"
 
 #define Anum_ag_label_vertex_table_id 1
 #define Anum_ag_label_vertex_table_properties 2
@@ -46,9 +48,11 @@
 #define Anum_ag_label_kind 4
 #define Anum_ag_label_relation 5
 #define Anum_ag_label_seq_name 6
+#define Anum_ag_label_allrelations 7
+#define Anum_ag_label_rel_kind 8
 
 
-#define Natts_ag_label 6
+#define Natts_ag_label 8
 
 #define ag_label_relation_id() ag_relation_id("ag_label", "table")
 #define ag_label_name_graph_index_id() \
@@ -65,8 +69,18 @@
 #define LABEL_KIND_VERTEX 'v'
 #define LABEL_KIND_EDGE 'e'
 
+/*
+ * Used in ag_label.rel_kind to mark what type of relation is
+ * ag_label.relation:
+ *      default label, single label, or intersection relation
+ */
+#define LABEL_REL_KIND_DEFAULT 'd'
+#define LABEL_REL_KIND_SINGLE 's'
+#define LABEL_REL_KIND_INTR 'i'
+
 void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
-                  char label_kind, Oid label_relation, const char *seq_name);
+                  char label_kind, Oid label_relation, const char *seq_name,
+                  char rel_kind);
 void delete_label(Oid relation);
 
 int32 get_label_id(const char *label_name, Oid graph_oid);
@@ -76,6 +90,10 @@ char get_label_kind(const char *label_name, Oid label_graph);
 char *get_label_seq_relation_name(const char *label_name);
 
 
+Oid get_entity_reloid(graphid entity_id, Oid graph_oid);
+char *get_entity_relname(graphid entity_id, Oid graph_oid);
+Datum get_entity_labels(graphid entity_id, Oid graph_oid);
+
 bool label_id_exists(Oid graph_oid, int32 label_id);
 RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
                               char *label_name);
@@ -84,5 +102,8 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid);
 
 #define label_exists(label_name, label_graph) \
     OidIsValid(get_label_id(label_name, label_graph))
+
+#define ag_relation_exists(relname, graphoid) \
+    label_exists((relname), (graphoid))
 
 #endif

@@ -28,6 +28,7 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "nodes/cypher_nodes.h"
+#include "catalog/ag_label.h"
 
 /* defines */
 #define GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc) \
@@ -1612,6 +1613,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 
     for (index = 0; index < graphid_array_size; index += 2)
     {
+        Datum labels = (Datum)NULL;
         char *label_name = NULL;
         vertex_entry *ve = NULL;
         edge_entry *ee = NULL;
@@ -1621,11 +1623,10 @@ static agtype_value *build_path(VLE_path_container *vpc)
         /* get the vertex entry from the hashtable */
         ve = get_vertex_entry(ggctx, graphid_array[index]);
         /* get the label name from the oid */
-        label_name = get_rel_name(get_vertex_entry_label_table_oid(ve));
+        labels = get_entity_labels(get_vertex_entry_id(ve), graph_oid);
         /* reconstruct the vertex */
-        agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
-                                                label_name,
-                                                get_vertex_entry_properties(ve));
+        agtv_vertex = agtype_value_build_vertex(
+            get_vertex_entry_id(ve), labels, get_vertex_entry_properties(ve));
         /* push the vertex */
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_vertex);

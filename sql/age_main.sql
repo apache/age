@@ -46,6 +46,14 @@ CREATE DOMAIN label_id AS int NOT NULL CHECK (VALUE > 0 AND VALUE <= 65535);
 
 CREATE DOMAIN label_kind AS "char" NOT NULL CHECK (VALUE = 'v' OR VALUE = 'e');
 
+CREATE DOMAIN rel_kind AS "char"
+    NOT NULL
+    CHECK (
+        VALUE = 'd' OR -- default label's relation
+        VALUE = 's' OR -- a single label's relation
+        VALUE = 'i'    -- an intersection relation
+    );
+
 CREATE TABLE ag_label (
                           name name NOT NULL,
                           graph oid NOT NULL,
@@ -53,6 +61,8 @@ CREATE TABLE ag_label (
                           kind label_kind,
                           relation regclass NOT NULL,
                           seq_name name NOT NULL,
+                          allrelations regclass[] DEFAULT '{}',
+                          rel_kind rel_kind,
                           CONSTRAINT fk_graph_oid
                               FOREIGN KEY(graph)
                                   REFERENCES ag_graph(graphid)

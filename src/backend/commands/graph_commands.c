@@ -98,14 +98,16 @@ Oid create_graph_internal(const Name graph_name)
     nsp_id = create_schema_for_graph(graph_name);
 
     /* inserts the graph info into the relation which has all the other existing graphs info */
-    insert_graph(graph_name, nsp_id);  
+    insert_graph(graph_name, nsp_id);
 
     /* Increment the Command counter before create the generic labels. */
     CommandCounterIncrement();
 
     /* Create the default label tables */
-    create_label(graph_name_str, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX, NIL);
-    create_label(graph_name_str, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE, NIL);
+    create_label(graph_name_str, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX,
+                 LABEL_REL_KIND_DEFAULT, NIL);
+    create_label(graph_name_str, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE,
+                 LABEL_REL_KIND_DEFAULT, NIL);
 
     return nsp_id;
 }
