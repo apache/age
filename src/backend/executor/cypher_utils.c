@@ -76,7 +76,7 @@ uint32 datum_image_hash(Datum value, bool typByVal, int typLen)
         /* Only free memory if it's a copy made here. */
         if ((Pointer) val != (Pointer) value)
         {
-            pfree(val);
+            pfree_if_not_null(val);
         }
     }
     else if (typLen == -2)

@@ -281,7 +281,7 @@ static void finish_edge_batch_insert(batch_insert_state **batch_state,
     }
 
     // Clean up batch state
-    pfree((*batch_state)->buffered_tuples);
-    pfree(*batch_state);
+    pfree_if_not_null((*batch_state)->buffered_tuples);
+    pfree_if_not_null(*batch_state);
     *batch_state = NULL;
 }
