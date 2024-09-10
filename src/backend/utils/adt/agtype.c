@@ -180,6 +180,19 @@ static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo);
 agtype_value *agtype_composite_to_agtype_value_binary(agtype *a);
 static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr);
 
+/*
+ * Due to how pfree can be implemented, it may not check for a passed NULL. This
+ * wrapper does just that, it will only call pfree is the pointer passed is not
+ * NULL.
+ */
+void pfree_if_not_null(void *ptr)
+{
+    if (ptr != NULL)
+    {
+        pfree(ptr);
+    }
+}
+
 /* global storage of  OID for agtype and _agtype */
 static Oid g_AGTYPEOID = InvalidOid;
 static Oid g_AGTYPEARRAYOID = InvalidOid;
@@ -297,7 +310,7 @@ Datum agtype_recv(PG_FUNCTION_ARGS)
     result = agtype_from_cstring(str, nbytes);
 
     PG_FREE_IF_COPY(buf, 0);
-    pfree(str);
+    pfree_if_not_null(str);
 
     return result;
 }
@@ -322,8 +335,8 @@ Datum agtype_send(PG_FUNCTION_ARGS)
     pq_begintypsend(&buf);
     pq_sendint8(&buf, version);
     pq_sendtext(&buf, agtype_text->data, agtype_text->len);
-    pfree(agtype_text->data);
-    pfree(agtype_text);
+    pfree_if_not_null(agtype_text->data);
+    pfree_if_not_null(agtype_text);
 
     PG_FREE_IF_COPY(agt, 0);
 
@@ -1545,7 +1558,7 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
                 intd = DirectFunctionCall1(int8in, CStringGetDatum(outputstr));
                 agtv.type = AGTV_INTEGER;
                 agtv.val.int_value = DatumGetInt64(intd);
-                pfree(outputstr);
+                pfree_if_not_null(outputstr);
             }
             break;
         case AGT_TYPE_FLOAT:
@@ -1590,7 +1603,7 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
                                                ObjectIdGetDatum(InvalidOid),
                                                Int32GetDatum(-1));
                     agtv.val.numeric = DatumGetNumeric(numd);
-                    pfree(outputstr);
+                    pfree_if_not_null(outputstr);
                 }
                 else
                 {
@@ -1820,8 +1833,8 @@ static void array_to_agtype_internal(Datum array, agtype_in_state *result)
     array_dim_to_agtype(result, 0, ndim, dim, elements, nulls, &count,
                         tcategory, outfuncoid);
 
-    pfree(elements);
-    pfree(nulls);
+    pfree_if_not_null(elements);
+    pfree_if_not_null(nulls);
 }
 
 /*
@@ -2220,7 +2233,7 @@ Datum make_path(List *path)
 
         if ((Pointer) (agt) != lfirst(lc))
         {
-            pfree(agt);
+            pfree_if_not_null(agt);
         }
         pfree_agtype_value(elem);
 
@@ -2481,7 +2494,7 @@ static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
             result.res = push_agtype_value(&result.parse_state, WAGT_KEY, agtv);
 
             /* free the agtype_value from tostring_helper */
-            pfree(agtv);
+            pfree_if_not_null(agtv);
         }
         else
         {
@@ -2843,7 +2856,7 @@ Datum agtype_to_int8(PG_FUNCTION_ARGS)
     /* free the container, if it was used */
     if (container)
     {
-        pfree(container);
+        pfree_if_not_null(container);
     }
 
     PG_FREE_IF_COPY(arg_agt, 0);
@@ -2964,7 +2977,7 @@ Datum agtype_to_int4(PG_FUNCTION_ARGS)
     /* free the container, if it was used */
     if (container)
     {
-        pfree(container);
+        pfree_if_not_null(container);
     }
 
     PG_FREE_IF_COPY(arg_agt, 0);
@@ -3086,7 +3099,7 @@ Datum agtype_to_int2(PG_FUNCTION_ARGS)
     /* free the container, if it was used */
     if (container)
     {
-        pfree(container);
+        pfree_if_not_null(container);
     }
 
     PG_FREE_IF_COPY(arg_agt, 0);
@@ -3231,7 +3244,7 @@ Datum text_to_agtype(PG_FUNCTION_ARGS)
     agtv.val.string.val = pstrdup(string);
 
     /* free the string */
-    pfree(string);
+    pfree_if_not_null(string);
 
     /* convert to agtype */
     result = agtype_value_to_agtype(&agtv);
@@ -3279,7 +3292,7 @@ Datum agtype_to_json(PG_FUNCTION_ARGS)
     result = DirectFunctionCall1(json_in, CStringGetDatum(json_str));
 
     PG_FREE_IF_COPY(agt, 0);
-    pfree(json_str);
+    pfree_if_not_null(json_str);
 
     PG_RETURN_DATUM(result);
 }
@@ -4066,9 +4079,9 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
      */
     if (args == NULL || nargs == 0 || nulls[0] == true)
     {
-        pfree(args);
-        pfree(types);
-        pfree(nulls);
+        pfree_if_not_null(args);
+        pfree_if_not_null(types);
+        pfree_if_not_null(nulls);
 
         PG_RETURN_NULL();
     }
@@ -4079,9 +4092,9 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         /* if we have a NULL, return NULL */
         if (nulls[i] == true)
         {
-            pfree(args);
-            pfree(types);
-            pfree(nulls);
+            pfree_if_not_null(args);
+            pfree_if_not_null(types);
+            pfree_if_not_null(nulls);
             PG_RETURN_NULL();
         }
     }
@@ -4200,9 +4213,9 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         container = NULL;
     }
 
-    pfree(args);
-    pfree(types);
-    pfree(nulls);
+    pfree_if_not_null(args);
+    pfree_if_not_null(types);
+    pfree_if_not_null(nulls);
 
     /* serialize and return the result */
     result = agtype_value_to_agtype(container_value);
@@ -4677,8 +4690,8 @@ Datum agtype_string_match_contains(PG_FUNCTION_ARGS)
             {
                 result = true;
             }
-            pfree(l);
-            pfree(r);
+            pfree_if_not_null(l);
+            pfree_if_not_null(r);
         }
         pfree_agtype_value(lhs_value);
         pfree_agtype_value(rhs_value);
@@ -4734,7 +4747,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
         seed = LEFT_ROTATE(seed, 1);
     }
 
-    pfree(r);
+    pfree_if_not_null(r);
     PG_FREE_IF_COPY(agt, 0);
 
     PG_RETURN_INT32(hash);
@@ -4840,7 +4853,7 @@ Datum agtype_typecast_numeric(PG_FUNCTION_ARGS)
                                    ObjectIdGetDatum(InvalidOid),
                                    Int32GetDatum(-1));
         /* free the string */
-        pfree(string);
+        pfree_if_not_null(string);
         string = NULL;
         break;
     /* what was given doesn't cast to a numeric */
@@ -4928,7 +4941,7 @@ Datum agtype_typecast_int(PG_FUNCTION_ARGS)
 
         d = DirectFunctionCall1(int8in, CStringGetDatum(string));
         /* free the string */
-        pfree(string);
+        pfree_if_not_null(string);
         string = NULL;
         break;
     /* what was given doesn't cast to an int */
@@ -5065,7 +5078,7 @@ Datum agtype_typecast_float(PG_FUNCTION_ARGS)
 
         d = DirectFunctionCall1(float8in, CStringGetDatum(string));
         /* free the string */
-        pfree(string);
+        pfree_if_not_null(string);
         string = NULL;
         break;
     /* what was given doesn't cast to a float */
@@ -7162,7 +7175,7 @@ Datum age_tostring(PG_FUNCTION_ARGS)
 
     /* convert to agtype and free the agtype_value */
     agt = agtype_value_to_agtype(agtv);
-    pfree(agtv);
+    pfree_if_not_null(agtv);
 
     PG_RETURN_POINTER(agt);
 }
@@ -10365,9 +10378,9 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
     /* if null, return null */
     if (nulls[0])
     {
-        pfree(args);
-        pfree(nulls);
-        pfree(types);
+        pfree_if_not_null(args);
+        pfree_if_not_null(nulls);
+        pfree_if_not_null(types);
         return NULL;
     }
 
@@ -10388,9 +10401,9 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
         {
             PG_FREE_IF_COPY(agtype_result, variadic_offset);
 
-            pfree(args);
-            pfree(nulls);
-            pfree(types);
+            pfree_if_not_null(args);
+            pfree_if_not_null(nulls);
+            pfree_if_not_null(types);
             return NULL;
         }
     }
@@ -10414,9 +10427,9 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
         pfree_agtype_in_state(&state);
     }
 
-    pfree(args);
-    pfree(nulls);
-    pfree(types);
+    pfree_if_not_null(args);
+    pfree_if_not_null(nulls);
+    pfree_if_not_null(types);
 
     return agtype_result;
 }
