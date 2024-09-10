@@ -596,7 +596,7 @@ static void process_update_list(CustomScanState *node)
         lidx++;
     }
     /* free our lookup array */
-    pfree(luindex);
+    pfree_if_not_null(luindex);
 }
 
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)
