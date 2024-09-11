@@ -94,8 +94,6 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
                                                    Oid odl_rel_oid,
                                                    void *arg);
 
-
-
 PG_FUNCTION_INFO_V1(create_vlabel);
 
 /*
