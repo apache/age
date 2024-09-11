@@ -34,6 +34,7 @@
 #include "mb/pg_wchar.h"
 
 #include "parser/ag_scanner.h"
+#include "utils/agtype.h"
 }
 
 %option 8bit
@@ -795,7 +796,7 @@ void *ag_yyrealloc(void *ptr, yy_size_t size, yyscan_t yyscanner)
     {
         if (size == 0)
         {
-            pfree(ptr);
+            pfree_if_not_null(ptr);
             return NULL;
         }
         else
@@ -812,7 +813,7 @@ void *ag_yyrealloc(void *ptr, yy_size_t size, yyscan_t yyscanner)
 void ag_yyfree(void *ptr, yyscan_t yyscanner)
 {
     if (ptr)
-        pfree(ptr);
+        pfree_if_not_null(ptr);
 }
 
 static void strbuf_init(strbuf *sb, int capacity)
@@ -825,7 +826,7 @@ static void strbuf_init(strbuf *sb, int capacity)
 static void strbuf_cleanup(strbuf *sb)
 {
     if (sb->buffer)
-        pfree(sb->buffer);
+        pfree_if_not_null(sb->buffer);
 }
 
 static void strbuf_append_buf(strbuf *sb, const char *b, const int len)
@@ -1121,8 +1122,8 @@ static void _numstr_to_decimal(const char *numstr, const int base, strbuf *sb)
         strbuf_append_buf(sb, &buf[buf_i], ndigits_per_remainder - buf_i);
     }
 
-    pfree(remainders);
-    pfree(words);
+    pfree_if_not_null(remainders);
+    pfree_if_not_null(words);
 }
 
 static uint32 hexdigit_value(const char c)

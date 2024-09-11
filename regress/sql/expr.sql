@@ -3454,6 +3454,12 @@ SELECT agtype_to_int4(bool('neither'));
 SELECT agtype_to_int8(bool('neither'));
 
 --
+-- Issue 2093: Server crashes when executing SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
+--
+SELECT agtype_access_operator(agtype_in('[null, null]'));
+SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
+
+--
 -- Cleanup
 --
 SELECT * FROM drop_graph('issue_1124', true);

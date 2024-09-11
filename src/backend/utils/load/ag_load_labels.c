@@ -327,8 +327,8 @@ static void setup_temp_table_for_vertex_ids(char *graph_name)
 
     SPI_finish();
 
-    pfree(create_as_query);
-    pfree(index_query);
+    pfree_if_not_null(create_as_query);
+    pfree_if_not_null(index_query);
 }
 
 /*
@@ -366,7 +366,7 @@ static void insert_batch_in_temp_table(batch_insert_state *batch_state,
     for (i = 0; i < batch_state->num_tuples; i++)
     {
         TupleTableSlot *slot;
-        
+
         slot = MakeSingleTupleTableSlot(batch_state->id_desc);
         ExecStoreTuple(batch_state->buffered_id_tuples[i],
                        slot, InvalidBuffer, false);
@@ -379,14 +379,14 @@ static void insert_batch_in_temp_table(batch_insert_state *batch_state,
             bool isnull;
 
             id = slot_getattr(slot, 1, &isnull);
-            pfree(slot);
+            pfree_if_not_null(slot);
             ereport(ERROR, (errmsg("Cannot insert duplicate vertex id: %ld",
                                     DATUM_GET_GRAPHID(id)),
                             errhint("Entry id %ld is already used",
                                     get_graphid_entry_id(id))));
         }
 
-        pfree(slot);
+        pfree_if_not_null(slot);
     }
     /* Clean up and close the indices */
     ExecCloseIndices(resultRelInfo);
@@ -442,8 +442,8 @@ static void finish_vertex_batch_insert(batch_insert_state **batch_state,
     }
 
     /* Clean up batch state */
-    pfree((*batch_state)->buffered_tuples);
-    pfree((*batch_state)->buffered_id_tuples);
-    pfree(*batch_state);
+    pfree_if_not_null((*batch_state)->buffered_tuples);
+    pfree_if_not_null((*batch_state)->buffered_id_tuples);
+    pfree_if_not_null(*batch_state);
     *batch_state = NULL;
 }
