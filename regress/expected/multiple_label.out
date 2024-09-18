@@ -272,8 +272,8 @@ drop cascades to table mlabels1._ag_label_edge
 drop cascades to table mlabels1.a
 drop cascades to table mlabels1.b
 drop cascades to table mlabels1.c
-drop cascades to table mlabels1._agr_ab
-drop cascades to table mlabels1._agr_abc
+drop cascades to table mlabels1."_agr_a-b"
+drop cascades to table mlabels1."_agr_a-b-c"
 drop cascades to table mlabels1.p
 drop cascades to table mlabels1.q
 drop cascades to table mlabels1.r
@@ -409,14 +409,14 @@ SElECT drop_graph('mlabels5', true);
 NOTICE:  drop cascades to 11 other objects
 DETAIL:  drop cascades to table mlabels5._ag_label_vertex
 drop cascades to table mlabels5._ag_label_edge
-drop cascades to table mlabels5._agr_employeeengineer
+drop cascades to table mlabels5."_agr_employee-engineer"
 drop cascades to table mlabels5.employee
 drop cascades to table mlabels5.engineer
-drop cascades to table mlabels5._agr_employeemanager
+drop cascades to table mlabels5."_agr_employee-manager"
 drop cascades to table mlabels5.manager
-drop cascades to table mlabels5._agr_employeeengineermanagertechlead
+drop cascades to table mlabels5."_agr_employee-engineer-manager-techlead"
 drop cascades to table mlabels5.techlead
-drop cascades to table mlabels5._agr_accountantemployee
+drop cascades to table mlabels5."_agr_accountant-employee"
 drop cascades to table mlabels5.accountant
 NOTICE:  graph "mlabels5" has been dropped
  drop_graph 
@@ -458,9 +458,32 @@ SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) as (a agtype);
 ERROR:  label b is for vertices, not edges
 LINE 1: SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) a...
                                                       ^
+-- check intersection relation separator
+SELECT * FROM cypher('mlabels6', $$ MATCH (x) DETACH DELETE x $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels6', $$ CREATE (:M:N:P) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels6', $$ CREATE (:MN:P) $$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('mlabels6', $$ MATCH (x) RETURN x $$) as (a agtype);
+                                      a                                       
+------------------------------------------------------------------------------
+ {"id": 2533274790395905, "label": ["M", "N", "P"], "properties": {}}::vertex
+ {"id": 3659174697238529, "label": ["MN", "P"], "properties": {}}::vertex
+(2 rows)
+
 -- cleanup
 SElECT drop_graph('mlabels6', true);
-NOTICE:  drop cascades to 8 other objects
+NOTICE:  drop cascades to 14 other objects
 DETAIL:  drop cascades to table mlabels6._ag_label_vertex
 drop cascades to table mlabels6._ag_label_edge
 drop cascades to table mlabels6.a
@@ -469,6 +492,12 @@ drop cascades to table mlabels6.b
 drop cascades to table mlabels6.y
 drop cascades to table mlabels6.c
 drop cascades to table mlabels6.z
+drop cascades to table mlabels6."_agr_M-N-P"
+drop cascades to table mlabels6."M"
+drop cascades to table mlabels6."N"
+drop cascades to table mlabels6."P"
+drop cascades to table mlabels6."_agr_MN-P"
+drop cascades to table mlabels6."MN"
 NOTICE:  graph "mlabels6" has been dropped
  drop_graph 
 ------------
@@ -544,13 +573,13 @@ SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b)  $$) as (":a:b" agtype);
 (0 rows)
 
 SELECT * FROM mlabels8.catalog;
-       name       |         relation          |         allrelations          | rel_kind 
-------------------+---------------------------+-------------------------------+----------
- _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}     | d
- _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}   | d
- _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}            | i
- a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab} | s
- b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab} | s
+       name       |         relation          |             allrelations             | rel_kind 
+------------------+---------------------------+--------------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}            | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}          | d
+ _agr_a-b         | mlabels8."_agr_a-b"       | {"mlabels8.\"_agr_a-b\""}            | i
+ a                | mlabels8.a                | {mlabels8.a,"mlabels8.\"_agr_a-b\""} | s
+ b                | mlabels8.b                | {mlabels8.b,"mlabels8.\"_agr_a-b\""} | s
 (5 rows)
 
 -- creates :c and :bc
@@ -560,15 +589,15 @@ SELECT * FROM cypher('mlabels8', $$ CREATE (:b:c)  $$) as (":b:c" agtype);
 (0 rows)
 
 SELECT * FROM mlabels8.catalog;
-       name       |         relation          |                  allrelations                  | rel_kind 
-------------------+---------------------------+------------------------------------------------+----------
- _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                      | d
- _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                    | d
- _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}                             | i
- _agr_bc          | mlabels8._agr_bc          | {mlabels8._agr_bc}                             | i
- a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab}                  | s
- b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab,mlabels8._agr_bc} | s
- c                | mlabels8.c                | {mlabels8.c,mlabels8._agr_bc}                  | s
+       name       |         relation          |                         allrelations                         | rel_kind 
+------------------+---------------------------+--------------------------------------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                                    | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                                  | d
+ _agr_a-b         | mlabels8."_agr_a-b"       | {"mlabels8.\"_agr_a-b\""}                                    | i
+ _agr_b-c         | mlabels8."_agr_b-c"       | {"mlabels8.\"_agr_b-c\""}                                    | i
+ a                | mlabels8.a                | {mlabels8.a,"mlabels8.\"_agr_a-b\""}                         | s
+ b                | mlabels8.b                | {mlabels8.b,"mlabels8.\"_agr_a-b\"","mlabels8.\"_agr_b-c\""} | s
+ c                | mlabels8.c                | {mlabels8.c,"mlabels8.\"_agr_b-c\""}                         | s
 (7 rows)
 
 -- :a:b:c inserted in other labels' allrelations column
@@ -578,16 +607,16 @@ SELECT * FROM cypher('mlabels8', $$ CREATE (:a:b:c) $$) as (":a:b:c" agtype);
 (0 rows)
 
 SELECT * FROM mlabels8.catalog;
-       name       |         relation          |                           allrelations                           | rel_kind 
-------------------+---------------------------+------------------------------------------------------------------+----------
- _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                                        | d
- _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                                      | d
- _agr_ab          | mlabels8._agr_ab          | {mlabels8._agr_ab}                                               | i
- _agr_abc         | mlabels8._agr_abc         | {mlabels8._agr_abc}                                              | i
- _agr_bc          | mlabels8._agr_bc          | {mlabels8._agr_bc}                                               | i
- a                | mlabels8.a                | {mlabels8.a,mlabels8._agr_ab,mlabels8._agr_abc}                  | s
- b                | mlabels8.b                | {mlabels8.b,mlabels8._agr_ab,mlabels8._agr_bc,mlabels8._agr_abc} | s
- c                | mlabels8.c                | {mlabels8.c,mlabels8._agr_bc,mlabels8._agr_abc}                  | s
+       name       |         relation          |                                      allrelations                                      | rel_kind 
+------------------+---------------------------+----------------------------------------------------------------------------------------+----------
+ _ag_label_edge   | mlabels8._ag_label_edge   | {mlabels8._ag_label_edge}                                                              | d
+ _ag_label_vertex | mlabels8._ag_label_vertex | {mlabels8._ag_label_vertex}                                                            | d
+ _agr_a-b         | mlabels8."_agr_a-b"       | {"mlabels8.\"_agr_a-b\""}                                                              | i
+ _agr_a-b-c       | mlabels8."_agr_a-b-c"     | {"mlabels8.\"_agr_a-b-c\""}                                                            | i
+ _agr_b-c         | mlabels8."_agr_b-c"       | {"mlabels8.\"_agr_b-c\""}                                                              | i
+ a                | mlabels8.a                | {mlabels8.a,"mlabels8.\"_agr_a-b\"","mlabels8.\"_agr_a-b-c\""}                         | s
+ b                | mlabels8.b                | {mlabels8.b,"mlabels8.\"_agr_a-b\"","mlabels8.\"_agr_b-c\"","mlabels8.\"_agr_a-b-c\""} | s
+ c                | mlabels8.c                | {mlabels8.c,"mlabels8.\"_agr_b-c\"","mlabels8.\"_agr_a-b-c\""}                         | s
 (8 rows)
 
 -- cleanup
@@ -596,12 +625,12 @@ NOTICE:  drop cascades to 9 other objects
 DETAIL:  drop cascades to table mlabels8._ag_label_vertex
 drop cascades to table mlabels8._ag_label_edge
 drop cascades to view mlabels8.catalog
-drop cascades to table mlabels8._agr_ab
+drop cascades to table mlabels8."_agr_a-b"
 drop cascades to table mlabels8.a
 drop cascades to table mlabels8.b
-drop cascades to table mlabels8._agr_bc
+drop cascades to table mlabels8."_agr_b-c"
 drop cascades to table mlabels8.c
-drop cascades to table mlabels8._agr_abc
+drop cascades to table mlabels8."_agr_a-b-c"
 NOTICE:  graph "mlabels8" has been dropped
  drop_graph 
 ------------
@@ -936,7 +965,7 @@ drop cascades to table mlabels10._ag_label_edge
 drop cascades to table mlabels10.rel
 drop cascades to table mlabels10.x
 drop cascades to table mlabels10.a
-drop cascades to table mlabels10._agr_ab
+drop cascades to table mlabels10."_agr_a-b"
 drop cascades to table mlabels10.b
 drop cascades to table mlabels10.c
 drop cascades to table mlabels10.d
@@ -981,7 +1010,7 @@ SElECT drop_graph('mlabels11', true);
 NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to table mlabels11._ag_label_vertex
 drop cascades to table mlabels11._ag_label_edge
-drop cascades to table mlabels11._agr_ab
+drop cascades to table mlabels11."_agr_a-b"
 drop cascades to table mlabels11.a
 drop cascades to table mlabels11.b
 NOTICE:  graph "mlabels11" has been dropped
@@ -1168,17 +1197,17 @@ SElECT drop_graph('mlabels12', true);
 NOTICE:  drop cascades to 15 other objects
 DETAIL:  drop cascades to table mlabels12._ag_label_vertex
 drop cascades to table mlabels12._ag_label_edge
-drop cascades to table mlabels12."_agr_PersonStudent"
+drop cascades to table mlabels12."_agr_Person-Student"
 drop cascades to table mlabels12."Person"
 drop cascades to table mlabels12."Student"
-drop cascades to table mlabels12."_agr_PersonTeacher"
+drop cascades to table mlabels12."_agr_Person-Teacher"
 drop cascades to table mlabels12."Teacher"
-drop cascades to table mlabels12._agr_ab
+drop cascades to table mlabels12."_agr_a-b"
 drop cascades to table mlabels12.a
 drop cascades to table mlabels12.b
 drop cascades to table mlabels12.r
 drop cascades to table mlabels12.k
-drop cascades to table mlabels12._agr_mn
+drop cascades to table mlabels12."_agr_m-n"
 drop cascades to table mlabels12.m
 drop cascades to table mlabels12.n
 NOTICE:  graph "mlabels12" has been dropped

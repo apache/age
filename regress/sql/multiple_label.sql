@@ -121,6 +121,11 @@ SELECT * FROM cypher('mlabels6', $$ CREATE (:c)-[:z]->() $$) as (a agtype);
 -- following fails
 SELECT * FROM cypher('mlabels6', $$ CREATE (:a:y:c) $$) as (a agtype);
 SELECT * FROM cypher('mlabels6', $$ CREATE ()-[:b]->() $$) as (a agtype);
+-- check intersection relation separator
+SELECT * FROM cypher('mlabels6', $$ MATCH (x) DETACH DELETE x $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ CREATE (:M:N:P) $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ CREATE (:MN:P) $$) as (a agtype);
+SELECT * FROM cypher('mlabels6', $$ MATCH (x) RETURN x $$) as (a agtype);
 -- cleanup
 SElECT drop_graph('mlabels6', true);
 

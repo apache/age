@@ -204,7 +204,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     parent = list_make1(rv);
 
     create_label(graph_name, label_name, LABEL_TYPE_VERTEX,
-                 LABEL_REL_KIND_SINGLE, parent);
+                 LABEL_REL_KIND_SINGLE, parent, true);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", label_name)));
@@ -287,7 +287,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
 
     parent = list_make1(rv);
     create_label(graph_name, label_name, LABEL_TYPE_EDGE,
-                 LABEL_REL_KIND_SINGLE, parent);
+                 LABEL_REL_KIND_SINGLE, parent, true);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", label_name)));
@@ -304,7 +304,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * accepts macros LABEL_REL_KIND_*.
  */
 void create_label(char *graph_name, char *label_name, char label_type,
-                  char rel_kind, List *parents)
+                  char rel_kind, List *parents, bool check_valid_label)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -316,7 +316,7 @@ void create_label(char *graph_name, char *label_name, char label_type,
     int32 label_id;
     Oid relation_id;
 
-    if (!is_valid_label_name(label_name, label_type))
+    if (check_valid_label && !is_valid_label_name(label_name, label_type))
     {
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("label name is invalid")));
@@ -362,7 +362,7 @@ void create_label(char *graph_name, char *label_name, char label_type,
     CommandCounterIncrement();
 }
 
-/* 
+/*
  * CREATE TABLE `schema_name`.`rel_name` (
  * "id" graphid PRIMARY KEY DEFAULT "ag_catalog"."_graphid"(...),
  * "start_id" graphid NOT NULL note: only for edge labels

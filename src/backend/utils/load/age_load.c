@@ -467,7 +467,7 @@ static int32 get_or_create_label(Oid graph_oid, char *graph_name,
         parent = list_make1(rv);
 
         create_label(graph_name, label_name, label_kind,
-                     LABEL_REL_KIND_SINGLE, parent);
+                     LABEL_REL_KIND_SINGLE, parent, true);
         label_id = get_label_id(label_name, graph_oid);
 
         ereport(NOTICE,

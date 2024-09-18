@@ -36,6 +36,7 @@
 /* Prefix for intersection relations. */
 #define INTR_REL_PREFIX "_agr_"
 #define INTR_REL_PREFIX_LEN 5
+#define INTR_REL_SEPERATOR '-'
 
 #define LABEL_EXPR_LENGTH(label_expr) (list_length((label_expr)->label_names))
 

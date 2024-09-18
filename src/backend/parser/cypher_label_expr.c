@@ -33,6 +33,7 @@
 #include "parser/cypher_transform_entity.h"
 #include "utils/ag_cache.h"
 #include "utils/array.h"
+#include "utils/name_validation.h"
 
 static void append_to_allrelations(Relation ag_label, char *label_name,
                                    char *intr_relname, Oid graphoid);
@@ -80,6 +81,7 @@ RangeVar *create_label_expr_relations(Oid graphoid, char *graphname,
     char rel_kind;
     cypher_label_expr_type label_expr_type;
     RangeVar *rv;
+    ListCell *label_lc;
 
     label_expr_type = LABEL_EXPR_TYPE(label_expr);
 
@@ -126,9 +128,30 @@ RangeVar *create_label_expr_relations(Oid graphoid, char *graphname,
         return rv;
     }
 
-    /* creates ag_label entry and relation */
+    /* Verify if label names are valid */
+    foreach (label_lc, label_expr->label_names)
+    {
+        char *label_name;
+
+        label_name = strVal(lfirst(label_lc));
+
+        if (!is_valid_label_name(label_name, label_expr_kind))
+        {
+            ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                            errmsg("label name is invalid")));
+        }
+    }
+
+    /*
+     * Creates ag_label entry and relation.
+     *
+     * In case of LABEL_EXPR_TYPE_AND, ag_label_relation will be an invalid
+     * label name due to the separator (see label_expr_relname()). For this
+     * reason, check_valid_label parameter is set to false. Instead,
+     * validity of individual label names are verified here.
+     */
     create_label(graphname, ag_label_relation, label_expr_kind, rel_kind,
-                 parents);
+                 parents, false);
 
     /*
      * For multiple labels (AND expression), processes each individual labels
@@ -152,7 +175,7 @@ RangeVar *create_label_expr_relations(Oid graphoid, char *graphname,
             if (!label_exists(label_name, graphoid))
             {
                 create_label(graphname, label_name, label_expr_kind,
-                             LABEL_REL_KIND_SINGLE, parents);
+                             LABEL_REL_KIND_SINGLE, parents, false);
             }
 
             /*
@@ -417,6 +440,11 @@ char *label_expr_relname(cypher_label_expr *label_expr, char label_expr_kind)
         {
             char *label_name = strVal(lfirst(lc));
             appendStringInfoString(relname_strinfo, label_name);
+
+            if (lnext(label_expr->label_names, lc))
+            {
+                appendStringInfoChar(relname_strinfo, INTR_REL_SEPERATOR);
+            }
         }
 
         relname = relname_strinfo->data;
