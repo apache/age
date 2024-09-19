@@ -91,7 +91,7 @@ SET search_path = ag_catalog, "$user", public;
   load the Apache Age extension from the PostgreSQL plugins directory located at ```$libdir/plugins/age```. Example:
   ```python.
   ag = age.connect(host='localhost', port=5432, user='dbuser', password='strong_password', 
-                   dbname=postgres, load_from_plugins=True, graph='graph_name')
+                   dbname='postgres', load_from_plugins=True, graph='graph_name')
   ```
 
 ### License
