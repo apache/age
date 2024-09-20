@@ -61,6 +61,11 @@ SELECT drop_label('issue_1305', 'r', false);
 SELECT drop_label('issue_1305', 'r');
 SELECT drop_label('issue_1305', 'n', false);
 SELECT drop_label('issue_1305', 'n');
+
+-- Validate that not only tables are dropped, but labels are also removed via object_access hook.
+SELECT COUNT(*) FROM ag_label WHERE name IN ('n', 'r');
+SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname = 'issue_1305' AND tablename IN ('n', 'r');
+
 SELECT * FROM drop_graph('issue_1305', true);
 
 -- END

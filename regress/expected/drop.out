@@ -115,7 +115,7 @@ NOTICE:  label "issue_1305"."r" has been dropped
 (1 row)
 
 SELECT drop_label('issue_1305', 'r');
-ERROR:  rel_name not found for label "r"
+ERROR:  label "r" does not exist
 SELECT drop_label('issue_1305', 'n', false);
 NOTICE:  label "issue_1305"."n" has been dropped
  drop_label 
@@ -124,7 +124,20 @@ NOTICE:  label "issue_1305"."n" has been dropped
 (1 row)
 
 SELECT drop_label('issue_1305', 'n');
-ERROR:  rel_name not found for label "n"
+ERROR:  label "n" does not exist
+-- Validate that not only tables are dropped, but labels are also removed via object_access hook.
+SELECT COUNT(*) FROM ag_label WHERE name IN ('n', 'r');
+ count 
+-------
+     0
+(1 row)
+
+SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname = 'issue_1305' AND tablename IN ('n', 'r');
+ count 
+-------
+     0
+(1 row)
+
 SELECT * FROM drop_graph('issue_1305', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table issue_1305._ag_label_vertex

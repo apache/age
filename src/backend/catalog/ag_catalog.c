@@ -126,6 +126,9 @@ static void drop_age_extension(DropStmt *stmt)
     /* reset global variables for OIDs */
     clear_global_Oids_AGTYPE();
     clear_global_Oids_GRAPHID();
+
+   /* Restore the object access hook */
+   object_access_hook_init();
 }
 
 /* Check to see if the Utility Command is to drop the AGE Extension. */
