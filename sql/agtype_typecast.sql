@@ -232,6 +232,18 @@ CREATE FUNCTION ag_catalog.age_create_barbell_graph(graph_name name,
     PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.age_create_watts_strogatz_graph(graph_name name, n int, k int, p float8,
+                                                           vertex_label_name name = NULL,
+                                                           vertex_properties agtype = NULL,
+                                                           edge_label_name name = NULL,
+                                                           edge_properties agtype = NULL,
+                                                           bidirectional boolean = true)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.age_prepare_cypher(cstring, cstring)
     RETURNS boolean
     LANGUAGE c
