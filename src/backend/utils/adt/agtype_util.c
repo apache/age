@@ -87,6 +87,8 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
                                               agtype_value *scalar_val);
 static int compare_two_floats_orderability(float8 lhs, float8 rhs);
 static int get_type_sort_priority(enum agtype_value_type type);
+static void pfree_iterator_agtype_value_token(agtype_iterator_token token,
+                                              agtype_value *agtv);
 
 /*
  * Turn an in-memory agtype_value into an agtype for on-disk storage.
@@ -234,6 +236,17 @@ static int get_type_sort_priority(enum agtype_value_type type)
     return -1;
 }
 
+static void pfree_iterator_agtype_value_token(agtype_iterator_token token,
+                                              agtype_value *agtv)
+{
+    if (token == WAGT_KEY ||
+        token == WAGT_VALUE ||
+        token == WAGT_ELEM)
+    {
+        pfree_agtype_value_content(agtv);
+    }
+}
+
 /*
  * BT comparator worker function.  Returns an integer less than, equal to, or
  * greater than zero, indicating whether a is less than, equal to, or greater
@@ -269,6 +282,10 @@ int compare_agtype_containers_orderability(agtype_container *a,
             if (ra == WAGT_DONE)
             {
                 /* Decisively equal */
+
+                /* free the agtype_values associated with the tokens */
+                pfree_iterator_agtype_value_token(ra, &va);
+                pfree_iterator_agtype_value_token(rb, &vb);
                 break;
             }
 
@@ -280,6 +297,10 @@ int compare_agtype_containers_orderability(agtype_container *a,
                  * initially, at the WAGT_BEGIN_ARRAY and WAGT_BEGIN_OBJECT
                  * tokens.
                  */
+
+                /* free the agtype_values associated with the tokens */
+                pfree_iterator_agtype_value_token(ra, &va);
+                pfree_iterator_agtype_value_token(rb, &vb);
                 continue;
             }
 
@@ -367,12 +388,18 @@ int compare_agtype_containers_orderability(agtype_container *a,
             if (ra == WAGT_END_ARRAY || ra == WAGT_END_OBJECT)
             {
                 res = -1;
+                /* free the agtype_values associated with the tokens */
+                pfree_iterator_agtype_value_token(ra, &va);
+                pfree_iterator_agtype_value_token(rb, &vb);
                 break;
             }
             /* If right side is shorter, greater than */
             if (rb == WAGT_END_ARRAY || rb == WAGT_END_OBJECT)
             {
                 res = 1;
+                /* free the agtype_values associated with the tokens */
+                pfree_iterator_agtype_value_token(ra, &va);
+                pfree_iterator_agtype_value_token(rb, &vb);
                 break;
             }
 
@@ -387,7 +414,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
             {
                 rb = agtype_iterator_next(&itb, &vb, false);
             }
-            
+
             Assert(va.type != vb.type);
             Assert(va.type != AGTV_BINARY);
             Assert(vb.type != AGTV_BINARY);
@@ -397,20 +424,23 @@ int compare_agtype_containers_orderability(agtype_container *a,
                       -1 :
                       1;
         }
+        /* free the agtype_values associated with the tokens */
+        pfree_iterator_agtype_value_token(ra, &va);
+        pfree_iterator_agtype_value_token(rb, &vb);
     } while (res == 0);
 
     while (ita != NULL)
     {
         agtype_iterator *i = ita->parent;
 
-        pfree(ita);
+        pfree_if_not_null(ita);
         ita = i;
     }
     while (itb != NULL)
     {
         agtype_iterator *i = itb->parent;
 
-        pfree(itb);
+        pfree_if_not_null(itb);
         itb = i;
     }
 
@@ -527,7 +557,7 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
     }
 
     /* Not found */
-    pfree(result);
+    pfree_if_not_null(result);
     return NULL;
 }
 
@@ -558,6 +588,88 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
                       result);
 
     return result;
+}
+
+/*
+ * Get type of i-th value of an agtype array.
+ */
+enum agtype_value_type get_ith_agtype_value_type(agtype_container *container,
+                                                 uint32 i)
+{
+    enum agtype_value_type type;
+    uint32 nelements;
+    agtentry entry;
+
+    if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+    {
+        ereport(ERROR, (errmsg("container is not an agtype array")));
+    }
+
+    nelements = AGTYPE_CONTAINER_SIZE(container);
+    if (i >= nelements)
+    {
+        ereport(ERROR, (errmsg("index out of bounds")));
+    }
+
+    entry = container->children[i];
+    switch ((entry)&AGTENTRY_TYPEMASK)
+    {
+    case AGTENTRY_IS_STRING:
+        type = AGTV_STRING;
+        break;
+    case AGTENTRY_IS_NUMERIC:
+        type = AGTV_NUMERIC;
+        break;
+    case AGTENTRY_IS_AGTYPE:
+    {
+        char *base_addr;
+        uint32 agt_header;
+        char *base;
+
+        base_addr = (char *)&container->children[nelements];
+        base = base_addr + INTALIGN(get_agtype_offset(container, i));
+        agt_header = *((uint32 *)base);
+
+        switch (agt_header)
+        {
+        case AGT_HEADER_INTEGER:
+            type = AGTV_INTEGER;
+            break;
+        case AGT_HEADER_FLOAT:
+            type = AGTV_FLOAT;
+            break;
+        case AGT_HEADER_VERTEX:
+            type = AGTV_VERTEX;
+            break;
+        case AGT_HEADER_EDGE:
+            type = AGTV_EDGE;
+            break;
+        case AGT_HEADER_PATH:
+            type = AGTV_PATH;
+            break;
+        default:
+            ereport(ERROR, (errmsg("unexpected agt_header type")));
+            break;
+        }
+        break;
+    }
+    case AGTENTRY_IS_BOOL_TRUE:
+        type = AGTV_BOOL;
+        break;
+    case AGTENTRY_IS_BOOL_FALSE:
+        type = AGTV_BOOL;
+        break;
+    case AGTENTRY_IS_NULL:
+        type = AGTV_NULL;
+        break;
+    case AGTENTRY_IS_CONTAINER:
+        type = AGTV_BINARY;
+        break;
+    default:
+        ereport(ERROR, (errmsg("unexpected agtentry type")));
+        break;
+    }
+    return type;
 }
 
 /*
@@ -1105,7 +1217,7 @@ static agtype_iterator *free_and_get_parent(agtype_iterator *it)
 {
     agtype_iterator *v = it->parent;
 
-    pfree(it);
+    pfree_if_not_null(it);
     return v;
 }
 
@@ -1357,9 +1469,9 @@ bool agtype_deep_contains(agtype_iterator **val,
                     contains = agtype_deep_contains(&nestval, &nest_contained, false);
 
                     if (nestval)
-                        pfree(nestval);
+                        pfree_if_not_null(nestval);
                     if (nest_contained)
-                        pfree(nest_contained);
+                        pfree_if_not_null(nest_contained);
                     if (contains)
                         break;
                 }
@@ -2326,11 +2438,11 @@ char *agtype_value_type_to_string(enum agtype_value_type type)
 void pfree_agtype_value(agtype_value* value)
 {
     pfree_agtype_value_content(value);
-    pfree(value);
+    pfree_if_not_null(value);
 }
 
 /*
- * Helper function that recursively deallocates the contents 
+ * Helper function that recursively deallocates the contents
  * of the passed agtype_value only. It does not deallocate
  * `value` itself.
  */
@@ -2344,7 +2456,7 @@ void pfree_agtype_value_content(agtype_value* value)
     switch (value->type)
     {
         case AGTV_NUMERIC:
-            pfree(value->val.numeric);
+            pfree_if_not_null(value->val.numeric);
             break;
 
         case AGTV_STRING:
@@ -2352,6 +2464,7 @@ void pfree_agtype_value_content(agtype_value* value)
              * The char pointer (val.string.val) is not free'd because
              * it is not allocated by an agtype helper function.
              */
+            pfree_if_not_null(value->val.string.val);
             break;
 
         case AGTV_ARRAY:
@@ -2360,7 +2473,7 @@ void pfree_agtype_value_content(agtype_value* value)
             {
                 pfree_agtype_value_content(&value->val.array.elems[i]);
             }
-            pfree(value->val.array.elems);
+            pfree_if_not_null(value->val.array.elems);
             break;
 
         case AGTV_OBJECT:
@@ -2371,11 +2484,11 @@ void pfree_agtype_value_content(agtype_value* value)
                 pfree_agtype_value_content(&value->val.object.pairs[i].key);
                 pfree_agtype_value_content(&value->val.object.pairs[i].value);
             }
-            pfree(value->val.object.pairs);
+            pfree_if_not_null(value->val.object.pairs);
             break;
 
         case AGTV_BINARY:
-            pfree(value->val.binary.data);
+            pfree_if_not_null(value->val.binary.data);
             break;
 
         case AGTV_NULL:

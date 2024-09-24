@@ -1065,6 +1065,52 @@ SELECT agtype_in('null::path');
 SELECT * FROM cypher('expr', $$ RETURN null::path $$) AS r(result agtype);
 SELECT agtype_typecast_path(agtype_in('null'));
 SELECT agtype_typecast_path(null);
+--
+-- Tests for explicit typecast to json
+--
+
+-- Should pass
+SELECT agtype_to_json('{}'::agtype);
+SELECT agtype_to_json('{ "hello": "world" }'::agtype);
+SELECT agtype_to_json('{ "hello": "world" }'::agtype)->>'hello';
+SELECT agtype_to_json('[]'::agtype);
+SELECT agtype_to_json('[1, 2, 3]'::agtype);
+SELECT agtype_to_json(null::agtype);
+
+SELECT cast('{}'::agtype as json);
+SELECT cast('{ "hello": "world" }'::agtype as json);
+SELECT cast('{ "hello": "world" }'::agtype as json)->>'hello';
+SELECT cast('[]'::agtype as json);
+SELECT cast('[1, 2, 3]'::agtype as json);
+SELECT cast('[1, 2, 3]'::agtype as json)->1;
+SELECT cast(null::agtype as json);
+
+SELECT vertex_in_json, vertex_in_json->'id' as id, pg_typeof(vertex_in_json) FROM cypher('type_coercion', $$ MATCH (a) RETURN a $$) AS (vertex_in_json json);
+SELECT edge_in_json, edge_in_json->'id' as id, pg_typeof(edge_in_json) FROM cypher('type_coercion', $$ MATCH ()-[e]->() RETURN e $$) AS (edge_in_json json);
+SELECT vle_in_json, vle_in_json->0 as first_edge, pg_typeof(vle_in_json) FROM cypher('type_coercion', $$ MATCH ()-[e *]->() RETURN e $$) AS (vle_in_json json);
+SELECT *, pg_typeof(props_in_json) FROM cypher('type_coercion', $$ MATCH (a) RETURN properties(a) $$) AS (props_in_json json);
+SELECT path_in_json, path_in_json->0 as first_node FROM cypher('type_coercion', $$ MATCH p=()-[]->() RETURN p $$) AS (path_in_json json);
+SELECT *, pg_typeof(nodes_in_json) FROM cypher('type_coercion', $$ MATCH p=()-[]->() RETURN nodes(p) $$) AS (nodes_in_json json);
+SELECT *, pg_typeof(rels_in_json) FROM cypher('type_coercion', $$ MATCH p=()-[]->() RETURN relationships(p) $$) AS (rels_in_json json);
+
+SELECT cast(result as json) FROM cypher('type_coercion', $$ MATCH (a) RETURN a $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ MATCH ()-[e]-() RETURN e $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ MATCH ()-[e *]->() RETURN e $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ MATCH p=()-[]->() RETURN p $$) AS (result agtype);
+SELECT pg_typeof(cast(result as json)) FROM cypher('type_coercion', $$ MATCH p=()-[]->() RETURN p $$) AS (result agtype);
+
+-- Should fail
+SELECT agtype_to_json('1'::agtype);
+SELECT agtype_to_json('1.111'::agtype);
+SELECT agtype_to_json('true'::agtype);
+SELECT agtype_to_json('false'::agtype);
+SELECT agtype_to_json('1::numeric'::agtype);
+
+SELECT cast(result as json) FROM cypher('type_coercion', $$ RETURN 1 $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ RETURN 1.111 $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ RETURN true $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ RETURN false $$) AS (result agtype);
+SELECT cast(result as json) FROM cypher('type_coercion', $$ RETURN 1::numeric $$) AS (result agtype);
 
 -- test functions
 -- create some vertices and edges
@@ -3445,8 +3491,61 @@ SELECT * FROM cypher('issue_1953', $$ RETURN is_valid_label_name('issue_1953')[0
 SELECT * FROM cypher('issue_1953', $$ RETURN is_valid_label_name('issue_1953')[0..1] $$) AS (result agtype);
 
 --
+-- Issue 1988: How to update a property which is a keyword.
+--
+SELECT * FROM create_graph('issue_1988');
+SELECT * from cypher('issue_1988', $$
+    CREATE (p1:Part {part_num: 123}),
+           (p2:Part {part_num: 345}),
+           (p3:Part {part_num: 456}),
+           (p4:Part {part_num: 789}) $$) as (a agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p) RETURN p $$) as (p agtype);
+
+SELECT * from cypher('issue_1988', $$
+    MATCH (p1:Part {part_num: 123}), (p2:Part {part_num: 345})
+    CREATE (p1)-[u:used_by { quantity: 1 }]->(p2) RETURN p1, u, p2 $$) as (p1 agtype, u agtype, p2 agtype);
+
+-- should fail
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.match = 'xyz' RETURN p $$) as (p agtype);
+
+-- should succeed
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`match` = 'xyz' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`set` = 'xyz' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`delete` = 'xyz' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`merge` = 'xyz' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`create` = 'xyz' RETURN p $$) as (p agtype);
+-- should succeed
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`match` = 'match' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`set` = 'set' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`delete` = 'delete' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`merge` = 'merge' RETURN p $$) as (p agtype);
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p:Part { part_num: 123 }) SET p.`create` = 'create' RETURN p $$) as (p agtype);
+
+SELECT * FROM cypher('issue_1988', $$
+    MATCH (p) RETURN p $$) as (p agtype);
+
+--
+-- Issue 2093: Server crashes when executing SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
+--
+SELECT agtype_access_operator(agtype_in('[null, null]'));
+SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
+
+--
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_1988', true);
 SELECT * FROM drop_graph('issue_1953', true);
 SELECT * FROM drop_graph('expanded_map', true);
 SELECT * FROM drop_graph('issue_1124', true);

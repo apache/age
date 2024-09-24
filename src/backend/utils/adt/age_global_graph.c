@@ -80,6 +80,7 @@ typedef struct GRAPH_global_context
     int64 num_loaded_vertices;     /* number of loaded vertices in this graph */
     int64 num_loaded_edges;        /* number of loaded edges in this graph */
     ListGraphId *vertices;         /* vertices for vertex hashtable cleanup */
+    ListGraphId *edges;            /* edges for edge hashtable cleanup */
     struct GRAPH_global_context *next; /* next graph */
 } GRAPH_global_context;
 
@@ -181,7 +182,7 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     ggctx->vertex_hashtable = hash_create(vhn, VERTEX_HTAB_INITIAL_SIZE,
                                           &vertex_ctl,
                                           HASH_ELEM | HASH_FUNCTION);
-    pfree(vhn);
+    pfree_if_not_null(vhn);
 
     /* initialize the edge hashtable */
     MemSet(&edge_ctl, 0, sizeof(edge_ctl));
@@ -190,7 +191,7 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     edge_ctl.hash = tag_hash;
     ggctx->edge_hashtable = hash_create(ehn, EDGE_HTAB_INITIAL_SIZE, &edge_ctl,
                                         HASH_ELEM | HASH_FUNCTION);
-    pfree(ehn);
+    pfree_if_not_null(ehn);
 }
 
 /* helper function to get a List of all label names for the specified graph */
@@ -300,6 +301,9 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
     ee->start_vertex_id = start_vertex_id;
     ee->end_vertex_id = end_vertex_id;
     ee->edge_label_table_oid = edge_label_table_oid;
+
+    /* we also need to store the edge id for clean up of edge property datums */
+    ggctx->edges = append_graphid(ggctx->edges, edge_id);
 
     /* increment the number of loaded edges */
     ggctx->num_loaded_edges++;
@@ -696,6 +700,7 @@ static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
 {
     GraphIdNode *curr_vertex = NULL;
+    GraphIdNode *curr_edge = NULL;
 
     /* don't do anything if NULL */
     if (ggctx == NULL)
@@ -704,13 +709,13 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
     }
 
     /* free the graph name */
-    pfree(ggctx->graph_name);
+    pfree_if_not_null(ggctx->graph_name);
     ggctx->graph_name = NULL;
 
     ggctx->graph_oid = InvalidOid;
     ggctx->next = NULL;
 
-    /* free the vertex edge lists, starting with the head */
+    /* free the vertex edge lists and properties, starting with the head */
     curr_vertex = peek_stack_head(ggctx->vertices);
     while (curr_vertex != NULL)
     {
@@ -735,6 +740,10 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
             return false;
         }
 
+        /* free the vertex's datumCopy properties */
+        pfree_if_not_null(DatumGetPointer(value->vertex_properties));
+        value->vertex_properties = 0;
+
         /* free the edge list associated with this vertex */
         free_ListGraphId(value->edges_in);
         free_ListGraphId(value->edges_out);
@@ -748,9 +757,46 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
         curr_vertex = next_vertex;
     }
 
+    /* free the edge properties, starting with the head */
+    curr_edge = peek_stack_head(ggctx->edges);
+    while (curr_edge != NULL)
+    {
+        GraphIdNode *next_edge = NULL;
+        edge_entry *value = NULL;
+        bool found = false;
+        graphid edge_id;
+
+        /* get the next edge in the list, if any */
+        next_edge = next_GraphIdNode(curr_edge);
+
+        /* get the current edge id */
+        edge_id = get_graphid(curr_edge);
+
+        /* retrieve the edge entry */
+        value = (edge_entry *)hash_search(ggctx->edge_hashtable,
+                                          (void *)&edge_id, HASH_FIND,
+                                          &found);
+        /* this is bad if it isn't found, but leave that to the caller */
+        if (found == false)
+        {
+            return false;
+        }
+
+        /* free the edge's datumCopy properties */
+        pfree_if_not_null(DatumGetPointer(value->edge_properties));
+        value->edge_properties = 0;
+
+        /* move to the next edge */
+        curr_edge = next_edge;
+    }
+
     /* free the vertices list */
     free_ListGraphId(ggctx->vertices);
     ggctx->vertices = NULL;
+
+    /* free the edges list */
+    free_ListGraphId(ggctx->edges);
+    ggctx->edges = NULL;
 
     /* free the hashtables */
     hash_destroy(ggctx->vertex_hashtable);
@@ -760,7 +806,7 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
     ggctx->edge_hashtable = NULL;
 
     /* free the context */
-    pfree(ggctx);
+    pfree_if_not_null(ggctx);
     ggctx = NULL;
 
     return true;
@@ -836,7 +882,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
                 pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
                 ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
-                                errmsg("missing vertex_entry during free")));
+                                errmsg("missing vertex or edge entry during free")));
             }
         }
         else
@@ -891,6 +937,8 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
 
     /* initialize our vertices list */
     new_ggctx->vertices = NULL;
+    /* initialize our edges list */
+    new_ggctx->edges = NULL;
 
     /* build the hashtables for this graph */
     create_GRAPH_global_hashtables(new_ggctx);
@@ -939,7 +987,7 @@ static bool delete_GRAPH_global_contexts(void)
             pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
             ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
-                            errmsg("missing vertex_entry during free")));
+                            errmsg("missing vertex or edge entry during free")));
         }
 
         /* advance to the next context */
@@ -1261,7 +1309,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
 
     /* free the graph name */
-    pfree(graph_name);
+    pfree_if_not_null(graph_name);
 
     /* get the id */
     agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_vertex, "id");
@@ -1367,7 +1415,7 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
 
     /* free the graph name */
-    pfree(graph_name);
+    pfree_if_not_null(graph_name);
 
     /* zero the state */
     memset(&result, 0, sizeof(agtype_in_state));

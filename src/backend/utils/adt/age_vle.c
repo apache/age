@@ -319,7 +319,7 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
                                                 EDGE_STATE_HTAB_INITIAL_SIZE,
                                                 &edge_state_ctl,
                                                 HASH_ELEM | HASH_FUNCTION);
-    pfree(eshn);
+    pfree_if_not_null(eshn);
 }
 
 /*
@@ -433,14 +433,14 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     /* free the stored graph name */
     if (vlelctx->graph_name != NULL)
     {
-        pfree(vlelctx->graph_name);
+        pfree_if_not_null(vlelctx->graph_name);
         vlelctx->graph_name = NULL;
     }
 
     /* free the stored edge label name */
     if (vlelctx->edge_label_name != NULL)
     {
-        pfree(vlelctx->edge_label_name);
+        pfree_if_not_null(vlelctx->edge_label_name);
         vlelctx->edge_label_name = NULL;
     }
 
@@ -462,15 +462,15 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     }
 
     /* free the containers */
-    pfree(vlelctx->dfs_vertex_stack);
-    pfree(vlelctx->dfs_edge_stack);
-    pfree(vlelctx->dfs_path_stack);
+    pfree_if_not_null(vlelctx->dfs_vertex_stack);
+    pfree_if_not_null(vlelctx->dfs_edge_stack);
+    pfree_if_not_null(vlelctx->dfs_path_stack);
     vlelctx->dfs_vertex_stack = NULL;
     vlelctx->dfs_edge_stack = NULL;
     vlelctx->dfs_path_stack = NULL;
 
     /* and finally the context itself */
-    pfree(vlelctx);
+    pfree_if_not_null(vlelctx);
     vlelctx = NULL;
 }
 
@@ -1878,8 +1878,19 @@ Datum age_vle(PG_FUNCTION_ARGS)
  */
 agtype *agt_materialize_vle_path(agtype *agt_arg_vpc)
 {
-    /* convert the agtype_value to agtype and return it */
-    return agtype_value_to_agtype(agtv_materialize_vle_path(agt_arg_vpc));
+    agtype *agt_path = NULL;
+    agtype_value *agtv_path = NULL;
+
+    /* get the path */
+    agtv_path = agtv_materialize_vle_path(agt_arg_vpc);
+
+    /* convert  agtype_value to agtype */
+    agt_path = agtype_value_to_agtype(agtv_path);
+
+    /* free in memory path */
+    pfree_agtype_value(agtv_path);
+
+    return agt_path;
 }
 
 /*
@@ -1939,6 +1950,8 @@ Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
     left_array_size = left_path->graphid_array_size;
     left_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(left_path);
 
+    PG_FREE_IF_COPY(agt_arg_vpc, 0);
+
     agt_arg_vpc = AG_GET_ARG_AGTYPE_P(1);
 
     if (!AGT_ROOT_IS_BINARY(agt_arg_vpc) ||
@@ -1952,6 +1965,8 @@ Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
     /* cast argument as a VLE_Path_Container and extract graphid array */
     right_path = (VLE_path_container *)agt_arg_vpc;
     right_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(right_path);
+
+    PG_FREE_IF_COPY(agt_arg_vpc, 1);
 
     if (left_array[left_array_size - 1] != right_array[0])
     {
@@ -2132,7 +2147,6 @@ agtype_value *agtv_materialize_vle_edges(agtype *agt_arg_vpc)
     /* build the AGTV_ARRAY of edges from the VLE_path_container */
     agtv_array = build_edge_list(vpc);
 
-    /* convert the agtype_value to agtype and return it */
     return agtv_array;
 
 }

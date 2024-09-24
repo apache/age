@@ -25,6 +25,9 @@
 #include "utils/load/age_load.h"
 
 static agtype_value *csv_value_to_agtype_value(char *csv_val);
+static Oid get_or_create_graph(const Name graph_name);
+static int32 get_or_create_label(Oid graph_oid, char *graph_name,
+                                 char *label_name, char label_kind);
 
 agtype *create_empty_agtype(void)
 {
@@ -111,9 +114,6 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                    WAGT_VALUE,
                                    value_agtype);
 
-    pfree_agtype_value(key_agtype);
-    pfree_agtype_value(value_agtype);
-
     for (i = 0; i<fields_len; i++)
     {
         key_agtype = string_to_agtype_value(header[i]);
@@ -133,15 +133,15 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
-
-        pfree_agtype_value(key_agtype);
-        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
+    /* serialize it */
     out = agtype_value_to_agtype(result.res);
+
+    /* now that it is serialized we can free the in memory structure */
     pfree_agtype_in_state(&result);
 
     return out;
@@ -186,15 +186,15 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
         result.res = push_agtype_value(&result.parse_state,
                                        WAGT_VALUE,
                                        value_agtype);
-
-        pfree_agtype_value(key_agtype);
-        pfree_agtype_value(value_agtype);
     }
 
     result.res = push_agtype_value(&result.parse_state,
                                    WAGT_END_OBJECT, NULL);
 
+    /* serialize it */
     out = agtype_value_to_agtype(result.res);
+
+    /* now that it is serialized we can free the in memory structure */
     pfree_agtype_in_state(&result);
 
     return out;
@@ -262,6 +262,34 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     CommandCounterIncrement();
 }
 
+void insert_batch(batch_insert_state *batch_state, char *label_name,
+                  Oid graph_oid)
+{
+    Relation label_relation;
+    BulkInsertState bistate;
+    Oid relid;
+
+    // Get the relation OID
+    relid = get_label_relation(label_name, graph_oid);
+
+    // Open the relation
+    label_relation = table_open(relid, RowExclusiveLock);
+
+    // Prepare the BulkInsertState
+    bistate = GetBulkInsertState();
+
+    // Perform the bulk insert
+    heap_multi_insert(label_relation, batch_state->slots,
+                      batch_state->num_tuples, GetCurrentCommandId(true),
+                      0, bistate);
+
+    // Clean up
+    FreeBulkInsertState(bistate);
+    table_close(label_relation, RowExclusiveLock);
+
+    CommandCounterIncrement();
+}
+
 PG_FUNCTION_INFO_V1(load_labels_from_file);
 Datum load_labels_from_file(PG_FUNCTION_ARGS)
 {
@@ -300,19 +328,24 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     id_field_exists = PG_GETARG_BOOL(3);
     load_as_agtype = PG_GETARG_BOOL(4);
 
-
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
+
+    if (strcmp(label_name_str, "") == 0)
+    {
+        label_name_str = AG_DEFAULT_LABEL_VERTEX;
+    }
+
     file_path_str = text_to_cstring(file_path);
 
-    graph_oid = get_graph_oid(graph_name_str);
-    label_id = get_label_id(label_name_str, graph_oid);
+    graph_oid = get_or_create_graph(graph_name);
+    label_id = get_or_create_label(graph_oid, graph_name_str,
+                                   label_name_str, LABEL_KIND_VERTEX);
 
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
                                 label_name_str, label_id, id_field_exists,
                                 load_as_agtype);
     PG_RETURN_VOID();
-
 }
 
 PG_FUNCTION_INFO_V1(load_edges_from_file);
@@ -354,13 +387,91 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
+
+    if (strcmp(label_name_str, "") == 0)
+    {
+        label_name_str = AG_DEFAULT_LABEL_EDGE;
+    }
+
     file_path_str = text_to_cstring(file_path);
 
-    graph_oid = get_graph_oid(graph_name_str);
-    label_id = get_label_id(label_name_str, graph_oid);
+    graph_oid = get_or_create_graph(graph_name);
+    label_id = get_or_create_label(graph_oid, graph_name_str,
+                                   label_name_str, LABEL_KIND_EDGE);
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
                                label_name_str, label_id, load_as_agtype);
     PG_RETURN_VOID();
+}
 
+/*
+ * Helper function to create a graph if it does not exist.
+ * Just returns Oid of the graph if it already exists.
+ */
+static Oid get_or_create_graph(const Name graph_name)
+{
+    Oid graph_oid;
+    char *graph_name_str;
+
+    graph_name_str = NameStr(*graph_name);
+    graph_oid = get_graph_oid(graph_name_str);
+
+    if (OidIsValid(graph_oid))
+    {
+        return graph_oid;
+    }
+
+    graph_oid = create_graph_internal(graph_name);
+    ereport(NOTICE,
+            (errmsg("graph \"%s\" has been created", NameStr(*graph_name))));
+    
+    return graph_oid;
+}
+
+/*
+ * Helper function to create a label if it does not exist.
+ * Just returns label_id of the label if it already exists.
+ */
+static int32 get_or_create_label(Oid graph_oid, char *graph_name,
+                                 char *label_name, char label_kind)
+{
+    int32 label_id;
+
+    label_id = get_label_id(label_name, graph_oid);
+
+    /* Check if label exists */
+    if (label_id_is_valid(label_id))
+    {
+        char *label_kind_full = (label_kind == LABEL_KIND_VERTEX)
+                                ? "vertex" : "edge";
+        char opposite_label_kind = (label_kind == LABEL_KIND_VERTEX)
+                                    ? LABEL_KIND_EDGE : LABEL_KIND_VERTEX;
+
+        /* If it exists, but as another label_kind, throw an error */
+        if (get_label_kind(label_name, graph_oid) == opposite_label_kind)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("label \"%s\" already exists as %s label",
+                            label_name, label_kind_full)));
+        }
+    }
+    else
+    {
+        /* Create a label */
+        RangeVar *rv;
+        List *parent;
+        char *default_label = (label_kind == LABEL_KIND_VERTEX)
+                               ? AG_DEFAULT_LABEL_VERTEX : AG_DEFAULT_LABEL_EDGE;
+        rv = get_label_range_var(graph_name, graph_oid, default_label);
+        parent = list_make1(rv);
+
+        create_label(graph_name, label_name, label_kind, parent);
+        label_id = get_label_id(label_name, graph_oid);
+
+        ereport(NOTICE,
+                (errmsg("VLabel \"%s\" has been created", label_name)));
+    }
+
+    return label_id;
 }
