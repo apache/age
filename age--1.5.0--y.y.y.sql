@@ -138,3 +138,15 @@ AS 'MODULE_PATHNAME';
 
 CREATE CAST (agtype AS json)
     WITH FUNCTION ag_catalog.agtype_to_json(agtype);
+
+CREATE FUNCTION ag_catalog.age_create_watts_strogatz_graph(graph_name name, n int, k int, p float8,
+                                                           vertex_label_name name = NULL,
+                                                           vertex_properties agtype = NULL,
+                                                           edge_label_name name = NULL,
+                                                           edge_properties agtype = NULL,
+                                                           bidirectional boolean = true)
+RETURNS void
+LANGUAGE c
+CALLED ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
