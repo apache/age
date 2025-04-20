@@ -24,6 +24,8 @@
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 
+#include "executor/executor.h"
+#include "pg_config.h"
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
 static TupleTableSlot *exec_cypher_set(CustomScanState *node);
@@ -49,6 +51,13 @@ const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       NULL,
                                                       NULL};
 
+#if PG_VERSION_NUM >= 18000 
+#define TUPLE_DESC_ATTR_TYPE_ID TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, i)->atttypid
+#define TUPLE_DESC_ATTR_TYPE_ID_ENTITY TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, update_item->entity_position - 1)->atttypid
+#else
+#define TUPLE_DESC_ATTR_TYPE_ID scanTupleSlot->tts_tupleDescriptor->attrs[i]->atttypid
+#define TUPLE_DESC_ATTR_TYPE_ID_ENTITY scanTupleSlot->tts_tupleDescriptor->attrs[update_item->entity_position - 1]->atttypid
+#endif
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                              int eflags)
 {
@@ -310,7 +319,8 @@ static void update_all_paths(CustomScanState *node, graphid id,
         agtype_value *original_entity_value;
 
         /* skip nulls */
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[i].atttypid != AGTYPEOID)
+        // Starting postgresql version 16, tupleDescriptor->attrs access is not recommended. Instead, we must use tupleDescAttr which handles both compact_attr and attr access.
+        if (TUPLE_DESC_ATTR_TYPE_ID != AGTYPEOID)
         {
             continue;
         }
@@ -414,7 +424,8 @@ static void process_update_list(CustomScanState *node)
             continue;
         }
 
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[update_item->entity_position -1].atttypid != AGTYPEOID)
+        // Starting from postgresql 16, we need to use TupleDescAttr for accessing tupleDescriptor because attr is now no longer present under tupleDescriptor and is now compact_attr
+        if (TUPLE_DESC_ATTR_TYPE_ID_ENTITY != AGTYPEOID)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

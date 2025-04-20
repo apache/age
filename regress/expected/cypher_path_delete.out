@@ -1,0 +1,87 @@
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('cypher_path');
+NOTICE:  graph "cypher_path" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Create vertex
+SELECT * FROM cypher('cypher_path', $$
+                CREATE (:label_name_1 {i: 0})
+$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- Create a path to test our create, set and delete on.
+SELECT * 
+FROM cypher('cypher_path', $$
+    CREATE p = (andres {name:'Andres'})-[:WORKS_AT]->(neo)<-[:WORKS_AT]-(michael {name:'Michael'})-[:WORKS_WITH]->(jordan {name: 'Jordan'})
+    RETURN p
+$$) as (p agtype);
+                                                                                                                                                                                                                                                                                                                                                           p                                                                                                                                                                                                                                                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"name": "Andres"}}::vertex, {"id": 1125899906842626, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge, {"id": 281474976710658, "label": "", "properties": {}}::vertex, {"id": 1125899906842625, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710659, "label": "", "properties": {"name": "Michael"}}::vertex, {"id": 1407374883553281, "label": "WORKS_WITH", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710660, "label": "", "properties": {"name": "Jordan"}}::vertex]::path
+(1 row)
+
+-- Now delete one of the relationships nodes and the output should be return unchanged.
+SELECT *
+FROM cypher('cypher_path', $$
+    MATCH p = ()-[]->()<-[]-()-[]->(j)
+    DETACH DELETE j
+    RETURN p
+$$) AS (a agtype);
+                                                                                                                                                                                                                                                                                                                                                           a                                                                                                                                                                                                                                                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"name": "Andres"}}::vertex, {"id": 1125899906842626, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge, {"id": 281474976710658, "label": "", "properties": {}}::vertex, {"id": 1125899906842625, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710659, "label": "", "properties": {"name": "Michael"}}::vertex, {"id": 1407374883553281, "label": "WORKS_WITH", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710660, "label": "", "properties": {"name": "Jordan"}}::vertex]::path
+(1 row)
+
+-- Now delete one of the edges and the path should be updated but output is still unchanged
+SELECT *
+FROM cypher('cypher_path', $$
+    MATCH p = (andres {name: 'Andres'})-[r:WORKS_AT]->(neo)<-[g:WORKS_AT]-(michael {name: 'Michael'})
+    DELETE g
+    RETURN p
+$$) as (a agtype);
+                                                                                                                                                                                                                                                   a                                                                                                                                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "", "properties": {"name": "Andres"}}::vertex, {"id": 1125899906842626, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge, {"id": 281474976710658, "label": "", "properties": {}}::vertex, {"id": 1125899906842625, "label": "WORKS_AT", "end_id": 281474976710658, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710659, "label": "", "properties": {"name": "Michael"}}::vertex]::path
+(1 row)
+
+-- Create a path to test our create, set and delete on.
+SELECT * 
+FROM cypher('cypher_path', $$
+    CREATE p = (andres {name:'Andres'})-[:CHILLS_AT]->(neo)<-[:CHILLS_SOME_MORE]-(michael {name:'Michael'}) 
+    RETURN p
+$$) as (p agtype);
+                                                                                                                                                                                                                                                       p                                                                                                                                                                                                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710661, "label": "", "properties": {"name": "Andres"}}::vertex, {"id": 1688849860263937, "label": "CHILLS_AT", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge, {"id": 281474976710662, "label": "", "properties": {}}::vertex, {"id": 1970324836974593, "label": "CHILLS_SOME_MORE", "end_id": 281474976710662, "start_id": 281474976710663, "properties": {}}::edge, {"id": 281474976710663, "label": "", "properties": {"name": "Michael"}}::vertex]::path
+(1 row)
+
+-- Attempt to delete anything other than vertex or edge. This should fail
+SELECT *
+FROM cypher('cypher_path', $$
+    MATCH p = (andres {name: 'Andres'})-[]->()
+    DELETE p
+    RETURN p
+$$) as (a agtype);
+ERROR:  DELETE clause can only delete vertices and edges
+-- Cleanup
+SELECT drop_graph('cypher_path', true);
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to table cypher_path._ag_label_vertex
+drop cascades to table cypher_path._ag_label_edge
+drop cascades to table cypher_path.label_name_1
+drop cascades to table cypher_path."WORKS_AT"
+drop cascades to table cypher_path."WORKS_WITH"
+drop cascades to table cypher_path."CHILLS_AT"
+drop cascades to table cypher_path."CHILLS_SOME_MORE"
+NOTICE:  graph "cypher_path" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

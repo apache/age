@@ -112,7 +112,8 @@ REGRESS = scan \
           name_validation \
           jsonb_operators \
           list_comprehension \
-          map_projection
+          map_projection \
+          cypher_path_delete
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)
