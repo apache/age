@@ -119,10 +119,6 @@ typedef struct cypher_unwind
 {
     ExtensibleNode extensible;
     ResTarget *target;
-
-    /* for list comprehension */
-    Node *where;
-    Node *collect;
 } cypher_unwind;
 
 typedef struct cypher_merge

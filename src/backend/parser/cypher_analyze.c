@@ -932,13 +932,6 @@ bool expr_contains_node(cypher_expression_condition is_expr, Node *expr)
         }
         if (is_ag_node(expr, cypher_unwind))
         {
-            cypher_unwind* lc = (cypher_unwind *)expr;
-
-            if (expr_contains_node(is_expr, lc->where) ||
-                expr_contains_node(is_expr, lc->collect))
-            {
-                return true;
-            }
             break;
         }
 

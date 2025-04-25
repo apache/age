@@ -98,8 +98,6 @@ static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
 static ArrayExpr *make_agtype_array_expr(List *args);
 static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
                                                   ColumnRef *cr);
-static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
-                                                 cypher_unwind *expr);
 static Node *transform_external_ext_FuncCall(cypher_parsestate *cpstate,
                                              FuncCall *fn, List *targs,
                                              Form_pg_proc procform,
@@ -194,66 +192,39 @@ static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
     case T_CoalesceExpr:
         return transform_CoalesceExpr(cpstate, (CoalesceExpr *) expr);
     case T_ExtensibleNode:
-    {
         if (is_ag_node(expr, cypher_bool_const))
-        {
             return transform_cypher_bool_const(cpstate,
                                                (cypher_bool_const *)expr);
-        }
         if (is_ag_node(expr, cypher_integer_const))
-        {
             return transform_cypher_integer_const(cpstate,
                                                   (cypher_integer_const *)expr);
-        }
         if (is_ag_node(expr, cypher_param))
-        {
             return transform_cypher_param(cpstate, (cypher_param *)expr);
-        }
         if (is_ag_node(expr, cypher_map))
-        {
             return transform_cypher_map(cpstate, (cypher_map *)expr);
-        }
         if (is_ag_node(expr, cypher_map_projection))
         {
             return transform_cypher_map_projection(
                 cpstate, (cypher_map_projection *)expr);
         }
         if (is_ag_node(expr, cypher_list))
-        {
             return transform_cypher_list(cpstate, (cypher_list *)expr);
-        }
         if (is_ag_node(expr, cypher_string_match))
-        {
             return transform_cypher_string_match(cpstate,
                                                  (cypher_string_match *)expr);
-        }
         if (is_ag_node(expr, cypher_typecast))
-        {
             return transform_cypher_typecast(cpstate,
                                              (cypher_typecast *)expr);
-        }
         if (is_ag_node(expr, cypher_comparison_aexpr))
-        {
             return transform_cypher_comparison_aexpr_OP(cpstate,
                                              (cypher_comparison_aexpr *)expr);
-        }
         if (is_ag_node(expr, cypher_comparison_boolexpr))
-        {
             return transform_cypher_comparison_boolexpr(cpstate,
                                              (cypher_comparison_boolexpr *)expr);
-        }
-        if (is_ag_node(expr, cypher_unwind))
-        {
-            return transform_cypher_list_comprehension(cpstate,
-                                                       (cypher_unwind *) expr);
-        }
-
         ereport(ERROR,
                 (errmsg_internal("unrecognized ExtensibleNode: %s",
                                  ((ExtensibleNode *)expr)->extnodename)));
-
         return NULL;
-    }
     case T_FuncCall:
         return transform_FuncCall(cpstate, (FuncCall *)expr);
     case T_SubLink:
@@ -391,26 +362,8 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 Assert(IsA(field1, String));
                 colname = strVal(field1);
 
-                if (cpstate->p_list_comp &&
-                    (pstate->p_expr_kind == EXPR_KIND_WHERE ||
-                     pstate->p_expr_kind == EXPR_KIND_SELECT_TARGET) &&
-                     list_length(pstate->p_namespace) > 0)
-                {
-                    /*
-                     * Just scan through the last pnsi(that is for list comp)
-                     * to find the column.
-                     */
-                    node = scanNSItemForColumn(pstate,
-                                               llast(pstate->p_namespace),
-                                               0, colname, cref->location);
-                }
-                else
-                {
-                    /* Try to identify as an unqualified column */
-                    node = colNameToVar(pstate, colname, false,
-                                        cref->location);
-                }
-
+                /* Try to identify as an unqualified column */
+                node = colNameToVar(pstate, colname, false, cref->location);
                 if (node != NULL)
                 {
                         break;
@@ -2442,32 +2395,4 @@ static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink)
         elog(ERROR, "unsupported SubLink type");
 
     return result;
-}
-
-static Node *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
-                                                 cypher_unwind *unwind)
-{
-    cypher_clause cc;
-    Node* expr;
-    ParseNamespaceItem *pnsi;
-    ParseState *pstate = (ParseState *)cpstate;
-
-    cpstate->p_list_comp = true;
-    pstate->p_lateral_active = true;
-
-    cc.prev = NULL;
-    cc.next = NULL;
-    cc.self = (Node *)unwind;
-
-    pnsi = transform_cypher_clause_as_subquery(cpstate,
-                                               transform_cypher_clause,
-                                               &cc, NULL, true);
-
-    expr = transform_cypher_expr(cpstate, unwind->collect,
-                                 EXPR_KIND_SELECT_TARGET);
-
-    pnsi->p_cols_visible = false;
-    pstate->p_lateral_active = false;
-
-    return expr;
 }

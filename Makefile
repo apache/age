@@ -111,7 +111,6 @@ REGRESS = scan \
           graph_generation \
           name_validation \
           jsonb_operators \
-          list_comprehension \
           map_projection
 
 ifneq ($(EXTRA_TESTS),)
