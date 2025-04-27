@@ -53,7 +53,7 @@ TargetEntry *transform_cypher_item(cypher_parsestate *cpstate, Node *node,
                            colname, resjunk);
 }
 
-// see transformTargetList()
+/* see transformTargetList() */
 List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                                  List **groupClause, ParseExprKind expr_kind)
 {
@@ -96,7 +96,7 @@ List *transform_cypher_item_list(cypher_parsestate *cpstate, List *item_list,
                 }
             }
         }
-        /* clear the exprHasAgg flag to check transform for an aggregate */
+        /* Clear the exprHasAgg flag to check transform for an aggregate */
         cpstate->exprHasAgg = false;
 
         /* transform the item */

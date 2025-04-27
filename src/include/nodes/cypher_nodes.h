@@ -216,6 +216,15 @@ typedef struct cypher_map_projection
     int location;
 } cypher_map_projection;
 
+ typedef struct cypher_list_comprehension
+ {
+    ExtensibleNode extensible;
+    char *varname;
+    Node *expr;
+    Node *where;
+    Node *mapping_expr;
+ } cypher_list_comprehension;
+
 typedef enum cypher_map_projection_element_type
 {
     PROPERTY_SELECTOR = 0,  /* map_var { .key } */

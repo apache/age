@@ -945,6 +945,19 @@ bool expr_contains_node(cypher_expression_condition is_expr, Node *expr)
             break;
         }
 
+        if (is_ag_node(expr, cypher_list_comprehension))
+        {
+            cypher_list_comprehension *lc = (cypher_list_comprehension *)expr;
+
+            if (expr_contains_node(is_expr, lc->expr) ||
+                expr_contains_node(is_expr, lc->where) ||
+                expr_contains_node(is_expr, lc->mapping_expr))
+            {
+                return true;
+            }
+            break;
+        }
+
         ereport(ERROR,
                 (errmsg_internal("unrecognized ExtensibleNode: %s",
                                  ((ExtensibleNode *)expr)->extnodename)));

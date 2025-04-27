@@ -50,6 +50,7 @@ typedef enum ag_node_tag
     cypher_map_projection_t,
     cypher_map_projection_element_t,
     cypher_list_t,
+    cypher_list_comprehension_t,
     /* comparison expression */
     cypher_comparison_aexpr_t,
     cypher_comparison_boolexpr_t,

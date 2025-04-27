@@ -178,6 +178,18 @@ void out_cypher_unwind(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(target);
 }
 
+/* serialization function for the cypher_list_comprehension ExtensibleNode. */
+void out_cypher_list_comprehension(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_list_comprehension);
+
+    WRITE_STRING_FIELD(varname);
+    WRITE_NODE_FIELD(expr);
+    WRITE_NODE_FIELD(where);
+    WRITE_NODE_FIELD(mapping_expr);
+}
+
+
 /* serialization function for the cypher_delete ExtensibleNode. */
 void out_cypher_merge(StringInfo str, const ExtensibleNode *node)
 {

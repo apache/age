@@ -21,6 +21,7 @@
 #include "postgres.h"
 
 #include "nodes/makefuncs.h"
+#include "nodes/nodeFuncs.h"
 #include "parser/parser.h"
 
 #include "parser/cypher_gram.h"
@@ -121,6 +122,9 @@
 
 /* UNWIND clause */
 %type <node> unwind
+
+/* list comprehension */
+%type <node> list_comprehension
 
 /* SET and REMOVE clause */
 %type <node> set set_item remove remove_item
@@ -258,6 +262,12 @@ static bool is_A_Expr_a_comparison_operation(cypher_comparison_aexpr *a);
 static Node *build_comparison_expression(Node *left_grammar_node,
                                          Node *right_grammar_node,
                                          char *opr_name, int location);
+
+/* list_comprehension */
+static Node *build_list_comprehension_node(Node *var, Node *expr,
+                                           Node *where, Node *mapping_expr,
+                                           int location);
+
 %}
 %%
 
@@ -2050,6 +2060,7 @@ expr_literal:
     | map
     | map_projection
     | list
+    | list_comprehension
     ;
 
 map:
@@ -2168,6 +2179,39 @@ list:
             n->elems = $2;
 
             $$ = (Node *)n;
+        }
+    ;
+
+/*
+ * This grammar rule is generic to some extent. It can
+ * evaluate to either IN operator or list comprehension.
+ * This avoids shift/reduce errors between the two rules.
+ */
+list_comprehension:
+    '[' expr IN expr ']'
+        {
+            /*
+             * If the first expr is not a ColumnRef(variable), then the rule
+             * should evaluate as an IN operator.
+             */
+            if (!IsA($2, ColumnRef))
+            {
+                $$ = (Node *)makeSimpleA_Expr(AEXPR_IN, "=", $2, $4, @3);
+            }
+
+            $$ = build_list_comprehension_node($2, $4, NULL, NULL, @1);
+        }
+    | '[' expr IN expr WHERE expr ']'
+        {
+            $$ = build_list_comprehension_node($2, $4, $6, NULL, @1);
+        }
+    | '[' expr IN expr '|' expr ']'
+        {
+            $$ = build_list_comprehension_node($2, $4, NULL, $6, @1);
+        }
+    | '[' expr IN expr WHERE expr '|' expr ']'
+        {
+            $$ = build_list_comprehension_node($2, $4, $6, $8, @1);
         }
     ;
 
@@ -2818,6 +2862,10 @@ static FuncCall *node_to_agtype(Node * fnode, char *type, int location)
     {
         funcname = lappend(funcname, makeString("bool_to_agtype"));
     }
+    else if (pg_strcasecmp(type, "agtype[]") == 0)
+    {
+        funcname = lappend(funcname, makeString("agtype_array_to_agtype"));
+    }
     else
     {
         ereport(ERROR,
@@ -3210,4 +3258,53 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
                                     cr_location);
     /* return the VLE relation node */
     return cr;
+}
+
+/* helper function to build a list_comprehension grammar node */
+static Node *build_list_comprehension_node(Node *var, Node *expr,
+                                           Node *where, Node *mapping_expr,
+                                           int location)
+{
+    SubLink *sub;
+    String *val;
+    ColumnRef *cref = NULL;
+    cypher_list_comprehension *list_comp = NULL;
+
+    if (!IsA(var, ColumnRef))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("Syntax error at or near IN")));
+    }
+
+    cref = (ColumnRef *)var;
+    val = linitial(cref->fields);
+    if (!IsA(val, String))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("Invalid list comprehension variable name")));
+    }
+
+    /* build the list comprehension node */
+    list_comp = make_ag_node(cypher_list_comprehension);
+    list_comp->varname = val->sval;
+    list_comp->expr = expr;
+    list_comp->where = where;
+    list_comp->mapping_expr = (mapping_expr != NULL) ? mapping_expr :
+                                                       (Node *) cref;
+
+    /*
+     * Build an ARRAY sublink and attach list_comp as sub-select,
+     * it will be transformed in to query tree by us and reattached for 
+     * pg to process.
+     */
+    sub = makeNode(SubLink);
+    sub->subLinkType = ARRAY_SUBLINK;
+    sub->subLinkId = 0;
+    sub->testexpr = NULL;
+    sub->subselect = (Node *)list_comp;
+    sub->location = location;
+
+    return (Node *) node_to_agtype((Node *)sub, "agtype[]", location);
 }

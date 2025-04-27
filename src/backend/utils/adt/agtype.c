@@ -1838,6 +1838,19 @@ static void array_to_agtype_internal(Datum array, agtype_in_state *result)
     pfree_if_not_null(nulls);
 }
 
+PG_FUNCTION_INFO_V1(agtype_array_to_agtype);
+Datum agtype_array_to_agtype(PG_FUNCTION_ARGS)
+{
+    agtype_in_state result;
+
+    result.parse_state = NULL;
+    result.res = NULL;
+
+    array_to_agtype_internal(PG_GETARG_DATUM(0), &result);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+}
+
 /*
  * Turn a composite / record into agtype.
  */
@@ -11926,7 +11939,7 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     agtype_value v;
     agtype_iterator_token r;
 
-    // check for null
+    /* check for a NULL expr */
     if (PG_ARGISNULL(0))
     {
         PG_RETURN_NULL();
