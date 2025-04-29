@@ -707,6 +707,18 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10
 ERROR:  Invalid use of aggregation in this context
 LINE 1: ... $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = coll...
                                                              ^
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list = [u IN [1, u]] RETURN u $$) AS (u agtype);
+ u 
+---
+(0 rows)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list IN [u IN [1, u.list]] RETURN u $$) AS (u agtype);
+                                                                               u                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+ {"id": 281474976710668, "label": "", "properties": {"b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
+(2 rows)
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 4 other objects

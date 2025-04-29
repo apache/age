@@ -171,6 +171,8 @@ SELECT * FROM cypher('list_comprehension', $$ CREATE (u {list: [0, 2, 4, 6, 8, 1
 SELECT * FROM cypher('list_comprehension', $$ WITH [1, 2, 3] AS u UNWIND collect(u) AS v RETURN v $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WITH u, collect(u.list) AS v SET u += {b: [u IN range(0, 5)]} SET u.c = [u IN v[0]] RETURN u $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = collect(u.list) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list = [u IN [1, u]] RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list IN [u IN [1, u.list]] RETURN u $$) AS (u agtype);
 
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);

@@ -68,7 +68,6 @@ typedef struct cypher_with
 {
     ExtensibleNode extensible;
     bool distinct;
-    bool subquery_intermediate; /* flag that denotes a subquery node */
     List *items; /* a list of ResTarget's */
     List *order_by;
     Node *skip;

@@ -23,13 +23,14 @@
 
 #include "optimizer/cypher_createplan.h"
 #include "optimizer/cypher_pathnode.h"
+#include "parser/cypher_analyze.h"
 #include "executor/cypher_utils.h"
 #include "optimizer/subselect.h"
 #include "nodes/makefuncs.h"
 
 static Const *convert_sublink_to_subplan(PlannerInfo *root,
                                          List *custom_private);
-static bool has_sublink(Node *node);
+static bool expr_has_sublink(Node *node, void *context);
 
 const CustomPathMethods cypher_create_path_methods = {
     CREATE_PATH_NAME, plan_cypher_create_path, NULL};
@@ -236,12 +237,10 @@ static Const *convert_sublink_to_subplan(PlannerInfo *root, List *custom_private
     {
         cypher_target_node *node = (cypher_target_node *)lfirst(lc);
         Node *prop_expr = (Node *) node->prop_expr;
-        if (prop_expr != NULL)
+
+        if (expr_has_sublink(prop_expr, NULL))
         {
-            if (has_sublink(prop_expr))
-            {
-                node->prop_expr = (Expr *) SS_process_sublinks(root, prop_expr, false);
-            }
+            node->prop_expr = (Expr *) SS_process_sublinks(root, prop_expr, false);
         }
     }
 
@@ -252,26 +251,20 @@ static Const *convert_sublink_to_subplan(PlannerInfo *root, List *custom_private
                      PointerGetDatum(str->data), false, false);
 }
 
-/* Helper function to check if the node is SubLink or has it embedded */
-static bool has_sublink(Node *node)
+/*
+ * Helper function to check if the node has a sublink.
+ */
+static bool expr_has_sublink(Node *node, void *context)
 {
     if (node == NULL)
-        return false;
-
-    if (IsA(node, SubLink))
-        return true;
-
-    if (IsA(node, FuncExpr))
     {
-        FuncExpr *fe = (FuncExpr *) node;
-        ListCell *lc;
-
-        foreach(lc, fe->args)
-        {
-            if (has_sublink((Node *) lfirst(lc)))
-                return true;
-        }
+        return false;
     }
 
-    return false;
+    if (IsA(node, SubLink))
+    {
+        return true;
+    }
+
+    return cypher_expr_tree_walker(node, expr_has_sublink, context);
 }

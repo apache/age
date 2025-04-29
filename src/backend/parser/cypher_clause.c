@@ -343,6 +343,7 @@ static void setNamespaceLateralState(List *namespace, bool lateral_only,
 static bool isa_special_VLE_case(cypher_path *path);
 
 static ParseNamespaceItem *find_pnsi(cypher_parsestate *cpstate, char *varname);
+static bool has_list_comp_or_subquery(Node *expr, void *context);
 
 /*
  * transform a cypher_clause
@@ -449,23 +450,6 @@ static cypher_clause *make_cypher_clause(List *stmt)
         next->next = NULL;
         next->self = lfirst(lc);
         next->prev = clause;
-
-        /* check for subqueries in match */
-        if (is_ag_node(next->self, cypher_match))
-        {
-            cypher_match *match = (cypher_match *)next->self;
-
-            if (match->where != NULL && expr_contains_node(expr_has_subquery, match->where))
-            {
-               /* advance the clause iterator to the intermediate clause position */
-               clause = build_subquery_node(next);
-
-               /* set the next of the match to the where_container_clause */
-               match->where = NULL;
-               next->next = clause;
-               continue;
-            }
-        }
 
         if (clause != NULL)
         {
@@ -2508,6 +2492,7 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
                                      cypher_clause *clause)
 {
     cypher_match *match_self = (cypher_match*) clause->self;
+    Node *where = match_self->where;
 
     if(!match_check_valid_label(match_self, cpstate))
     {
@@ -2525,7 +2510,37 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
                                                      (Node *)r, -1);
     }
 
+    if (has_list_comp_or_subquery((Node *)match_self->where, NULL))
+    {
+        match_self->where = NULL;
+        return transform_cypher_clause_with_where(cpstate,
+                transform_cypher_match_pattern, clause, where);
+    }
+
     return transform_cypher_match_pattern(cpstate, clause);
+}
+
+/*
+ * Function that checks if an expr has a cypher_sub_query or
+ * cypher_list_comprehension.
+ */
+static bool has_list_comp_or_subquery(Node *expr, void *context)
+{
+    if (expr == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(expr, ExtensibleNode))
+    {
+        if (is_ag_node(expr, cypher_sub_query) ||
+            is_ag_node(expr, cypher_list_comprehension))
+        {
+            return true;
+        }
+    }
+
+    return cypher_raw_expr_tree_walker(expr, has_list_comp_or_subquery, context);
 }
 
 /*
@@ -2724,18 +2739,6 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     {
         cypher_clause *next = clause->next;
 
-        /*
-         * check if optional match has a subquery node-- it could still
-         * be following a match
-         */
-        if(is_ag_node(next->self, cypher_with))
-        {
-            cypher_with *next_with = (cypher_with *)next->self;
-            if (next_with->subquery_intermediate == true)
-            {
-                next = next->next;
-            }
-        }
         if (is_ag_node(next->self, cypher_match))
         {
             cypher_match *next_self = (cypher_match *)next->self;
