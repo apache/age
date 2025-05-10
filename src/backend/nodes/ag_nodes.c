@@ -25,6 +25,7 @@
 #include "nodes/cypher_readfuncs.h"
 #include "nodes/cypher_nodes.h"
 
+#include "utils/palloc.h"
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b);
 
 /* This list must match ag_node_tag. */
@@ -156,7 +157,7 @@ ExtensibleNode *_new_ag_node(Size size, ag_node_tag tag)
 {
     ExtensibleNode *n;
 
-    n = (ExtensibleNode *)palloc0fast(size);
+    n = (ExtensibleNode *)palloc0(size);
     n->type = T_ExtensibleNode;
     n->extnodename = node_names[tag];
 
