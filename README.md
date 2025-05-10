@@ -104,9 +104,9 @@ Refer to our latest [Apache AGE documentation](https://age.apache.org/age-manual
 
 Install the following essential libraries according to each OS. Building AGE from the source depends on the following Linux libraries (Ubuntu package names shown below):
 
-- **CentOS**
+- **Rocky Linux**
 ```bash
-yum install gcc glibc glib-common readline readline-devel zlib zlib-devel flex bison
+yum install gcc glibc glibc-common readline readline-devel zlib zlib-devel flex bison perl
 ```
 - **Fedora**
 ```bash
