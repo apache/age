@@ -30,6 +30,7 @@
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
+#include "executor/executor.h"
 #include "utils/ag_cache.h"
 
 /*
