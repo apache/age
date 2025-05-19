@@ -20,8 +20,10 @@
 #include "postgres.h"
 
 #include "catalog/ag_label.h"
+#include "catalog/indexing.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "executor/executor.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
