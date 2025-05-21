@@ -49,7 +49,7 @@
 static void create_table_for_label(char *graph_name, char *label_name,
                                    char *schema_name, char *rel_name,
                                    char *seq_name, char label_type,
-                                   List *parents);
+                                   List *parents, bool if_not_exists);
 
 /* common */
 static List *create_edge_table_elements(char *graph_name, char *label_name,
@@ -58,7 +58,7 @@ static List *create_edge_table_elements(char *graph_name, char *label_name,
 static List *create_vertex_table_elements(char *graph_name, char *label_name,
                                           char *schema_name, char *rel_name,
                                           char *seq_name);
-static void create_sequence_for_label(RangeVar *seq_range_var);
+static void create_sequence_for_label(RangeVar *seq_range_var, bool if_not_exists);
 static Constraint *build_pk_constraint(void);
 static Constraint *build_id_default(char *graph_name, char *label_name,
                                     char *schema_name, char *seq_name);
@@ -200,7 +200,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
     parent = list_make1(rv);
 
-    create_label(graph_name, label_name, LABEL_TYPE_VERTEX, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_VERTEX, parent, false);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", label_name)));
@@ -280,7 +280,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_EDGE);
 
     parent = list_make1(rv);
-    create_label(graph_name, label_name, LABEL_TYPE_EDGE, parent);
+    create_label(graph_name, label_name, LABEL_TYPE_EDGE, parent, false);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", label_name)));
@@ -294,7 +294,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
  * ag_catalog.ag_label.
  */
 void create_label(char *graph_name, char *label_name, char label_type,
-                  List *parents)
+                  List *parents, bool if_not_exists)
 {
     graph_cache_data *cache_data;
     Oid graph_oid;
@@ -326,11 +326,11 @@ void create_label(char *graph_name, char *label_name, char label_type,
     rel_name = gen_label_relation_name(label_name);
     seq_name = ChooseRelationName(rel_name, "id", "seq", nsp_id, false);
     seq_range_var = makeRangeVar(schema_name, seq_name, -1);
-    create_sequence_for_label(seq_range_var);
+    create_sequence_for_label(seq_range_var, if_not_exists);
 
     /* create a table for the new label */
     create_table_for_label(graph_name, label_name, schema_name, rel_name,
-                           seq_name, label_type, parents);
+                           seq_name, label_type, parents, if_not_exists);
 
     /* record the new label in ag_label */
     relation_id = get_relname_relid(rel_name, nsp_id);
@@ -363,7 +363,7 @@ void create_label(char *graph_name, char *label_name, char label_type,
 static void create_table_for_label(char *graph_name, char *label_name,
                                    char *schema_name, char *rel_name,
                                    char *seq_name, char label_type,
-                                   List *parents)
+                                   List *parents, bool if_not_exists)
 {
     CreateStmt *create_stmt;
     PlannedStmt *wrapper;
@@ -397,7 +397,7 @@ static void create_table_for_label(char *graph_name, char *label_name,
     create_stmt->options = NIL;
     create_stmt->oncommit = ONCOMMIT_NOOP;
     create_stmt->tablespacename = NULL;
-    create_stmt->if_not_exists = false;
+    create_stmt->if_not_exists = if_not_exists;
 
     wrapper = makeNode(PlannedStmt);
     wrapper->commandType = CMD_UTILITY;
@@ -482,7 +482,7 @@ static List *create_vertex_table_elements(char *graph_name, char *label_name,
 }
 
 /* CREATE SEQUENCE `seq_range_var` MAXVALUE `LOCAL_ID_MAX` */
-static void create_sequence_for_label(RangeVar *seq_range_var)
+static void create_sequence_for_label(RangeVar *seq_range_va, bool if_not_exists)
 {
     ParseState *pstate;
     CreateSeqStmt *seq_stmt;
@@ -500,7 +500,7 @@ static void create_sequence_for_label(RangeVar *seq_range_var)
     seq_stmt->options = list_make1(maxvalue);
     seq_stmt->ownerId = InvalidOid;
     seq_stmt->for_identity = false;
-    seq_stmt->if_not_exists = false;
+    seq_stmt->if_not_exists = if_not_exists;
 
     DefineSequence(pstate, seq_stmt);
     CommandCounterIncrement();
