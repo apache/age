@@ -53,7 +53,7 @@
     (IS_DEFAULT_LABEL_EDGE(x) || IS_DEFAULT_LABEL_VERTEX(x))
 
 void create_label(char *graph_name, char *label_name, char label_type,
-                  List *parents);
+                  List *parents, bool if_not_exists);
 
 Datum create_vlabel(PG_FUNCTION_ARGS);
 

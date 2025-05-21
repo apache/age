@@ -104,8 +104,8 @@ Oid create_graph_internal(const Name graph_name)
     CommandCounterIncrement();
 
     /* Create the default label tables */
-    create_label(graph_name_str, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX, NIL);
-    create_label(graph_name_str, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE, NIL);
+    create_label(graph_name_str, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX, NIL, false);
+    create_label(graph_name_str, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE, NIL, false);
 
     return nsp_id;
 }
