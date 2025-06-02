@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Get latest commit id of PostgreSQL 14
         run: |
-          echo "PG_COMMIT_HASH=$(git ls-remote git://git.postgresql.org/git/postgresql.git refs/heads/REL_14_STABLE | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PG_COMMIT_HASH=$(git ls-remote https://git.postgresql.org/git/postgresql.git refs/heads/REL_14_STABLE | awk '{print $1}')" >> $GITHUB_ENV
 
       - name: Cache PostgreSQL 14
         uses: actions/cache@v3
@@ -30,7 +30,7 @@ jobs:
       - name: Install PostgreSQL 14 and some extensions
         if: steps.pg14cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch REL_14_STABLE git://git.postgresql.org/git/postgresql.git ~/pg14source
+          git clone --depth 1 --branch REL_14_STABLE https://git.postgresql.org/git/postgresql.git ~/pg14source
           cd ~/pg14source
           ./configure --prefix=$HOME/pg14 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
