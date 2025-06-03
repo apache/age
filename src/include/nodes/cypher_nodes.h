@@ -480,7 +480,7 @@ typedef struct cypher_typecast
 {
     ExtensibleNode extensible;
     Node *expr;
-    char *typecast;
+    TypeName *typname;
     int location;
 } cypher_typecast;
 
