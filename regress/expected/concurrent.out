@@ -1,0 +1,12 @@
+\! python3 regress/python/test_concurrent.py
+Result: OK
+
+Result: OK
+
+Result: OK
+
+Result: OK
+
+Result: OK
+
+All threads have finished execution.
