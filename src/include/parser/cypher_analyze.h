@@ -21,16 +21,22 @@
 #define AG_CYPHER_ANALYZE_H
 
 #include "parser/cypher_clause.h"
+#include "nodes/nodeFuncs.h"
 
-typedef bool (*cypher_expression_condition)( Node *expr);
+#define cypher_expr_tree_walker(n, w, c) \
+	cypher_expr_tree_walker_impl(n, (tree_walker_callback) (w), c)
+#define cypher_raw_expr_tree_walker(n, w, c) \
+	cypher_raw_expr_tree_walker_impl(n, (tree_walker_callback) (w), c)
 
 void post_parse_analyze_init(void);
 void post_parse_analyze_fini(void);
 
-cypher_clause *build_subquery_node(cypher_clause *next);
-
-/*expr tree walker */
-bool expr_contains_node(cypher_expression_condition is_expr, Node *expr);
-bool expr_has_subquery(Node * expr);
+/* expr tree walker */
+bool cypher_expr_tree_walker_impl(Node *node,
+                                  bool (*walker)(Node *node, void *context),
+                                  void *context);
+bool cypher_raw_expr_tree_walker_impl(Node *node,
+                                      bool (*walker)(Node *node, void *context),
+                                      void *context);
 
 #endif
