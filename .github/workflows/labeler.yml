@@ -5,8 +5,9 @@ on:
 jobs:
   triage:
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
+      issues: write
     runs-on: ubuntu-latest
     steps:
     - name: Apply branch labels
