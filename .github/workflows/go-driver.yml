@@ -2,10 +2,10 @@ name: Go Driver Tests
 
 on:
   push:
-    branches: [ "PG17_prepare" ]
+    branches: [ "PG17" ]
 
   pull_request:
-    branches: [ "PG17_prepare" ]
+    branches: [ "PG17" ]
 
 jobs:
   build:
