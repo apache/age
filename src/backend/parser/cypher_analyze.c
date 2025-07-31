@@ -168,6 +168,8 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * OpExpr - expression node for an operator invocation
          * Const - constant value or expression node
          * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
+         * JsonConstructorExpr - wrapper over FuncExpr/Aggref/WindowFunc for
+         *                       SQL/JSON constructors
          *
          * These are a special case that needs to be ignored.
          *
@@ -175,7 +177,8 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
         if (IsA(funcexpr, SQLValueFunction)
                 || IsA(funcexpr, CoerceViaIO)
                 || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-                || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+                || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+                || IsA(funcexpr, JsonConstructorExpr))
         {
             return false;
         }
@@ -340,6 +343,8 @@ static bool is_func_cypher(FuncExpr *funcexpr)
      * OpExpr - expression node for an operator invocation
      * Const - constant value or expression node
      * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
+     * JsonConstructorExpr - wrapper over FuncExpr/Aggref/WindowFunc for
+     *                       SQL/JSON constructors
      *
      * These are a special case that needs to be ignored.
      *
@@ -347,7 +352,8 @@ static bool is_func_cypher(FuncExpr *funcexpr)
     if (IsA(funcexpr, SQLValueFunction)
             || IsA(funcexpr, CoerceViaIO)
             || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+            || IsA(funcexpr, JsonConstructorExpr))
     {
         return false;
     }
