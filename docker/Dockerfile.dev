@@ -17,14 +17,14 @@
 #
 
 
-FROM postgres:16
+FROM postgres:17
 
 RUN apt-get update
 RUN apt-get install --assume-yes --no-install-recommends --no-install-suggests \
   bison \
   build-essential \
   flex \
-  postgresql-server-dev-16 \
+  postgresql-server-dev-17 \
   locales
 
 ENV LANG=en_US.UTF-8
