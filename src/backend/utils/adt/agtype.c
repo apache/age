@@ -12058,11 +12058,12 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
             agtv_result.type = AGTV_BOOL;
             agtv_result.val.boolean = DatumGetBool(arg);
         }
-        else if (type == INT2OID || type == INT4OID || type == INT8OID)
+        else if (type == INT2OID || type == INT4OID || type == INT8OID ||
+                 type == GRAPHIDOID)
         {
             agtv_result.type = AGTV_INTEGER;
 
-            if (type == INT8OID)
+            if (type == INT8OID || GRAPHIDOID)
             {
                 agtv_result.val.int_value = DatumGetInt64(arg);
             }

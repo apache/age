@@ -1437,9 +1437,23 @@ SELECT count(*) FROM cypher('test_enable_containment', $$ MATCH p=(x:Customer)-[
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer)-[:bought ={store: 'Amazon', addr:{city: 'Vancouver', street: 30}}]->(y:Product) RETURN 0 $$) as (a agtype);
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
 
+---
+--- tests for the additional variables added during node and edge transform 
+---
+SELECT FROM create_graph('special_vars');
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 1}) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 2}) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 3}) RETURN u $$) AS (u agtype);
+SELECT * FROM cypher('special_vars', $$ MATCH (u) MATCH (v) CREATE(u)-[e:KNOWS {start: u_idc, end: v_idc}]->(v) RETURN e $$) AS (edge agtype);
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->(v) RETURN e_idc, e_start_idc, e_end_idc, e_propertiesc $$) AS (e_idc agtype, e_start_idc agtype, e_end_idc agtype, e_propertiesc agtype);
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->(v) RETURN u_idc, u_propertiesc, v_idc, v_propertiesc $$) AS (u_idc agtype, u_propertiesc agtype, v_idc agtype, v_propertiesc agtype);
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->() RETURN count(*), u_idc ORDER BY count(*) DESC $$) AS (count agtype, u_idc agtype);
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->() RETURN count(*), id(u) ORDER BY count(*) DESC $$) AS (count agtype, idu agtype);
+
 --
 -- Clean up
 --
+SELECT drop_graph('special_vars', true);
 SELECT drop_graph('cypher_match', true);
 SELECT drop_graph('test_retrieve_var', true);
 SELECT drop_graph('test_enable_containment', true);
