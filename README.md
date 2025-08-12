@@ -12,7 +12,7 @@
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
      is a leading multi-model graph database </h3>
-     
+
 </h3>
 
 <h3 align="center">Graph Processing & Analytics for Relational Databases</h3>
@@ -24,7 +24,7 @@
 
 
 
-<p align="center">                                                                                                    
+<p align="center">
   <a href="https://github.com/apache/age/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/apache/age"/>
   </a>
@@ -119,7 +119,7 @@ sudo apt-get install build-essential libreadline-dev zlib1g-dev flex bison
 
 <h2><img height="30" src="/img/installation.svg">&nbsp;&nbsp;Installation</h2>
 
-Apache AGE is intended to be simple to install and run. It can be installed with Docker and other traditional ways. 
+Apache AGE is intended to be simple to install and run. It can be installed with Docker and other traditional ways.
 
 <h4><a><img width="20" src="/img/pg.svg"></a>
 &nbsp;Install PostgreSQL
@@ -154,16 +154,16 @@ Clone the <a href="https://github.com/apache/age">github repository</a> or downl
 </a>
 Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, 14, 15, 16 & 17 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, 14, 15, 16 & 17.
 <br>
-    
+
 ```bash
 pg_config
 ```
-Run the following command in the source code directory of Apache AGE to build and install the extension.  
-     
+Run the following command in the source code directory of Apache AGE to build and install the extension.
+
 ```bash
 make install
 ```
-     
+
 If the path to your Postgres installation is not in the PATH variable, add the path in the arguments:
 ```bash
 make PG_CONFIG=/path/to/postgres/bin/pg_config install
@@ -228,14 +228,14 @@ SELECT create_graph('graph_name');
 To create a single vertex with label and properties, use the CREATE clause.
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     CREATE (:label {property:"Node A"})
 $$) as (v agtype);
 ```
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     CREATE (:label {property:"Node B"})
 $$) as (v agtype);
@@ -244,7 +244,7 @@ $$) as (v agtype);
 To create an edge between two nodes and set its properties:
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     MATCH (a:label), (b:label)
     WHERE a.property = 'Node A' AND b.property = 'Node B'
@@ -302,7 +302,7 @@ After installing AGE Extension, you may use this tool to get access to the visua
 
 <h2><img height="20" src="/img/videos.png">&nbsp;&nbsp;Video Links</h2>
 
-You can also get help from these videos. 
+You can also get help from these videos.
 
 - Install on [Windows](https://www.youtube.com/watch?v=ddk8VX8Hm-I&list=PLGp3huJbWNDjgwP7s99Q-9_w1vxpjNHXG)
 - Install on [MacOS](https://www.youtube.com/watch?v=0-qMwpDh0CA)
