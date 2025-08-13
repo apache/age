@@ -7691,12 +7691,6 @@ Datum age_reverse(PG_FUNCTION_ARGS)
     string = text_to_cstring(text_string);
     string_len = strlen(string);
 
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-    {
-        PG_RETURN_NULL();
-    }
-
     /* build the result */
     agtv_result.type = AGTV_STRING;
     agtv_result.val.string.val = string;
@@ -7775,10 +7769,6 @@ Datum age_toupper(PG_FUNCTION_ARGS)
                             errmsg("toUpper() unsupported argument agtype %d",
                                    agtv_value->type)));
     }
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* allocate the new string */
     result = palloc0(string_len);
@@ -7865,10 +7855,6 @@ Datum age_tolower(PG_FUNCTION_ARGS)
                             errmsg("toLower() unsupported argument agtype %d",
                                    agtv_value->type)));
     }
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* allocate the new string */
     result = palloc0(string_len);
@@ -7964,10 +7950,6 @@ Datum age_rtrim(PG_FUNCTION_ARGS)
     string = text_to_cstring(text_string);
     string_len = strlen(string);
 
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
-
     /* build the result */
     agtv_result.type = AGTV_STRING;
     agtv_result.val.string.val = string;
@@ -8055,10 +8037,6 @@ Datum age_ltrim(PG_FUNCTION_ARGS)
     string = text_to_cstring(text_string);
     string_len = strlen(string);
 
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
-
     /* build the result */
     agtv_result.type = AGTV_STRING;
     agtv_result.val.string.val = string;
@@ -8145,10 +8123,6 @@ Datum age_trim(PG_FUNCTION_ARGS)
     /* convert it back to a cstring */
     string = text_to_cstring(text_string);
     string_len = strlen(string);
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* build the result */
     agtv_result.type = AGTV_STRING;
@@ -8287,10 +8261,6 @@ Datum age_right(PG_FUNCTION_ARGS)
     string = text_to_cstring(text_string);
     string_len = strlen(string);
 
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
-
     /* build the result */
     agtv_result.type = AGTV_STRING;
     agtv_result.val.string.val = string;
@@ -8427,10 +8397,6 @@ Datum age_left(PG_FUNCTION_ARGS)
     /* convert it back to a cstring */
     string = text_to_cstring(text_string);
     string_len = strlen(string);
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* build the result */
     agtv_result.type = AGTV_STRING;
@@ -8596,10 +8562,6 @@ Datum age_substring(PG_FUNCTION_ARGS)
     /* convert it back to a cstring */
     string = text_to_cstring(text_string);
     string_len = strlen(string);
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* build the result */
     agtv_result.type = AGTV_STRING;
@@ -8854,10 +8816,6 @@ Datum age_replace(PG_FUNCTION_ARGS)
     /* convert it back to a cstring */
     string = text_to_cstring(text_result);
     string_len = strlen(string);
-
-    /* if we have an empty string, return null */
-    if (string_len == 0)
-        PG_RETURN_NULL();
 
     /* build the result */
     agtv_result.type = AGTV_STRING;
