@@ -1906,6 +1906,15 @@ $$) AS (results agtype);
 SELECT * FROM age_left('123456789', null);
 SELECT * FROM age_left('123456789', -1);
 SELECT * FROM age_left();
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', -2147483648)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', -2147483649)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', 2147483649)
+$$) AS (result agtype);
 --right()
 SELECT * FROM cypher('expr', $$
     RETURN right("123456789", 1)
@@ -1939,6 +1948,15 @@ $$) AS (results agtype);
 SELECT * FROM age_right('123456789', null);
 SELECT * FROM age_right('123456789', -1);
 SELECT * FROM age_right();
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', -2147483648)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', -2147483649)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', 2147483649)
+$$) AS (result agtype);
 -- substring()
 SELECT * FROM cypher('expr', $$
     RETURN substring("0123456789", 0, 1)
@@ -1969,6 +1987,24 @@ $$) AS (results agtype);
 SELECT * FROM age_substring(null, null, null);
 SELECT * FROM age_substring(null, null);
 SELECT * FROM age_substring(null, 1);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', -2147483648, 0)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', -2147483649, 0)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 2147483649, 0)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, -2147483648)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, -2147483649)
+$$) AS (result agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, 2147483649)
+$$) AS (result agtype);
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN substring("123456789", null)
