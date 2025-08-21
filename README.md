@@ -12,7 +12,7 @@
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
      is a leading multi-model graph database </h3>
-     
+
 </h3>
 
 <h3 align="center">Graph Processing & Analytics for Relational Databases</h3>
@@ -24,13 +24,13 @@
 
 
 
-<p align="center">                                                                                                    
+<p align="center">
   <a href="https://github.com/apache/age/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/apache/age"/>
   </a>
   &nbsp;
   <a href="https://github.com/apache/age/releases">
-    <img src="https://img.shields.io/badge/Release-v1.5.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
+    <img src="https://img.shields.io/badge/Release-v1.6.0-FFA500?labelColor=gray&style=flat&link=https://github.com/apache/age/releases"/>
   </a>
   &nbsp;
   <a href="https://www.postgresql.org/docs/17/index.html">
@@ -154,16 +154,16 @@ Clone the <a href="https://github.com/apache/age">github repository</a> or downl
 </a>
 Run the pg_config utility and check the version of PostgreSQL. Currently, only PostgreSQL versions 11, 12, 13, 14, 15, 16 & 17 are supported. If you have any other version of Postgres, you will need to install PostgreSQL version 11, 12, 13, 14, 15, 16 & 17.
 <br>
-    
+
 ```bash
 pg_config
 ```
 Run the following command in the source code directory of Apache AGE to build and install the extension.  
-     
+
 ```bash
 make install
 ```
-     
+
 If the path to your Postgres installation is not in the PATH variable, add the path in the arguments:
 ```bash
 make PG_CONFIG=/path/to/postgres/bin/pg_config install
@@ -228,14 +228,14 @@ SELECT create_graph('graph_name');
 To create a single vertex with label and properties, use the CREATE clause.
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     CREATE (:label {property:"Node A"})
 $$) as (v agtype);
 ```
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     CREATE (:label {property:"Node B"})
 $$) as (v agtype);
@@ -244,7 +244,7 @@ $$) as (v agtype);
 To create an edge between two nodes and set its properties:
 
 ```bash
-SELECT * 
+SELECT *
 FROM cypher('graph_name', $$
     MATCH (a:label), (b:label)
     WHERE a.property = 'Node A' AND b.property = 'Node B'
