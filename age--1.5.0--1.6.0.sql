@@ -17,16 +17,23 @@
  * under the License.
  */
 
--- This is a template for upgrading from the previous version of Apache AGE
--- It will only work within versions of PostgreSQL, not across.
--- Please adjust the below ALTER EXTENSION to reflect the correct version
--- it is upgrading to.
+-- This will only work within a major version of PostgreSQL, not across
+-- major versions.
 
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
-\echo Use "ALTER EXTENSION age UPDATE TO '1.4.0'" to load this file. \quit
+\echo Use "ALTER EXTENSION age UPDATE TO '1.6.0'" to load this file. \quit
 
--- Please add all additions, deletions, and modifications to the end of this
--- file. We need to keep the order of these changes.
+--
+-- WARNING!
+--
+-- Since there are modifications to agtype gin operators, users who are
+-- upgrading will have to drop the gin indexes before running this script and
+-- recreate them afterwards.
+--
+-- As always, please backup your database prior to any upgrade.
+--
+-- WARNING!
+--
 
 CREATE FUNCTION ag_catalog.agtype_contains_top_level(agtype, agtype)
     RETURNS boolean
@@ -64,7 +71,7 @@ CREATE OPERATOR <<@ (
 
 /*
  * We have to drop and recreate the operators, because
- * commutator is not modifiable using ALTER OPERATOR. 
+ * commutator is not modifiable using ALTER OPERATOR.
  */
 ALTER EXTENSION age
     DROP OPERATOR ? (agtype, agtype);
