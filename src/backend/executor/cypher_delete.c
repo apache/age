@@ -25,6 +25,8 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "executor/executor.h"
+#include "pg_config.h"
 
 static void begin_cypher_delete(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -55,6 +57,11 @@ const CustomExecMethods cypher_delete_exec_methods = {DELETE_SCAN_STATE_NAME,
                                                       NULL,
                                                       NULL};
 
+#if PG_VERSION_NUM >= 18000 
+#define TUPLE_DESC_ATTR_TYPE_ID TupleDescAttr(tupleDescriptor, entity_position - 1)->atttypid
+#else
+#define TUPLE_DESC_ATTR_TYPE_ID tupleDescriptor->attrs[entity_position - 1]->atttypid
+#endif
 /*
  * Initialization at the beginning of execution. Setup the child node,
  * setup its scan tuple slot and projection info, expression context,
@@ -257,13 +264,15 @@ static agtype_value *extract_entity(CustomScanState *node,
     tupleDescriptor = scanTupleSlot->tts_tupleDescriptor;
 
     /* type checking, make sure the entity is an agtype vertex or edge */
-    if (tupleDescriptor->attrs[entity_position -1].atttypid != AGTYPEOID)
+    // First  make sure the entity is an agtype. this is set per extension. Also, from postgresql 16 onwards use TupleDescAttr so that it works on both attrs and compact_attrs.
+    if (TUPLE_DESC_ATTR_TYPE_ID != AGTYPEOID)
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                 errmsg("DELETE clause can only delete agtype")));
 
     original_entity = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[entity_position - 1]);
     original_entity_value = get_ith_agtype_value_from_container(&original_entity->root, 0);
 
+    // We are not deleting anything other than vertices and edges.
     if (original_entity_value->type != AGTV_VERTEX && original_entity_value->type != AGTV_EDGE)
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                 errmsg("DELETE clause can only delete vertices and edges")));
