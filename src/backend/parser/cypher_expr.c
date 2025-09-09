@@ -2036,7 +2036,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
                 targs = lcons(c, targs);
             }
         }
-        /* 
+        /*
          * If it's not in age, check if it's a potential call to some function
          * in another installed extension.
          */
@@ -2055,14 +2055,13 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
                                                          procform, extension);
                 return retval;
             }
+            /*
+             * Else we have a function that is in the search_path, and not
+             * qualified, but is not in an extension. Pass it through.
+             */
             else
             {
-                ereport(ERROR,
-                        (errcode(ERRCODE_UNDEFINED_FUNCTION),
-                        errmsg("function %s does not exist", name),
-                        errhint("If the function is from an external extension, "
-                                "make sure the extension is installed and the "
-                                "function is in the search path.")));
+                fname = fn->funcname;
             }
         }
         /* no function found */
