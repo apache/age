@@ -3927,6 +3927,41 @@ SELECT * FROM age_reverse('gnirts a si siht'::cstring);
  "this is a string"
 (1 row)
 
+-- should return empty string
+SELECT * FROM age_reverse('');
+ age_reverse 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_reverse(''::text);
+ age_reverse 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_reverse(''::cstring);
+ age_reverse 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN reverse('')
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN reverse("")
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN reverse(null)
@@ -4104,6 +4139,75 @@ SELECT * FROM age_tolower('CSTRING'::cstring);
  "cstring"
 (1 row)
 
+-- should return empty string
+SELECT * FROM age_toupper('');
+ age_toupper 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_toupper(''::text);
+ age_toupper 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_toupper(''::cstring);
+ age_toupper 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN toupper('')
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN toupper("")
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
+SELECT * FROM age_tolower('');
+ age_tolower 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_tolower(''::text);
+ age_tolower 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_tolower(''::cstring);
+ age_tolower 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN tolower('')
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN tolower("")
+$$) AS (result agtype);
+ result 
+--------
+ ""
+(1 row)
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN toUpper(null)
@@ -4209,6 +4313,73 @@ SELECT * FROM age_trim('  string   ');
  age_trim 
 ----------
  "string"
+(1 row)
+
+-- should return empty string
+SELECT * FROM cypher('expr', $$
+    RETURN lTrim('')
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN rTrim('')
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN trim('')
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN lTrim("")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN rTrim("")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN trim("")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM age_ltrim('');
+ age_ltrim 
+-----------
+ ""
+(1 row)
+
+SELECT * FROM age_rtrim('');
+ age_rtrim 
+-----------
+ ""
+(1 row)
+
+SELECT * FROM age_trim('');
+ age_trim 
+----------
+ ""
 (1 row)
 
 -- should return null
@@ -4322,15 +4493,16 @@ $$) AS (results agtype);
  "123"
 (1 row)
 
--- should return null
+-- should return empty string
 SELECT * FROM cypher('expr', $$
     RETURN left("123456789", 0)
 $$) AS (results agtype);
  results 
 ---------
- 
+ ""
 (1 row)
 
+-- should return null
 SELECT * FROM cypher('expr', $$
     RETURN left(null, 1)
 $$) AS (results agtype);
@@ -4384,6 +4556,18 @@ ERROR:  function age_left() does not exist
 LINE 1: SELECT * FROM age_left();
                       ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', -2147483648)
+$$) AS (result agtype);
+ERROR:  left() negative values are not supported for length
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', -2147483649)
+$$) AS (result agtype);
+ERROR:  left() length value is out of INT range
+SELECT * FROM cypher('expr', $$
+    RETURN left('abcdef', 2147483649)
+$$) AS (result agtype);
+ERROR:  left() length value is out of INT range
 --right()
 SELECT * FROM cypher('expr', $$
     RETURN right("123456789", 1)
@@ -4401,15 +4585,16 @@ $$) AS (results agtype);
  "789"
 (1 row)
 
--- should return null
+-- should return empty string
 SELECT * FROM cypher('expr', $$
     RETURN right("123456789", 0)
 $$) AS (results agtype);
  results 
 ---------
- 
+ ""
 (1 row)
 
+-- should return null
 SELECT * FROM cypher('expr', $$
     RETURN right(null, 1)
 $$) AS (results agtype);
@@ -4463,6 +4648,18 @@ ERROR:  function age_right() does not exist
 LINE 1: SELECT * FROM age_right();
                       ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', -2147483648)
+$$) AS (result agtype);
+ERROR:  right() negative values are not supported for length
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', -2147483649)
+$$) AS (result agtype);
+ERROR:  right() length value is out of INT range
+SELECT * FROM cypher('expr', $$
+    RETURN right('abcdef', 2147483649)
+$$) AS (result agtype);
+ERROR:  right() length value is out of INT range
 -- substring()
 SELECT * FROM cypher('expr', $$
     RETURN substring("0123456789", 0, 1)
@@ -4508,6 +4705,13 @@ SELECT * FROM age_substring('0123456789', 1);
  "123456789"
 (1 row)
 
+-- should return empty string
+SELECT * FROM age_substring('0123456789', 0, 0);
+ age_substring 
+---------------
+ ""
+(1 row)
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN substring(null, null, null)
@@ -4551,6 +4755,30 @@ SELECT * FROM age_substring(null, 1);
  
 (1 row)
 
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', -2147483648, 0)
+$$) AS (result agtype);
+ERROR:  substring() negative values are not supported for offset or length
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', -2147483649, 0)
+$$) AS (result agtype);
+ERROR:  substring() parameter value is out of INT range
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 2147483649, 0)
+$$) AS (result agtype);
+ERROR:  substring() parameter value is out of INT range
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, -2147483648)
+$$) AS (result agtype);
+ERROR:  substring() negative values are not supported for offset or length
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, -2147483649)
+$$) AS (result agtype);
+ERROR:  substring() parameter value is out of INT range
+SELECT * FROM cypher('expr', $$
+    RETURN substring('abcdef', 0, 2147483649)
+$$) AS (result agtype);
+ERROR:  substring() parameter value is out of INT range
 -- should fail
 SELECT * FROM cypher('expr', $$
     RETURN substring("123456789", null)
@@ -4747,6 +4975,49 @@ $$) AS (results agtype);
  "ababab"
 (1 row)
 
+-- should return empty string
+SELECT * FROM cypher('expr', $$
+    RETURN replace("", "", "")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN replace("Hello", "Hello", "")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN replace("", "Hello", "Mellow")
+$$) AS (results agtype);
+ results 
+---------
+ ""
+(1 row)
+
+SELECT * FROM age_replace('', '', '');
+ age_replace 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_replace('Hello', 'Hello', '');
+ age_replace 
+-------------
+ ""
+(1 row)
+
+SELECT * FROM age_replace('', 'Hello', 'Mellow');
+ age_replace 
+-------------
+ ""
+(1 row)
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN replace(null, null, null)
@@ -4772,30 +5043,6 @@ $$) AS (results agtype);
  
 (1 row)
 
-SELECT * FROM cypher('expr', $$
-    RETURN replace("", "", "")
-$$) AS (results agtype);
- results 
----------
- 
-(1 row)
-
-SELECT * FROM cypher('expr', $$
-    RETURN replace("Hello", "Hello", "")
-$$) AS (results agtype);
- results 
----------
- 
-(1 row)
-
-SELECT * FROM cypher('expr', $$
-    RETURN replace("", "Hello", "Mellow")
-$$) AS (results agtype);
- results 
----------
- 
-(1 row)
-
 SELECT * FROM age_replace(null, null, null);
  age_replace 
 -------------
@@ -4809,24 +5056,6 @@ SELECT * FROM age_replace('Hello', null, null);
 (1 row)
 
 SELECT * FROM age_replace('Hello', '', null);
- age_replace 
--------------
- 
-(1 row)
-
-SELECT * FROM age_replace('', '', '');
- age_replace 
--------------
- 
-(1 row)
-
-SELECT * FROM age_replace('Hello', 'Hello', '');
- age_replace 
--------------
- 
-(1 row)
-
-SELECT * FROM age_replace('', 'Hello', 'Mellow');
  age_replace 
 -------------
  
