@@ -104,5 +104,30 @@ SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt AS sqrt1 CALL sq
 SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt AS sqrt1 CALL sqrt(81) YIELD sqrt AS sqrt1 RETURN sqrt1, sqrt1 $$) as (a agtype, b agtype);
 SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt CALL agtype_sum(2,2) YIELD agtype_sum AS sqrt RETURN sqrt, sqrt $$) as (a agtype, b agtype);
 
+-- Fix CALL/YIELD issues
+CREATE OR REPLACE FUNCTION myfunc(i agtype)
+RETURNS agtype
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    result agtype;
+BEGIN
+    RETURN ag_catalog.age_sqrt(i);
+END;
+$$;
+
+-- should have no errors
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.age_sqrt(64) YIELD age_sqrt RETURN age_sqrt $$) as (sqrt agtype);
+SELECT * FROM cypher('cypher_call', $$ CALL myfunc(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+
+-- should error
+SELECT * FROM cypher('cypher_call', $$ CALL myfunc() YIELD myfunc RETURN myfunc $$) as (result agtype);
+SELECT * FROM cypher('cypher_call', $$ CALL myfunz(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc() YIELD myfunc RETURN myfunc $$) as (result agtype);
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunz(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+
+DROP FUNCTION myfunc;
+
 DROP SCHEMA call_stmt_test CASCADE;
 SELECT drop_graph('cypher_call', true);
