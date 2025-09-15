@@ -1153,7 +1153,7 @@ static Query *transform_cypher_call_subquery(cypher_parsestate *cpstate,
                                                      EXPR_KIND_FROM_FUNCTION));
 
     /* retrieve the column name from funccall */
-    colName = strVal(linitial(self->funccall->funcname));
+    colName = strVal(llast(self->funccall->funcname));
 
     /* make a targetentry from the funcexpr node */
     tle = makeTargetEntry((Expr *) node,
@@ -3957,7 +3957,7 @@ static List *transform_map_to_ind_recursive(cypher_parsestate *cpstate,
  *
  * Transforms the map to a list of equality irrespective of
  * value type. For example,
- * 
+ *
  * x.name = 'xyz'
  * x.map = {"city": "abc", "street": {"name": "pqr", "number": 123}}
  * x.list = [9, 8, 7]
@@ -4011,7 +4011,7 @@ static List *transform_map_to_ind_top_level(cypher_parsestate *cpstate,
         qual = (Node *)make_op(pstate, op, lhs, rhs, last_srf, -1);
         quals = lappend(quals, qual);
     }
-    
+
     return quals;
 }
 
