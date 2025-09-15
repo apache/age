@@ -240,6 +240,58 @@ SELECT * FROM cypher('cypher_call', $$ CALL sqrt(64) YIELD sqrt CALL agtype_sum(
 ERROR:  duplicate variable "sqrt"
 LINE 1: ...LL sqrt(64) YIELD sqrt CALL agtype_sum(2,2) YIELD agtype_sum...
                                                              ^
+-- Fix CALL/YIELD issues
+CREATE OR REPLACE FUNCTION myfunc(i agtype)
+RETURNS agtype
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    result agtype;
+BEGIN
+    RETURN ag_catalog.age_sqrt(i);
+END;
+$$;
+-- should have no errors
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.age_sqrt(64) YIELD age_sqrt RETURN age_sqrt $$) as (sqrt agtype);
+ sqrt 
+------
+ 8.0
+(1 row)
+
+SELECT * FROM cypher('cypher_call', $$ CALL myfunc(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+ result 
+--------
+ 5.0
+(1 row)
+
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+ result 
+--------
+ 5.0
+(1 row)
+
+-- should error
+SELECT * FROM cypher('cypher_call', $$ CALL myfunc() YIELD myfunc RETURN myfunc $$) as (result agtype);
+ERROR:  function myfunc does not exist
+LINE 1: SELECT * FROM cypher('cypher_call', $$ CALL myfunc() YIELD m...
+                                             ^
+HINT:  If the function is from an external extension, make sure the extension is installed and the function is in the search path.
+SELECT * FROM cypher('cypher_call', $$ CALL myfunz(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+ERROR:  function myfunz does not exist
+LINE 1: SELECT * FROM cypher('cypher_call', $$ CALL myfunz(25) YIELD...
+                                             ^
+HINT:  If the function is from an external extension, make sure the extension is installed and the function is in the search path.
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc() YIELD myfunc RETURN myfunc $$) as (result agtype);
+ERROR:  function ag_catalog.myfunc() does not exist
+LINE 1: ...T * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc() Y...
+                                                             ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunz(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
+ERROR:  function ag_catalog.myfunz(agtype) does not exist
+LINE 1: ...OM cypher('cypher_call', $$ CALL ag_catalog.myfunz(25) YIELD...
+                                                             ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+DROP FUNCTION myfunc;
 DROP SCHEMA call_stmt_test CASCADE;
 NOTICE:  drop cascades to function call_stmt_test.add_agtype(agtype,agtype)
 SELECT drop_graph('cypher_call', true);
