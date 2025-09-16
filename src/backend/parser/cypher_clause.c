@@ -345,6 +345,10 @@ static bool isa_special_VLE_case(cypher_path *path);
 static ParseNamespaceItem *find_pnsi(cypher_parsestate *cpstate, char *varname);
 static bool has_list_comp_or_subquery(Node *expr, void *context);
 
+static List **add_additional_variables(ParseState *pstate,
+                                       ParseNamespaceItem *pnsi,
+                                       List **target_list, char *name,
+                                       List *colnames, List *suffixes);
 /*
  * transform a cypher_clause
  */
@@ -5193,6 +5197,34 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
         *target_list = lappend(*target_list, te);
     }
 
+    /*
+     * Add in our additional variables tied to this edge var -
+     *
+     *  - edge id column var
+     *  - edge properties column var
+     *  - edge start_id
+     *  - edge end_id
+     */
+    if (rel->name != NULL)
+    {
+        List *suffixes = NULL;
+        List *colnames = NULL;
+
+        suffixes = list_make4(EDGE_ID_COLUMN_SUFFIX,
+                              EDGE_PROPERTIES_COLUMN_SUFFIX,
+                              EDGE_START_ID_COLUMN_SUFFIX,
+                              EDGE_END_ID_COLUMN_SUFFIX);
+
+        colnames = list_make4(AG_EDGE_COLNAME_ID,
+                              AG_EDGE_COLNAME_PROPERTIES,
+                              AG_EDGE_COLNAME_START_ID,
+                              AG_EDGE_COLNAME_END_ID);
+
+        target_list = add_additional_variables(pstate, pnsi, target_list,
+                                               rel->name, colnames, suffixes);
+    }
+
+
     return (Expr *)expr;
 }
 
@@ -5479,7 +5511,61 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     te = makeTargetEntry(expr, resno, node->name, false);
     *target_list = lappend(*target_list, te);
 
+    /*
+     * Add in our additional variables tied to this node var -
+     *
+     *  - vertex id column var
+     *  - vertex properties column var
+     */
+    if (node->name != NULL)
+    {
+        List *suffixes = NULL;
+        List *colnames = NULL;
+
+        suffixes = list_make2(VERTEX_ID_COLUMN_SUFFIX,
+                              VERTEX_PROPERTIES_COLUMN_SUFFIX);
+
+        colnames = list_make2(AG_VERTEX_COLNAME_ID,
+                              AG_VERTEX_COLNAME_PROPERTIES);
+
+        target_list = add_additional_variables(pstate, pnsi, target_list,
+                                               node->name, colnames, suffixes);
+    }
+
     return expr;
+}
+
+/* helper function to add additional variables to a node or edge */
+static List **add_additional_variables(ParseState *pstate,
+                                       ParseNamespaceItem *pnsi,
+                                       List **target_list, char *name,
+                                       List *colnames, List *suffixes)
+{
+    ListCell *slc = NULL;
+    ListCell *clc = NULL;
+
+    forboth (slc, suffixes, clc, colnames)
+    {
+        TargetEntry *te = NULL;
+        Node *column = NULL;
+        char *varname = NULL;
+        char *suffix = (char *)lfirst(slc);
+        char *colname = (char *)lfirst(clc);
+        int varnamelen = 0;
+        int resno = -1;
+
+
+        varnamelen = strlen(name) + strlen(suffix) +1;
+        varname = palloc0(varnamelen);
+        strcpy(varname, name);
+        strcat(varname, suffix);
+        column = scanNSItemForColumn(pstate, pnsi, 0, colname, -1);
+        resno = pstate->p_next_resno++;
+        te = makeTargetEntry((Expr*)column, resno, varname, false);
+        *target_list = lappend(*target_list, te);
+    }
+
+    return target_list;
 }
 
 static Node *make_edge_expr(cypher_parsestate *cpstate,

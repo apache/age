@@ -31,6 +31,18 @@
 #define AGE_DEFAULT_ALIAS_PREFIX AGE_DEFAULT_PREFIX"alias_"
 #define AGE_DEFAULT_VARNAME_PREFIX AGE_DEFAULT_PREFIX"varname_"
 
+/*
+ * Every vertex or edge creation, that is labeled, will additionally add
+ * variables to point directly to their respective columns. Below are the
+ * suffixes used.
+ */
+#define VERTEX_ID_COLUMN_SUFFIX "_idc"
+#define VERTEX_PROPERTIES_COLUMN_SUFFIX "_propertiesc"
+#define EDGE_ID_COLUMN_SUFFIX "_idc"
+#define EDGE_START_ID_COLUMN_SUFFIX "_start_idc"
+#define EDGE_END_ID_COLUMN_SUFFIX "_end_idc"
+#define EDGE_PROPERTIES_COLUMN_SUFFIX "_propertiesc"
+
 typedef struct cypher_parsestate
 {
     ParseState pstate;
