@@ -3535,9 +3535,105 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
    Filter: ((agtype_access_operator(VARIADIC ARRAY[properties, '"school"'::agtype]) = '{"name": "XYZ College", "program": {"major": "Psyc", "degree": "BSc"}}'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"phone"'::agtype]) = '[123456789, 987654321, 456987123]'::agtype))
 (2 rows)
 
+---
+--- tests for the additional variables added during node and edge transform 
+---
+SELECT FROM create_graph('special_vars');
+NOTICE:  graph "special_vars" has been created
+--
+(1 row)
+
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 1}) RETURN u $$) AS (u agtype);
+                                      u                                      
+-----------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Object", "properties": {"id": 1}}::vertex
+(1 row)
+
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 2}) RETURN u $$) AS (u agtype);
+                                      u                                      
+-----------------------------------------------------------------------------
+ {"id": 844424930131970, "label": "Object", "properties": {"id": 2}}::vertex
+(1 row)
+
+SELECT * FROM cypher('special_vars', $$ CREATE (u:Object {id: 3}) RETURN u $$) AS (u agtype);
+                                      u                                      
+-----------------------------------------------------------------------------
+ {"id": 844424930131971, "label": "Object", "properties": {"id": 3}}::vertex
+(1 row)
+
+SELECT * FROM cypher('special_vars', $$ MATCH (u) MATCH (v) CREATE(u)-[e:KNOWS {start: u_idc, end: v_idc}]->(v) RETURN e $$) AS (edge agtype);
+                                                                                    edge                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131969, "start_id": 844424930131969, "properties": {"end": 844424930131969, "start": 844424930131969}}::edge
+ {"id": 1125899906842626, "label": "KNOWS", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {"end": 844424930131970, "start": 844424930131969}}::edge
+ {"id": 1125899906842627, "label": "KNOWS", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {"end": 844424930131971, "start": 844424930131969}}::edge
+ {"id": 1125899906842628, "label": "KNOWS", "end_id": 844424930131969, "start_id": 844424930131970, "properties": {"end": 844424930131969, "start": 844424930131970}}::edge
+ {"id": 1125899906842629, "label": "KNOWS", "end_id": 844424930131970, "start_id": 844424930131970, "properties": {"end": 844424930131970, "start": 844424930131970}}::edge
+ {"id": 1125899906842630, "label": "KNOWS", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {"end": 844424930131971, "start": 844424930131970}}::edge
+ {"id": 1125899906842631, "label": "KNOWS", "end_id": 844424930131969, "start_id": 844424930131971, "properties": {"end": 844424930131969, "start": 844424930131971}}::edge
+ {"id": 1125899906842632, "label": "KNOWS", "end_id": 844424930131970, "start_id": 844424930131971, "properties": {"end": 844424930131970, "start": 844424930131971}}::edge
+ {"id": 1125899906842633, "label": "KNOWS", "end_id": 844424930131971, "start_id": 844424930131971, "properties": {"end": 844424930131971, "start": 844424930131971}}::edge
+(9 rows)
+
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->(v) RETURN e_idc, e_start_idc, e_end_idc, e_propertiesc $$) AS (e_idc agtype, e_start_idc agtype, e_end_idc agtype, e_propertiesc agtype);
+      e_idc       |   e_start_idc   |    e_end_idc    |                   e_propertiesc                    
+------------------+-----------------+-----------------+----------------------------------------------------
+ 1125899906842628 | 844424930131970 | 844424930131969 | {"end": 844424930131969, "start": 844424930131970}
+ 1125899906842625 | 844424930131969 | 844424930131969 | {"end": 844424930131969, "start": 844424930131969}
+ 1125899906842631 | 844424930131971 | 844424930131969 | {"end": 844424930131969, "start": 844424930131971}
+ 1125899906842629 | 844424930131970 | 844424930131970 | {"end": 844424930131970, "start": 844424930131970}
+ 1125899906842626 | 844424930131969 | 844424930131970 | {"end": 844424930131970, "start": 844424930131969}
+ 1125899906842632 | 844424930131971 | 844424930131970 | {"end": 844424930131970, "start": 844424930131971}
+ 1125899906842627 | 844424930131969 | 844424930131971 | {"end": 844424930131971, "start": 844424930131969}
+ 1125899906842633 | 844424930131971 | 844424930131971 | {"end": 844424930131971, "start": 844424930131971}
+ 1125899906842630 | 844424930131970 | 844424930131971 | {"end": 844424930131971, "start": 844424930131970}
+(9 rows)
+
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->(v) RETURN u_idc, u_propertiesc, v_idc, v_propertiesc $$) AS (u_idc agtype, u_propertiesc agtype, v_idc agtype, v_propertiesc agtype);
+      u_idc      | u_propertiesc |      v_idc      | v_propertiesc 
+-----------------+---------------+-----------------+---------------
+ 844424930131970 | {"id": 2}     | 844424930131969 | {"id": 1}
+ 844424930131969 | {"id": 1}     | 844424930131969 | {"id": 1}
+ 844424930131971 | {"id": 3}     | 844424930131969 | {"id": 1}
+ 844424930131970 | {"id": 2}     | 844424930131970 | {"id": 2}
+ 844424930131969 | {"id": 1}     | 844424930131970 | {"id": 2}
+ 844424930131971 | {"id": 3}     | 844424930131970 | {"id": 2}
+ 844424930131969 | {"id": 1}     | 844424930131971 | {"id": 3}
+ 844424930131971 | {"id": 3}     | 844424930131971 | {"id": 3}
+ 844424930131970 | {"id": 2}     | 844424930131971 | {"id": 3}
+(9 rows)
+
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->() RETURN count(*), u_idc ORDER BY count(*) DESC $$) AS (count agtype, u_idc agtype);
+ count |      u_idc      
+-------+-----------------
+ 3     | 844424930131969
+ 3     | 844424930131970
+ 3     | 844424930131971
+(3 rows)
+
+SELECT * FROM cypher('special_vars', $$ MATCH (u)-[e]->() RETURN count(*), id(u) ORDER BY count(*) DESC $$) AS (count agtype, idu agtype);
+ count |       idu       
+-------+-----------------
+ 3     | 844424930131969
+ 3     | 844424930131970
+ 3     | 844424930131971
+(3 rows)
+
 --
 -- Clean up
 --
+SELECT drop_graph('special_vars', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table special_vars._ag_label_vertex
+drop cascades to table special_vars._ag_label_edge
+drop cascades to table special_vars."Object"
+drop cascades to table special_vars."KNOWS"
+NOTICE:  graph "special_vars" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT drop_graph('cypher_match', true);
 NOTICE:  drop cascades to 17 other objects
 DETAIL:  drop cascades to table cypher_match._ag_label_vertex
