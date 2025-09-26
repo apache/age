@@ -25,6 +25,7 @@
 #include "nodes/cypher_readfuncs.h"
 #include "nodes/cypher_nodes.h"
 
+#include "utils/palloc.h"
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b);
 
 /* This list must match ag_node_tag. */

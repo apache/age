@@ -59,6 +59,7 @@ typedef enum /* contexts of agtype parser */
     AGTYPE_PARSE_END /* saw the end of a document, expect nothing */
 } agtype_parse_context;
 
+#define pg_attribute_noreturn() __attribute__((noreturn))
 static inline void agtype_lex(agtype_lex_context *lex);
 static inline void agtype_lex_string(agtype_lex_context *lex);
 static inline void agtype_lex_number(agtype_lex_context *lex, char *s,
