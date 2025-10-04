@@ -2427,6 +2427,55 @@ Datum age_build_vle_match_edge(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
 }
 
+PG_FUNCTION_INFO_V1(_ag_enforce_edge_uniqueness2);
+
+Datum _ag_enforce_edge_uniqueness2(PG_FUNCTION_ARGS)
+{
+    graphid gid1 = AG_GETARG_GRAPHID(0);
+    graphid gid2 = AG_GETARG_GRAPHID(1);
+
+    if (gid1 == gid2)
+    {
+        PG_RETURN_BOOL(false);
+    }
+
+    PG_RETURN_BOOL(true);
+}
+
+PG_FUNCTION_INFO_V1(_ag_enforce_edge_uniqueness3);
+
+Datum _ag_enforce_edge_uniqueness3(PG_FUNCTION_ARGS)
+{
+    graphid gid1 = AG_GETARG_GRAPHID(0);
+    graphid gid2 = AG_GETARG_GRAPHID(1);
+    graphid gid3 = AG_GETARG_GRAPHID(2);
+
+    if (gid1 == gid2 || gid1 == gid3 || gid2 == gid3)
+    {
+        PG_RETURN_BOOL(false);
+    }
+
+    PG_RETURN_BOOL(true);
+}
+
+PG_FUNCTION_INFO_V1(_ag_enforce_edge_uniqueness4);
+
+Datum _ag_enforce_edge_uniqueness4(PG_FUNCTION_ARGS)
+{
+    graphid gid1 = AG_GETARG_GRAPHID(0);
+    graphid gid2 = AG_GETARG_GRAPHID(1);
+    graphid gid3 = AG_GETARG_GRAPHID(2);
+    graphid gid4 = AG_GETARG_GRAPHID(3);
+
+    if (gid1 == gid2 || gid1 == gid3 || gid1 == gid4 ||
+        gid2 == gid3 || gid2 == gid4 || gid3 == gid4)
+    {
+        PG_RETURN_BOOL(false);
+    }
+
+    PG_RETURN_BOOL(true);
+}
+
 /*
  * This function checks the edges in a MATCH clause to see if they are unique or
  * not. Filters out all the paths where the edge uniques rules are not met.
