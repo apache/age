@@ -31,3 +31,23 @@
 --* file. We need to keep the order of these changes.
 --* REMOVE ALL LINES ABOVE, and this one, that start with --*
 
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness2(graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness3(graphid, graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness4(graphid, graphid, graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
