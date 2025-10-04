@@ -3276,13 +3276,13 @@ static FuncCall *prevent_duplicate_edges(cypher_parsestate *cpstate,
 {
     List *edges = NIL;
     ListCell *lc;
-    List *qualified_function_name;
-    String *ag_catalog, *edge_fn;
+    List *qualified_function_name = NULL;
+    String *ag_catalog;
+    String *edge_fn = NULL;
+    bool is_vle_edge = false;
+    int nentities = list_length(entities);
 
     ag_catalog = makeString("ag_catalog");
-    edge_fn = makeString("_ag_enforce_edge_uniqueness");
-
-    qualified_function_name = list_make2(ag_catalog, edge_fn);
 
     /* iterate through each entity, collecting the access node for each edge */
     foreach (lc, entities)
@@ -3298,9 +3298,32 @@ static FuncCall *prevent_duplicate_edges(cypher_parsestate *cpstate,
         }
         else if (entity->type == ENT_VLE_EDGE)
         {
+            is_vle_edge = true;
             edges = lappend(edges, entity->expr);
         }
     }
+
+    if (!is_vle_edge && (nentities >= 5 && nentities <= 9))
+    {
+        if (nentities == 5)
+        {
+            edge_fn = makeString("_ag_enforce_edge_uniqueness2");
+        }
+        else if (nentities == 7)
+        {
+            edge_fn = makeString("_ag_enforce_edge_uniqueness3");
+        }
+        else
+        {
+            edge_fn = makeString("_ag_enforce_edge_uniqueness4");
+        }
+    }
+    else
+    {
+        edge_fn = makeString("_ag_enforce_edge_uniqueness");
+    }
+
+    qualified_function_name = list_make2(ag_catalog, edge_fn);
 
     return makeFuncCall(qualified_function_name, edges, COERCE_SQL_SYNTAX, -1);
 }
