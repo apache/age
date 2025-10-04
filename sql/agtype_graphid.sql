@@ -77,6 +77,27 @@ CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness2(graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness3(graphid, graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness4(graphid, graphid, graphid, graphid)
+    RETURNS bool
+    LANGUAGE c
+    STABLE
+PARALLEL SAFE
+as 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness(VARIADIC "any")
     RETURNS bool
     LANGUAGE c
