@@ -51,13 +51,9 @@ const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       NULL,
                                                       NULL};
 
-#if PG_VERSION_NUM >= 18000 
 #define TUPLE_DESC_ATTR_TYPE_ID TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, i)->atttypid
 #define TUPLE_DESC_ATTR_TYPE_ID_ENTITY TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, update_item->entity_position - 1)->atttypid
-#else
-#define TUPLE_DESC_ATTR_TYPE_ID scanTupleSlot->tts_tupleDescriptor->attrs[i]->atttypid
-#define TUPLE_DESC_ATTR_TYPE_ID_ENTITY scanTupleSlot->tts_tupleDescriptor->attrs[update_item->entity_position - 1]->atttypid
-#endif
+
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                              int eflags)
 {

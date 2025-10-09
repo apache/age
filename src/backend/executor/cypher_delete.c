@@ -57,11 +57,8 @@ const CustomExecMethods cypher_delete_exec_methods = {DELETE_SCAN_STATE_NAME,
                                                       NULL,
                                                       NULL};
 
-#if PG_VERSION_NUM >= 18000 
 #define TUPLE_DESC_ATTR_TYPE_ID TupleDescAttr(tupleDescriptor, entity_position - 1)->atttypid
-#else
-#define TUPLE_DESC_ATTR_TYPE_ID tupleDescriptor->attrs[entity_position - 1]->atttypid
-#endif
+
 /*
  * Initialization at the beginning of execution. Setup the child node,
  * setup its scan tuple slot and projection info, expression context,
