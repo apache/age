@@ -22,6 +22,17 @@
 
 #include "nodes/ag_nodes.h"
 
+/*
+ * Added the following String definition from PostgreSQL's value.h to
+ * allow for compatability with PRs from later versions (PG15 and onward).
+ */
+typedef struct String
+{
+
+        NodeTag         type;
+        char       *sval;
+} String;
+
 /* cypher sub patterns/queries */
 typedef enum csp_kind
 {
