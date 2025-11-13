@@ -3777,8 +3777,109 @@ SELECT agtype_build_map('1', '1', 2, 2, 3.14, 3.14, 'e', 2.71);
 (1 row)
 
 --
+-- Bug found from issue 2043 - Regression in string concatenation using the + operator
+--
+-- This bug impacted specific numeric cases too.
+--
+SELECT * FROM create_graph('issue_2243');
+NOTICE:  graph "issue_2243" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2243', $$
+    CREATE (n30164502:Node {data_id: 30164502})
+    RETURN id(n30164502) + ':test_n' + n30164502.data_id
+  $$ ) as (result agtype);
+              result              
+----------------------------------
+ "844424930131969:test_n30164502"
+(1 row)
+
+-- concat / add
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer + ":test_n" + 9223372036854775807::integer
+  $$ ) as (result agtype);
+                     result                      
+-------------------------------------------------
+ "9223372036854775807:test_n9223372036854775807"
+(1 row)
+
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric + 9223372036854775807::integer
+  $$ ) as (result agtype);
+            result             
+-------------------------------
+ 18446744073709551614::numeric
+(1 row)
+
+-- sub
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric - 9223372036854775807::integer
+  $$ ) as (result agtype);
+   result   
+------------
+ 0::numeric
+(1 row)
+
+-- mul
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric * 9223372036854775807::integer
+  $$ ) as (result agtype);
+                     result                      
+-------------------------------------------------
+ 85070591730234615847396907784232501249::numeric
+(1 row)
+
+-- div
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric / 9223372036854775807::integer
+  $$ ) as (result agtype);
+             result              
+---------------------------------
+ 1.00000000000000000000::numeric
+(1 row)
+
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer / 9223372036854775807::numeric
+  $$ ) as (result agtype);
+             result              
+---------------------------------
+ 1.00000000000000000000::numeric
+(1 row)
+
+-- mod
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric % 9223372036854775807::integer
+  $$ ) as (result agtype);
+   result   
+------------
+ 0::numeric
+(1 row)
+
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer % 9223372036854775807::numeric
+  $$ ) as (result agtype);
+   result   
+------------
+ 0::numeric
+(1 row)
+
+--
 -- Cleanup
 --
+SELECT drop_graph('issue_2243', true);
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table issue_2243._ag_label_vertex
+drop cascades to table issue_2243._ag_label_edge
+drop cascades to table issue_2243."Node"
+NOTICE:  graph "issue_2243" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT drop_graph('agtype_build_map', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table agtype_build_map._ag_label_vertex

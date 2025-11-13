@@ -1076,8 +1076,55 @@ SELECT * FROM cypher('agtype_build_map', $$ RETURN ag_catalog.agtype_build_map('
 SELECT agtype_build_map('1', '1', 2, 2, 3.14, 3.14, 'e', 2.71);
 
 --
+-- Bug found from issue 2043 - Regression in string concatenation using the + operator
+--
+-- This bug impacted specific numeric cases too.
+--
+SELECT * FROM create_graph('issue_2243');
+SELECT * FROM cypher('issue_2243', $$
+    CREATE (n30164502:Node {data_id: 30164502})
+    RETURN id(n30164502) + ':test_n' + n30164502.data_id
+  $$ ) as (result agtype);
+
+-- concat / add
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer + ":test_n" + 9223372036854775807::integer
+  $$ ) as (result agtype);
+
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric + 9223372036854775807::integer
+  $$ ) as (result agtype);
+
+-- sub
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric - 9223372036854775807::integer
+  $$ ) as (result agtype);
+
+-- mul
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric * 9223372036854775807::integer
+  $$ ) as (result agtype);
+
+-- div
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric / 9223372036854775807::integer
+  $$ ) as (result agtype);
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer / 9223372036854775807::numeric
+  $$ ) as (result agtype);
+
+-- mod
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::numeric % 9223372036854775807::integer
+  $$ ) as (result agtype);
+SELECT * FROM cypher('issue_2243', $$
+    RETURN 9223372036854775807::integer % 9223372036854775807::numeric
+  $$ ) as (result agtype);
+
+--
 -- Cleanup
 --
+SELECT drop_graph('issue_2243', true);
 SELECT drop_graph('agtype_build_map', true);
 
 DROP TABLE agtype_table;
