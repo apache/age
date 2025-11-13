@@ -68,7 +68,7 @@ static char *get_string_from_agtype_value(agtype_value *agtv, int *length)
     {
     case AGTV_INTEGER:
         number = DirectFunctionCall1(int8out,
-                                     Int8GetDatum(agtv->val.int_value));
+                                     Int64GetDatum(agtv->val.int_value));
         string = DatumGetCString(number);
         *length = strlen(string);
         return string;
@@ -115,7 +115,7 @@ Datum get_numeric_datum_from_agtype_value(agtype_value *agtv)
     {
     case AGTV_INTEGER:
         return DirectFunctionCall1(int8_numeric,
-                                   Int8GetDatum(agtv->val.int_value));
+                                   Int64GetDatum(agtv->val.int_value));
     case AGTV_FLOAT:
         return DirectFunctionCall1(float8_numeric,
                                    Float8GetDatum(agtv->val.float_value));
