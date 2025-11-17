@@ -2,10 +2,10 @@ name: Nodejs Driver Tests
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "PG18" ]
 
   pull_request:
-    branches: [ "master" ]
+    branches: [ "PG18" ]
 
 jobs:
   build:
