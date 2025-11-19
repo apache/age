@@ -193,5 +193,45 @@ SELECT raise_notice('graph1');
 
 DROP FUNCTION raise_notice(TEXT);
 
--- dropping the graph
+--
+-- Fix issue 2245 - Creating more than 41 vlabels causes drop_graph to fail with
+--  label (relation) cache corrupted
+--
+
+-- this result will change if another graph was created prior to this point.
+SELECT count(*) FROM ag_label;
+
+SELECT * FROM create_graph('issue_2245');
+SELECT * FROM cypher('issue_2245', $$
+  CREATE (a1:Part1 {part_num: '123'}), (a2:Part2 {part_num: '345'}), (a3:Part3 {part_num: '456'}),
+         (a4:Part4 {part_num: '789'}), (a5:Part5 {part_num: '123'}), (a6:Part6 {part_num: '345'}),
+         (a7:Part7 {part_num: '456'}), (a8:Part8 {part_num: '789'}), (a9:Part9 {part_num: '123'}),
+         (a10:Part10 {part_num: '345'}), (a11:Part11 {part_num: '456'}), (a12:Part12 {part_num: '789'}),
+         (a13:Part13 {part_num: '123'}), (a14:Part14 {part_num: '345'}), (a15:Part15 {part_num: '456'}),
+         (a16:Part16 {part_num: '789'}), (a17:Part17 {part_num: '123'}), (a18:Part18 {part_num: '345'}),
+         (a19:Part19 {part_num: '456'}), (a20:Part20 {part_num: '789'}), (a21:Part21 {part_num: '123'}),
+         (a22:Part22 {part_num: '345'}), (a23:Part23 {part_num: '456'}), (a24:Part24 {part_num: '789'}),
+         (a25:Part25 {part_num: '123'}), (a26:Part26 {part_num: '345'}), (a27:Part27 {part_num: '456'}),
+         (a28:Part28 {part_num: '789'}), (a29:Part29 {part_num: '789'}), (a30:Part30 {part_num: '123'}),
+         (a31:Part31 {part_num: '345'}), (a32:Part32 {part_num: '456'}), (a33:Part33 {part_num: '789'}),
+         (a34:Part34 {part_num: '123'}), (a35:Part35 {part_num: '345'}), (a36:Part36 {part_num: '456'}),
+         (a37:Part37 {part_num: '789'}), (a38:Part38 {part_num: '123'}), (a39:Part39 {part_num: '345'}),
+         (a40:Part40 {part_num: '456'}), (a41:Part41 {part_num: '789'}), (a42:Part42 {part_num: '345'}),
+         (a43:Part43 {part_num: '456'}), (a44:Part44 {part_num: '789'}), (a45:Part45 {part_num: '456'}),
+         (a46:Part46 {part_num: '789'}), (a47:Part47 {part_num: '456'}), (a48:Part48 {part_num: '789'}),
+         (a49:Part49 {part_num: '789'}), (a50:Part50 {part_num: '456'}), (a51:Part51 {part_num: '789'})
+  $$) AS (result agtype);
+
+SELECT count(*) FROM ag_label;
+SELECT drop_graph('issue_2245', true);
+
+-- this result should be the same as the one before the create_graph
+SELECT count(*) FROM ag_label;
+
+-- create the graph again
+SELECT * FROM create_graph('issue_2245');
+SELECT count(*) FROM ag_label;
+
+-- dropping the graphs
+SELECT drop_graph('issue_2245', true);
 SELECT drop_graph('graph', true);
