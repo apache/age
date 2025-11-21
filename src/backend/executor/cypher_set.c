@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "storage/bufmgr.h"
 
 #include "executor/cypher_executor.h"
@@ -112,8 +113,8 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                   LockWaitBlock, false, &buffer, &hufd);
 
     if (lock_result == TM_Ok)
-    {
-        ExecOpenIndices(resultRelInfo, false);
+        {
+            ExecOpenIndices(resultRelInfo, false);
         ExecStoreVirtualTuple(elemTupleSlot);
         tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
         tuple->t_self = old_tuple->t_self;
@@ -310,7 +311,7 @@ static void update_all_paths(CustomScanState *node, graphid id,
         agtype_value *original_entity_value;
 
         /* skip nulls */
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[i].atttypid != AGTYPEOID)
+        if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, i)->atttypid != AGTYPEOID)
         {
             continue;
         }
@@ -414,7 +415,7 @@ static void process_update_list(CustomScanState *node)
             continue;
         }
 
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[update_item->entity_position -1].atttypid != AGTYPEOID)
+        if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, update_item->entity_position -1)->atttypid != AGTYPEOID)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -588,7 +589,7 @@ static void process_update_list(CustomScanState *node)
         }
 
         estate->es_snapshot->curcid = cid;
-        /* close relation */
+        /* close relation */        
         ExecCloseIndices(resultRelInfo);
         table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
