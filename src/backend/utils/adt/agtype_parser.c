@@ -74,11 +74,9 @@ static void parse_object(agtype_lex_context *lex, agtype_sem_action *sem);
 static void parse_array_element(agtype_lex_context *lex,
                                 agtype_sem_action *sem);
 static void parse_array(agtype_lex_context *lex, agtype_sem_action *sem);
-static void report_parse_error(agtype_parse_context ctx,
-                               agtype_lex_context *lex)
-    pg_attribute_noreturn();
-static void report_invalid_token(agtype_lex_context *lex)
-    pg_attribute_noreturn();
+static pg_noreturn void report_parse_error(agtype_parse_context ctx,
+                               agtype_lex_context *lex);
+static pg_noreturn void report_invalid_token(agtype_lex_context *lex);
 static int report_agtype_context(agtype_lex_context *lex);
 static char *extract_mb_char(char *s);
 
