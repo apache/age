@@ -153,7 +153,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
             }
 
             if (close_indices)
+            {
                 ExecCloseIndices(resultRelInfo);
+            }
             estate->es_result_relations = saved_resultRels;
 
             return tuple;
@@ -173,7 +175,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         }
 
         if (close_indices)
+        {
             ExecCloseIndices(resultRelInfo);
+        }
     }
     else if (lock_result == TM_SelfModified)
     {
