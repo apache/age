@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "storage/bufmgr.h"
 #include "common/hashfn.h"
 
@@ -257,7 +258,7 @@ static agtype_value *extract_entity(CustomScanState *node,
     tupleDescriptor = scanTupleSlot->tts_tupleDescriptor;
 
     /* type checking, make sure the entity is an agtype vertex or edge */
-    if (tupleDescriptor->attrs[entity_position -1].atttypid != AGTYPEOID)
+    if (TupleDescAttr(tupleDescriptor, entity_position -1)->atttypid != AGTYPEOID)
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                 errmsg("DELETE clause can only delete agtype")));
 
