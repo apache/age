@@ -120,6 +120,8 @@ endif
 
 REGRESS += drop
 
+PG_CFLAGS += -Wmissing-variable-declarations -Werror
+
 srcdir=`pwd`
 
 ag_regress_dir = $(srcdir)/regress
