@@ -181,6 +181,17 @@ static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo);
 agtype_value *agtype_composite_to_agtype_value_binary(agtype *a);
 static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr);
 
+
+void *repalloc_check(void *ptr, size_t len)
+{
+   if (ptr != NULL)
+   {
+       return repalloc(ptr, len);
+   }
+
+   return palloc(len);
+}
+
 /*
  * Due to how pfree can be implemented, it may not check for a passed NULL. This
  * wrapper does just that, it will only call pfree is the pointer passed is not
@@ -5580,7 +5591,7 @@ static char *get_label_name(const char *graph_name, graphid element_graphid)
     result = NameStr(*DatumGetName(heap_getattr(tuple, Anum_ag_label_name,
                                                 tupdesc, &column_is_null)));
     /* duplicate it */
-    result = strdup(result);
+    result = pstrdup(result);
 
     /* end the scan and close the relation */
     systable_endscan(scan_desc);
@@ -5673,8 +5684,8 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     Assert(AGT_ROOT_IS_SCALAR(agt_arg));
     agtv_object = get_ith_agtype_value_from_container(&agt_arg->root, 0);
     Assert(agtv_object->type == AGTV_STRING);
-    graph_name = strndup(agtv_object->val.string.val,
-                         agtv_object->val.string.len);
+    graph_name = pnstrdup(agtv_object->val.string.val,
+                          agtv_object->val.string.len);
 
     /* get the edge */
     agt_arg = AG_GET_ARG_AGTYPE_P(1);
@@ -5708,8 +5719,6 @@ Datum age_startnode(PG_FUNCTION_ARGS)
 
     result = get_vertex(graph_name, label_name, start_id);
 
-    free(label_name);
-
     return result;
 }
 
@@ -5738,8 +5747,8 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     Assert(AGT_ROOT_IS_SCALAR(agt_arg));
     agtv_object = get_ith_agtype_value_from_container(&agt_arg->root, 0);
     Assert(agtv_object->type == AGTV_STRING);
-    graph_name = strndup(agtv_object->val.string.val,
-                         agtv_object->val.string.len);
+    graph_name = pnstrdup(agtv_object->val.string.val,
+                          agtv_object->val.string.len);
 
     /* get the edge */
     agt_arg = AG_GET_ARG_AGTYPE_P(1);
@@ -5772,8 +5781,6 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     Assert(label_name != NULL);
 
     result = get_vertex(graph_name, label_name, end_id);
-
-    free(label_name);
 
     return result;
 }
@@ -6401,11 +6408,10 @@ Datum age_tofloat(PG_FUNCTION_ARGS)
                 NumericGetDatum(agtv_value->val.numeric)));
         else if (agtv_value->type == AGTV_STRING)
         {
-            string = strndup(agtv_value->val.string.val,
-                             agtv_value->val.string.len);
+            string = pnstrdup(agtv_value->val.string.val,
+                              agtv_value->val.string.len);
             result = float8in_internal_null(string, NULL, "double precision",
                                             string, &is_valid);
-            free(string);
             if (!is_valid)
                 PG_RETURN_NULL();
         }
@@ -6703,8 +6709,8 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
         {
             char *endptr;
             /* we need a null terminated cstring */
-            string = strndup(agtv_value->val.string.val,
-                             agtv_value->val.string.len);
+            string = pnstrdup(agtv_value->val.string.val,
+                              agtv_value->val.string.len);
             /* convert it if it is a regular integer string */
             result = strtoi64(string, &endptr, 10);
 
@@ -6718,7 +6724,6 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
 
                 f = float8in_internal_null(string, NULL, "double precision",
                                            string, &is_valid);
-                free(string);
                 /*
                  * If the conversions failed or it's a special float value,
                  * return null.
@@ -6730,10 +6735,6 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                 }
 
                 result = (int64) f;
-            }
-            else
-            {
-                free(string);
             }
         }
         else
