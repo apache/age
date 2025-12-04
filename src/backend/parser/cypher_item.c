@@ -30,6 +30,7 @@
 
 #include "parser/cypher_expr.h"
 #include "parser/cypher_item.h"
+#include "parser/cypher_transform_entity.h"
 
 static List *ExpandAllTables(ParseState *pstate, int location);
 static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
@@ -169,6 +170,43 @@ static List *ExpandAllTables(ParseState *pstate, int location)
 }
 
 /*
+ * Function takes the name of the passed var and then checks it against all of
+ * the potential var suffixes. If one is found it returns the root/entity name.
+ */
+static char *get_parent_entity_name(char *varname)
+{
+    List *suffixes = NULL;
+    ListCell *slc = NULL;
+    int vlen = strlen(varname);
+
+    /* list of current suffixes */
+    suffixes = list_make5(VERTEX_ID_COLUMN_SUFFIX,
+                          VERTEX_PROPERTIES_COLUMN_SUFFIX,
+                          EDGE_ID_COLUMN_SUFFIX,
+                          EDGE_PROPERTIES_COLUMN_SUFFIX,
+                          EDGE_START_ID_COLUMN_SUFFIX);
+    suffixes = lappend(suffixes, EDGE_END_ID_COLUMN_SUFFIX);
+
+    /*
+     * Check each suffix against the input varname. If a match is found,
+     * return the potential entity name.
+     */
+    foreach (slc, suffixes)
+    {
+        char *suffix = (char*) lfirst(slc);
+        int slen = strlen(suffix);
+
+        if (strncmp(&varname[vlen-slen], suffix, slen) == 0)
+        {
+            return strndup(varname, vlen-slen);
+        }
+    }
+
+    /* nothing found, return null */
+    return NULL;
+}
+
+/*
  * From PG's expandNSItemAttrs
  * Modified to exclude hidden variables and aliases in RETURN *
  */
@@ -176,6 +214,7 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
 			       int sublevels_up, bool require_col_privs,
                                int location)
 {
+    cypher_parsestate *cpstate = (cypher_parsestate*)pstate;
     RangeTblEntry *rte = pnsi->p_rte;
     RTEPermissionInfo *perminfo = pnsi->p_perminfo;
     List *names, *vars;
@@ -187,7 +226,7 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
     vars = expandNSItemVars(pstate, pnsi, sublevels_up, location, &names);
 
     /*
-     * Require read access to the table.  This is normally redundant with the
+     * Require read access to the table. This is normally redundant with the
      * markVarForSelectPriv calls below, but not if the table has zero
      * columns.
      */
@@ -203,14 +242,29 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
         char *label = strVal(lfirst(name));
         Var *varnode = (Var *)lfirst(var);
         TargetEntry *te;
+        char *entity = NULL;
 
         /* we want to skip our "hidden" variables */
         if (strncmp(AGE_DEFAULT_VARNAME_PREFIX, label, var_prefix_len) == 0)
+        {
             continue;
+        }
 
-        /* we want to skip out "hidden" aliases */
+        /* we want to skip our "hidden" aliases */
         if (strncmp(AGE_DEFAULT_ALIAS_PREFIX, label, alias_prefix_len) == 0)
+        {
             continue;
+        }
+
+        /*
+         * If we find an potential entity based off of this var and it exists,
+         * we need to skip it.
+         */
+        entity = get_parent_entity_name(label);
+        if (entity != NULL && find_variable(cpstate, entity) != NULL)
+        {
+            continue;
+        }
 
         /* add this variable to the list */
         te = makeTargetEntry((Expr *)varnode,
