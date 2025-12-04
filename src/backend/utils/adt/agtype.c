@@ -184,8 +184,11 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr);
 
 void *repalloc_check(void *ptr, size_t len)
 {
-   if (ptr)
+   if (ptr != NULL)
+   {
        return repalloc(ptr, len);
+   }
+
    return palloc(len);
 }
 
