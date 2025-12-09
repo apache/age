@@ -141,6 +141,7 @@ SELECT * FROM cypher('cypher_union', $$MATCH (n) RETURN n UNION ALL MATCH (m) RE
 ERROR:  could not find rte for n
 LINE 2: ..., $$MATCH (n) RETURN n UNION ALL MATCH (m) RETURN n$$) AS (r...
                                                              ^
+HINT:  variable n does not exist within scope of usage
 /*
  *UNION and UNION ALL, type casting
  */

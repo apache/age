@@ -3370,6 +3370,7 @@ $$) AS (toBooleanList agtype);
 ERROR:  could not find rte for fail
 LINE 2:     RETURN toBooleanList(fail)
                                  ^
+HINT:  variable fail does not exist within scope of usage
 SELECT * FROM cypher('expr', $$
     RETURN toBooleanList("fail")
 $$) AS (toBooleanList agtype);
@@ -3513,6 +3514,7 @@ $$) AS (toFloatList agtype);
 ERROR:  could not find rte for failed
 LINE 2:     RETURN toFloatList([failed])
                                 ^
+HINT:  variable failed does not exist within scope of usage
 SELECT * FROM cypher('expr', $$
     RETURN toFloatList("failed")
 $$) AS (toFloatList agtype);
@@ -3892,12 +3894,14 @@ $$) AS (toStringList agtype);
 ERROR:  could not find rte for b
 LINE 2:     RETURN toStringList([['a', b]]) 
                                        ^
+HINT:  variable b does not exist within scope of usage
 SELECT * FROM cypher('expr', $$ 
     RETURN toStringList([test]) 
 $$) AS (toStringList agtype);
 ERROR:  could not find rte for test
 LINE 2:     RETURN toStringList([test]) 
                                  ^
+HINT:  variable test does not exist within scope of usage
 --
 -- reverse(string)
 --
@@ -7923,6 +7927,7 @@ SELECT * FROM cypher('list', $$ RETURN tail(abc) $$) AS (tail agtype);
 ERROR:  could not find rte for abc
 LINE 1: SELECT * FROM cypher('list', $$ RETURN tail(abc) $$) AS (tai...
                                                     ^
+HINT:  variable abc does not exist within scope of usage
 SELECT * FROM cypher('list', $$ RETURN tail() $$) AS (tail agtype);
 ERROR:  function ag_catalog.age_tail() does not exist
 LINE 1: SELECT * FROM cypher('list', $$ RETURN tail() $$) AS (tail a...
@@ -9012,8 +9017,69 @@ SELECT agtype_hash_cmp(agtype_in('[null, null, null, null, null]'));
 (1 row)
 
 --
+-- Issue 2263: AGE returns incorrect error message for EXISTS subquery outer variable reference
+--
+--       NOTE: There isn't really anything incorrect about the message. However,
+--             it could be more clear.
+--
+SELECT * FROM create_graph('issue_2263');
+NOTICE:  graph "issue_2263" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2263', $$
+    CREATE a=()-[:T]->(), p=({k:exists{return a}})-[:T]->()
+    RETURN 1
+$$) AS (one agtype);
+ERROR:  could not find rte for a
+LINE 2:     CREATE a=()-[:T]->(), p=({k:exists{return a}})-[:T]->()
+                                                      ^
+HINT:  variable a does not exist within scope of usage
+SELECT * FROM cypher('issue_2263', $$
+    CREATE p0=(n0), (n1{k:EXISTS{WITH p0}})
+    RETURN 1
+$$) AS (one agtype);
+ERROR:  could not find rte for p0
+LINE 2:     CREATE p0=(n0), (n1{k:EXISTS{WITH p0}})
+                                              ^
+HINT:  variable p0 does not exist within scope of usage
+SELECT * FROM cypher('issue_2263', $$
+    CREATE ()-[r4 :T6]->(), ({k2:COUNT{WITH r4.k AS a3 UNWIND [] AS a4 WITH DISTINCT NULL AS a5}})
+    RETURN 1
+$$) AS (one agtype);
+ERROR:  could not find rte for r4
+LINE 2:     CREATE ()-[r4 :T6]->(), ({k2:COUNT{WITH r4.k AS a3 UNWIN...
+                                                    ^
+HINT:  variable r4 does not exist within scope of usage
+SELECT * FROM cypher('issue_2263', $$
+    CREATE (x), ({a1:EXISTS { RETURN COUNT(0) AS a2, keys(x) AS a4 }})
+$$) AS (out agtype);
+ERROR:  could not find rte for x
+LINE 2: ...TE (x), ({a1:EXISTS { RETURN COUNT(0) AS a2, keys(x) AS a4 }...
+                                                             ^
+HINT:  variable x does not exist within scope of usage
+SELECT * FROM cypher('issue_2263', $$
+    CREATE x = (), ({ a0:COUNT { MATCH () WHERE CASE WHEN true THEN (x IS NULL) END RETURN 0 } })
+$$) AS (out agtype);
+ERROR:  could not find rte for x
+LINE 2: ...({ a0:COUNT { MATCH () WHERE CASE WHEN true THEN (x IS NULL)...
+                                                             ^
+HINT:  variable x does not exist within scope of usage
+--
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_2263', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table issue_2263._ag_label_vertex
+drop cascades to table issue_2263._ag_label_edge
+NOTICE:  graph "issue_2263" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT * FROM drop_graph('issue_1988', true);
 NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table issue_1988._ag_label_vertex
