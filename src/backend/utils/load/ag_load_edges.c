@@ -36,8 +36,8 @@ void edge_field_cb(void *field, size_t field_len, void *data)
     if (cr->cur_field == cr->alloc)
     {
         cr->alloc *= 2;
-        cr->fields = realloc(cr->fields, sizeof(char *) * cr->alloc);
-        cr->fields_len = realloc(cr->header, sizeof(size_t *) * cr->alloc);
+        cr->fields = repalloc_check(cr->fields, sizeof(char *) * cr->alloc);
+        cr->fields_len = repalloc_check(cr->header, sizeof(size_t *) * cr->alloc);
         if (cr->fields == NULL)
         {
             cr->error = 1;
@@ -48,7 +48,7 @@ void edge_field_cb(void *field, size_t field_len, void *data)
     }
     cr->fields_len[cr->cur_field] = field_len;
     cr->curr_row_length += field_len;
-    cr->fields[cr->cur_field] = strndup((char*)field, field_len);
+    cr->fields[cr->cur_field] = pnstrdup((char*)field, field_len);
     cr->cur_field += 1;
 }
 
@@ -78,13 +78,13 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
     {
         cr->header_num = cr->cur_field;
         cr->header_row_length = cr->curr_row_length;
-        cr->header_len = (size_t* )malloc(sizeof(size_t *) * cr->cur_field);
-        cr->header = malloc((sizeof (char*) * cr->cur_field));
+        cr->header_len = (size_t* )palloc(sizeof(size_t *) * cr->cur_field);
+        cr->header = palloc((sizeof (char*) * cr->cur_field));
 
         for (i = 0; i<cr->cur_field; i++)
         {
             cr->header_len[i] = cr->fields_len[i];
-            cr->header[i] = strndup(cr->fields[i], cr->header_len[i]);
+            cr->header[i] = pnstrdup(cr->fields[i], cr->header_len[i]);
         }
     }
     else
@@ -133,7 +133,7 @@ void edge_row_cb(int delim __attribute__((unused)), void *data)
 
     for (i = 0; i < n_fields; ++i)
     {
-        free(cr->fields[i]);
+        pfree_if_not_null(cr->fields[i]);
     }
 
     if (cr->error)
@@ -192,6 +192,10 @@ int create_edges_from_csv_file(char *file_path,
                 (errmsg("Failed to initialize csv parser\n")));
     }
 
+    p.malloc_func = palloc;
+    p.realloc_func = repalloc_check;
+    p.free_func = pfree_if_not_null;
+
     csv_set_space_func(&p, is_space);
     csv_set_term_func(&p, is_term);
 
@@ -202,47 +206,52 @@ int create_edges_from_csv_file(char *file_path,
                 (errmsg("Failed to open %s\n", file_path)));
     }
 
-    label_seq_name = get_label_seq_relation_name(label_name);
-
-    memset((void*)&cr, 0, sizeof(csv_edge_reader));
-    cr.alloc = 128;
-    cr.fields = malloc(sizeof(char *) * cr.alloc);
-    cr.fields_len = malloc(sizeof(size_t *) * cr.alloc);
-    cr.header_row_length = 0;
-    cr.curr_row_length = 0;
-    cr.graph_name = graph_name;
-    cr.graph_oid = graph_oid;
-    cr.label_name = label_name;
-    cr.label_id = label_id;
-    cr.label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
-    cr.load_as_agtype = load_as_agtype;
-
-    /* Initialize the batch insert state */
-    init_batch_insert(&cr.batch_state, label_name, graph_oid);
-
-    while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
+    PG_TRY();
     {
-        if (csv_parse(&p, buf, bytes_read, edge_field_cb,
-                      edge_row_cb, &cr) != bytes_read)
+        label_seq_name = get_label_seq_relation_name(label_name);
+
+        memset((void*)&cr, 0, sizeof(csv_edge_reader));
+        cr.alloc = 128;
+        cr.fields = palloc(sizeof(char *) * cr.alloc);
+        cr.fields_len = palloc(sizeof(size_t *) * cr.alloc);
+        cr.header_row_length = 0;
+        cr.curr_row_length = 0;
+        cr.graph_name = graph_name;
+        cr.graph_oid = graph_oid;
+        cr.label_name = label_name;
+        cr.label_id = label_id;
+        cr.label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
+        cr.load_as_agtype = load_as_agtype;
+
+        /* Initialize the batch insert state */
+        init_batch_insert(&cr.batch_state, label_name, graph_oid);
+
+        while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
         {
-            ereport(ERROR, (errmsg("Error while parsing file: %s\n",
-                                   csv_strerror(csv_error(&p)))));
+            if (csv_parse(&p, buf, bytes_read, edge_field_cb,
+                        edge_row_cb, &cr) != bytes_read)
+            {
+                ereport(ERROR, (errmsg("Error while parsing file: %s\n",
+                                    csv_strerror(csv_error(&p)))));
+            }
+        }
+
+        csv_fini(&p, edge_field_cb, edge_row_cb, &cr);
+
+        /* Finish any remaining batch inserts */
+        finish_batch_insert(&cr.batch_state);
+
+        if (ferror(fp))
+        {
+            ereport(ERROR, (errmsg("Error while reading file %s\n", file_path)));
         }
     }
-
-    csv_fini(&p, edge_field_cb, edge_row_cb, &cr);
-
-    /* Finish any remaining batch inserts */
-    finish_batch_insert(&cr.batch_state);
-
-    if (ferror(fp))
+    PG_FINALLY();
     {
-        ereport(ERROR, (errmsg("Error while reading file %s\n", file_path)));
+        fclose(fp);
+        csv_free(&p);
     }
+    PG_END_TRY();
 
-    fclose(fp);
-
-    free(cr.fields);
-    csv_free(&p);
     return EXIT_SUCCESS;
 }
