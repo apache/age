@@ -169,13 +169,20 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * Const - constant value or expression node
          * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
          *
-         * These are a special case that needs to be ignored.
+         * Added the following, although only the first 2 caused crashes in tests -
+         * CoalesceExpr, MinMaxExpr, CaseExpr, XmlExpr, ArrayExpr, RowExpr
+         *
+         * These are all special case that needs to be ignored.
          *
          */
         if (IsA(funcexpr, SQLValueFunction)
-                || IsA(funcexpr, CoerceViaIO)
-                || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-                || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+            || IsA(funcexpr, CoerceViaIO)
+            || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+            || IsA(funcexpr, JsonConstructorExpr)
+            || IsA(funcexpr, CoalesceExpr) || IsA(funcexpr, MinMaxExpr)
+            || IsA(funcexpr, CaseExpr) || IsA(funcexpr, XmlExpr)
+            || IsA(funcexpr, ArrayExpr) || IsA(funcexpr, RowExpr))
         {
             return false;
         }
@@ -341,13 +348,20 @@ static bool is_func_cypher(FuncExpr *funcexpr)
      * Const - constant value or expression node
      * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
      *
-     * These are a special case that needs to be ignored.
+     * Added the following, although only the first 2 caused crashes in tests -
+     * CoalesceExpr, MinMaxExpr, CaseExpr, XmlExpr, ArrayExpr, RowExpr
+     *
+     * These are all special case that needs to be ignored.
      *
      */
     if (IsA(funcexpr, SQLValueFunction)
             || IsA(funcexpr, CoerceViaIO)
             || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+            || IsA(funcexpr, JsonConstructorExpr)
+            || IsA(funcexpr, CoalesceExpr) || IsA(funcexpr, MinMaxExpr)
+            || IsA(funcexpr, CaseExpr) || IsA(funcexpr, XmlExpr)
+            || IsA(funcexpr, ArrayExpr) || IsA(funcexpr, RowExpr))
     {
         return false;
     }
