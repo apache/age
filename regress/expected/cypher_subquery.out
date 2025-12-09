@@ -135,6 +135,7 @@ SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 ERROR:  could not find rte for c
 LINE 5:               RETURN c
                              ^
+HINT:  variable c does not exist within scope of usage
 --union, no returns
 SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 									WHERE EXISTS {
@@ -341,6 +342,7 @@ SELECT * FROM cypher('subquery', $$ RETURN 1,
 ERROR:  could not find rte for a
 LINE 4:                RETURN a
                               ^
+HINT:  variable a does not exist within scope of usage
 --- COUNT
 --count pattern subquery in where
 SELECT * FROM cypher('subquery', $$ MATCH (a:person)
@@ -540,6 +542,7 @@ SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 ERROR:  could not find rte for b
 LINE 2:          RETURN a.name, COUNT{MATCH (a) RETURN b} $$)
                                                        ^
+HINT:  variable b does not exist within scope of usage
 --incorrect nested variable reference
 SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 									RETURN a.name, COUNT{MATCH (a)
@@ -549,6 +552,7 @@ SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 ERROR:  could not find rte for b
 LINE 4:                RETURN b} $$)
                               ^
+HINT:  variable b does not exist within scope of usage
 --count nested with exists
 SELECT * FROM cypher('subquery', $$ MATCH (a:person)
 									RETURN a.name,

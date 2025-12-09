@@ -437,36 +437,42 @@ $$) AS t(id text);
 ERROR:  could not find rte for _$09A_z
 LINE 2: RETURN _$09A_z
                ^
+HINT:  variable _$09A_z does not exist within scope of usage
 SELECT * FROM cypher('scan', $$
 RETURN A
 $$) AS t(id text);
 ERROR:  could not find rte for A
 LINE 2: RETURN A
                ^
+HINT:  variable A does not exist within scope of usage
 SELECT * FROM cypher('scan', $$
 RETURN z
 $$) AS t(id text);
 ERROR:  could not find rte for z
 LINE 2: RETURN z
                ^
+HINT:  variable z does not exist within scope of usage
 SELECT * FROM cypher('scan', $$
 RETURN `$`
 $$) AS t(id text);
 ERROR:  could not find rte for $
 LINE 2: RETURN `$`
                ^
+HINT:  variable $ does not exist within scope of usage
 SELECT * FROM cypher('scan', $$
 RETURN `0`
 $$) AS t(id text);
 ERROR:  could not find rte for 0
 LINE 2: RETURN `0`
                ^
+HINT:  variable 0 does not exist within scope of usage
 SELECT * FROM cypher('scan', $$
 RETURN ````
 $$) AS t(id text);
 ERROR:  could not find rte for `
 LINE 2: RETURN ````
                ^
+HINT:  variable ` does not exist within scope of usage
 -- zero-length quoted identifier
 SELECT * FROM cypher('scan', $$
 RETURN ``
