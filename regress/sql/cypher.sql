@@ -94,6 +94,13 @@ CREATE TABLE my_edges AS
 CREATE TABLE my_detailed_paths AS
     (SELECT * FROM cypher('issue_1767', $$ MATCH p=(u)-[e]->(v) RETURN u,e,v,p $$) as (u agtype, e agtype, v agtype, p agtype));
 
+--
+-- Issue 2256: A segmentation fault occurs when calling the coalesce function
+--             This also occurs with the greatest function too.
+--
+SELECT * FROM coalesce(1, 0);
+SELECT * FROM greatest(1, 0);
+
 -- dump out the tables
 SELECT * FROM my_vertices;
 SELECT * FROM my_edges;
