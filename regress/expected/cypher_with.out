@@ -267,6 +267,7 @@ $$) AS (a agtype, b agtype);
 ERROR:  could not find rte for b
 LINE 4:     RETURN m,b
                      ^
+HINT:  variable b does not exist within scope of usage
 SELECT * FROM cypher('cypher_with', $$
     MATCH (m)-[]->(b)
     WITH m AS start_node,b AS end_node
@@ -278,6 +279,7 @@ $$) AS (id agtype, node agtype);
 ERROR:  could not find rte for end_node
 LINE 7:     RETURN id(start_node),end_node.name
                                   ^
+HINT:  variable end_node does not exist within scope of usage
 -- Clean up
 SELECT drop_graph('cypher_with', true);
 NOTICE:  drop cascades to 4 other objects
@@ -320,6 +322,7 @@ $$) AS (n agtype, d agtype);
 ERROR:  could not find rte for d
 LINE 8:     RETURN c,d
                      ^
+HINT:  variable d does not exist within scope of usage
 -- Issue 396 (should error out)
 SELECT * FROM cypher('graph',$$
     CREATE (v),(u),(w),
@@ -338,6 +341,7 @@ $$) as (a agtype,b agtype);
 ERROR:  could not find rte for v
 LINE 4:     RETURN v,path_length
                    ^
+HINT:  variable v does not exist within scope of usage
 -- Clean up
 SELECT drop_graph('graph', true);
 NOTICE:  drop cascades to 6 other objects

@@ -423,9 +423,11 @@ static Node *transform_ColumnRef(cypher_parsestate *cpstate, ColumnRef *cref)
                 else
                 {
                     ereport(ERROR,
-                                (errcode(ERRCODE_UNDEFINED_COLUMN),
-                                 errmsg("could not find rte for %s", colname),
-                                 parser_errposition(pstate, cref->location)));
+                            (errcode(ERRCODE_UNDEFINED_COLUMN),
+                             errmsg("could not find rte for %s", colname),
+                             errhint("variable %s does not exist within scope of usage",
+                                     colname),
+                             parser_errposition(pstate, cref->location)));
                 }
 
                 if (node == NULL)
