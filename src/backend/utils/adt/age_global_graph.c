@@ -1237,12 +1237,10 @@ Datum age_delete_global_graphs(PG_FUNCTION_ARGS)
     {
         char *graph_name = NULL;
 
-        graph_name = strndup(agtv_temp->val.string.val,
-                             agtv_temp->val.string.len);
+        graph_name = pnstrdup(agtv_temp->val.string.val,
+                              agtv_temp->val.string.len);
 
         success = delete_specific_GRAPH_global_contexts(graph_name);
-
-        free(graph_name);
     }
     else
     {
