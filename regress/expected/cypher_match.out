@@ -1655,10 +1655,10 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (u agtype, m agtype, l agtype);
      u      |       m       |     l      
 ------------+---------------+------------
- "someone"  | "opt_match_e" | "somebody"
- "somebody" | "opt_match_e" | "someone"
  "anybody"  | "opt_match_e" | "nobody"
  "nobody"   | "opt_match_e" | "anybody"
+ "somebody" | "opt_match_e" | "someone"
+ "someone"  | "opt_match_e" | "somebody"
 (4 rows)
 
 SELECT * FROM cypher('cypher_match', $$
@@ -1670,8 +1670,8 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
      n     |       r       |     p      |     m     |       s       |     q      
 -----------+---------------+------------+-----------+---------------+------------
- "someone" | "opt_match_e" | "somebody" | "anybody" | "opt_match_e" | "nobody"
  "anybody" | "opt_match_e" | "nobody"   | "someone" | "opt_match_e" | "somebody"
+ "someone" | "opt_match_e" | "somebody" | "anybody" | "opt_match_e" | "nobody"
 (2 rows)
 
 SELECT * FROM cypher('cypher_match', $$
@@ -1684,18 +1684,18 @@ SELECT * FROM cypher('cypher_match', $$
  $$) AS (n agtype, r agtype, p agtype, m agtype, s agtype, q agtype);
      n      |       r       |     p      |     m      |       s       |     q      
 ------------+---------------+------------+------------+---------------+------------
- "someone"  | "opt_match_e" | "somebody" | "anybody"  | "opt_match_e" | "nobody"
- "someone"  |               |            | "somebody" |               | 
- "someone"  |               |            | "nobody"   |               | 
- "somebody" |               |            | "someone"  |               | 
+ "anybody"  | "opt_match_e" | "nobody"   | "someone"  | "opt_match_e" | "somebody"
+ "anybody"  |               |            | "nobody"   |               | 
+ "anybody"  |               |            | "somebody" |               | 
+ "nobody"   |               |            | "anybody"  |               | 
+ "nobody"   |               |            | "somebody" |               | 
+ "nobody"   |               |            | "someone"  |               | 
  "somebody" |               |            | "anybody"  |               | 
  "somebody" |               |            | "nobody"   |               | 
- "anybody"  | "opt_match_e" | "nobody"   | "someone"  | "opt_match_e" | "somebody"
- "anybody"  |               |            | "somebody" |               | 
- "anybody"  |               |            | "nobody"   |               | 
- "nobody"   |               |            | "someone"  |               | 
- "nobody"   |               |            | "somebody" |               | 
- "nobody"   |               |            | "anybody"  |               | 
+ "somebody" |               |            | "someone"  |               | 
+ "someone"  | "opt_match_e" | "somebody" | "anybody"  | "opt_match_e" | "nobody"
+ "someone"  |               |            | "nobody"   |               | 
+ "someone"  |               |            | "somebody" |               | 
 (12 rows)
 
 -- Tests to catch match following optional match logic

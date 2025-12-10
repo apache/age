@@ -6949,6 +6949,94 @@ $$) AS (i agtype);
  {"key": "value"}
 (9 rows)
 
+--
+-- Test ORDER BY with AS
+--
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'John', age: 38}) $$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Jill', age: 23}) $$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Ion', age: 34}) $$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Mary', age: 57}) $$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Jerry', age: 34}) $$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name
+$$) AS (name agtype, age agtype);
+  name   | age 
+---------+-----
+ "Ion"   | 34
+ "Jerry" | 34
+ "Jill"  | 23
+ "John"  | 38
+ "Mary"  | 57
+(5 rows)
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name ASC
+$$) AS (name agtype, age agtype);
+  name   | age 
+---------+-----
+ "Ion"   | 34
+ "Jerry" | 34
+ "Jill"  | 23
+ "John"  | 38
+ "Mary"  | 57
+(5 rows)
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name DESC
+$$) AS (name agtype, age agtype);
+  name   | age 
+---------+-----
+ "Mary"  | 57
+ "John"  | 38
+ "Jill"  | 23
+ "Jerry" | 34
+ "Ion"   | 34
+(5 rows)
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY age ASC, name DESCENDING 
+$$) AS (name agtype, age agtype);
+  name   | age 
+---------+-----
+ "Jill"  | 23
+ "Jerry" | 34
+ "Ion"   | 34
+ "John"  | 38
+ "Mary"  | 57
+(5 rows)
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY age DESC, name ASCENDING
+$$) AS (name agtype, age agtype);
+  name   | age 
+---------+-----
+ "Mary"  | 57
+ "John"  | 38
+ "Ion"   | 34
+ "Jerry" | 34
+ "Jill"  | 23
+(5 rows)
+
 --CASE
 SELECT create_graph('case_statement');
 NOTICE:  graph "case_statement" has been created
