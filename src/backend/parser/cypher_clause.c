@@ -2296,6 +2296,32 @@ static TargetEntry *find_target_list_entry(cypher_parsestate *cpstate,
     ListCell *lt;
     TargetEntry *te;
 
+    /*
+     * If the ORDER BY item is a simple identifier, check if it matches
+     * an alias in the target list. This implements SQL99-compliant
+     * alias matching for ORDER BY clauses.
+     */
+    if (IsA(node, ColumnRef))
+    {
+        ColumnRef *cref = (ColumnRef *)node;
+
+        if (list_length(cref->fields) == 1)
+        {
+            char *name = strVal(linitial(cref->fields));
+
+            /* Try to match an alias in the target list */
+            foreach (lt, *target_list)
+            {
+                te = lfirst(lt);
+
+                if (te->resname != NULL && strcmp(te->resname, name) == 0)
+                {
+                    return te;
+                }
+            }
+        }
+    }
+
     expr = transform_cypher_expr(cpstate, node, expr_kind);
 
     foreach (lt, *target_list)
