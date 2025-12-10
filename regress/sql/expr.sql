@@ -2823,6 +2823,7 @@ SELECT * FROM cypher('order_by', $$CREATE ({i: false})$$) AS (result agtype);
 SELECT * FROM cypher('order_by', $$CREATE ({i: {key: 'value'}})$$) AS (result agtype);
 SELECT * FROM cypher('order_by', $$CREATE ({i: [1]})$$) AS (result agtype);
 
+
 SELECT * FROM cypher('order_by', $$
 	MATCH (u)
 	RETURN u.i
@@ -2834,6 +2835,35 @@ SELECT * FROM cypher('order_by', $$
 	RETURN u.i
 	ORDER BY u.i DESC
 $$) AS (i agtype);
+
+--
+-- Test ORDER BY with AS
+--
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'John', age: 38}) $$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Jill', age: 23}) $$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Ion', age: 34}) $$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Mary', age: 57}) $$) AS (result agtype);
+SELECT * FROM cypher('order_by', $$ CREATE ({name: 'Jerry', age: 34}) $$) AS (result agtype);
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name ASC
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY name DESC
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY age ASC, name DESCENDING 
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('order_by', $$
+        MATCH (u) WHERE EXISTS(u.name) RETURN u.name AS name, u.age AS age ORDER BY age DESC, name ASCENDING
+$$) AS (name agtype, age agtype);
 
 --CASE
 SELECT create_graph('case_statement');
