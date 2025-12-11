@@ -41,6 +41,9 @@
 
 #define YYMALLOC palloc
 #define YYFREE pfree
+
+/* Helper macro for keyword string duplication */
+#define KEYWORD_STRDUP(kw) pnstrdup((kw), strlen(kw))
 %}
 
 %locations
@@ -276,6 +279,11 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
                                            Node *where, Node *mapping_expr,
                                            int location);
 
+/* helper functions */
+static ExplainStmt *make_explain_stmt(List *options);
+static void validate_return_item_aliases(List *items, ag_scanner_t scanner);
+static cypher_return *make_default_return_node(int location);
+
 %}
 %%
 
@@ -300,81 +308,59 @@ stmt:
              * Throw syntax error in this case.
              */
             if (yychar != YYEOF)
+            {
                 yyerror(&yylloc, scanner, extra, "syntax error");
+            }
 
             extra->result = $1;
             extra->extra = NULL;
         }
     | EXPLAIN cypher_stmt semicolon_opt
         {
-            ExplainStmt *estmt = NULL;
-
             if (yychar != YYEOF)
+            {
                 yyerror(&yylloc, scanner, extra, "syntax error");
-
+            }
             extra->result = $2;
-
-            estmt = makeNode(ExplainStmt);
-            estmt->query = NULL;
-            estmt->options = NIL;
-            extra->extra = (Node *)estmt;
+            extra->extra = (Node *)make_explain_stmt(NIL);
         }
     | EXPLAIN VERBOSE cypher_stmt semicolon_opt
         {
-            ExplainStmt *estmt = NULL;
-
             if (yychar != YYEOF)
+            {
                 yyerror(&yylloc, scanner, extra, "syntax error");
-
+            }
             extra->result = $3;
-
-            estmt = makeNode(ExplainStmt);
-            estmt->query = NULL;
-            estmt->options = list_make1(makeDefElem("verbose", NULL, @2));;
-            extra->extra = (Node *)estmt;
+            extra->extra = (Node *)make_explain_stmt(
+                list_make1(makeDefElem("verbose", NULL, @2)));
         }
     | EXPLAIN ANALYZE cypher_stmt semicolon_opt
         {
-            ExplainStmt *estmt = NULL;
-
             if (yychar != YYEOF)
+            {
                 yyerror(&yylloc, scanner, extra, "syntax error");
-
+            }
             extra->result = $3;
-
-            estmt = makeNode(ExplainStmt);
-            estmt->query = NULL;
-            estmt->options = list_make1(makeDefElem("analyze", NULL, @2));;
-            extra->extra = (Node *)estmt;
+            extra->extra = (Node *)make_explain_stmt(
+                list_make1(makeDefElem("analyze", NULL, @2)));
         }
     | EXPLAIN ANALYZE VERBOSE cypher_stmt semicolon_opt
         {
-            ExplainStmt *estmt = NULL;
-
             if (yychar != YYEOF)
                 yyerror(&yylloc, scanner, extra, "syntax error");
-
             extra->result = $4;
-
-            estmt = makeNode(ExplainStmt);
-            estmt->query = NULL;
-            estmt->options = list_make2(makeDefElem("analyze", NULL, @2),
-                                        makeDefElem("verbose", NULL, @3));;
-            extra->extra = (Node *)estmt;
+            extra->extra = (Node *)make_explain_stmt(
+                list_make2(makeDefElem("analyze", NULL, @2),
+                          makeDefElem("verbose", NULL, @3)));
         }
     | EXPLAIN '(' utility_option_list ')' cypher_stmt semicolon_opt
         {
-            ExplainStmt *estmt = NULL;
-
             if (yychar != YYEOF)
+            {
                 yyerror(&yylloc, scanner, extra, "syntax error");
-
+            }
             extra->result = $5;
-
-            estmt = makeNode(ExplainStmt);
-            estmt->query = NULL;
-            estmt->options = $3;
-            extra->extra = (Node *)estmt;
+            extra->extra = (Node *)make_explain_stmt($3);
         }
     ;
 
@@ -652,57 +638,20 @@ single_subquery:
 single_subquery_no_return:
     subquery_part_init reading_clause_list
         {
-            ColumnRef *cr;
-            ResTarget *rt;
             cypher_return *n;
 
             /*
              * since subqueries allow return-less clauses, we add a
              * return node manually to reflect that syntax
              */
-            cr = makeNode(ColumnRef);
-            cr->fields = list_make1(makeNode(A_Star));
-            cr->location = @1;
-
-            rt = makeNode(ResTarget);
-            rt->name = NULL;
-            rt->indirection = NIL;
-            rt->val = (Node *)cr;
-            rt->location = @1;
-
-            n = make_ag_node(cypher_return);
-            n->distinct = false;
-            n->items = list_make1((Node *)rt);
-            n->order_by = NULL;
-            n->skip = NULL;
-            n->limit = NULL;
-
+            n = make_default_return_node(@1);
             $$ = list_concat($1, lappend($2, n));
-
         }
-        | subquery_pattern
+    | subquery_pattern
         {
-            ColumnRef *cr;
-            ResTarget *rt;
             cypher_return *n;
 
-            cr = makeNode(ColumnRef);
-            cr->fields = list_make1(makeNode(A_Star));
-            cr->location = @1;
-
-            rt = makeNode(ResTarget);
-            rt->name = NULL;
-            rt->indirection = NIL;
-            rt->val = (Node *)cr;
-            rt->location = @1;
-
-            n = make_ag_node(cypher_return);
-            n->distinct = false;
-            n->items = list_make1((Node *)rt);
-            n->order_by = NULL;
-            n->skip = NULL;
-            n->limit = NULL;
-
+            n = make_default_return_node(@1);
             $$ = lappend(list_make1($1), n);
         }
     ;
@@ -958,24 +907,10 @@ limit_opt:
 with:
     WITH DISTINCT return_item_list order_by_opt skip_opt limit_opt where_opt
         {
-            ListCell *li;
             cypher_with *n;
 
             /* check expressions are aliased */
-            foreach(li, $3)
-            {
-                ResTarget *item = lfirst(li);
-
-                /* variable does not have to be aliased */
-                if (IsA(item->val, ColumnRef) || item->name)
-                    continue;
-
-                ereport(ERROR,
-                        (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("expression item must be aliased"),
-                         errhint("Items can be aliased by using AS."),
-                         ag_scanner_errposition(item->location, scanner)));
-            }
+            validate_return_item_aliases($3, scanner);
 
             n = make_ag_node(cypher_with);
             n->distinct = true;
@@ -987,27 +922,12 @@ with:
 
             $$ = (Node *)n;
         }
-    | WITH return_item_list order_by_opt skip_opt limit_opt
-    where_opt
+    | WITH return_item_list order_by_opt skip_opt limit_opt where_opt
         {
-            ListCell *li;
             cypher_with *n;
 
             /* check expressions are aliased */
-            foreach (li, $2)
-            {
-                ResTarget *item = lfirst(li);
-
-                /* variable does not have to be aliased */
-                if (IsA(item->val, ColumnRef) || item->name)
-                    continue;
-
-                ereport(ERROR,
-                        (errcode(ERRCODE_SYNTAX_ERROR),
-                         errmsg("expression item must be aliased"),
-                         errhint("Items can be aliased by using AS."),
-                         ag_scanner_errposition(item->location, scanner)));
-            }
+            validate_return_item_aliases($2, scanner);
 
             n = make_ag_node(cypher_with);
             n->distinct = false;
@@ -2449,58 +2369,58 @@ qual_op:
  */
 
 safe_keywords:
-    ALL          { $$ = pnstrdup($1, 3); }
-    | ANALYZE    { $$ = pnstrdup($1, 7); }
-    | AND        { $$ = pnstrdup($1, 3); }
-    | AS         { $$ = pnstrdup($1, 2); }
-    | ASC        { $$ = pnstrdup($1, 3); }
-    | ASCENDING  { $$ = pnstrdup($1, 9); }
-    | BY         { $$ = pnstrdup($1, 2); }
-    | CALL       { $$ = pnstrdup($1, 4); }
-    | CASE       { $$ = pnstrdup($1, 4); }
-    | COALESCE   { $$ = pnstrdup($1, 8); }
-    | CONTAINS   { $$ = pnstrdup($1, 8); }
-    | COUNT      { $$ = pnstrdup($1 ,5); }
-    | CREATE     { $$ = pnstrdup($1, 6); }
-    | DELETE     { $$ = pnstrdup($1, 6); }
-    | DESC       { $$ = pnstrdup($1, 4); }
-    | DESCENDING { $$ = pnstrdup($1, 10); }
-    | DETACH     { $$ = pnstrdup($1, 6); }
-    | DISTINCT   { $$ = pnstrdup($1, 8); }
-    | ELSE       { $$ = pnstrdup($1, 4); }
-    | ENDS       { $$ = pnstrdup($1, 4); }
-    | EXISTS     { $$ = pnstrdup($1, 6); }
-    | EXPLAIN    { $$ = pnstrdup($1, 7); }
-    | IN         { $$ = pnstrdup($1, 2); }
-    | IS         { $$ = pnstrdup($1, 2); }
-    | LIMIT      { $$ = pnstrdup($1, 6); }
-    | MATCH      { $$ = pnstrdup($1, 6); }
-    | MERGE      { $$ = pnstrdup($1, 6); }
-    | NOT        { $$ = pnstrdup($1, 3); }
-    | OPERATOR   { $$ = pnstrdup($1, 8); }
-    | OPTIONAL   { $$ = pnstrdup($1, 8); }
-    | OR         { $$ = pnstrdup($1, 2); }
-    | ORDER      { $$ = pnstrdup($1, 5); }
-    | REMOVE     { $$ = pnstrdup($1, 6); }
-    | RETURN     { $$ = pnstrdup($1, 6); }
-    | SET        { $$ = pnstrdup($1, 3); }
-    | SKIP       { $$ = pnstrdup($1, 4); }
-    | STARTS     { $$ = pnstrdup($1, 6); }
-    | THEN       { $$ = pnstrdup($1, 4); }
-    | UNION      { $$ = pnstrdup($1, 5); }
-    | WHEN       { $$ = pnstrdup($1, 4); }
-    | VERBOSE    { $$ = pnstrdup($1, 7); }
-    | WHERE      { $$ = pnstrdup($1, 5); }
-    | WITH       { $$ = pnstrdup($1, 4); }
-    | XOR        { $$ = pnstrdup($1, 3); }
-    | YIELD      { $$ = pnstrdup($1, 5); }
+    ALL          { $$ = KEYWORD_STRDUP($1); }
+    | ANALYZE    { $$ = KEYWORD_STRDUP($1); }
+    | AND        { $$ = KEYWORD_STRDUP($1); }
+    | AS         { $$ = KEYWORD_STRDUP($1); }
+    | ASC        { $$ = KEYWORD_STRDUP($1); }
+    | ASCENDING  { $$ = KEYWORD_STRDUP($1); }
+    | BY         { $$ = KEYWORD_STRDUP($1); }
+    | CALL       { $$ = KEYWORD_STRDUP($1); }
+    | CASE       { $$ = KEYWORD_STRDUP($1); }
+    | COALESCE   { $$ = KEYWORD_STRDUP($1); }
+    | CONTAINS   { $$ = KEYWORD_STRDUP($1); }
+    | COUNT      { $$ = KEYWORD_STRDUP($1); }
+    | CREATE     { $$ = KEYWORD_STRDUP($1); }
+    | DELETE     { $$ = KEYWORD_STRDUP($1); }
+    | DESC       { $$ = KEYWORD_STRDUP($1); }
+    | DESCENDING { $$ = KEYWORD_STRDUP($1); }
+    | DETACH     { $$ = KEYWORD_STRDUP($1); }
+    | DISTINCT   { $$ = KEYWORD_STRDUP($1); }
+    | ELSE       { $$ = KEYWORD_STRDUP($1); }
+    | ENDS       { $$ = KEYWORD_STRDUP($1); }
+    | EXISTS     { $$ = KEYWORD_STRDUP($1); }
+    | EXPLAIN    { $$ = KEYWORD_STRDUP($1); }
+    | IN         { $$ = KEYWORD_STRDUP($1); }
+    | IS         { $$ = KEYWORD_STRDUP($1); }
+    | LIMIT      { $$ = KEYWORD_STRDUP($1); }
+    | MATCH      { $$ = KEYWORD_STRDUP($1); }
+    | MERGE      { $$ = KEYWORD_STRDUP($1); }
+    | NOT        { $$ = KEYWORD_STRDUP($1); }
+    | OPERATOR   { $$ = KEYWORD_STRDUP($1); }
+    | OPTIONAL   { $$ = KEYWORD_STRDUP($1); }
+    | OR         { $$ = KEYWORD_STRDUP($1); }
+    | ORDER      { $$ = KEYWORD_STRDUP($1); }
+    | REMOVE     { $$ = KEYWORD_STRDUP($1); }
+    | RETURN     { $$ = KEYWORD_STRDUP($1); }
+    | SET        { $$ = KEYWORD_STRDUP($1); }
+    | SKIP       { $$ = KEYWORD_STRDUP($1); }
+    | STARTS     { $$ = KEYWORD_STRDUP($1); }
+    | THEN       { $$ = KEYWORD_STRDUP($1); }
+    | UNION      { $$ = KEYWORD_STRDUP($1); }
+    | WHEN       { $$ = KEYWORD_STRDUP($1); }
+    | VERBOSE    { $$ = KEYWORD_STRDUP($1); }
+    | WHERE      { $$ = KEYWORD_STRDUP($1); }
+    | WITH       { $$ = KEYWORD_STRDUP($1); }
+    | XOR        { $$ = KEYWORD_STRDUP($1); }
+    | YIELD      { $$ = KEYWORD_STRDUP($1); }
     ;
 
 conflicted_keywords:
-    END_P     { $$ = pnstrdup($1, 5); }
-    | FALSE_P { $$ = pnstrdup($1, 7); }
-    | NULL_P  { $$ = pnstrdup($1, 6); }
-    | TRUE_P  { $$ = pnstrdup($1, 6); }
+    END_P     { $$ = KEYWORD_STRDUP($1); }
+    | FALSE_P { $$ = KEYWORD_STRDUP($1); }
+    | NULL_P  { $$ = KEYWORD_STRDUP($1); }
+    | TRUE_P  { $$ = KEYWORD_STRDUP($1); }
     ;
 
 %%
@@ -3384,7 +3304,7 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
 
     /*
      * Build an ARRAY sublink and attach list_comp as sub-select,
-     * it will be transformed in to query tree by us and reattached for 
+     * it will be transformed in to query tree by us and reattached for
      * pg to process.
      */
     sub = makeNode(SubLink);
@@ -3395,4 +3315,61 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
     sub->location = location;
 
     return (Node *) node_to_agtype((Node *)sub, "agtype[]", location);
+}
+
+/* Helper function to create an ExplainStmt node */
+static ExplainStmt *make_explain_stmt(List *options)
+{
+    ExplainStmt *estmt = makeNode(ExplainStmt);
+    estmt->query = NULL;
+    estmt->options = options;
+    return estmt;
+}
+
+/* Helper function to validate that return items are properly aliased */
+static void validate_return_item_aliases(List *items, ag_scanner_t scanner)
+{
+    ListCell *li;
+
+    foreach(li, items)
+    {
+        ResTarget *item = lfirst(li);
+
+        /* variable does not have to be aliased */
+        if (IsA(item->val, ColumnRef) || item->name)
+            continue;
+
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("expression item must be aliased"),
+                 errhint("Items can be aliased by using AS."),
+                 ag_scanner_errposition(item->location, scanner)));
+    }
+}
+
+/* Helper function to create a default return node (RETURN *) */
+static cypher_return *make_default_return_node(int location)
+{
+    ColumnRef *cr;
+    ResTarget *rt;
+    cypher_return *n;
+
+    cr = makeNode(ColumnRef);
+    cr->fields = list_make1(makeNode(A_Star));
+    cr->location = location;
+
+    rt = makeNode(ResTarget);
+    rt->name = NULL;
+    rt->indirection = NIL;
+    rt->val = (Node *)cr;
+    rt->location = location;
+
+    n = make_ag_node(cypher_return);
+    n->distinct = false;
+    n->items = list_make1((Node *)rt);
+    n->order_by = NULL;
+    n->skip = NULL;
+    n->limit = NULL;
+
+    return n;
 }
