@@ -62,7 +62,7 @@ python -m unittest -v test_agtypes.py
 
 ### Build from source
 ```
-python setup.py install
+pip install .
 ```
 
 ### For more information about [Apache AGE](https://age.apache.org/)
