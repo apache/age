@@ -26,7 +26,7 @@ from .builder import parseAgeValue
 _EXCEPTION_NoConnection = NoConnection()
 _EXCEPTION_GraphNotSet = GraphNotSet()
 
-WHITESPACE = re.compile('\s')
+WHITESPACE = re.compile(r'\s')
 
 
 class AgeDumper(psycopg.adapt.Dumper):
@@ -233,3 +233,4 @@ class Age:
 
     # def queryCypher(self, cypherStmt:str, columns:list=None , params:tuple=None) -> psycopg.cursor :
     #     return queryCypher(self.connection, self.graphName, cypherStmt, columns, params)
+
