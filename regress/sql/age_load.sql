@@ -17,7 +17,9 @@
  * under the License.
  */
 
-\! cp -r regress/age_load/data regress/instance/data/age_load
+\! rm -rf /tmp/age/age_load
+\! mkdir -p /tmp/age
+\! cp -r regress/age_load/data /tmp/age/age_load
 
 LOAD 'age';
 
@@ -160,4 +162,38 @@ SELECT create_elabel('agload_conversion','Edges2');
 SELECT load_edges_from_file('agload_conversion', 'Edges2', 'age_load/conversion_edges.csv', false);
 SELECT * FROM cypher('agload_conversion', $$ MATCH ()-[e:Edges2]->() RETURN properties(e) $$) as (a agtype);
 
+--
+-- Check sandbox
+--
+-- check null file name
+SELECT load_labels_from_file('agload_conversion', 'Person1', NULL, true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', NULL, true);
+
+-- check no file name
+SELECT load_labels_from_file('agload_conversion', 'Person1', '', true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', '', true);
+
+-- check for file/path does not exist
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load_xxx/conversion_vertices.csv', true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load_xxx/conversion_edges.csv', true);
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load/conversion_vertices.txt', true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load/conversion_edges.txt', true);
+
+-- check wrong extension
+\! touch /tmp/age/age_load/conversion_vertices.txt
+\! touch /tmp/age/age_load/conversion_edges.txt
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load/conversion_vertices.txt', true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load/conversion_edges.txt', true);
+
+-- check outside sandbox directory
+SELECT load_labels_from_file('agload_conversion', 'Person1', '../../etc/passwd', true, true);
+SELECT load_edges_from_file('agload_conversion', 'Edges1', '../../etc/passwd', true);
+
+--
+-- Cleanup
+--
 SELECT drop_graph('agload_conversion', true);
+
+--
+-- End
+--
