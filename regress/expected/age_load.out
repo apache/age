@@ -16,7 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-\! cp -r regress/age_load/data regress/instance/data/age_load
+\! rm -rf /tmp/age/age_load
+\! mkdir -p /tmp/age
+\! cp -r regress/age_load/data /tmp/age/age_load
 LOAD 'age';
 SET search_path TO ag_catalog;
 -- Create a country using CREATE clause
@@ -401,6 +403,43 @@ SELECT * FROM cypher('agload_conversion', $$ MATCH ()-[e:Edges2]->() RETURN prop
  {"bool": "false", "string": "nUll", "numeric": "3.14"}
 (6 rows)
 
+--
+-- Check sandbox
+--
+-- check null file name
+SELECT load_labels_from_file('agload_conversion', 'Person1', NULL, true, true);
+ERROR:  file path must not be NULL
+SELECT load_edges_from_file('agload_conversion', 'Edges1', NULL, true);
+ERROR:  file path must not be NULL
+-- check no file name
+SELECT load_labels_from_file('agload_conversion', 'Person1', '', true, true);
+ERROR:  file name cannot be zero length
+SELECT load_edges_from_file('agload_conversion', 'Edges1', '', true);
+ERROR:  file name cannot be zero length
+-- check for file/path does not exist
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load_xxx/conversion_vertices.csv', true, true);
+ERROR:  File or path does not exist [/tmp/age/age_load_xxx/conversion_vertices.csv]
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load_xxx/conversion_edges.csv', true);
+ERROR:  File or path does not exist [/tmp/age/age_load_xxx/conversion_edges.csv]
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load/conversion_vertices.txt', true, true);
+ERROR:  File or path does not exist [/tmp/age/age_load/conversion_vertices.txt]
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load/conversion_edges.txt', true);
+ERROR:  File or path does not exist [/tmp/age/age_load/conversion_edges.txt]
+-- check wrong extension
+\! touch /tmp/age/age_load/conversion_vertices.txt
+\! touch /tmp/age/age_load/conversion_edges.txt
+SELECT load_labels_from_file('agload_conversion', 'Person1', 'age_load/conversion_vertices.txt', true, true);
+ERROR:  You can only load files with extension [.csv].
+SELECT load_edges_from_file('agload_conversion', 'Edges1', 'age_load/conversion_edges.txt', true);
+ERROR:  You can only load files with extension [.csv].
+-- check outside sandbox directory
+SELECT load_labels_from_file('agload_conversion', 'Person1', '../../etc/passwd', true, true);
+ERROR:  You can only load files located in [/tmp/age/].
+SELECT load_edges_from_file('agload_conversion', 'Edges1', '../../etc/passwd', true);
+ERROR:  You can only load files located in [/tmp/age/].
+--
+-- Cleanup
+--
 SELECT drop_graph('agload_conversion', true);
 NOTICE:  drop cascades to 6 other objects
 DETAIL:  drop cascades to table agload_conversion._ag_label_vertex
@@ -415,3 +454,6 @@ NOTICE:  graph "agload_conversion" has been dropped
  
 (1 row)
 
+--
+-- End
+--
