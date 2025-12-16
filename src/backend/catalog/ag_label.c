@@ -21,6 +21,7 @@
 
 #include "access/genam.h"
 #include "catalog/indexing.h"
+#include "executor/executor.h"
 #include "nodes/makefuncs.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"

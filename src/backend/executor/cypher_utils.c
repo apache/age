@@ -24,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
 

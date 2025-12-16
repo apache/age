@@ -17,14 +17,14 @@
 #
 
 # Build stage: Install necessary development tools for compilation and installation
-FROM postgres:17 AS build
+FROM postgres:18 AS build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --no-install-suggests \
        bison \
        build-essential \
        flex \
-       postgresql-server-dev-17
+       postgresql-server-dev-18
 
 COPY . /age
 
@@ -34,7 +34,7 @@ RUN make && make install
 
 
 # Final stage: Create a final image by copying the files created in the build stage
-FROM postgres:17
+FROM postgres:18
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --no-install-suggests \
@@ -48,9 +48,9 @@ ENV LANG=en_US.UTF-8
 ENV LC_COLLATE=en_US.UTF-8
 ENV LC_CTYPE=en_US.UTF-8
 
-COPY --from=build /usr/lib/postgresql/17/lib/age.so /usr/lib/postgresql/17/lib/
-COPY --from=build /usr/share/postgresql/17/extension/age--1.6.0.sql /usr/share/postgresql/17/extension/
-COPY --from=build /usr/share/postgresql/17/extension/age.control /usr/share/postgresql/17/extension/
+COPY --from=build /usr/lib/postgresql/18/lib/age.so /usr/lib/postgresql/18/lib/
+COPY --from=build /usr/share/postgresql/18/extension/age--1.6.0.sql /usr/share/postgresql/18/extension/
+COPY --from=build /usr/share/postgresql/18/extension/age.control /usr/share/postgresql/18/extension/
 COPY docker/docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
 CMD ["postgres", "-c", "shared_preload_libraries=age"]

@@ -348,10 +348,10 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (i agtype);
                                         i                                         
 ----------------------------------------------------------------------------------
+ {"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex
  {"id": 1688849860263939, "label": "v2", "properties": {"id": "end"}}::vertex
- {"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex
- {"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex
  {"id": 1688849860263937, "label": "v2", "properties": {"id": "initial"}}::vertex
+ {"id": 1688849860263938, "label": "v2", "properties": {"id": "middle"}}::vertex
 (4 rows)
 
 SELECT * FROM cypher('cypher_match', $$
@@ -537,18 +537,18 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (i agtype, b agtype, c agtype);
  i |     b     |     c     
 ---+-----------+-----------
-   | "end"     | "middle"
- 0 | "end"     | "middle"
- 1 | "end"     | "middle"
    | "middle"  | "end"
  0 | "middle"  | "end"
  1 | "middle"  | "end"
-   | "middle"  | "initial"
- 0 | "middle"  | "initial"
- 1 | "middle"  | "initial"
+   | "end"     | "middle"
+ 0 | "end"     | "middle"
+ 1 | "end"     | "middle"
    | "initial" | "middle"
  0 | "initial" | "middle"
  1 | "initial" | "middle"
+   | "middle"  | "initial"
+ 0 | "middle"  | "initial"
+ 1 | "middle"  | "initial"
 (12 rows)
 
 SELECT * FROM cypher('cypher_match', $$
@@ -558,18 +558,18 @@ SELECT * FROM cypher('cypher_match', $$
 $$) AS (i agtype,  c agtype);
  i |     c     
 ---+-----------
-   | "middle"
- 0 | "middle"
- 1 | "middle"
    | "end"
  0 | "end"
  1 | "end"
-   | "initial"
- 0 | "initial"
- 1 | "initial"
    | "middle"
  0 | "middle"
  1 | "middle"
+   | "middle"
+ 0 | "middle"
+ 1 | "middle"
+   | "initial"
+ 0 | "initial"
+ 1 | "initial"
 (12 rows)
 
 --
@@ -2421,8 +2421,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relation
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationship: u.relationship}]->(b {age:b.age}) RETURN p $$) as (a agtype);
                                                                                                                                                                      a                                                                                                                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710659, "label": "", "properties": {"age": 3, "name": "orphan"}}::vertex, {"id": 4785074604081154, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710659, "properties": {"years": 4, "relationship": "enemies"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
  [{"id": 281474976710661, "label": "", "properties": {"age": 4, "name": "T"}}::vertex, {"id": 4785074604081153, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710661, "properties": {"years": 3, "relationship": "friends"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
+ [{"id": 281474976710659, "label": "", "properties": {"age": 3, "name": "orphan"}}::vertex, {"id": 4785074604081154, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710659, "properties": {"years": 4, "relationship": "enemies"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
 (2 rows)
 
 SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETURN 0 $$) as (a agtype);
