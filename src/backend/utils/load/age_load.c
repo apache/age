@@ -34,6 +34,62 @@ static bool json_validate(text *json);
 static Oid get_or_create_graph(const Name graph_name);
 static int32 get_or_create_label(Oid graph_oid, char *graph_name,
                                  char *label_name, char label_kind);
+static char *build_safe_filename(char *name);
+
+#define AGE_BASE_CSV_DIRECTORY "/tmp/age/"
+#define AGE_CSV_FILE_EXTENSION ".csv"
+
+static char *build_safe_filename(char *name)
+{
+    int length;
+    char path[PATH_MAX];
+    char *resolved;
+
+    if (name == NULL)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("file name cannot be NULL")));
+
+    }
+
+    length = strlen(name);
+
+    if (length == 0)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("file name cannot be zero length")));
+
+    }
+
+    snprintf(path, sizeof(path), "%s%s", AGE_BASE_CSV_DIRECTORY, name);
+
+    resolved = realpath(path, NULL);
+
+    if (resolved == NULL)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("File or path does not exist [%s]", path)));
+    }
+
+    if (strncmp(resolved, AGE_BASE_CSV_DIRECTORY,
+                strlen(AGE_BASE_CSV_DIRECTORY)) != 0)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("You can only load files located in [%s].",
+                               AGE_BASE_CSV_DIRECTORY)));
+    }
+
+    length = strlen(resolved) - 4;
+    if (strncmp(resolved+length, AGE_CSV_FILE_EXTENSION,
+                strlen(AGE_CSV_FILE_EXTENSION)) != 0)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("You can only load files with extension [%s].",
+                               AGE_CSV_FILE_EXTENSION)));
+    }
+
+    return resolved;
+}
 
 agtype *create_empty_agtype(void)
 {
@@ -363,7 +419,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
 {
     Name graph_name;
     Name label_name;
-    text* file_path;
+    text* file_name;
     char* graph_name_str;
     char* label_name_str;
     char* file_path_str;
@@ -392,7 +448,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
 
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
-    file_path = PG_GETARG_TEXT_P(2);
+    file_name = PG_GETARG_TEXT_P(2);
     id_field_exists = PG_GETARG_BOOL(3);
     load_as_agtype = PG_GETARG_BOOL(4);
 
@@ -404,7 +460,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
         label_name_str = AG_DEFAULT_LABEL_VERTEX;
     }
 
-    file_path_str = text_to_cstring(file_path);
+    file_path_str = build_safe_filename(text_to_cstring(file_name));
 
     graph_oid = get_or_create_graph(graph_name);
     label_id = get_or_create_label(graph_oid, graph_name_str,
@@ -413,6 +469,9 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
                                 label_name_str, label_id, id_field_exists,
                                 load_as_agtype);
+
+    free(file_path_str);
+
     PG_RETURN_VOID();
 }
 
@@ -422,7 +481,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     Name graph_name;
     Name label_name;
-    text* file_path;
+    text* file_name;
     char* graph_name_str;
     char* label_name_str;
     char* file_path_str;
@@ -450,7 +509,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
-    file_path = PG_GETARG_TEXT_P(2);
+    file_name = PG_GETARG_TEXT_P(2);
     load_as_agtype = PG_GETARG_BOOL(3);
 
     graph_name_str = NameStr(*graph_name);
@@ -461,7 +520,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
         label_name_str = AG_DEFAULT_LABEL_EDGE;
     }
 
-    file_path_str = text_to_cstring(file_path);
+    file_path_str = build_safe_filename(text_to_cstring(file_name));
 
     graph_oid = get_or_create_graph(graph_name);
     label_id = get_or_create_label(graph_oid, graph_name_str,
@@ -469,6 +528,9 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
                                label_name_str, label_id, load_as_agtype);
+
+    free(file_path_str);
+
     PG_RETURN_VOID();
 }
 
