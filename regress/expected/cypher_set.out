@@ -118,57 +118,57 @@ SELECT * FROM cypher('cypher_set', $$CREATE ()$$) AS (a agtype);
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3 RETURN n$$) AS (a agtype);
                                            a                                           
 ---------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
  {"id": 844424930131969, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131971, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
 (4 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
                                            a                                           
 ---------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
  {"id": 844424930131969, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131971, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
 (4 rows)
 
 --Validate Paths are updated
 SELECT * FROM cypher('cypher_set', $$MATCH (n) CREATE (n)-[:e {j:20}]->(:other_v {k:10}) RETURN n$$) AS (a agtype);
                                            a                                           
 ---------------------------------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
  {"id": 844424930131969, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131971, "label": "v", "properties": {"i": 3}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3}}::vertex
 (4 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH p=(n)-[]->() SET n.i = 50 RETURN p$$) AS (a agtype);
                                                                                                                                                        a                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710657, "label": "", "properties": {"i": 50}}::vertex, {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 281474976710657, "properties": {"j": 20}}::edge, {"id": 1407374883553281, "label": "other_v", "properties": {"k": 10}}::vertex]::path
- [{"id": 844424930131969, "label": "v", "properties": {"i": 50}}::vertex, {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131969, "properties": {"j": 20}}::edge, {"id": 1407374883553282, "label": "other_v", "properties": {"k": 10}}::vertex]::path
- [{"id": 844424930131971, "label": "v", "properties": {"i": 50}}::vertex, {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131971, "properties": {"j": 20}}::edge, {"id": 1407374883553283, "label": "other_v", "properties": {"k": 10}}::vertex]::path
- [{"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5}}::vertex, {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 844424930131970, "properties": {"j": 20}}::edge, {"id": 1407374883553284, "label": "other_v", "properties": {"k": 10}}::vertex]::path
+ [{"id": 844424930131969, "label": "v", "properties": {"i": 50}}::vertex, {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 844424930131969, "properties": {"j": 20}}::edge, {"id": 1407374883553281, "label": "other_v", "properties": {"k": 10}}::vertex]::path
+ [{"id": 844424930131971, "label": "v", "properties": {"i": 50}}::vertex, {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131971, "properties": {"j": 20}}::edge, {"id": 1407374883553282, "label": "other_v", "properties": {"k": 10}}::vertex]::path
+ [{"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5}}::vertex, {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131970, "properties": {"j": 20}}::edge, {"id": 1407374883553283, "label": "other_v", "properties": {"k": 10}}::vertex]::path
+ [{"id": 281474976710657, "label": "", "properties": {"i": 50}}::vertex, {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 281474976710657, "properties": {"j": 20}}::edge, {"id": 1407374883553284, "label": "other_v", "properties": {"k": 10}}::vertex]::path
 (4 rows)
 
 --Edges
 SELECT * FROM cypher('cypher_set', $$MATCH ()-[n]-(:other_v) SET n.i = 3 RETURN n$$) AS (a agtype);
                                                                    a                                                                    
 ----------------------------------------------------------------------------------------------------------------------------------------
- {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 281474976710657, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131969, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131971, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 844424930131970, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 844424930131969, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131971, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131970, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 281474976710657, "properties": {"i": 3, "j": 20}}::edge
 (4 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH ()-[n]->(:other_v) RETURN n$$) AS (a agtype);
                                                                    a                                                                    
 ----------------------------------------------------------------------------------------------------------------------------------------
- {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 281474976710657, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131969, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 844424930131970, "properties": {"i": 3, "j": 20}}::edge
- {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131971, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842625, "label": "e", "end_id": 1407374883553281, "start_id": 844424930131969, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842626, "label": "e", "end_id": 1407374883553282, "start_id": 844424930131971, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842627, "label": "e", "end_id": 1407374883553283, "start_id": 844424930131970, "properties": {"i": 3, "j": 20}}::edge
+ {"id": 1125899906842628, "label": "e", "end_id": 1407374883553284, "start_id": 281474976710657, "properties": {"i": 3, "j": 20}}::edge
 (4 rows)
 
 SELECT * FROM cypher('cypher_set', $$
@@ -245,8 +245,8 @@ SELECT * FROM cypher('cypher_set', $$
 $$) AS (a agtype);
                                                     a                                                    
 ---------------------------------------------------------------------------------------------------------
- {"id": 281474976710658, "label": "", "properties": {"y": 1}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "y": 1, "z": 99}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"y": 1}}::vertex
 (2 rows)
 
 SELECT * FROM cypher('cypher_set', $$
@@ -310,11 +310,11 @@ SELECT * FROM cypher('cypher_set', $$MATCH (n)-[]->(n) SET n.y = 99 RETURN n$$) 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) MATCH (n)-[]->(m) SET n.t = 150 RETURN n$$) AS (a agtype);
                                                          a                                                          
 --------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710658, "label": "", "properties": {"t": 150, "y": 1}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 50, "t": 150}}::vertex
  {"id": 844424930131969, "label": "v", "properties": {"i": 50, "t": 150}}::vertex
  {"id": 844424930131971, "label": "v", "properties": {"i": 50, "t": 150}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 50, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"t": 150, "y": 1}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 50, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (6 rows)
 
@@ -323,62 +323,62 @@ PREPARE p_1 AS SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3 RETURN
 EXECUTE p_1;
                                                          a                                                         
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 3, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 3, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 3, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 3, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 EXECUTE p_1;
                                                          a                                                         
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 3, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 3, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 3, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 3, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 3, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 PREPARE p_2 AS SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = $var_name RETURN n $$, $1) AS (a agtype);
 EXECUTE p_2('{"var_name": 4}');
                                                          a                                                         
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 4, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 4, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 4, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 4, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 4, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 4, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 4, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 4, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 4, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 4, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 4, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 4, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 4, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 4, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 4, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 4, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 EXECUTE p_2('{"var_name": 6}');
                                                          a                                                         
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 6, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 6, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 6, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 6, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 6, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 6, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 6, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 6, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 6, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 6, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 6, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 6, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 6, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 6, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 6, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 6, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 CREATE FUNCTION set_test()
@@ -393,31 +393,31 @@ $BODY$;
 SELECT set_test();
                                                      set_test                                                      
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 7, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 7, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 7, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 7, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 7, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 7, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 SELECT set_test();
                                                      set_test                                                      
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 7, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 7, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 7, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 7, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 7, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 7, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 7, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 7, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 --
@@ -426,16 +426,16 @@ SELECT set_test();
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = 3, n.j = 5 RETURN n $$) AS (a agtype);
                                                          a                                                         
 -------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": 3, "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": 3, "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": 3, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": 3, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": 3, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": 3, "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": 3, "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": 3, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": 3, "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": 3, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
 (10 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n)-[m]->(n) SET m.y = n.y RETURN n, m$$) AS (a agtype, b agtype);
@@ -577,16 +577,16 @@ SELECT * FROM cypher('cypher_set', $$MATCH (u:begin)-[:edge]->(v:end) return u, 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = [3, 'test', [1, 2, 3], {id: 1}, 1.0, 1.0::numeric] RETURN n$$) AS (a agtype);
                                                                                  a                                                                                  
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 6, "k": 9}}::vertex
  {"id": 1970324836974593, "label": "begin", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 3}}::vertex
@@ -595,16 +595,16 @@ SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = [3, 'test', [1, 2, 3], 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
                                                                                  a                                                                                  
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 6, "k": 9}}::vertex
  {"id": 1970324836974593, "label": "begin", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": [3, "test", [1, 2, 3], {"id": 1}, 1.0, 1::numeric], "j": 3}}::vertex
@@ -627,74 +627,74 @@ SELECT * FROM cypher('cypher_set', $$MATCH p=(u:begin)-[:edge]->(v:end) return u
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = [] RETURN n$$) AS (a agtype);
                                                          a                                                          
 --------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": [], "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": [], "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": [], "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": [], "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": [], "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": [], "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": [], "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": [], "j": 4}}::vertex
 (13 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
                                                          a                                                          
 --------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": [], "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": [], "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": [], "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": [], "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": [], "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": [], "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": [], "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": [], "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": [], "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": [], "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": [], "j": 4}}::vertex
 (13 rows)
 
 -- test maps
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = {prop1: 3, prop2:'test', prop3: [1, 2, 3], prop4: {id: 1}, prop5: 1.0, prop6:1.0::numeric} RETURN n$$) AS (a agtype);
                                                                                                             a                                                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 4}}::vertex
 (13 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
                                                                                                             a                                                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": {"prop1": 3, "prop2": "test", "prop3": [1, 2, 3], "prop4": {"id": 1}, "prop5": 1.0, "prop6": 1::numeric}, "j": 4}}::vertex
 (13 rows)
 
 -- test maps in paths
@@ -714,37 +714,37 @@ SELECT * FROM cypher('cypher_set', $$MATCH p=(u:begin)-[:edge]->(v:end) return u
 SELECT * FROM cypher('cypher_set', $$MATCH (n) SET n.i = {} RETURN n$$) AS (a agtype);
                                                          a                                                          
 --------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": {}, "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": {}, "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": {}, "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": {}, "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": {}, "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": {}, "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": {}, "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": {}, "j": 4}}::vertex
 (13 rows)
 
 SELECT * FROM cypher('cypher_set', $$MATCH (n) RETURN n$$) AS (a agtype);
                                                          a                                                          
 --------------------------------------------------------------------------------------------------------------------
- {"id": 281474976710659, "label": "", "properties": {"i": {}, "j": 5, "y": 2}}::vertex
- {"id": 281474976710658, "label": "", "properties": {"i": {}, "j": 5, "t": 150, "y": 1}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131969, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131971, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
- {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1407374883553281, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553282, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553283, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
  {"id": 1407374883553284, "label": "other_v", "properties": {"i": {}, "j": 5, "k": 10}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {"i": {}, "j": 5, "y": 2}}::vertex
+ {"id": 844424930131969, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 844424930131971, "label": "v", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"i": {}, "j": 5, "t": 150}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {"i": {}, "j": 5, "t": 150, "y": 1}}::vertex
+ {"id": 844424930131970, "label": "v", "properties": {"a": 0, "i": {}, "j": 5, "t": 150, "y": 99, "z": 99}}::vertex
  {"id": 1688849860263937, "label": "vertices", "properties": {"i": {}, "j": 6, "k": 9}}::vertex
- {"id": 1970324836974593, "label": "begin", "properties": {"i": {}, "j": 4}}::vertex
  {"id": 2533274790395905, "label": "end", "properties": {"i": {}, "j": 3}}::vertex
+ {"id": 1970324836974593, "label": "begin", "properties": {"i": {}, "j": 4}}::vertex
 (13 rows)
 
 --
@@ -821,8 +821,8 @@ SELECT * FROM cypher('cypher_set_1', $$
 $$) AS (m agtype);
                                                            m                                                           
 -----------------------------------------------------------------------------------------------------------------------
- {"id": 1407374883553281, "label": "Kevin", "properties": {"name": "Peter Smith", "position": "Entrepreneur"}}::vertex
  {"id": 1688849860263937, "label": "Matt", "properties": {"name": "Peter Smith", "position": "Entrepreneur"}}::vertex
+ {"id": 1407374883553281, "label": "Kevin", "properties": {"name": "Peter Smith", "position": "Entrepreneur"}}::vertex
 (2 rows)
 
 -- test removing all properties using an empty map and =
@@ -947,12 +947,12 @@ NOTICE:  graph "issue_1634" has been created
 
 -- this did not work and was fixed
 SELECT * FROM cypher('issue_1634', $$ WITH {first: 'jon', last: 'snow'} AS map
-                                      MERGE (v:PERSION {id: '1'})
+                                      MERGE (v:PERSON {id: '1'})
                                       SET v=map
                                       RETURN v,map $$) as (v agtype, map agtype);
-                                                  v                                                  |               map                
------------------------------------------------------------------------------------------------------+----------------------------------
- {"id": 844424930131969, "label": "PERSION", "properties": {"last": "snow", "first": "jon"}}::vertex | {"last": "snow", "first": "jon"}
+                                                 v                                                  |               map                
+----------------------------------------------------------------------------------------------------+----------------------------------
+ {"id": 844424930131969, "label": "PERSON", "properties": {"last": "snow", "first": "jon"}}::vertex | {"last": "snow", "first": "jon"}
 (1 row)
 
 -- these 2 did work and are added as extra tests
@@ -962,12 +962,12 @@ SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
 (0 rows)
 
 SELECT * FROM cypher('issue_1634', $$ WITH {first: 'jon', last: 'snow'} AS map
-                                      MERGE (v:PERSION {id: '1'})
+                                      MERGE (v:PERSON {id: '1'})
                                       SET v.first=map.first, v.last=map.last
                                       RETURN v,map $$) as (v agtype, map agtype);
-                                                       v                                                        |               map                
-----------------------------------------------------------------------------------------------------------------+----------------------------------
- {"id": 844424930131970, "label": "PERSION", "properties": {"id": "1", "last": "snow", "first": "jon"}}::vertex | {"last": "snow", "first": "jon"}
+                                                       v                                                       |               map                
+---------------------------------------------------------------------------------------------------------------+----------------------------------
+ {"id": 844424930131970, "label": "PERSON", "properties": {"id": "1", "last": "snow", "first": "jon"}}::vertex | {"last": "snow", "first": "jon"}
 (1 row)
 
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
@@ -975,12 +975,12 @@ SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
 ---
 (0 rows)
 
-SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSION {id: '1'})
+SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSON {id: '1'})
                                       SET v={first: 'jon', last: 'snow'}
                                       RETURN v $$) as (v agtype);
-                                                  v                                                  
------------------------------------------------------------------------------------------------------
- {"id": 844424930131971, "label": "PERSION", "properties": {"last": "snow", "first": "jon"}}::vertex
+                                                 v                                                  
+----------------------------------------------------------------------------------------------------
+ {"id": 844424930131971, "label": "PERSON", "properties": {"last": "snow", "first": "jon"}}::vertex
 (1 row)
 
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
@@ -1031,7 +1031,7 @@ SELECT drop_graph('issue_1634', true);
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to table issue_1634._ag_label_vertex
 drop cascades to table issue_1634._ag_label_edge
-drop cascades to table issue_1634."PERSION"
+drop cascades to table issue_1634."PERSON"
 NOTICE:  graph "issue_1634" has been dropped
  drop_graph 
 ------------

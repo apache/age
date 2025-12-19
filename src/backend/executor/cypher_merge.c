@@ -441,7 +441,7 @@ static path_entry **prebuild_path(CustomScanState *node)
 
             if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
             {
-                if (!entity_exists(estate, css->graph_oid, entry->id))
+                if (!vertex_exists(estate, css->graph_oid, entry->id))
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -1062,6 +1062,10 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         elemTupleSlot->tts_values[vertex_tuple_properties] = prop;
         elemTupleSlot->tts_isnull[vertex_tuple_properties] = isNull;
 
+        /* set the label table OID in the labels column */
+        elemTupleSlot->tts_values[vertex_tuple_labels] = ObjectIdGetDatum(node->label_table_oid);
+        elemTupleSlot->tts_isnull[vertex_tuple_labels] = false;
+
         /*
          * Insert the new vertex.
          *
@@ -1225,7 +1229,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
-            if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
+            if (!vertex_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),

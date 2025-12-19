@@ -535,10 +535,10 @@ SELECT * FROM cypher('cypher_delete', $$MATCH p=()-[]->() RETURN p$$) AS (a agty
 SELECT * FROM cypher('cypher_delete', $$MATCH(n)  DELETE n RETURN n$$) AS (a agtype);
                                 a                                
 -----------------------------------------------------------------
- {"id": 281474976710657, "label": "", "properties": {}}::vertex
- {"id": 281474976710658, "label": "", "properties": {}}::vertex
  {"id": 844424930132012, "label": "v", "properties": {}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {}}::vertex
  {"id": 844424930132013, "label": "v", "properties": {}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {}}::vertex
 (4 rows)
 
 --Test 24
@@ -710,8 +710,8 @@ SELECT * FROM cypher('detach_delete', $$ MATCH ()-[e]->() RETURN e.name $$) as (
 -------
  "ab"
  "cd"
- "am"
  "nm"
+ "am"
  "pq"
 (5 rows)
 

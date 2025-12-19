@@ -75,7 +75,8 @@ SELECT * FROM cypher('cypher_create', $$CREATE (:v)-[]->(:v)$$) AS (a agtype);
 
 SELECT * FROM cypher_create.e;
 
-SELECT * FROM cypher_create.v;
+SELECT id, properties FROM cypher_create._ag_label_vertex
+WHERE labels = 'cypher_create.v'::regclass::oid;
 
 SELECT * FROM cypher('cypher_create', $$
 	CREATE (:n_var {name: 'Node A'})
@@ -176,7 +177,8 @@ SELECT * FROM cypher('cypher_create', $$
 	RETURN a
 $$) as (a agtype);
 
-SELECT * FROM cypher_create.n_var;
+SELECT id, properties FROM cypher_create._ag_label_vertex
+WHERE labels = 'cypher_create.n_var'::regclass::oid;
 SELECT * FROM cypher_create.e_var;
 
 --Check every label has been created

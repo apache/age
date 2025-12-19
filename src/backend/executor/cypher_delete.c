@@ -403,13 +403,14 @@ static void process_delete_list(CustomScanState *node)
 
         /*
          * Setup the scan key to require the id field on-disc to match the
-         * entity's graphid.
+         * entity's graphid. For vertices, use F_INT8EQ since the unified
+         * vertex table stores id as int64. For edges, use F_GRAPHIDEQ.
          */
         if (original_entity_value->type == AGTV_VERTEX)
         {
             ScanKeyInit(&scan_keys[0], Anum_ag_label_vertex_table_id,
-                        BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
+                        BTEqualStrategyNumber, F_INT8EQ,
+                        Int64GetDatum(id->val.int_value));
         }
         else if (original_entity_value->type == AGTV_EDGE)
         {

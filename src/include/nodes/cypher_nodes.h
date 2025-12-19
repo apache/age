@@ -379,6 +379,8 @@ typedef struct cypher_target_node
     TupleTableSlot *elemTupleSlot;
     /* relid that the label stores its entity */
     Oid relid;
+    /* label table OID for the labels column in unified vertex table */
+    Oid label_table_oid;
     /* label this entity belongs to. */
     char *label_name;
     /* variable name for this entity */

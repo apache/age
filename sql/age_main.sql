@@ -375,6 +375,13 @@ CREATE FUNCTION ag_catalog._label_name(graph_oid oid, graphid)
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog._label_name_from_table_oid(label_table_oid oid)
+    RETURNS cstring
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog._extract_label_id(graphid)
     RETURNS label_id
     LANGUAGE c

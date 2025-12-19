@@ -6788,8 +6788,8 @@ SELECT * FROM cypher('group_by', $$MATCH (u:row) RETURN u.i, u.j, sum(u.k)$$) AS
  i | j | sumk 
 ---+---+------
  1 | 2 | 7
- 2 | 3 | 6
  1 | 3 | 5
+ 2 | 3 | 6
 (3 rows)
 
 SELECT * FROM cypher('group_by', $$CREATE (:L {a: 1, b: 2, c:3})$$) AS (result agtype);
@@ -6811,9 +6811,9 @@ SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a, x.b, x.c, x.a + count
 AS (a agtype, b agtype, c agtype, result agtype);
  a | b | c | result 
 ---+---+---+--------
- 3 | 1 | 2 | 8
- 2 | 3 | 1 | 8
  1 | 2 | 3 | 8
+ 2 | 3 | 1 | 8
+ 3 | 1 | 2 | 8
 (3 rows)
 
 SELECT * FROM cypher('group_by', $$MATCH (x:L) RETURN x.a + x.b + x.c, x.a + x.b + x.c + count(*) + count(*) $$)

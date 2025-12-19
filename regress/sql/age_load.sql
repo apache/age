@@ -81,8 +81,10 @@ SELECT table_catalog, table_schema, lower(table_name) as table_name, table_type
 FROM information_schema.tables
 WHERE table_schema = 'agload_test_graph' ORDER BY table_name ASC;
 
-SELECT COUNT(*) FROM agload_test_graph."Country";
-SELECT COUNT(*) FROM agload_test_graph."City";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country"'::regclass::oid;
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."City"'::regclass::oid;
 SELECT COUNT(*) FROM agload_test_graph."has_city";
 
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$MATCH(n) RETURN n$$) as (n agtype);
@@ -105,31 +107,36 @@ SELECT create_vlabel('agload_test_graph','City2');
 SELECT load_labels_from_file('agload_test_graph', 'City2',
                              'age_load/cities.csv', false);
 
-SELECT COUNT(*) FROM agload_test_graph."Country2";
-SELECT COUNT(*) FROM agload_test_graph."City2";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country2"'::regclass::oid;
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."City2"'::regclass::oid;
 
-SELECT id FROM agload_test_graph."Country" LIMIT 10;
-SELECT id FROM agload_test_graph."Country2" LIMIT 10;
+SELECT id FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country"'::regclass::oid LIMIT 10;
+SELECT id FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country2"'::regclass::oid LIMIT 10;
 
 -- Should return 2 rows for Country with same properties, but different ids
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'BE'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
 -- Should return 1 row
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country2 {iso2 : 'BE'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
 
 -- Should return 2 rows for Country with same properties, but different ids
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'AT'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
 -- Should return 1 row
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country2 {iso2 : 'AT'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
 
 -- Should return 2 rows for Country with same properties, but different ids
 SELECT * FROM cypher('agload_test_graph', $$
     MATCH (u:Country {region : "Europe"})
     WHERE u.name =~ 'Cro.*'
     RETURN id(u), u.name, u.region
+    ORDER BY id(u)
 $$) AS ("id(u)" agtype, result_1 agtype, result_2 agtype);
 
 -- There shouldn't be any duplicates

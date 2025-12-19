@@ -41,7 +41,8 @@ NOTICE:  VLabel "idx" has been created
  
 (1 row)
 
-CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index.idx(properties);
+CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index._ag_label_vertex(properties)
+WHERE labels = 'cypher_index.idx'::regclass::oid;
 --Test 1
 SELECT * FROM cypher('cypher_index', $$ CREATE (:idx {i: 1}) $$) AS (a agtype);
  a 
@@ -266,14 +267,14 @@ $$) as (n agtype);
 
 -- Verify that the incices are created on id columns
 SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index';
-          indexname          |                                            indexdef                                            
------------------------------+------------------------------------------------------------------------------------------------
+          indexname          |                                                                           indexdef                                                                           
+-----------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------
  _ag_label_edge_pkey         | CREATE UNIQUE INDEX _ag_label_edge_pkey ON cypher_index._ag_label_edge USING btree (id)
  _ag_label_edge_start_id_idx | CREATE INDEX _ag_label_edge_start_id_idx ON cypher_index._ag_label_edge USING btree (start_id)
  _ag_label_edge_end_id_idx   | CREATE INDEX _ag_label_edge_end_id_idx ON cypher_index._ag_label_edge USING btree (end_id)
  _ag_label_vertex_pkey       | CREATE UNIQUE INDEX _ag_label_vertex_pkey ON cypher_index._ag_label_vertex USING btree (id)
+ cypher_index_idx_props_uq   | CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index._ag_label_vertex USING btree (properties) WHERE (labels = ('cypher_index.idx'::regclass)::oid)
  idx_pkey                    | CREATE UNIQUE INDEX idx_pkey ON cypher_index.idx USING btree (id)
- cypher_index_idx_props_uq   | CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index.idx USING btree (properties)
  Country_pkey                | CREATE UNIQUE INDEX "Country_pkey" ON cypher_index."Country" USING btree (id)
  has_city_start_id_idx       | CREATE INDEX has_city_start_id_idx ON cypher_index.has_city USING btree (start_id)
  has_city_end_id_idx         | CREATE INDEX has_city_end_id_idx ON cypher_index.has_city USING btree (end_id)
@@ -296,24 +297,20 @@ SELECT COUNT(*) FROM cypher('cypher_index', $$
     EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
     RETURN e
 $$) as (n agtype);
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
  Aggregate
    ->  Merge Join
-         Merge Cond: (_age_default_alias_0.id = e.start_id)
-         ->  Merge Append
-               Sort Key: _age_default_alias_0.id
-               ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0_1
-               ->  Index Only Scan using idx_pkey on idx _age_default_alias_0_2
-               ->  Index Only Scan using "Country_pkey" on "Country" _age_default_alias_0_3
-               ->  Index Only Scan using "City_pkey" on "City" _age_default_alias_0_4
+         Merge Cond: (e.start_id = _age_default_alias_0.id)
          ->  Sort
                Sort Key: e.start_id
                ->  Merge Join
                      Merge Cond: (a.id = e.end_id)
-                     ->  Index Only Scan using "Country_pkey" on "Country" a
+                     ->  Index Scan using _ag_label_vertex_pkey on _ag_label_vertex a
+                           Filter: (labels = '22544'::oid)
                      ->  Index Scan using has_city_end_id_idx on has_city e
-(15 rows)
+         ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0
+(11 rows)
 
 SET enable_mergejoin = OFF;
 SET enable_hashjoin = ON;
@@ -331,23 +328,20 @@ SELECT COUNT(*) FROM cypher('cypher_index', $$
     EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
     RETURN e
 $$) as (n agtype);
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Aggregate
    ->  Hash Join
-         Hash Cond: (_age_default_alias_0.id = e.start_id)
-         ->  Append
-               ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0_1
-               ->  Index Only Scan using idx_pkey on idx _age_default_alias_0_2
-               ->  Index Only Scan using "Country_pkey" on "Country" _age_default_alias_0_3
-               ->  Index Only Scan using "City_pkey" on "City" _age_default_alias_0_4
+         Hash Cond: (e.start_id = _age_default_alias_0.id)
+         ->  Hash Join
+               Hash Cond: (e.end_id = a.id)
+               ->  Index Scan using has_city_end_id_idx on has_city e
+               ->  Hash
+                     ->  Index Scan using _ag_label_vertex_pkey on _ag_label_vertex a
+                           Filter: (labels = '22544'::oid)
          ->  Hash
-               ->  Hash Join
-                     Hash Cond: (e.end_id = a.id)
-                     ->  Index Scan using has_city_end_id_idx on has_city e
-                     ->  Hash
-                           ->  Index Only Scan using "Country_pkey" on "Country" a
-(14 rows)
+               ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0
+(11 rows)
 
 SET enable_mergejoin = OFF;
 SET enable_hashjoin = OFF;
@@ -356,24 +350,20 @@ SELECT COUNT(*) FROM cypher('cypher_index', $$
     EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
     RETURN e
 $$) as (n agtype);
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
  Aggregate
    ->  Nested Loop
          ->  Nested Loop
-               ->  Index Scan using has_city_start_id_idx on has_city e
-               ->  Index Only Scan using "Country_pkey" on "Country" a
-                     Index Cond: (id = e.end_id)
-         ->  Append
-               ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0_1
-                     Index Cond: (id = e.start_id)
-               ->  Index Only Scan using idx_pkey on idx _age_default_alias_0_2
-                     Index Cond: (id = e.start_id)
-               ->  Index Only Scan using "Country_pkey" on "Country" _age_default_alias_0_3
-                     Index Cond: (id = e.start_id)
-               ->  Index Only Scan using "City_pkey" on "City" _age_default_alias_0_4
-                     Index Cond: (id = e.start_id)
-(15 rows)
+               ->  Index Scan using _ag_label_vertex_pkey on _ag_label_vertex a
+                     Filter: (labels = '22544'::oid)
+               ->  Bitmap Heap Scan on has_city e
+                     Recheck Cond: (end_id = a.id)
+                     ->  Bitmap Index Scan on has_city_end_id_idx
+                           Index Cond: (end_id = a.id)
+         ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_0
+               Index Cond: (id = e.start_id)
+(11 rows)
 
 SET enable_mergejoin = ON;
 SET enable_hashjoin = ON;
@@ -382,9 +372,11 @@ SET enable_nestloop = ON;
 -- Section 3: Agtype GIN Indices to Improve WHERE clause Performance
 --
 CREATE INDEX load_city_gin_idx
-ON cypher_index."City" USING gin (properties);
+ON cypher_index._ag_label_vertex USING gin (properties)
+WHERE labels = 'cypher_index."City"'::regclass::oid;
 CREATE INDEX load_country_gin_idx
-ON cypher_index."Country" USING gin (properties);
+ON cypher_index._ag_label_vertex USING gin (properties)
+WHERE labels = 'cypher_index."Country"'::regclass::oid;
 SELECT * FROM cypher('cypher_index', $$
     MATCH (c:City {city_id: 1})
     RETURN c
@@ -451,8 +443,9 @@ $$) as (n agtype);
      0
 (1 row)
 
-CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
-(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
+CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index._ag_label_vertex
+(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype))
+WHERE labels = 'cypher_index."City"'::regclass::oid;
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$
     MATCH (a:City)
     WHERE a.country_code = 'RS'

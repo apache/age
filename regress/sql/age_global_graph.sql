@@ -115,11 +115,11 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v $$) AS (
 -- what is there now?
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);
 -- remove some vertices
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT id, properties FROM ag_graph_1._ag_label_vertex order by id;
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710661';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710662';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710664';
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT id, properties FROM ag_graph_1._ag_label_vertex order by id;
 SELECT * FROM ag_graph_1._ag_label_edge;
 -- there should be warning messages
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);

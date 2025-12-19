@@ -215,11 +215,11 @@ BEGIN
     WHERE name = 'graph';
 
     EXECUTE format($f$
-        CREATE INDEX movie_vector_idx ON graph."Movie"
+        CREATE INDEX movie_vector_idx ON graph._ag_label_vertex
         USING hnsw (((
           agtype_access_operator(
             VARIADIC ARRAY[
-              _agtype_build_vertex(id, _label_name(%L::oid, id), properties),
+              _agtype_build_vertex(id, _label_name_from_table_oid(labels), properties),
               '"embedding"'::agtype
             ]
           )::text
@@ -270,11 +270,11 @@ BEGIN
     WHERE name = 'graph';
 
     EXECUTE format($f$
-        CREATE INDEX movie_vector_idx ON graph."Movie"
+        CREATE INDEX movie_vector_idx ON graph._ag_label_vertex
         USING hnsw ((
           agtype_access_operator(
             VARIADIC ARRAY[
-              _agtype_build_vertex(id, _label_name(%L::oid, id), properties),
+              _agtype_build_vertex(id, _label_name_from_table_oid(labels), properties),
               '"embedding"'::agtype
             ]
         )::vector(4)) vector_cosine_ops);

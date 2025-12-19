@@ -313,10 +313,11 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
                           agtype *vertex_properties)
 {
 
-    Datum values[2];
-    bool nulls[2] = {false, false};
+    Datum values[3];
+    bool nulls[3] = {false, false, false};
     Relation label_relation;
     HeapTuple tuple;
+    Oid label_table_oid;
 
     /* Check if label provided exists as edge label, then throw error */
     if (get_label_kind(label_name, graph_oid) == LABEL_KIND_EDGE)
@@ -326,13 +327,17 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
                                 label_name)));
     }
 
-    /* Open the relation */
-    label_relation = table_open(get_label_relation(label_name, graph_oid),
+    /* Get the label table OID for the labels column */
+    label_table_oid = get_label_relation(label_name, graph_oid);
+
+    /* Open the unified vertex table */
+    label_relation = table_open(get_label_relation(AG_DEFAULT_LABEL_VERTEX, graph_oid),
                                 RowExclusiveLock);
 
-    /* Form the tuple */
+    /* Form the tuple with all 3 columns: id, properties, labels */
     values[0] = GRAPHID_GET_DATUM(vertex_id);
     values[1] = AGTYPE_P_GET_DATUM((vertex_properties));
+    values[2] = ObjectIdGetDatum(label_table_oid);
     tuple = heap_form_tuple(RelationGetDescr(label_relation),
                             values, nulls);
 
@@ -598,9 +603,20 @@ void init_batch_insert(batch_insert_state **batch_state,
     EState *estate;
     ResultRelInfo *resultRelInfo;
     int i;
+    char label_kind;
 
-    /* Open the relation */
-    relid = get_label_relation(label_name, graph_oid);
+    /* Check if this is a vertex or edge label */
+    label_kind = get_label_kind(label_name, graph_oid);
+
+    /* For vertices, use the unified vertex table; for edges, use label-specific table */
+    if (label_kind == LABEL_KIND_VERTEX)
+    {
+        relid = get_label_relation(AG_DEFAULT_LABEL_VERTEX, graph_oid);
+    }
+    else
+    {
+        relid = get_label_relation(label_name, graph_oid);
+    }
     relation = table_open(relid, RowExclusiveLock);
 
     /* Initialize executor state */

@@ -539,6 +539,7 @@ static List *create_vertex_table_elements(char *graph_name, char *label_name,
 {
     ColumnDef *id;
     ColumnDef *props;
+    ColumnDef *labels;
 
     /* "id" graphid PRIMARY KEY DEFAULT "ag_catalog"."_graphid"(...) */
     id = makeColumnDef(AG_VERTEX_COLNAME_ID, GRAPHIDOID, -1, InvalidOid);
@@ -552,7 +553,11 @@ static List *create_vertex_table_elements(char *graph_name, char *label_name,
     props->constraints = list_make2(build_not_null_constraint(),
                                     build_properties_default());
 
-    return list_make2(id, props);
+    /* "labels" oid NOT NULL */
+    labels = makeColumnDef(AG_VERTEX_COLNAME_LABELS, OIDOID, -1, InvalidOid);
+    labels->constraints = list_make1(build_not_null_constraint());
+
+    return list_make3(id, props, labels);
 }
 
 /* CREATE SEQUENCE `seq_range_var` MAXVALUE `LOCAL_ID_MAX` */

@@ -24,9 +24,12 @@
 
 #include "postgres.h"
 
+#include "catalog/namespace.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
+#include "utils/lsyscache.h"
 
+#include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
@@ -45,18 +48,31 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     ParseState *pstate = NULL;
     RangeTblEntry *rte = NULL;
     int pii = 0;
+    Oid graph_oid;
+    char relkind;
 
     /* create a new parse state for this operation */
     pstate = make_parsestate(NULL);
 
     resultRelInfo = palloc(sizeof(ResultRelInfo));
 
-    if (strlen(label_name) == 0)
+    /* For vertices, always use the unified vertex table */
+    graph_oid = get_graph_oid(graph_name);
+    relkind = get_label_kind(label_name, graph_oid);
+
+    if (relkind == LABEL_KIND_VERTEX)
     {
+        /* All vertices are in _ag_label_vertex */
+        rv = makeRangeVar(graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
+    }
+    else if (strlen(label_name) == 0)
+    {
+        /* Empty label name means vertex */
         rv = makeRangeVar(graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
     }
     else
     {
+        /* Edges use label-specific tables */
         rv = makeRangeVar(graph_name, label_name, -1);
     }
 
@@ -175,35 +191,36 @@ TupleTableSlot *populate_edge_tts(
 
 
 /*
- * Find out if the entity still exists. This is for 'implicit' deletion
- * of an entity.
+ * Find out if the vertex still exists. This is for 'implicit' deletion
+ * of a vertex - checking if a vertex was deleted by another variable.
+ *
+ * NOTE: This function scans the unified _ag_label_vertex table directly.
+ * No information is extracted from the graphid - the graphid is only used
+ * as the search key to find the vertex row.
  */
-bool entity_exists(EState *estate, Oid graph_oid, graphid id)
+bool vertex_exists(EState *estate, Oid graph_oid, graphid id)
 {
-    label_cache_data *label;
     ScanKeyData scan_keys[1];
     TableScanDesc scan_desc;
     HeapTuple tuple;
     Relation rel;
     bool result = true;
+    Oid vertex_table_oid;
 
-    /*
-     * Extract the label id from the graph id and get the table name
-     * the entity is part of.
-     */
-    label = search_label_graph_oid_cache(graph_oid, GET_LABEL_ID(id));
+    /* Get the unified vertex table OID directly from graph_oid */
+    vertex_table_oid = get_label_relation(AG_DEFAULT_LABEL_VERTEX, graph_oid);
 
-    /* Setup the scan key to be the graphid */
+    /* Setup the scan key to search by graphid (using INT8 comparison) */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
-                F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
+                F_INT8EQ, Int64GetDatum(id));
 
-    rel = table_open(label->relation, RowExclusiveLock);
+    rel = table_open(vertex_table_oid, RowExclusiveLock);
+
     scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
-
     tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
     /*
-     * If a single tuple was returned, the tuple is still valid, otherwise'
+     * If a single tuple was returned, the tuple is still valid, otherwise
      * set to false.
      */
     if (!HeapTupleIsValid(tuple))

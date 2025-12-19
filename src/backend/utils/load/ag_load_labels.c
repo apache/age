@@ -111,8 +111,11 @@ void vertex_row_cb(int delim __attribute__((unused)), void *data)
                                 create_agtype_from_list(cr->header, cr->fields,
                                                         n_fields, entry_id,
                                                         cr->load_as_agtype));
+        /* Set the labels column to the label table OID */
+        slot->tts_values[2] = ObjectIdGetDatum(get_label_relation(cr->label_name, cr->graph_oid));
         slot->tts_isnull[0] = false;
         slot->tts_isnull[1] = false;
+        slot->tts_isnull[2] = false;
 
         /* Make the slot as containing virtual tuple */
         ExecStoreVirtualTuple(slot);

@@ -28,6 +28,7 @@
 
 #define AG_VERTEX_COLNAME_ID "id"
 #define AG_VERTEX_COLNAME_PROPERTIES "properties"
+#define AG_VERTEX_COLNAME_LABELS "labels"
 
 #define AG_ACCESS_FUNCTION_ID "age_id"
 

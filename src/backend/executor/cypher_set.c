@@ -21,8 +21,12 @@
 
 #include "storage/bufmgr.h"
 
+#include "catalog/ag_label.h"
+#include "catalog/namespace.h"
+#include "commands/label_commands.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/lsyscache.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -498,8 +502,17 @@ static void process_update_list(CustomScanState *node)
             }
         }
 
-        resultRelInfo = create_entity_result_rel_info(
-            estate, css->set_list->graph_name, label_name);
+        /* For vertices, use the unified vertex table */
+        if (original_entity_value->type == AGTV_VERTEX)
+        {
+            resultRelInfo = create_entity_result_rel_info(
+                estate, css->set_list->graph_name, AG_DEFAULT_LABEL_VERTEX);
+        }
+        else
+        {
+            resultRelInfo = create_entity_result_rel_info(
+                estate, css->set_list->graph_name, label_name);
+        }
 
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
@@ -512,11 +525,34 @@ static void process_update_list(CustomScanState *node)
          */
         if (original_entity_value->type == AGTV_VERTEX)
         {
+            Oid graph_namespace_oid;
+            Oid label_table_oid;
+
             new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
                                      CStringGetDatum(label_name),
                                      AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
 
+            /* Get the namespace OID for the graph */
+            graph_namespace_oid = get_namespace_oid(css->set_list->graph_name, false);
+
+            /*
+             * Get the label table OID. If label_name is empty or NULL, use the
+             * default vertex label.
+             */
+            if (label_name == NULL || strlen(label_name) == 0)
+            {
+                label_table_oid = get_relname_relid(AG_DEFAULT_LABEL_VERTEX, graph_namespace_oid);
+            }
+            else
+            {
+                label_table_oid = get_relname_relid(label_name, graph_namespace_oid);
+            }
+
             slot = populate_vertex_tts(slot, id, altered_properties);
+
+            /* Set the labels column to the label table OID */
+            slot->tts_values[vertex_tuple_labels] = ObjectIdGetDatum(label_table_oid);
+            slot->tts_isnull[vertex_tuple_labels] = false;
         }
         else if (original_entity_value->type == AGTV_EDGE)
         {
@@ -561,10 +597,19 @@ static void process_update_list(CustomScanState *node)
         {
             /*
              * Setup the scan key to require the id field on-disc to match the
-             * entity's graphid.
+             * entity's graphid. For vertices, use F_INT8EQ since the unified
+             * table stores id as int64. For edges, use F_GRAPHIDEQ.
              */
-            ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
+            if (original_entity_value->type == AGTV_VERTEX)
+            {
+                ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_INT8EQ,
+                            Int64GetDatum(id->val.int_value));
+            }
+            else
+            {
+                ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                            GRAPHID_GET_DATUM(id->val.int_value));
+            }
             /*
              * Setup the scan description, with the correct snapshot and scan
              * keys.

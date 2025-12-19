@@ -5490,20 +5490,15 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     /* now build a new vertex */
     schema_name = get_graph_namespace_name(cpstate->graph_name);
 
-    if (valid_label)
-    {
-        rel_name = get_label_relation_name(node->label, cpstate->graph_oid);
-    }
-    else
-    {
-        rel_name = AG_DEFAULT_LABEL_VERTEX;
-    }
+    /* Always use the default vertex table for MATCH queries */
+    rel_name = AG_DEFAULT_LABEL_VERTEX;
 
     label_range_var = makeRangeVar(schema_name, rel_name, -1);
     alias = makeAlias(node->name, NIL);
 
+    /* Don't scan child tables - all vertices are now in _ag_label_vertex */
     pnsi = addRangeTableEntry(pstate, label_range_var, alias,
-                             label_range_var->inh, true);
+                             false, true);
 
     Assert(pnsi != NULL);
 
@@ -5512,6 +5507,34 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
      * relation are not visible (a in expression doesn't work)
      */
     addNSItemToQuery(pstate, pnsi, true, true, true);
+
+    /* Add label filtering if a specific label is requested */
+    if (valid_label && node->label != NULL && strcmp(node->label, AG_DEFAULT_LABEL_VERTEX) != 0)
+    {
+        Oid label_table_oid;
+        Var *labels_var;
+        Const *label_oid_const;
+        OpExpr *filter_expr;
+
+        /* Get the label table OID */
+        label_table_oid = get_label_relation(node->label, cpstate->graph_oid);
+
+        /* Create a Var for the labels column */
+        labels_var = makeVar(pnsi->p_rtindex, Anum_ag_label_vertex_table_labels,
+                            OIDOID, -1, InvalidOid, 0);
+
+        /* Create a Const for the label OID */
+        label_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
+                                    ObjectIdGetDatum(label_table_oid), false, true);
+
+        /* Create an equality filter: labels = label_oid */
+        filter_expr = (OpExpr *)make_op(pstate, list_make1(makeString("=")),
+                                       (Node *)labels_var, (Node *)label_oid_const,
+                                       pstate->p_last_srf, -1);
+
+        /* Add the filter to the RTE's quals */
+        pnsi->p_rte->securityQuals = lappend(pnsi->p_rte->securityQuals, filter_expr);
+    }
 
     resno = pstate->p_next_resno++;
 
@@ -5582,10 +5605,10 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
                               ParseNamespaceItem *pnsi)
 {
     ParseState *pstate = (ParseState *)cpstate;
-    Oid label_name_func_oid;
+    Oid get_rel_name_func_oid;
     Oid func_oid;
     Node *id;
-    Const *graph_oid_const;
+    Node *labels_oid;
     Node *props;
     List *args, *label_name_args;
     FuncExpr *func_expr;
@@ -5598,16 +5621,15 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
 
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_ID, -1);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
-                                          GRAPHIDOID);
+    /* Get the labels column (OID of label table) */
+    labels_oid = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_LABELS, -1);
 
-    graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
-                                ObjectIdGetDatum(cpstate->graph_oid), false,
-                                true);
+    /* Use _label_name_from_table_oid() to convert label table OID to label name */
+    get_rel_name_func_oid = get_ag_func_oid("_label_name_from_table_oid", 1, OIDOID);
 
-    label_name_args = list_make2(graph_oid_const, id);
+    label_name_args = list_make1(labels_oid);
 
-    label_name_func_expr = makeFuncExpr(label_name_func_oid, CSTRINGOID,
+    label_name_func_expr = makeFuncExpr(get_rel_name_func_oid, CSTRINGOID,
                                         label_name_args, InvalidOid,
                                         InvalidOid, COERCE_EXPLICIT_CALL);
     label_name_func_expr->location = -1;
@@ -6158,6 +6180,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     ParseState *pstate = (ParseState *)cpstate;
     cypher_target_node *rel = make_ag_node(cypher_target_node);
     Relation label_relation;
+    Relation default_vertex_relation;
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     TargetEntry *te;
@@ -6204,16 +6227,23 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     rv = makeRangeVar(cpstate->graph_name, node->label, -1);
     label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
 
-    /* Store the relid */
-    rel->relid = RelationGetRelid(label_relation);
+    /* Store the label table OID (for labels column) */
+    rel->label_table_oid = RelationGetRelid(label_relation);
 
-    pnsi = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
+    /* Use the default vertex table for actual storage */
+    rv = makeRangeVar(cpstate->graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
+    default_vertex_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+
+    /* Store the relid pointing to _ag_label_vertex */
+    rel->relid = RelationGetRelid(default_vertex_relation);
+
+    pnsi = addRangeTableEntryForRelation((ParseState *)cpstate, default_vertex_relation,
                                         AccessShareLock, NULL, false, false);
 
     rte_pi = pnsi->p_perminfo;
     rte_pi->requiredPerms = ACL_INSERT;
 
-    /* id */
+    /* id - get from label table for sequence */
     rel->id_expr = (Expr *)build_column_default(label_relation,
                                                 Anum_ag_label_vertex_table_id);
 
@@ -6221,7 +6251,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     alias = get_next_default_alias(cpstate);
     resno = pstate->p_next_resno++;
 
-    props = cypher_create_properties(cpstate, rel, label_relation, node->props,
+    props = cypher_create_properties(cpstate, rel, default_vertex_relation, node->props,
                                      ENT_VERTEX);
 
     rel->prop_attr_num = resno - 1;
@@ -6229,6 +6259,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     *target_list = lappend(*target_list, te);
 
     table_close(label_relation, NoLock);
+    table_close(default_vertex_relation, NoLock);
 
     if (node->name)
     {
@@ -7076,6 +7107,7 @@ static cypher_target_node *get_referenced_variable(ParseState *pstate,
             _cpy->resultRelInfo = ctn->resultRelInfo;
             _cpy->elemTupleSlot = ctn->elemTupleSlot;
             _cpy->relid = ctn->relid;
+            _cpy->label_table_oid = ctn->label_table_oid;
             _cpy->label_name = ctn->label_name;
             _cpy->variable_name = ctn->variable_name;
             _cpy->tuple_position = ctn->tuple_position;
@@ -7333,6 +7365,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     ParseState *pstate = (ParseState *)cpstate;
     cypher_target_node *rel = make_ag_node(cypher_target_node);
     Relation label_relation;
+    Relation default_vertex_relation;
     RangeVar *rv;
     RTEPermissionInfo *rte_pi;
     ParseNamespaceItem *pnsi;
@@ -7438,10 +7471,17 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
                         parser_errposition(&cpstate->pstate, node->location)));
     }
 
-    /* Store the relid */
-    rel->relid = RelationGetRelid(label_relation);
+    /* Store the label table OID (for labels column) */
+    rel->label_table_oid = RelationGetRelid(label_relation);
 
-    pnsi = addRangeTableEntryForRelation((ParseState *)cpstate, label_relation,
+    /* Use the default vertex table for actual storage */
+    rv = makeRangeVar(cpstate->graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
+    default_vertex_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+
+    /* Store the relid pointing to _ag_label_vertex */
+    rel->relid = RelationGetRelid(default_vertex_relation);
+
+    pnsi = addRangeTableEntryForRelation((ParseState *)cpstate, default_vertex_relation,
                                          AccessShareLock, NULL, false, false);
 
     rte_pi = pnsi->p_perminfo;
@@ -7451,10 +7491,11 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     rel->id_expr = (Expr *)build_column_default(label_relation,
                                                 Anum_ag_label_vertex_table_id);
 
-    rel->prop_expr = cypher_create_properties(cpstate, rel, label_relation,
+    rel->prop_expr = cypher_create_properties(cpstate, rel, default_vertex_relation,
                                               node->props, ENT_VERTEX);
 
     table_close(label_relation, NoLock);
+    table_close(default_vertex_relation, NoLock);
 
     return rel;
 }

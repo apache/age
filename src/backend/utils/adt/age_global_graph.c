@@ -463,89 +463,81 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
 /* helper routine to load all vertices into the GRAPH global vertex hashtable */
 static void load_vertex_hashtable(GRAPH_global_context *ggctx)
 {
-    Oid graph_oid;
     Oid graph_namespace_oid;
     Snapshot snapshot;
-    List *vertex_label_names = NIL;
-    ListCell *lc;
+    Relation graph_vertex_table;
+    TableScanDesc scan_desc;
+    HeapTuple tuple;
+    Oid vertex_table_oid;
+    TupleDesc tupdesc;
 
-    /* get the specific graph OID and namespace (schema) OID */
-    graph_oid = ggctx->graph_oid;
+    /* get the specific graph namespace (schema) OID */
     graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
-    /* get the names of all of the vertex label tables */
-    vertex_label_names = get_ag_labels_names(snapshot, graph_oid,
-                                             LABEL_TYPE_VERTEX);
-    /* go through all vertex label tables in list */
-    foreach (lc, vertex_label_names)
+
+    /* get the unified vertex table OID */
+    vertex_table_oid = get_relname_relid(AG_DEFAULT_LABEL_VERTEX,
+                                         graph_namespace_oid);
+    /* open the unified vertex table and begin the scan */
+    graph_vertex_table = table_open(vertex_table_oid, ShareLock);
+    scan_desc = table_beginscan(graph_vertex_table, snapshot, 0, NULL);
+    /* get the tupdesc - we don't need to release this one */
+    tupdesc = RelationGetDescr(graph_vertex_table);
+    /* bail if the number of columns differs (should be 3: id, properties, labels) */
+    if (tupdesc->natts != 3)
     {
-        Relation graph_vertex_label;
-        TableScanDesc scan_desc;
-        HeapTuple tuple;
-        char *vertex_label_name;
-        Oid vertex_label_table_oid;
-        TupleDesc tupdesc;
-
-        /* get the vertex label name */
-        vertex_label_name = lfirst(lc);
-        /* get the vertex label name's OID */
-        vertex_label_table_oid = get_relname_relid(vertex_label_name,
-                                                   graph_namespace_oid);
-        /* open the relation (table) and begin the scan */
-        graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
-        scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL);
-        /* get the tupdesc - we don't need to release this one */
-        tupdesc = RelationGetDescr(graph_vertex_label);
-        /* bail if the number of columns differs */
-        if (tupdesc->natts != 2)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_UNDEFINED_TABLE),
-                     errmsg("Invalid number of attributes for %s.%s",
-                     ggctx->graph_name, vertex_label_name)));
-        }
-        /* get all tuples in table and insert them into graph hashtables */
-        while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
-        {
-            graphid vertex_id;
-            Datum vertex_properties;
-            bool inserted = false;
-
-            /* something is wrong if this isn't true */
-            if (!HeapTupleIsValid(tuple))
-            {
-                elog(ERROR, "load_vertex_hashtable: !HeapTupleIsValid");
-            }
-            Assert(HeapTupleIsValid(tuple));
-
-            /* get the vertex id */
-            vertex_id = DatumGetInt64(column_get_datum(tupdesc, tuple, 0, "id",
-                                                       GRAPHIDOID, true));
-            /* get the vertex properties datum */
-            vertex_properties = column_get_datum(tupdesc, tuple, 1,
-                                                 "properties", AGTYPEOID, true);
-            /* we need to make a copy of the properties datum */
-            vertex_properties = datumCopy(vertex_properties, false, -1);
-
-            /* insert vertex into vertex hashtable */
-            inserted = insert_vertex_entry(ggctx, vertex_id,
-                                           vertex_label_table_oid,
-                                           vertex_properties);
-
-            /* warn if there is a duplicate */
-            if (!inserted)
-            {
-                 ereport(WARNING,
-                         (errcode(ERRCODE_DATA_EXCEPTION),
-                          errmsg("ignored duplicate vertex")));
-            }
-        }
-
-        /* end the scan and close the relation */
-        table_endscan(scan_desc);
-        table_close(graph_vertex_label, ShareLock);
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("Invalid number of attributes for %s.%s",
+                 ggctx->graph_name, AG_DEFAULT_LABEL_VERTEX)));
     }
+
+    /* get all tuples in table and insert them into graph hashtables */
+    while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+    {
+        graphid vertex_id;
+        Datum vertex_properties;
+        Oid label_table_oid;
+        bool inserted = false;
+
+        /* something is wrong if this isn't true */
+        if (!HeapTupleIsValid(tuple))
+        {
+            elog(ERROR, "load_vertex_hashtable: !HeapTupleIsValid");
+        }
+        Assert(HeapTupleIsValid(tuple));
+
+        /* get the vertex id (column 0) */
+        vertex_id = DatumGetInt64(column_get_datum(tupdesc, tuple, 0, "id",
+                                                   GRAPHIDOID, true));
+        /* get the vertex properties datum (column 1) */
+        vertex_properties = column_get_datum(tupdesc, tuple, 1,
+                                             "properties", AGTYPEOID, true);
+        /* get the label table OID (column 2) */
+        label_table_oid = DatumGetObjectId(column_get_datum(tupdesc, tuple, 2,
+                                                            "labels", OIDOID, true));
+
+        /* we need to make a copy of the properties datum */
+        vertex_properties = datumCopy(vertex_properties, false, -1);
+
+        /* insert vertex into vertex hashtable */
+        inserted = insert_vertex_entry(ggctx, vertex_id,
+                                       label_table_oid,
+                                       vertex_properties);
+
+        /* warn if there is a duplicate */
+        if (!inserted)
+        {
+             ereport(WARNING,
+                     (errcode(ERRCODE_DATA_EXCEPTION),
+                      errmsg("ignored duplicate vertex")));
+        }
+    }
+
+    /* end the scan and close the relation */
+    table_endscan(scan_desc);
+    table_close(graph_vertex_table, ShareLock);
 }
 
 /*

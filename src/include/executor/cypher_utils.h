@@ -119,7 +119,7 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
                                              char *label_name);
 void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info);
 
-bool entity_exists(EState *estate, Oid graph_oid, graphid id);
+bool vertex_exists(EState *estate, Oid graph_oid, graphid id);
 HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
                               TupleTableSlot *elemTupleSlot,
                               EState *estate);

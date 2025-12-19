@@ -169,8 +169,16 @@ char *get_label_seq_relation_name(const char *label_name)
 PG_FUNCTION_INFO_V1(_label_name);
 
 /*
- * Using the graph name and the vertex/edge's graphid, find
- * the correct label name from ag_catalog.label
+ * Using the graph OID and the graphid, find the correct label name from
+ * ag_catalog.ag_label by extracting the label_id from the graphid.
+ *
+ * IMPORTANT: This function extracts the label_id from the graphid's upper
+ * bits. For EDGES, this is the correct source of label information. For
+ * VERTICES, the label is stored in the 'labels' column of the unified vertex
+ * table, so use _label_name_from_table_oid() instead when querying vertices.
+ *
+ * This function is primarily used for edges where the label_id in the graphid
+ * is authoritative.
  */
 Datum _label_name(PG_FUNCTION_ARGS)
 {
@@ -210,6 +218,43 @@ Datum _label_name(PG_FUNCTION_ARGS)
 
     if (IS_AG_DEFAULT_LABEL(label_name))
         PG_RETURN_CSTRING("");
+
+    PG_RETURN_CSTRING(label_name);
+}
+
+PG_FUNCTION_INFO_V1(_label_name_from_table_oid);
+
+/*
+ * Given a label table OID, return the label name.
+ * Returns empty string for the default vertex/edge table.
+ */
+Datum _label_name_from_table_oid(PG_FUNCTION_ARGS)
+{
+    Oid label_table_oid;
+    char *label_name;
+
+    if (PG_ARGISNULL(0))
+    {
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("label_table_oid must not be null")));
+    }
+
+    label_table_oid = PG_GETARG_OID(0);
+
+    /* Get the relation name from the OID */
+    label_name = get_rel_name(label_table_oid);
+
+    if (label_name == NULL)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+                        errmsg("relation with oid %u does not exist", label_table_oid)));
+    }
+
+    /* Return empty string for default labels */
+    if (IS_AG_DEFAULT_LABEL(label_name))
+    {
+        PG_RETURN_CSTRING("");
+    }
 
     PG_RETURN_CSTRING(label_name);
 }
