@@ -361,19 +361,19 @@ SELECT * FROM create_graph('issue_1634');
 
 -- this did not work and was fixed
 SELECT * FROM cypher('issue_1634', $$ WITH {first: 'jon', last: 'snow'} AS map
-                                      MERGE (v:PERSION {id: '1'})
+                                      MERGE (v:PERSON {id: '1'})
                                       SET v=map
                                       RETURN v,map $$) as (v agtype, map agtype);
 
 -- these 2 did work and are added as extra tests
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
 SELECT * FROM cypher('issue_1634', $$ WITH {first: 'jon', last: 'snow'} AS map
-                                      MERGE (v:PERSION {id: '1'})
+                                      MERGE (v:PERSON {id: '1'})
                                       SET v.first=map.first, v.last=map.last
                                       RETURN v,map $$) as (v agtype, map agtype);
 
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
-SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSION {id: '1'})
+SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSON {id: '1'})
                                       SET v={first: 'jon', last: 'snow'}
                                       RETURN v $$) as (v agtype);
 

@@ -55,6 +55,8 @@
 #include "utils/agtype_raw.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
+#include "commands/label_commands.h"
+#include "utils/ag_cache.h"
 
 /* State structure for Percentile aggregate functions */
 typedef struct PercentileGroupAggState
@@ -155,9 +157,7 @@ static bool is_object_vertex(agtype_value *agtv);
 static bool is_object_edge(agtype_value *agtv);
 static bool is_array_path(agtype_value *agtv);
 /* graph entity retrieval */
-static Datum get_vertex(const char *graph, const char *vertex_label,
-                        int64 graphid);
-static char *get_label_name(const char *graph_name, graphid element_graphid);
+static Datum get_vertex(const char *graph, int64 graphid);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null);
 static Numeric get_numeric_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -5540,91 +5540,34 @@ Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
     return result;
 }
 
-/*
- * Function to retrieve a label name, given the graph name and graphid of the
- * node or edge. The function returns a pointer to a duplicated string that
- * needs to be freed when you are finished using it.
- */
-static char *get_label_name(const char *graph_name, graphid element_graphid)
-{
-    ScanKeyData scan_keys[2];
-    Relation ag_label;
-    SysScanDesc scan_desc;
-    HeapTuple tuple;
-    TupleDesc tupdesc;
-    char *result = NULL;
-    bool column_is_null = false;
-    Oid graph_oid = get_graph_oid(graph_name);
-    int32 label_id = get_graphid_label_id(element_graphid);
-
-    /* scankey for first match in ag_label, column 2, graphoid, BTEQ, OidEQ */
-    ScanKeyInit(&scan_keys[0], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
-    /* scankey for second match in ag_label, column 3, label id, BTEQ, Int4EQ */
-    ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
-                F_INT4EQ, Int32GetDatum(label_id));
-
-    ag_label = table_open(ag_label_relation_id(), ShareLock);
-    scan_desc = systable_beginscan(ag_label, ag_label_graph_oid_index_id(), true,
-                                   NULL, 2, scan_keys);
-
-    tuple = systable_getnext(scan_desc);
-    if (!HeapTupleIsValid(tuple))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                 errmsg("graphid %lu does not exist", element_graphid)));
-    }
-
-    /* get the tupdesc - we don't need to release this one */
-    tupdesc = RelationGetDescr(ag_label);
-
-    /* bail if the number of columns differs */
-    if (tupdesc->natts != Natts_ag_label)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid number of attributes for ag_catalog.ag_label")));
-    }
-
-    /* get the label name */
-    result = NameStr(*DatumGetName(heap_getattr(tuple, Anum_ag_label_name,
-                                                tupdesc, &column_is_null)));
-    /* duplicate it */
-    result = pstrdup(result);
-
-    /* end the scan and close the relation */
-    systable_endscan(scan_desc);
-    table_close(ag_label, ShareLock);
-
-    return result;
-}
-
-static Datum get_vertex(const char *graph, const char *vertex_label,
-                        int64 graphid)
+static Datum get_vertex(const char *graph, int64 graphid)
 {
     ScanKeyData scan_keys[1];
-    Relation graph_vertex_label;
+    Relation graph_vertex_table;
     TableScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
-    Datum id, properties, result;
+    Datum id, properties, labels_oid_datum;
+    Datum result;
+    Oid label_table_oid;
+    label_cache_data *label_cache;
+    char *label_name;
 
     /* get the specific graph namespace (schema) */
     Oid graph_namespace_oid = get_namespace_oid(graph, false);
-    /* get the specific vertex label table (schema.vertex_label) */
-    Oid vertex_label_table_oid = get_relname_relid(vertex_label,
-                                                 graph_namespace_oid);
+    /* get the unified vertex table (schema._ag_label_vertex) */
+    Oid vertex_table_oid = get_relname_relid(AG_DEFAULT_LABEL_VERTEX,
+                                              graph_namespace_oid);
     /* get the active snapshot */
     Snapshot snapshot = GetActiveSnapshot();
 
-    /* initialize the scan key */
-    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
+    /* initialize the scan key to search by id */
+    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_INT8EQ,
                 Int64GetDatum(graphid));
 
-    /* open the relation (table), begin the scan, and get the tuple  */
-    graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
-    scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
+    /* open the unified vertex table, begin the scan, and get the tuple  */
+    graph_vertex_table = table_open(vertex_table_oid, ShareLock);
+    scan_desc = table_beginscan(graph_vertex_table, snapshot, 1, scan_keys);
     tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
     /* bail if the tuple isn't valid */
@@ -5636,25 +5579,43 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     }
 
     /* get the tupdesc - we don't need to release this one */
-    tupdesc = RelationGetDescr(graph_vertex_label);
-    /* bail if the number of columns differs */
-    if (tupdesc->natts != 2)
+    tupdesc = RelationGetDescr(graph_vertex_table);
+    /* bail if the number of columns differs (should be 3: id, properties, labels) */
+    if (tupdesc->natts != 3)
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("Invalid number of attributes for %s.%s", graph,
-                        vertex_label )));
+                        AG_DEFAULT_LABEL_VERTEX)));
 
-    /* get the id */
+    /* get the id (column 0) */
     id = column_get_datum(tupdesc, tuple, 0, "id", GRAPHIDOID, true);
-    /* get the properties */
+    /* get the properties (column 1) */
     properties = column_get_datum(tupdesc, tuple, 1, "properties",
                                   AGTYPEOID, true);
+    /* get the labels column (column 2) - contains label table OID */
+    labels_oid_datum = column_get_datum(tupdesc, tuple, 2, "labels", OIDOID, true);
+    label_table_oid = DatumGetObjectId(labels_oid_datum);
+
+    /* look up the label name from the label table OID using the cache */
+    label_cache = search_label_relation_cache(label_table_oid);
+    if (label_cache == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_OBJECT),
+                 errmsg("label with relation oid %u does not exist", label_table_oid)));
+    }
+
+    /* get the label name - return empty string for default labels */
+    label_name = NameStr(label_cache->name);
+    if (IS_AG_DEFAULT_LABEL(label_name))
+        label_name = "";
+
     /* reconstruct the vertex */
     result = DirectFunctionCall3(_agtype_build_vertex, id,
-                                 CStringGetDatum(vertex_label), properties);
+                                 CStringGetDatum(label_name), properties);
     /* end the scan and close the relation */
     table_endscan(scan_desc);
-    table_close(graph_vertex_label, ShareLock);
+    table_close(graph_vertex_table, ShareLock);
     /* return the vertex datum */
     return result;
 }
@@ -5667,7 +5628,6 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     agtype_value *agtv_object = NULL;
     agtype_value *agtv_value = NULL;
     char *graph_name = NULL;
-    char *label_name = NULL;
     graphid start_id;
     Datum result;
 
@@ -5712,12 +5672,8 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     Assert(agtv_value->type = AGTV_INTEGER);
     start_id = agtv_value->val.int_value;
 
-    /* get the label */
-    label_name = get_label_name(graph_name, start_id);
-    /* it must not be null and must be a string */
-    Assert(label_name != NULL);
-
-    result = get_vertex(graph_name, label_name, start_id);
+    /* get the vertex - label is read from the labels column */
+    result = get_vertex(graph_name, start_id);
 
     return result;
 }
@@ -5730,7 +5686,6 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     agtype_value *agtv_object = NULL;
     agtype_value *agtv_value = NULL;
     char *graph_name = NULL;
-    char *label_name = NULL;
     graphid end_id;
     Datum result;
 
@@ -5775,12 +5730,8 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     Assert(agtv_value->type = AGTV_INTEGER);
     end_id = agtv_value->val.int_value;
 
-    /* get the label */
-    label_name = get_label_name(graph_name, end_id);
-    /* it must not be null and must be a string */
-    Assert(label_name != NULL);
-
-    result = get_vertex(graph_name, label_name, end_id);
+    /* get the vertex - label is read from the labels column */
+    result = get_vertex(graph_name, end_id);
 
     return result;
 }

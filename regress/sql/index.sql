@@ -34,7 +34,8 @@ SELECT create_graph('cypher_index');
  */
 --Section 1 Setup
 SELECT create_vlabel('cypher_index', 'idx');
-CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index.idx(properties);
+CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index._ag_label_vertex(properties)
+WHERE labels = 'cypher_index.idx'::regclass::oid;
 
 --Test 1
 SELECT * FROM cypher('cypher_index', $$ CREATE (:idx {i: 1}) $$) AS (a agtype);
@@ -214,10 +215,12 @@ SET enable_nestloop = ON;
 -- Section 3: Agtype GIN Indices to Improve WHERE clause Performance
 --
 CREATE INDEX load_city_gin_idx
-ON cypher_index."City" USING gin (properties);
+ON cypher_index._ag_label_vertex USING gin (properties)
+WHERE labels = 'cypher_index."City"'::regclass::oid;
 
 CREATE INDEX load_country_gin_idx
-ON cypher_index."Country" USING gin (properties);
+ON cypher_index._ag_label_vertex USING gin (properties)
+WHERE labels = 'cypher_index."Country"'::regclass::oid;
 
 
 SELECT * FROM cypher('cypher_index', $$
@@ -256,8 +259,9 @@ SELECT COUNT(*) FROM cypher('cypher_index', $$
     RETURN a
 $$) as (n agtype);
 
-CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
-(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
+CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index._ag_label_vertex
+(ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype))
+WHERE labels = 'cypher_index."City"'::regclass::oid;
 
 SELECT COUNT(*) FROM cypher('agload_test_graph', $$
     MATCH (a:City)

@@ -33,7 +33,8 @@ SELECT COUNT(*) FROM gp1."edges";
     10
 (1 row)
 
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
  count 
 -------
      5
@@ -44,12 +45,12 @@ SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 ----------------------------------------------------------------------------------------------------------------------------
  {"id": 1125899906842625, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
  {"id": 1125899906842626, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
  {"id": 1125899906842627, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842628, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
  {"id": 1125899906842631, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842633, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842634, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
 (10 rows)
@@ -66,7 +67,8 @@ SELECT COUNT(*) FROM gp1."edges";
     20
 (1 row)
 
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
  count 
 -------
     10
@@ -130,7 +132,8 @@ SELECT COUNT(*) FROM gp1."edges";
     21
 (1 row)
 
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
  count 
 -------
     10
@@ -141,22 +144,22 @@ SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 ----------------------------------------------------------------------------------------------------------------------------
  {"id": 1125899906842625, "label": "edges", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {}}::edge
  {"id": 1125899906842626, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
  {"id": 1125899906842627, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131969, "properties": {}}::edge
- {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
- {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842628, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131969, "properties": {}}::edge
+ {"id": 1125899906842629, "label": "edges", "end_id": 844424930131971, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842630, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131970, "properties": {}}::edge
  {"id": 1125899906842631, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131970, "properties": {}}::edge
+ {"id": 1125899906842632, "label": "edges", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842633, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131971, "properties": {}}::edge
  {"id": 1125899906842634, "label": "edges", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {}}::edge
  {"id": 1125899906842635, "label": "edges", "end_id": 844424930131975, "start_id": 844424930131974, "properties": {}}::edge
  {"id": 1125899906842636, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842639, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131975, "properties": {}}::edge
  {"id": 1125899906842637, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131974, "properties": {}}::edge
- {"id": 1125899906842640, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131975, "properties": {}}::edge
- {"id": 1125899906842642, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131976, "properties": {}}::edge
  {"id": 1125899906842638, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131974, "properties": {}}::edge
+ {"id": 1125899906842639, "label": "edges", "end_id": 844424930131976, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842640, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131975, "properties": {}}::edge
  {"id": 1125899906842641, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131975, "properties": {}}::edge
+ {"id": 1125899906842642, "label": "edges", "end_id": 844424930131977, "start_id": 844424930131976, "properties": {}}::edge
  {"id": 1125899906842643, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131976, "properties": {}}::edge
  {"id": 1125899906842644, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131977, "properties": {}}::edge
  {"id": 1125899906842645, "label": "edges", "end_id": 844424930131978, "start_id": 844424930131969, "properties": {}}::edge
@@ -174,7 +177,8 @@ SELECT COUNT(*) FROM gp1."edges";
     42
 (1 row)
 
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
  count 
 -------
     20

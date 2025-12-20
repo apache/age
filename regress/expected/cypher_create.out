@@ -133,7 +133,8 @@ SELECT * FROM cypher_create.e;
  1125899906842634 | 844424930131987 | 844424930131988 | {"id": "paths, edge two"}
 (10 rows)
 
-SELECT * FROM cypher_create.v;
+SELECT id, properties FROM cypher_create._ag_label_vertex
+WHERE labels = 'cypher_create.v'::regclass::oid;
        id        |             properties             
 -----------------+------------------------------------
  844424930131969 | {}
@@ -331,7 +332,8 @@ $$) as (a agtype);
 ---
 (0 rows)
 
-SELECT * FROM cypher_create.n_var;
+SELECT id, properties FROM cypher_create._ag_label_vertex
+WHERE labels = 'cypher_create.n_var'::regclass::oid;
         id        |     properties     
 ------------------+--------------------
  1407374883553281 | {"name": "Node A"}
@@ -393,25 +395,6 @@ SELECT * FROM cypher('cypher_create', $$MATCH (n) RETURN n$$) AS (n agtype);
                                                 n                                                
 -------------------------------------------------------------------------------------------------
  {"id": 281474976710657, "label": "", "properties": {}}::vertex
- {"id": 281474976710658, "label": "", "properties": {}}::vertex
- {"id": 281474976710659, "label": "", "properties": {}}::vertex
- {"id": 281474976710660, "label": "", "properties": {}}::vertex
- {"id": 281474976710661, "label": "", "properties": {}}::vertex
- {"id": 281474976710662, "label": "", "properties": {}}::vertex
- {"id": 281474976710663, "label": "", "properties": {}}::vertex
- {"id": 281474976710664, "label": "", "properties": {}}::vertex
- {"id": 281474976710665, "label": "", "properties": {}}::vertex
- {"id": 281474976710666, "label": "", "properties": {}}::vertex
- {"id": 281474976710667, "label": "", "properties": {}}::vertex
- {"id": 281474976710668, "label": "", "properties": {}}::vertex
- {"id": 281474976710669, "label": "", "properties": {}}::vertex
- {"id": 281474976710670, "label": "", "properties": {}}::vertex
- {"id": 281474976710671, "label": "", "properties": {}}::vertex
- {"id": 281474976710672, "label": "", "properties": {}}::vertex
- {"id": 281474976710673, "label": "", "properties": {}}::vertex
- {"id": 281474976710674, "label": "", "properties": {"id": 0}}::vertex
- {"id": 281474976710675, "label": "", "properties": {}}::vertex
- {"id": 281474976710676, "label": "", "properties": {}}::vertex
  {"id": 844424930131969, "label": "v", "properties": {}}::vertex
  {"id": 844424930131970, "label": "v", "properties": {}}::vertex
  {"id": 844424930131971, "label": "v", "properties": {"key": "value"}}::vertex
@@ -438,6 +421,25 @@ SELECT * FROM cypher('cypher_create', $$MATCH (n) RETURN n$$) AS (n agtype);
  {"id": 1970324836974593, "label": "n_other_node", "properties": {}}::vertex
  {"id": 1970324836974594, "label": "n_other_node", "properties": {}}::vertex
  {"id": 1970324836974595, "label": "n_other_node", "properties": {}}::vertex
+ {"id": 281474976710658, "label": "", "properties": {}}::vertex
+ {"id": 281474976710659, "label": "", "properties": {}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {}}::vertex
+ {"id": 281474976710661, "label": "", "properties": {}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {}}::vertex
+ {"id": 281474976710663, "label": "", "properties": {}}::vertex
+ {"id": 281474976710664, "label": "", "properties": {}}::vertex
+ {"id": 281474976710665, "label": "", "properties": {}}::vertex
+ {"id": 281474976710666, "label": "", "properties": {}}::vertex
+ {"id": 281474976710667, "label": "", "properties": {}}::vertex
+ {"id": 281474976710668, "label": "", "properties": {}}::vertex
+ {"id": 281474976710669, "label": "", "properties": {}}::vertex
+ {"id": 281474976710670, "label": "", "properties": {}}::vertex
+ {"id": 281474976710671, "label": "", "properties": {}}::vertex
+ {"id": 281474976710672, "label": "", "properties": {}}::vertex
+ {"id": 281474976710673, "label": "", "properties": {}}::vertex
+ {"id": 281474976710674, "label": "", "properties": {"id": 0}}::vertex
+ {"id": 281474976710675, "label": "", "properties": {}}::vertex
+ {"id": 281474976710676, "label": "", "properties": {}}::vertex
 (46 rows)
 
 -- prepared statements

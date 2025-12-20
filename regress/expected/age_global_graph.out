@@ -203,9 +203,9 @@ SELECT * FROM cypher('ag_graph_2', $$ MATCH (a:Person), (b:Person) WHERE a.name 
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
  {"id": 281474976710657, "label": "", "in_degree": 0, "out_degree": 0, "self_loops": 0}
  {"id": 281474976710658, "label": "", "in_degree": 0, "out_degree": 0, "self_loops": 0}
- {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (3 rows)
 
 --should return 1 vertice and 1 label
@@ -288,14 +288,14 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[]->(v) MERGE (v)-[:stalks]->(u)
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v $$) AS (u agtype, e agtype, v agtype);
                                                 u                                                 |                                                              e                                                              |                                                v                                                 
 --------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------
- {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex | {"id": 1407374883553281, "label": "stalks", "end_id": 281474976710659, "start_id": 281474976710660, "properties": {}}::edge | {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex
  {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge  | {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex
- {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex | {"id": 1407374883553282, "label": "stalks", "end_id": 281474976710661, "start_id": 281474976710662, "properties": {}}::edge | {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex
  {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex | {"id": 1125899906842626, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge  | {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex
- {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex | {"id": 1407374883553283, "label": "stalks", "end_id": 281474976710663, "start_id": 281474976710664, "properties": {}}::edge | {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex
  {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex | {"id": 1125899906842627, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge  | {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex
- {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex | {"id": 1407374883553284, "label": "stalks", "end_id": 281474976710665, "start_id": 281474976710666, "properties": {}}::edge | {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex
  {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex | {"id": 1125899906842628, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge  | {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex | {"id": 1407374883553281, "label": "stalks", "end_id": 281474976710661, "start_id": 281474976710662, "properties": {}}::edge | {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex | {"id": 1407374883553282, "label": "stalks", "end_id": 281474976710659, "start_id": 281474976710660, "properties": {}}::edge | {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex
+ {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex | {"id": 1407374883553283, "label": "stalks", "end_id": 281474976710663, "start_id": 281474976710664, "properties": {}}::edge | {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex
+ {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex | {"id": 1407374883553284, "label": "stalks", "end_id": 281474976710665, "start_id": 281474976710666, "properties": {}}::edge | {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex
 (8 rows)
 
 -- what is there now?
@@ -306,7 +306,7 @@ SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (r
 (1 row)
 
 -- remove some vertices
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT id, properties FROM ag_graph_1._ag_label_vertex order by id;
        id        |              properties              
 -----------------+--------------------------------------
  281474976710657 | {}
@@ -325,7 +325,7 @@ SELECT * FROM ag_graph_1._ag_label_vertex;
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710661';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710662';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710664';
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT id, properties FROM ag_graph_1._ag_label_vertex order by id;
        id        |              properties              
 -----------------+--------------------------------------
  281474976710657 | {}
@@ -345,8 +345,8 @@ SELECT * FROM ag_graph_1._ag_label_edge;
  1125899906842626 | 281474976710661 | 281474976710662 | {}
  1125899906842627 | 281474976710663 | 281474976710664 | {}
  1125899906842628 | 281474976710665 | 281474976710666 | {}
- 1407374883553281 | 281474976710660 | 281474976710659 | {}
- 1407374883553282 | 281474976710662 | 281474976710661 | {}
+ 1407374883553281 | 281474976710662 | 281474976710661 | {}
+ 1407374883553282 | 281474976710660 | 281474976710659 | {}
  1407374883553283 | 281474976710664 | 281474976710663 | {}
  1407374883553284 | 281474976710666 | 281474976710665 | {}
 (8 rows)
@@ -357,7 +357,7 @@ WARNING:  edge: [id: 1125899906842626, start: 281474976710661, end: 281474976710
 WARNING:  ignored malformed or dangling edge
 WARNING:  edge: [id: 1125899906842627, start: 281474976710663, end: 281474976710664, label: knows] end vertex not found
 WARNING:  ignored malformed or dangling edge
-WARNING:  edge: [id: 1407374883553282, start: 281474976710662, end: 281474976710661, label: stalks] start and end vertices not found
+WARNING:  edge: [id: 1407374883553281, start: 281474976710662, end: 281474976710661, label: stalks] start and end vertices not found
 WARNING:  ignored malformed or dangling edge
 WARNING:  edge: [id: 1407374883553283, start: 281474976710664, end: 281474976710663, label: stalks] start vertex not found
 WARNING:  ignored malformed or dangling edge

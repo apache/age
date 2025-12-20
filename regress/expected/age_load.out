@@ -125,13 +125,15 @@ WHERE table_schema = 'agload_test_graph' ORDER BY table_name ASC;
  contrib_regression | agload_test_graph | has_city         | BASE TABLE
 (5 rows)
 
-SELECT COUNT(*) FROM agload_test_graph."Country";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country"'::regclass::oid;
  count 
 -------
     54
 (1 row)
 
-SELECT COUNT(*) FROM agload_test_graph."City";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."City"'::regclass::oid;
  count 
 -------
  72485
@@ -194,19 +196,22 @@ SELECT load_labels_from_file('agload_test_graph', 'City2',
  
 (1 row)
 
-SELECT COUNT(*) FROM agload_test_graph."Country2";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country2"'::regclass::oid;
  count 
 -------
     53
 (1 row)
 
-SELECT COUNT(*) FROM agload_test_graph."City2";
+SELECT COUNT(*) FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."City2"'::regclass::oid;
  count 
 -------
  72485
 (1 row)
 
-SELECT id FROM agload_test_graph."Country" LIMIT 10;
+SELECT id FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country"'::regclass::oid LIMIT 10;
        id        
 -----------------
  844424930131969
@@ -221,7 +226,8 @@ SELECT id FROM agload_test_graph."Country" LIMIT 10;
  844424930132023
 (10 rows)
 
-SELECT id FROM agload_test_graph."Country2" LIMIT 10;
+SELECT id FROM agload_test_graph._ag_label_vertex
+WHERE labels = 'agload_test_graph."Country2"'::regclass::oid LIMIT 10;
         id        
 ------------------
  1688849860263937
@@ -238,7 +244,7 @@ SELECT id FROM agload_test_graph."Country2" LIMIT 10;
 
 -- Should return 2 rows for Country with same properties, but different ids
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'BE'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
       id(n)      |  n.name   | n.iso2 
 -----------------+-----------+--------
  844424930131990 | "Belgium" | "BE"
@@ -247,7 +253,7 @@ SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'BE'})
 
 -- Should return 1 row
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country2 {iso2 : 'BE'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
       id(n)       |  n.name   | n.iso2 
 ------------------+-----------+--------
  1688849860263942 | "Belgium" | "BE"
@@ -255,7 +261,7 @@ SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country2 {iso2 : 'BE'})
 
 -- Should return 2 rows for Country with same properties, but different ids
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'AT'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
       id(n)      |  n.name   | n.iso2 
 -----------------+-----------+--------
  844424930131983 | "Austria" | "AT"
@@ -264,7 +270,7 @@ SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country {iso2 : 'AT'})
 
 -- Should return 1 row
 SELECT * FROM cypher('agload_test_graph', $$MATCH(n:Country2 {iso2 : 'AT'})
-    RETURN id(n), n.name, n.iso2 $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
+    RETURN id(n), n.name, n.iso2 ORDER BY id(n) $$) as ("id(n)" agtype, "n.name" agtype, "n.iso2" agtype);
       id(n)       |  n.name   | n.iso2 
 ------------------+-----------+--------
  1688849860263940 | "Austria" | "AT"
@@ -275,6 +281,7 @@ SELECT * FROM cypher('agload_test_graph', $$
     MATCH (u:Country {region : "Europe"})
     WHERE u.name =~ 'Cro.*'
     RETURN id(u), u.name, u.region
+    ORDER BY id(u)
 $$) AS ("id(u)" agtype, result_1 agtype, result_2 agtype);
       id(u)      | result_1  | result_2 
 -----------------+-----------+----------

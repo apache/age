@@ -1,0 +1,419 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+--
+-- Regression tests for the unified vertex table architecture
+--
+-- Tests verify:
+--   1. Labels column correctly stores label table OID
+--   2. Label retrieval from labels column works correctly
+--   3. Multiple labels coexist in single table
+--   4. startNode/endNode correctly retrieve vertex labels
+--   5. VLE correctly handles label retrieval
+--
+LOAD 'age';
+SET search_path TO ag_catalog;
+--
+-- Test 1: Basic unified table structure verification
+--
+SELECT create_graph('unified_test');
+NOTICE:  graph "unified_test" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Create vertices with different labels
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Person {name: 'Alice'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Company {name: 'Acme Corp'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Location {name: 'Seattle'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify all vertices are in the unified table
+SELECT COUNT(*) AS vertex_count FROM unified_test._ag_label_vertex;
+ vertex_count 
+--------------
+            3
+(1 row)
+
+-- Verify labels column contains different OIDs for different labels
+SELECT COUNT(DISTINCT labels) AS distinct_label_count FROM unified_test._ag_label_vertex;
+ distinct_label_count 
+----------------------
+                    3
+(1 row)
+
+-- Verify we can filter by label using the labels column
+SELECT id, properties FROM unified_test._ag_label_vertex
+WHERE labels = 'unified_test."Person"'::regclass::oid;
+       id        |    properties     
+-----------------+-------------------
+ 844424930131969 | {"name": "Alice"}
+(1 row)
+
+SELECT id, properties FROM unified_test._ag_label_vertex
+WHERE labels = 'unified_test."Company"'::regclass::oid;
+        id        |      properties       
+------------------+-----------------------
+ 1125899906842625 | {"name": "Acme Corp"}
+(1 row)
+
+SELECT id, properties FROM unified_test._ag_label_vertex
+WHERE labels = 'unified_test."Location"'::regclass::oid;
+        id        |     properties      
+------------------+---------------------
+ 1407374883553281 | {"name": "Seattle"}
+(1 row)
+
+--
+-- Test 2: Label retrieval via Cypher MATCH
+--
+SELECT * FROM cypher('unified_test', $$
+    MATCH (p:Person) RETURN p.name ORDER BY p.name
+$$) AS (name agtype);
+  name   
+---------
+ "Alice"
+(1 row)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (c:Company) RETURN c.name ORDER BY c.name
+$$) AS (name agtype);
+    name     
+-------------
+ "Acme Corp"
+(1 row)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n) RETURN labels(n), n.name ORDER BY n.name
+$$) AS (label agtype, name agtype);
+    label     |    name     
+--------------+-------------
+ ["Company"]  | "Acme Corp"
+ ["Person"]   | "Alice"
+ ["Location"] | "Seattle"
+(3 rows)
+
+--
+-- Test 3: startNode/endNode label retrieval
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Person {name: 'Bob'})-[:WORKS_AT]->(:Company {name: 'Tech Inc'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Person {name: 'Carol'})-[:LIVES_IN]->(:Location {name: 'Portland'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify startNode returns correct label
+SELECT * FROM cypher('unified_test', $$
+    MATCH ()-[e:WORKS_AT]->()
+    RETURN startNode(e).name AS employee, label(startNode(e)) AS emp_label,
+           endNode(e).name AS company, label(endNode(e)) AS comp_label
+$$) AS (employee agtype, emp_label agtype, company agtype, comp_label agtype);
+ employee | emp_label |  company   | comp_label 
+----------+-----------+------------+------------
+ "Bob"    | "Person"  | "Tech Inc" | "Company"
+(1 row)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH ()-[e:LIVES_IN]->()
+    RETURN startNode(e).name AS person, label(startNode(e)) AS person_label,
+           endNode(e).name AS location, label(endNode(e)) AS loc_label
+$$) AS (person agtype, person_label agtype, location agtype, loc_label agtype);
+ person  | person_label |  location  | loc_label  
+---------+--------------+------------+------------
+ "Carol" | "Person"     | "Portland" | "Location"
+(1 row)
+
+--
+-- Test 4: Unlabeled vertices (default vertex label)
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE ({type: 'unlabeled_1'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE ({type: 'unlabeled_2'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify unlabeled vertices have empty string label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n) WHERE n.type IS NOT NULL
+    RETURN n.type, label(n) ORDER BY n.type
+$$) AS (type agtype, label agtype);
+     type      | label 
+---------------+-------
+ "unlabeled_1" | ""
+ "unlabeled_2" | ""
+(2 rows)
+
+-- Verify labels column for default vertices points to unified table
+SELECT COUNT(*) AS unlabeled_count FROM unified_test._ag_label_vertex
+WHERE labels = 'unified_test._ag_label_vertex'::regclass::oid;
+ unlabeled_count 
+-----------------
+               2
+(1 row)
+
+--
+-- Test 5: Mixed label queries (MATCH without label)
+--
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n)
+    RETURN label(n), count(*) AS cnt
+    ORDER BY label(n)
+$$) AS (label agtype, cnt agtype);
+   label    | cnt 
+------------+-----
+ ""         | 2
+ "Company"  | 2
+ "Location" | 2
+ "Person"   | 3
+(4 rows)
+
+--
+-- Test 6: Label with SET operations
+--
+SELECT * FROM cypher('unified_test', $$
+    MATCH (p:Person {name: 'Alice'})
+    SET p.age = 30
+    RETURN p.name, p.age, label(p)
+$$) AS (name agtype, age agtype, label agtype);
+  name   | age |  label   
+---------+-----+----------
+ "Alice" | 30  | "Person"
+(1 row)
+
+-- Verify label is preserved after SET
+SELECT * FROM cypher('unified_test', $$
+    MATCH (p:Person {name: 'Alice'})
+    RETURN label(p)
+$$) AS (label agtype);
+  label   
+----------
+ "Person"
+(1 row)
+
+--
+-- Test 7: MERGE with labels
+--
+SELECT * FROM cypher('unified_test', $$
+    MERGE (d:Department {name: 'Engineering'})
+    RETURN d.name, label(d)
+$$) AS (name agtype, label agtype);
+     name      |    label     
+---------------+--------------
+ "Engineering" | "Department"
+(1 row)
+
+SELECT * FROM cypher('unified_test', $$
+    MERGE (d:Department {name: 'Engineering'})
+    RETURN d.name, label(d)
+$$) AS (name agtype, label agtype);
+     name      |    label     
+---------------+--------------
+ "Engineering" | "Department"
+(1 row)
+
+-- Verify only one Department vertex exists
+SELECT * FROM cypher('unified_test', $$
+    MATCH (d:Department)
+    RETURN count(d)
+$$) AS (cnt agtype);
+ cnt 
+-----
+ 1
+(1 row)
+
+--
+-- Test 8: DELETE preserves labels column integrity
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Temporary {id: 1})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Temporary {id: 2})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify vertices exist
+SELECT * FROM cypher('unified_test', $$
+    MATCH (t:Temporary)
+    RETURN t.id ORDER BY t.id
+$$) AS (id agtype);
+ id 
+----
+ 1
+ 2
+(2 rows)
+
+-- Delete one
+SELECT * FROM cypher('unified_test', $$
+    MATCH (t:Temporary {id: 1})
+    DELETE t
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify remaining vertex still has correct label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (t:Temporary)
+    RETURN t.id, label(t)
+$$) AS (id agtype, label agtype);
+ id |    label    
+----+-------------
+ 2  | "Temporary"
+(1 row)
+
+--
+-- Test 9: VLE with label retrieval
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:Node {name: 'a'})-[:CONNECTED]->(:Node {name: 'b'})-[:CONNECTED]->(:Node {name: 'c'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Test that VLE path returns vertices with correct labels
+SELECT * FROM cypher('unified_test', $$
+    MATCH p = (n:Node {name: 'a'})-[:CONNECTED*1..2]->(m)
+    RETURN label(n), label(m)
+    ORDER BY label(m)
+$$) AS (start_label agtype, end_label agtype);
+ start_label | end_label 
+-------------+-----------
+ "Node"      | "Node"
+ "Node"      | "Node"
+(2 rows)
+
+--
+-- Test 10: _label_name_from_table_oid function
+--
+-- Get a label table OID and verify function works
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Person"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Person
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Company"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Company
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Location"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Location
+(1 row)
+
+--
+-- Test 11: Verify all labels coexist in unified table with distinct OIDs
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:LabelA {val: 1})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:LabelB {val: 2})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:LabelC {val: 3})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify all have distinct label OIDs (count should equal 3)
+SELECT COUNT(DISTINCT labels) AS distinct_labels FROM unified_test._ag_label_vertex
+WHERE properties::text LIKE '%val%';
+ distinct_labels 
+-----------------
+               3
+(1 row)
+
+--
+-- Cleanup
+--
+SELECT drop_graph('unified_test', true);
+NOTICE:  drop cascades to 14 other objects
+DETAIL:  drop cascades to table unified_test._ag_label_vertex
+drop cascades to table unified_test._ag_label_edge
+drop cascades to table unified_test."Person"
+drop cascades to table unified_test."Company"
+drop cascades to table unified_test."Location"
+drop cascades to table unified_test."WORKS_AT"
+drop cascades to table unified_test."LIVES_IN"
+drop cascades to table unified_test."Department"
+drop cascades to table unified_test."Temporary"
+drop cascades to table unified_test."Node"
+drop cascades to table unified_test."CONNECTED"
+drop cascades to table unified_test."LabelA"
+drop cascades to table unified_test."LabelB"
+drop cascades to table unified_test."LabelC"
+NOTICE:  graph "unified_test" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

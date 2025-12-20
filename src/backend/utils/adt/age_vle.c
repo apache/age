@@ -27,6 +27,7 @@
 #include "utils/age_vle.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
+#include "commands/label_commands.h"
 #include "nodes/cypher_nodes.h"
 
 /* defines */
@@ -1617,11 +1618,26 @@ static agtype_value *build_path(VLE_path_container *vpc)
         edge_entry *ee = NULL;
         agtype_value *agtv_vertex = NULL;
         agtype_value *agtv_edge = NULL;
+        Oid label_table_oid;
 
         /* get the vertex entry from the hashtable */
         ve = get_vertex_entry(ggctx, graphid_array[index]);
-        /* get the label name from the oid */
-        label_name = get_rel_name(get_vertex_entry_label_table_oid(ve));
+        /* get the label table OID */
+        label_table_oid = get_vertex_entry_label_table_oid(ve);
+
+        /*
+         * Get the label name from the oid. If label_table_oid is 0 or InvalidOid,
+         * use the default vertex label name.
+         */
+        if (label_table_oid == InvalidOid || label_table_oid == 0)
+        {
+            label_name = AG_DEFAULT_LABEL_VERTEX;
+        }
+        else
+        {
+            label_name = get_rel_name(label_table_oid);
+        }
+
         /* reconstruct the vertex */
         agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
                                                 label_name,

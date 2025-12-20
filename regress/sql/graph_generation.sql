@@ -25,14 +25,16 @@ SET search_path = ag_catalog;
 SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
 
 SELECT COUNT(*) FROM gp1."edges";
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
 
 SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 
 SELECT * FROM create_complete_graph('gp1',5,'edges','vertices');
 
 SELECT COUNT(*) FROM gp1."edges";
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
 
 SELECT * FROM create_complete_graph('gp2',5,'edges');
 
@@ -55,14 +57,16 @@ SELECT drop_graph('gp2', true);
 SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
 
 SELECT COUNT(*) FROM gp1."edges";
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
 
 SELECT * FROM cypher('gp1', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
 
 SELECT * FROM age_create_barbell_graph('gp1',5,0,'vertices',NULL,'edges',NULL);
 
 SELECT COUNT(*) FROM gp1."edges";
-SELECT COUNT(*) FROM gp1."vertices";
+SELECT COUNT(*) FROM gp1._ag_label_vertex
+WHERE labels = 'gp1."vertices"'::regclass::oid;
 
 SELECT * FROM age_create_barbell_graph('gp2',5,10,'vertices',NULL,'edges',NULL);
 

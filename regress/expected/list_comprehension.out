@@ -631,8 +631,8 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN u.lis
  {"id": 281474976710661, "label": "", "properties": {"list": [6, 8, 10, 12]}}::vertex
  {"id": 281474976710662, "label": "", "properties": {"list": [25.0, 49.0, 81.0, 121.0, 169.0]}}::vertex
  {"id": 281474976710663, "label": "", "properties": {"list": [1, 2, 3]}}::vertex
- {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
  {"id": 844424930131969, "label": "csm_match", "properties": {"list": ["abc", "def", "ghi"]}}::vertex
+ {"id": 281474976710657, "label": "", "properties": {"a": [], "b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
 (8 rows)
 
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u) WHERE u.list=[i IN u.list WHERE i>0] RETURN u $$) AS (result agtype);
