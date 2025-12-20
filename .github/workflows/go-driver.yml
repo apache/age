@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.20', '1.21' ]
+        go-version: [ '1.21', '1.22', '1.23' ]
 
     defaults:
       run:
@@ -25,7 +25,7 @@ jobs:
       run: docker compose up -d
 
     - name: Set up Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go-version }}
 
