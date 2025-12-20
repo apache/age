@@ -30,19 +30,19 @@ repositories {
 }
 
 dependencies {
-    implementation("org.postgresql:postgresql:42.6.0")
-    api("org.apache.commons:commons-text:1.10.0")
-    antlr("org.antlr:antlr4:4.12.0")
+    implementation("org.postgresql:postgresql:42.7.4")
+    api("org.apache.commons:commons-text:1.12.0")
+    antlr("org.antlr:antlr4:4.13.2")
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    testImplementation("org.testcontainers:testcontainers:1.18.0")
-    testImplementation("org.postgresql:postgresql:42.6.0")
+    testImplementation("org.testcontainers:testcontainers:1.20.4")
+    testImplementation("org.postgresql:postgresql:42.7.4")
 
-    testImplementation("org.slf4j:slf4j-api:2.0.7")
-    testImplementation("org.slf4j:slf4j-simple:2.0.7")
+    testImplementation("org.slf4j:slf4j-api:2.0.16")
+    testImplementation("org.slf4j:slf4j-simple:2.0.16")
 }
 
 tasks.generateGrammarSource {

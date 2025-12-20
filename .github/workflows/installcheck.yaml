@@ -16,7 +16,7 @@ jobs:
           echo "PG_COMMIT_HASH=$(git ls-remote https://git.postgresql.org/git/postgresql.git refs/heads/REL_17_STABLE | awk '{print $1}')" >> $GITHUB_ENV
 
       - name: Cache PostgreSQL 17
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: pg17cache
         with:
           path: ~/pg17
