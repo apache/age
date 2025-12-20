@@ -270,6 +270,8 @@ void read_cypher_update_item(struct ExtensibleNode *node)
     READ_NODE_FIELD(qualified_name);
     READ_BOOL_FIELD(remove_item);
     READ_BOOL_FIELD(is_add);
+    READ_BOOL_FIELD(is_label_op);
+    READ_STRING_FIELD(label_name);
 }
 
 /*

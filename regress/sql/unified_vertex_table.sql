@@ -463,6 +463,292 @@ SELECT * FROM cypher('unified_test', $$
 $$) AS (cnt agtype);
 
 --
+-- Test 18: SET label operation - error when vertex already has a label
+-- Multiple labels are not supported. SET only works on unlabeled vertices.
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OldLabel {id: 1, name: 'vertex1'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OldLabel {id: 2, name: 'vertex2'})
+$$) AS (v agtype);
+
+-- Verify initial label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OldLabel)
+    RETURN n.id, n.name, label(n) ORDER BY n.id
+$$) AS (id agtype, name agtype, lbl agtype);
+
+-- Try to change label on vertex1 - should FAIL because it already has a label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OldLabel {id: 1})
+    SET n:NewLabel
+    RETURN n.id, n.name, label(n)
+$$) AS (id agtype, name agtype, lbl agtype);
+
+-- Verify vertex1 still has OldLabel (unchanged due to error)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OldLabel)
+    RETURN n.id, n.name, label(n) ORDER BY n.id
+$$) AS (id agtype, name agtype, lbl agtype);
+
+--
+-- Test 19: REMOVE label operation
+-- This tests removing a vertex's label using REMOVE n:Label syntax
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:RemoveTest {id: 1, data: 'test1'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:RemoveTest {id: 2, data: 'test2'})
+$$) AS (v agtype);
+
+-- Verify initial label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:RemoveTest)
+    RETURN n.id, n.data, label(n) ORDER BY n.id
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Remove label from vertex1
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:RemoveTest {id: 1})
+    REMOVE n:RemoveTest
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify vertex1 now has no label (empty string)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {data: 'test1'})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify vertex2 still has RemoveTest label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:RemoveTest)
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify properties are preserved after label removal
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n)
+    WHERE n.data = 'test1'
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+--
+-- Test 20: SET label with property updates - error when vertex has label
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:CombinedTest {id: 1, val: 'original'})
+$$) AS (v agtype);
+
+-- Try to SET label and property - should FAIL because vertex has a label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:CombinedTest {id: 1})
+    SET n:CombinedNew, n.val = 'updated'
+    RETURN n.id, n.val, label(n)
+$$) AS (id agtype, val agtype, lbl agtype);
+
+-- Verify vertex is unchanged
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:CombinedTest)
+    RETURN n.id, n.val, label(n) ORDER BY n.id
+$$) AS (id agtype, val agtype, lbl agtype);
+
+--
+-- Test 21: Proper workflow - REMOVE then SET label
+-- To change a label, first REMOVE the old one, then SET the new one
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:WorkflowTest {id: 50, val: 'workflow'})
+$$) AS (v agtype);
+
+-- First REMOVE the label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:WorkflowTest {id: 50})
+    REMOVE n:WorkflowTest
+    RETURN n.id, n.val, label(n)
+$$) AS (id agtype, val agtype, lbl agtype);
+
+-- Now SET a new label (should work because vertex has no label)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 50})
+    SET n:NewWorkflowLabel
+    RETURN n.id, n.val, label(n)
+$$) AS (id agtype, val agtype, lbl agtype);
+
+-- Verify the new label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:NewWorkflowLabel)
+    RETURN n.id, n.val, label(n) ORDER BY n.id
+$$) AS (id agtype, val agtype, lbl agtype);
+
+--
+-- Test 22: SET label auto-creates label when vertex has no label
+--
+-- First create and remove label to get unlabeled vertex
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:TempForAuto {id: 60, name: 'auto_create_test'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:TempForAuto {id: 60})
+    REMOVE n:TempForAuto
+    RETURN n.id, n.name, label(n)
+$$) AS (id agtype, name agtype, lbl agtype);
+
+-- Now SET a new label that doesn't exist yet (should auto-create)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 60})
+    SET n:AutoCreatedLabel
+    RETURN n.id, n.name, label(n)
+$$) AS (id agtype, name agtype, lbl agtype);
+
+-- Verify the new label exists and the vertex is there
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:AutoCreatedLabel)
+    RETURN n.id, n.name, label(n)
+$$) AS (id agtype, name agtype, lbl agtype);
+
+--
+-- Test 23: SET label on vertex with NO label (blank -> labeled)
+--
+-- First create a vertex with a label, then remove it to get a blank label
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:TempLabel {id: 100, data: 'unlabeled_test'})
+$$) AS (v agtype);
+
+-- Remove the label to make it blank
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:TempLabel {id: 100})
+    REMOVE n:TempLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify it has no label (blank)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 100})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Now SET a label on the unlabeled vertex
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 100})
+    SET n:FromBlankLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify the label was set
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:FromBlankLabel)
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+--
+-- Test 24: REMOVE label on vertex that already has NO label (no-op)
+--
+-- Create another unlabeled vertex
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:TempLabel2 {id: 101, data: 'already_blank'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:TempLabel2 {id: 101})
+    REMOVE n:TempLabel2
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Now try to REMOVE a label from already-unlabeled vertex (should be no-op)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 101})
+    REMOVE n:SomeLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify still has no label
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 101})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+--
+-- Test 25: REMOVE with wrong label name (should be no-op)
+-- REMOVE should only remove the label if it matches the specified name
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:KeepThisLabel {id: 103, data: 'wrong_label_test'})
+$$) AS (v agtype);
+
+-- Try to REMOVE a different label than the vertex has - should be no-op
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:KeepThisLabel {id: 103})
+    REMOVE n:WrongLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify label is still KeepThisLabel (unchanged)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:KeepThisLabel {id: 103})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Now REMOVE with the correct label - should work
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:KeepThisLabel {id: 103})
+    REMOVE n:KeepThisLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify label is now empty
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n {id: 103})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+--
+-- Test 26: SET label to same label - error (vertex already has a label)
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:SameLabel {id: 102, data: 'same_label_test'})
+$$) AS (v agtype);
+
+-- SET to the same label it already has - should FAIL
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:SameLabel {id: 102})
+    SET n:SameLabel
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+-- Verify label is unchanged
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:SameLabel {id: 102})
+    RETURN n.id, n.data, label(n)
+$$) AS (id agtype, data agtype, lbl agtype);
+
+--
+-- Test 27: Error case - SET/REMOVE label on edge (should error)
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:EdgeTest1 {id: 200})-[:CONNECTS]->(:EdgeTest2 {id: 201})
+$$) AS (v agtype);
+
+-- Try to SET label on an edge - should fail
+SELECT * FROM cypher('unified_test', $$
+    MATCH (:EdgeTest1)-[e:CONNECTS]->(:EdgeTest2)
+    SET e:NewEdgeLabel
+    RETURN e
+$$) AS (e agtype);
+
+-- Try to REMOVE label on an edge - should fail
+SELECT * FROM cypher('unified_test', $$
+    MATCH (:EdgeTest1)-[e:CONNECTS]->(:EdgeTest2)
+    REMOVE e:CONNECTS
+    RETURN e
+$$) AS (e agtype);
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);
