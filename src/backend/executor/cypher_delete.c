@@ -19,8 +19,11 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "storage/bufmgr.h"
 #include "common/hashfn.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
@@ -376,12 +379,13 @@ static void process_delete_list(CustomScanState *node)
         cypher_delete_item *item;
         agtype_value *original_entity_value, *id, *label;
         ScanKeyData scan_keys[1];
-        TableScanDesc scan_desc;
+        SysScanDesc scan_desc;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple;
         char *label_name;
         Integer *pos;
         int entity_position;
+        Oid pk_index_oid;
 
         item = lfirst(lc);
 
@@ -425,15 +429,24 @@ static void process_delete_list(CustomScanState *node)
         }
 
         /*
+         * Get primary key index OID from relation cache for index scan.
+         * For vertices, this enables fast index lookups on the unified table.
+         */
+        (void) RelationGetIndexList(resultRelInfo->ri_RelationDesc);
+        pk_index_oid = resultRelInfo->ri_RelationDesc->rd_pkindex;
+
+        /*
          * Setup the scan description, with the correct snapshot and scan keys.
+         * Use systable_beginscan for index-based lookup when available.
          */
         estate->es_snapshot->curcid = GetCurrentCommandId(false);
         estate->es_output_cid = GetCurrentCommandId(false);
-        scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
-                                    estate->es_snapshot, 1, scan_keys);
+        scan_desc = systable_beginscan(resultRelInfo->ri_RelationDesc,
+                                       pk_index_oid, true,
+                                       estate->es_snapshot, 1, scan_keys);
 
         /* Retrieve the tuple. */
-        heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
+        heap_tuple = systable_getnext(scan_desc);
 
         /*
          * If the heap tuple still exists (It wasn't deleted after this variable
@@ -442,7 +455,7 @@ static void process_delete_list(CustomScanState *node)
          */
         if (!HeapTupleIsValid(heap_tuple))
         {
-            table_endscan(scan_desc);
+            systable_endscan(scan_desc);
             destroy_entity_result_rel_info(resultRelInfo);
 
             continue;
@@ -464,7 +477,7 @@ static void process_delete_list(CustomScanState *node)
         delete_entity(estate, resultRelInfo, heap_tuple);
 
         /* Close the scan and the relation. */
-        table_endscan(scan_desc);
+        systable_endscan(scan_desc);
         destroy_entity_result_rel_info(resultRelInfo);
     }
 }

@@ -227,10 +227,14 @@ PG_FUNCTION_INFO_V1(_label_name_from_table_oid);
 /*
  * Given a label table OID, return the label name.
  * Returns empty string for the default vertex/edge table.
+ *
+ * This function first checks the AGE label cache for fast lookups,
+ * then falls back to PostgreSQL's syscache if not found.
  */
 Datum _label_name_from_table_oid(PG_FUNCTION_ARGS)
 {
     Oid label_table_oid;
+    label_cache_data *cache_data;
     char *label_name;
 
     if (PG_ARGISNULL(0))
@@ -241,7 +245,22 @@ Datum _label_name_from_table_oid(PG_FUNCTION_ARGS)
 
     label_table_oid = PG_GETARG_OID(0);
 
-    /* Get the relation name from the OID */
+    /* Try the AGE label cache first for fast lookup */
+    cache_data = search_label_relation_cache(label_table_oid);
+    if (cache_data != NULL)
+    {
+        label_name = NameStr(cache_data->name);
+
+        /* Return empty string for default labels */
+        if (IS_AG_DEFAULT_LABEL(label_name))
+        {
+            PG_RETURN_CSTRING("");
+        }
+
+        PG_RETURN_CSTRING(pstrdup(label_name));
+    }
+
+    /* Fallback to PostgreSQL syscache */
     label_name = get_rel_name(label_table_oid);
 
     if (label_name == NULL)

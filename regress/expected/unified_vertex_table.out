@@ -393,10 +393,405 @@ WHERE properties::text LIKE '%val%';
 (1 row)
 
 --
+-- Test 12: Index scan optimization for vertex_exists()
+-- This exercises the systable_beginscan path in vertex_exists()
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:IndexTest {id: 100})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:IndexTest {id: 101})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:IndexTest {id: 102})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- DETACH DELETE exercises vertex_exists() to check vertex validity
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:IndexTest {id: 100})
+    DETACH DELETE n
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify vertex was deleted and others remain
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:IndexTest)
+    RETURN n.id ORDER BY n.id
+$$) AS (id agtype);
+ id  
+-----
+ 101
+ 102
+(2 rows)
+
+-- Multiple deletes to exercise index scan repeatedly
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:IndexTest)
+    DELETE n
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify all IndexTest vertices are gone
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:IndexTest)
+    RETURN count(n)
+$$) AS (cnt agtype);
+ cnt 
+-----
+ 0
+(1 row)
+
+--
+-- Test 13: Index scan optimization for get_vertex() via startNode/endNode
+-- This exercises the systable_beginscan path in get_vertex()
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (a:GetVertexTest {name: 'source1'})-[:LINK]->(b:GetVertexTest {name: 'target1'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (a:GetVertexTest {name: 'source2'})-[:LINK]->(b:GetVertexTest {name: 'target2'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    CREATE (a:GetVertexTest {name: 'source3'})-[:LINK]->(b:GetVertexTest {name: 'target3'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Multiple startNode/endNode calls exercise get_vertex() with index scans
+SELECT * FROM cypher('unified_test', $$
+    MATCH ()-[e:LINK]->()
+    RETURN startNode(e).name AS src, endNode(e).name AS tgt,
+           label(startNode(e)) AS src_label, label(endNode(e)) AS tgt_label
+    ORDER BY src
+$$) AS (src agtype, tgt agtype, src_label agtype, tgt_label agtype);
+    src    |    tgt    |    src_label    |    tgt_label    
+-----------+-----------+-----------------+-----------------
+ "source1" | "target1" | "GetVertexTest" | "GetVertexTest"
+ "source2" | "target2" | "GetVertexTest" | "GetVertexTest"
+ "source3" | "target3" | "GetVertexTest" | "GetVertexTest"
+(3 rows)
+
+-- Chain of edges to test repeated get_vertex calls
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:GetVertexTest {name: 'target1'})
+    CREATE (a)-[:CHAIN]->(:GetVertexTest {name: 'chain1'})-[:CHAIN]->(:GetVertexTest {name: 'chain2'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH ()-[e:CHAIN]->()
+    RETURN startNode(e).name, endNode(e).name
+    ORDER BY startNode(e).name
+$$) AS (src agtype, tgt agtype);
+    src    |   tgt    
+-----------+----------
+ "chain1"  | "chain2"
+ "target1" | "chain1"
+(2 rows)
+
+--
+-- Test 14: Index scan optimization for process_delete_list()
+-- This exercises the F_INT8EQ fix and systable_beginscan in DELETE
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:DeleteTest {seq: 1}), (:DeleteTest {seq: 2}), (:DeleteTest {seq: 3}),
+           (:DeleteTest {seq: 4}), (:DeleteTest {seq: 5})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify vertices exist
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:DeleteTest)
+    RETURN n.seq ORDER BY n.seq
+$$) AS (seq agtype);
+ seq 
+-----
+ 1
+ 2
+ 3
+ 4
+ 5
+(5 rows)
+
+-- Delete specific vertex by property (exercises index lookup)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:DeleteTest {seq: 3})
+    DELETE n
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify correct vertex was deleted
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:DeleteTest)
+    RETURN n.seq ORDER BY n.seq
+$$) AS (seq agtype);
+ seq 
+-----
+ 1
+ 2
+ 4
+ 5
+(4 rows)
+
+-- Delete with edges (exercises process_delete_list with edge cleanup)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:DeleteTest {seq: 1})
+    CREATE (a)-[:DEL_EDGE]->(:DeleteTest {seq: 10})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:DeleteTest {seq: 1})
+    DETACH DELETE n
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify vertex and edge were deleted
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:DeleteTest)
+    RETURN n.seq ORDER BY n.seq
+$$) AS (seq agtype);
+ seq 
+-----
+ 2
+ 4
+ 5
+ 10
+(4 rows)
+
+--
+-- Test 15: Index scan optimization for process_update_list()
+-- This exercises the systable_beginscan in SET/REMOVE operations
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:UpdateTest {id: 1, val: 'original1'}),
+           (:UpdateTest {id: 2, val: 'original2'}),
+           (:UpdateTest {id: 3, val: 'original3'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Single SET operation
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:UpdateTest {id: 1})
+    SET n.val = 'updated1'
+    RETURN n.id, n.val
+$$) AS (id agtype, val agtype);
+ id |    val     
+----+------------
+ 1  | "updated1"
+(1 row)
+
+-- Multiple SET operations in one query (exercises repeated index lookups)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:UpdateTest)
+    SET n.modified = true
+    RETURN n.id, n.val, n.modified ORDER BY n.id
+$$) AS (id agtype, val agtype, modified agtype);
+ id |     val     | modified 
+----+-------------+----------
+ 1  | "updated1"  | true
+ 2  | "original2" | true
+ 3  | "original3" | true
+(3 rows)
+
+-- SET with property addition
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:UpdateTest {id: 2})
+    SET n.extra = 'new_property', n.val = 'updated2'
+    RETURN n.id, n.val, n.extra
+$$) AS (id agtype, val agtype, extra agtype);
+ id |    val     |     extra      
+----+------------+----------------
+ 2  | "updated2" | "new_property"
+(1 row)
+
+-- REMOVE property operation
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:UpdateTest {id: 3})
+    REMOVE n.val
+    RETURN n.id, n.val, n.modified
+$$) AS (id agtype, val agtype, modified agtype);
+ id | val | modified 
+----+-----+----------
+ 3  |     | true
+(1 row)
+
+-- Verify final state of all UpdateTest vertices
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:UpdateTest)
+    RETURN n ORDER BY n.id
+$$) AS (n agtype);
+                                                                       n                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 5910974510923777, "label": "UpdateTest", "properties": {"id": 1, "val": "updated1", "modified": true}}::vertex
+ {"id": 5910974510923778, "label": "UpdateTest", "properties": {"id": 2, "val": "updated2", "extra": "new_property", "modified": true}}::vertex
+ {"id": 5910974510923779, "label": "UpdateTest", "properties": {"id": 3, "modified": true}}::vertex
+(3 rows)
+
+--
+-- Test 16: OID caching in _label_name_from_table_oid()
+-- Repeated calls should use cache after first lookup
+--
+-- Call multiple times to exercise cache hit path
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Person"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Person
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Person"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Person
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Company"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Company
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Company"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Company
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Location"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Location
+(1 row)
+
+SELECT ag_catalog._label_name_from_table_oid('unified_test."Location"'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ Location
+(1 row)
+
+-- Call with unified table OID (default vertex label case)
+SELECT ag_catalog._label_name_from_table_oid('unified_test._ag_label_vertex'::regclass::oid);
+ _label_name_from_table_oid 
+----------------------------
+ 
+(1 row)
+
+-- Verify label function also benefits from caching (exercises full path)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (p:Person)
+    RETURN label(p), label(p), label(p)
+$$) AS (l1 agtype, l2 agtype, l3 agtype);
+    l1    |    l2    |    l3    
+----------+----------+----------
+ "Person" | "Person" | "Person"
+ "Person" | "Person" | "Person"
+ "Person" | "Person" | "Person"
+(3 rows)
+
+--
+-- Test 17: Combined operations stress test
+-- Multiple operations in sequence to verify optimizations work together
+--
+SELECT * FROM cypher('unified_test', $$
+    CREATE (a:StressTest {id: 1})-[:ST_EDGE]->(b:StressTest {id: 2})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- startNode/endNode (get_vertex index scan)
+SELECT * FROM cypher('unified_test', $$
+    MATCH ()-[e:ST_EDGE]->()
+    RETURN startNode(e).id, endNode(e).id
+$$) AS (start_id agtype, end_id agtype);
+ start_id | end_id 
+----------+--------
+ 1        | 2
+(1 row)
+
+-- SET (process_update_list index scan)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:StressTest)
+    SET n.updated = true
+    RETURN n.id, n.updated ORDER BY n.id
+$$) AS (id agtype, updated agtype);
+ id | updated 
+----+---------
+ 1  | true
+ 2  | true
+(2 rows)
+
+-- label() calls (OID cache)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:StressTest)
+    RETURN n.id, label(n) ORDER BY n.id
+$$) AS (id agtype, lbl agtype);
+ id |     lbl      
+----+--------------
+ 1  | "StressTest"
+ 2  | "StressTest"
+(2 rows)
+
+-- DETACH DELETE (vertex_exists + process_delete_list index scans)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:StressTest)
+    DETACH DELETE n
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Verify cleanup
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:StressTest)
+    RETURN count(n)
+$$) AS (cnt agtype);
+ cnt 
+-----
+ 0
+(1 row)
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);
-NOTICE:  drop cascades to 14 other objects
+NOTICE:  drop cascades to 23 other objects
 DETAIL:  drop cascades to table unified_test._ag_label_vertex
 drop cascades to table unified_test._ag_label_edge
 drop cascades to table unified_test."Person"
@@ -411,6 +806,15 @@ drop cascades to table unified_test."CONNECTED"
 drop cascades to table unified_test."LabelA"
 drop cascades to table unified_test."LabelB"
 drop cascades to table unified_test."LabelC"
+drop cascades to table unified_test."IndexTest"
+drop cascades to table unified_test."GetVertexTest"
+drop cascades to table unified_test."LINK"
+drop cascades to table unified_test."CHAIN"
+drop cascades to table unified_test."DeleteTest"
+drop cascades to table unified_test."DEL_EDGE"
+drop cascades to table unified_test."UpdateTest"
+drop cascades to table unified_test."StressTest"
+drop cascades to table unified_test."ST_EDGE"
 NOTICE:  graph "unified_test" has been dropped
  drop_graph 
 ------------

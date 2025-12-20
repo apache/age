@@ -24,10 +24,13 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "catalog/namespace.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
 #include "utils/lsyscache.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -194,18 +197,20 @@ TupleTableSlot *populate_edge_tts(
  * Find out if the vertex still exists. This is for 'implicit' deletion
  * of a vertex - checking if a vertex was deleted by another variable.
  *
- * NOTE: This function scans the unified _ag_label_vertex table directly.
+ * NOTE: This function scans the unified _ag_label_vertex table directly
+ * using an index scan on the primary key for efficiency.
  * No information is extracted from the graphid - the graphid is only used
  * as the search key to find the vertex row.
  */
 bool vertex_exists(EState *estate, Oid graph_oid, graphid id)
 {
     ScanKeyData scan_keys[1];
-    TableScanDesc scan_desc;
+    SysScanDesc scan_desc;
     HeapTuple tuple;
     Relation rel;
     bool result = true;
     Oid vertex_table_oid;
+    Oid pk_index_oid;
 
     /* Get the unified vertex table OID directly from graph_oid */
     vertex_table_oid = get_label_relation(AG_DEFAULT_LABEL_VERTEX, graph_oid);
@@ -216,8 +221,17 @@ bool vertex_exists(EState *estate, Oid graph_oid, graphid id)
 
     rel = table_open(vertex_table_oid, RowExclusiveLock);
 
-    scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
+    /* Get primary key index OID from relation cache for index scan */
+    (void) RelationGetIndexList(rel);
+    pk_index_oid = rel->rd_pkindex;
+
+    /*
+     * Use systable_beginscan which will use the primary key index if available.
+     * This is much faster than a sequential scan for single-row lookups.
+     */
+    scan_desc = systable_beginscan(rel, pk_index_oid, true,
+                                   estate->es_snapshot, 1, scan_keys);
+    tuple = systable_getnext(scan_desc);
 
     /*
      * If a single tuple was returned, the tuple is still valid, otherwise
@@ -228,7 +242,7 @@ bool vertex_exists(EState *estate, Oid graph_oid, graphid id)
         result = false;
     }
 
-    table_endscan(scan_desc);
+    systable_endscan(scan_desc);
     table_close(rel, RowExclusiveLock);
 
     return result;

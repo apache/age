@@ -47,6 +47,8 @@
 #include "utils/builtins.h"
 #include "utils/float.h"
 #include "utils/lsyscache.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 #include "utils/snapmgr.h"
 #include "utils/typcache.h"
 #include "utils/age_vle.h"
@@ -5544,7 +5546,7 @@ static Datum get_vertex(const char *graph, int64 graphid)
 {
     ScanKeyData scan_keys[1];
     Relation graph_vertex_table;
-    TableScanDesc scan_desc;
+    SysScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
     Datum id, properties, labels_oid_datum;
@@ -5552,6 +5554,7 @@ static Datum get_vertex(const char *graph, int64 graphid)
     Oid label_table_oid;
     label_cache_data *label_cache;
     char *label_name;
+    Oid pk_index_oid;
 
     /* get the specific graph namespace (schema) */
     Oid graph_namespace_oid = get_namespace_oid(graph, false);
@@ -5565,10 +5568,20 @@ static Datum get_vertex(const char *graph, int64 graphid)
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_INT8EQ,
                 Int64GetDatum(graphid));
 
-    /* open the unified vertex table, begin the scan, and get the tuple  */
+    /* open the unified vertex table */
     graph_vertex_table = table_open(vertex_table_oid, ShareLock);
-    scan_desc = table_beginscan(graph_vertex_table, snapshot, 1, scan_keys);
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+    /* Get primary key index OID from relation cache for index scan */
+    (void) RelationGetIndexList(graph_vertex_table);
+    pk_index_oid = graph_vertex_table->rd_pkindex;
+
+    /*
+     * Use systable_beginscan which will use the primary key index if available.
+     * This is much faster than a sequential scan for single-row lookups.
+     */
+    scan_desc = systable_beginscan(graph_vertex_table, pk_index_oid, true,
+                                   snapshot, 1, scan_keys);
+    tuple = systable_getnext(scan_desc);
 
     /* bail if the tuple isn't valid */
     if (!HeapTupleIsValid(tuple))
@@ -5614,7 +5627,7 @@ static Datum get_vertex(const char *graph, int64 graphid)
     result = DirectFunctionCall3(_agtype_build_vertex, id,
                                  CStringGetDatum(label_name), properties);
     /* end the scan and close the relation */
-    table_endscan(scan_desc);
+    systable_endscan(scan_desc);
     table_close(graph_vertex_table, ShareLock);
     /* return the vertex datum */
     return result;
