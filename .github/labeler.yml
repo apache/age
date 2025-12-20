@@ -19,5 +19,8 @@ PG16:
 PG17:
 - base-branch: 'PG17'
 
+Dev_Multiple_Labels:
+- base-branch: 'Dev_Multiple_Labels'
+
 master:
 - base-branch: 'master'

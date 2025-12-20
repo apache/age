@@ -2,10 +2,10 @@ name: Go Driver Tests
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "Dev_Multiple_Labels" ]
 
   pull_request:
-    branches: [ "master" ]
+    branches: [ "Dev_Multiple_Labels" ]
 
 jobs:
   build:
