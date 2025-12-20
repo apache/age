@@ -19,7 +19,10 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "storage/bufmgr.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 
 #include "catalog/ag_label.h"
 #include "catalog/namespace.h"
@@ -398,7 +401,7 @@ static void process_update_list(CustomScanState *node)
         TupleTableSlot *slot;
         ResultRelInfo *resultRelInfo;
         ScanKeyData scan_keys[1];
-        TableScanDesc scan_desc;
+        SysScanDesc scan_desc;
         bool remove_property;
         char *label_name;
         cypher_update_item *update_item;
@@ -406,6 +409,7 @@ static void process_update_list(CustomScanState *node)
         HeapTuple heap_tuple;
         char *clause_name = css->set_list->clause_name;
         int cid;
+        Oid pk_index_oid;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -610,14 +614,23 @@ static void process_update_list(CustomScanState *node)
                 ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
                             GRAPHID_GET_DATUM(id->val.int_value));
             }
+
+            /*
+             * Get primary key index OID from relation cache for index scan.
+             * This enables fast index lookups instead of sequential scans.
+             */
+            (void) RelationGetIndexList(resultRelInfo->ri_RelationDesc);
+            pk_index_oid = resultRelInfo->ri_RelationDesc->rd_pkindex;
+
             /*
              * Setup the scan description, with the correct snapshot and scan
-             * keys.
+             * keys. Use systable_beginscan for index-based lookup when available.
              */
-            scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
-                                        estate->es_snapshot, 1, scan_keys);
+            scan_desc = systable_beginscan(resultRelInfo->ri_RelationDesc,
+                                           pk_index_oid, true,
+                                           estate->es_snapshot, 1, scan_keys);
             /* Retrieve the tuple. */
-            heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
+            heap_tuple = systable_getnext(scan_desc);
 
             /*
              * If the heap tuple still exists (It wasn't deleted between the
@@ -629,7 +642,7 @@ static void process_update_list(CustomScanState *node)
                                                  heap_tuple);
             }
             /* close the ScanDescription */
-            table_endscan(scan_desc);
+            systable_endscan(scan_desc);
         }
 
         estate->es_snapshot->curcid = cid;
