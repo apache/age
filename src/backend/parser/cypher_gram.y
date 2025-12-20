@@ -1041,6 +1041,8 @@ set_item:
             n->prop = $1;
             n->expr = $3;
             n->is_add = false;
+            n->is_label_op = false;
+            n->label_name = NULL;
             n->location = @1;
 
             $$ = (Node *)n;
@@ -1053,6 +1055,28 @@ set_item:
             n->prop = $1;
             n->expr = $3;
             n->is_add = true;
+            n->is_label_op = false;
+            n->label_name = NULL;
+            n->location = @1;
+
+            $$ = (Node *)n;
+        }
+    | var_name ':' label_name
+        {
+            cypher_set_item *n;
+            ColumnRef *cref;
+
+            /* Create a ColumnRef for the variable */
+            cref = makeNode(ColumnRef);
+            cref->fields = list_make1(makeString($1));
+            cref->location = @1;
+
+            n = make_ag_node(cypher_set_item);
+            n->prop = (Node *)cref;
+            n->expr = NULL;
+            n->is_add = false;
+            n->is_label_op = true;
+            n->label_name = $3;
             n->location = @1;
 
             $$ = (Node *)n;
@@ -1093,6 +1117,28 @@ remove_item:
             n->prop = $1;
             n->expr = make_null_const(-1);
             n->is_add = false;
+            n->is_label_op = false;
+            n->label_name = NULL;
+
+            $$ = (Node *)n;
+        }
+    | var_name ':' label_name
+        {
+            cypher_set_item *n;
+            ColumnRef *cref;
+
+            /* Create a ColumnRef for the variable */
+            cref = makeNode(ColumnRef);
+            cref->fields = list_make1(makeString($1));
+            cref->location = @1;
+
+            n = make_ag_node(cypher_set_item);
+            n->prop = (Node *)cref;
+            n->expr = NULL;
+            n->is_add = false;
+            n->is_label_op = true;
+            n->label_name = $3;
+            n->location = @1;
 
             $$ = (Node *)n;
         }

@@ -103,6 +103,8 @@ typedef struct cypher_set_item
     Node *prop; /* LHS */
     Node *expr; /* RHS */
     bool is_add; /* true if this is += */
+    bool is_label_op; /* true if this is a label SET/REMOVE operation */
+    char *label_name; /* label name for SET/REMOVE label operations */
     int location;
 } cypher_set_item;
 
@@ -453,6 +455,8 @@ typedef struct cypher_update_item
     List *qualified_name;
     bool remove_item;
     bool is_add;
+    bool is_label_op; /* true if this is a label SET/REMOVE operation */
+    char *label_name; /* label name for SET/REMOVE label operations */
 } cypher_update_item;
 
 typedef struct cypher_delete_information

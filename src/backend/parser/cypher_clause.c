@@ -1663,9 +1663,8 @@ cypher_update_information *transform_cypher_remove_item_list(
         cypher_set_item *set_item = lfirst(li);
         cypher_update_item *item;
         ColumnRef *ref;
-        A_Indirection *ind;
-        char *variable_name, *property_name;
-        String *property_node, *variable_node;
+        char *variable_name;
+        String *variable_node;
 
         item = make_ag_node(cypher_update_item);
 
@@ -1685,69 +1684,115 @@ cypher_update_information *transform_cypher_remove_item_list(
         }
         set_item->is_add = false;
 
-        item->remove_item = true;
-
-
-        if (!IsA(set_item->prop, A_Indirection))
+        /* Check if this is a label removal operation */
+        if (set_item->is_label_op)
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("REMOVE clause must be in the format: REMOVE variable.property_name"),
-                     parser_errposition(pstate, set_item->location)));
+            /* Label removal: REMOVE n:Label */
+            item->is_label_op = true;
+            item->label_name = set_item->label_name;
+            item->remove_item = true;
+            item->prop_name = NULL;
+
+            /* Extract variable name from ColumnRef */
+            if (!IsA(set_item->prop, ColumnRef))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("REMOVE label must be in the format: REMOVE variable:Label"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            ref = (ColumnRef *)set_item->prop;
+            variable_node = linitial(ref->fields);
+            variable_name = variable_node->sval;
+            item->var_name = variable_name;
+
+            item->entity_position = get_target_entry_resno(query->targetList,
+                                                           variable_name);
+            if (item->entity_position == -1)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("undefined reference to variable %s in REMOVE clause",
+                                variable_name),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            add_volatile_wrapper_to_target_entry(query->targetList,
+                                                 item->entity_position);
         }
-
-        ind = (A_Indirection *)set_item->prop;
-
-        /* extract variable name */
-        if (!IsA(ind->arg, ColumnRef))
+        else
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("REMOVE clause must be in the format: REMOVE variable.property_name"),
-                     parser_errposition(pstate, set_item->location)));
+            /* Property removal: REMOVE n.property */
+            A_Indirection *ind;
+            char *property_name;
+            String *property_node;
+
+            item->is_label_op = false;
+            item->label_name = NULL;
+            item->remove_item = true;
+
+            if (!IsA(set_item->prop, A_Indirection))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("REMOVE clause must be in the format: REMOVE variable.property_name or REMOVE variable:Label"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            ind = (A_Indirection *)set_item->prop;
+
+            /* extract variable name */
+            if (!IsA(ind->arg, ColumnRef))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("REMOVE clause must be in the format: REMOVE variable.property_name"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            ref = (ColumnRef *)ind->arg;
+
+            variable_node = linitial(ref->fields);
+
+            variable_name = variable_node->sval;
+            item->var_name = variable_name;
+
+            item->entity_position = get_target_entry_resno(query->targetList,
+                                                           variable_name);
+            if (item->entity_position == -1)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("undefined reference to variable %s in REMOVE clause",
+                                variable_name),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            add_volatile_wrapper_to_target_entry(query->targetList,
+                                                 item->entity_position);
+
+            /* extract property name */
+            if (list_length(ind->indirection) != 1)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("REMOVE clause must be in the format: REMOVE variable.property_name"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            property_node = linitial(ind->indirection);
+
+            if (!IsA(property_node, String))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("REMOVE clause expects a property name"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+            property_name = property_node->sval;
+            item->prop_name = property_name;
         }
-
-        ref = (ColumnRef *)ind->arg;
-
-        variable_node = linitial(ref->fields);
-
-        variable_name = variable_node->sval;
-        item->var_name = variable_name;
-
-        item->entity_position = get_target_entry_resno(query->targetList,
-                                                       variable_name);
-        if (item->entity_position == -1)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                     errmsg("undefined reference to variable %s in REMOVE clause",
-                            variable_name),
-                     parser_errposition(pstate, set_item->location)));
-        }
-
-        add_volatile_wrapper_to_target_entry(query->targetList,
-                                             item->entity_position);
-
-        /* extract property name */
-        if (list_length(ind->indirection) != 1)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("REMOVE clause must be in the format: REMOVE variable.property_name"),
-                     parser_errposition(pstate, set_item->location)));
-        }
-
-        property_node = linitial(ind->indirection);
-
-        if (!IsA(property_node, String))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                     errmsg("REMOVE clause expects a property name"),
-                     parser_errposition(pstate, set_item->location)));
-        }
-        property_name = property_node->sval;
-        item->prop_name = property_name;
 
         info->set_items = lappend(info->set_items, item);
     }
@@ -1769,59 +1814,7 @@ cypher_update_information *transform_cypher_set_item_list(
     foreach (li, set_item_list)
     {
         cypher_set_item *set_item = lfirst(li);
-        TargetEntry *target_item;
         cypher_update_item *item;
-        ColumnRef *ref;
-        A_Indirection *ind;
-        char *variable_name, *property_name;
-        String *property_node, *variable_node;
-        int is_entire_prop_update = 0; /* true if a map is assigned to variable */
-
-        /* LHS of set_item must be a variable or an indirection. */
-        if (IsA(set_item->prop, ColumnRef))
-        {
-            /*
-             * A variable can only be assigned a map, a function call that
-             * evaluates to a map, or a variable.
-             *
-             * In case of a function call, whether it actually evaluates to
-             * map is checked in the execution stage.
-             */
-            if (!is_ag_node(set_item->expr, cypher_map) &&
-                !IsA(set_item->expr, FuncCall) &&
-                !IsA(set_item->expr, ColumnRef))
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("SET clause expects a map"),
-                         parser_errposition(pstate, set_item->location)));
-            }
-
-            is_entire_prop_update = 1;
-
-            /*
-             * In case of a variable, it is wrapped as an argument to
-             * the 'properties' function.
-             */
-            if (IsA(set_item->expr, ColumnRef))
-            {
-                List *qualified_name, *args;
-
-                qualified_name = list_make2(makeString("ag_catalog"),
-                                            makeString("age_properties"));
-                args = list_make1(set_item->expr);
-                set_item->expr = (Node *)makeFuncCall(qualified_name, args,
-                                                      COERCE_SQL_SYNTAX, -1);
-            }
-        }
-        else if (!IsA(set_item->prop, A_Indirection))
-        {
-            ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                            errmsg("SET clause expects a variable name"),
-                            parser_errposition(pstate, set_item->location)));
-        }
-
-        item = make_ag_node(cypher_update_item);
 
         if (!is_ag_node(lfirst(li), cypher_set_item))
         {
@@ -1830,104 +1823,198 @@ cypher_update_information *transform_cypher_set_item_list(
                      errmsg("unexpected node in cypher update list")));
         }
 
+        item = make_ag_node(cypher_update_item);
         item->remove_item = false;
 
-        /* set variable, is_add and extract property name */
-        if (is_entire_prop_update)
+        /* Check if this is a label SET operation */
+        if (set_item->is_label_op)
         {
-            ref = (ColumnRef *)set_item->prop;
-            item->is_add = set_item->is_add;
+            /* Label SET: SET n:Label */
+            ColumnRef *ref;
+            String *variable_node;
+            char *variable_name;
+
+            item->is_label_op = true;
+            item->label_name = set_item->label_name;
             item->prop_name = NULL;
-        }
-        else
-        {
-            ind = (A_Indirection *)set_item->prop;
-            ref = (ColumnRef *)ind->arg;
+            item->is_add = false;
 
-            if (set_item->is_add)
-            {
-                ereport(
-                    ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg(
-                         "SET clause does not yet support incrementing a specific property"),
-                     parser_errposition(pstate, set_item->location)));
-            }
-            set_item->is_add = false;
-
-            /* extract property name */
-            if (list_length(ind->indirection) != 1)
-            {
-                ereport(
-                    ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("SET clause doesn't not support updating maps or lists in a property"),
-                     parser_errposition(pstate, set_item->location)));
-            }
-
-            property_node = linitial(ind->indirection);
-            if (!IsA(property_node, String))
+            /* Extract variable name from ColumnRef */
+            if (!IsA(set_item->prop, ColumnRef))
             {
                 ereport(ERROR,
-                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                         errmsg("SET clause expects a property name"),
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("SET label must be in the format: SET variable:Label"),
                          parser_errposition(pstate, set_item->location)));
             }
 
-            property_name = property_node->sval;
-            item->prop_name = property_name;
-        }
+            ref = (ColumnRef *)set_item->prop;
+            variable_node = linitial(ref->fields);
+            variable_name = variable_node->sval;
+            item->var_name = variable_name;
 
-        /* extract variable name */
-        variable_node = linitial(ref->fields);
-        if (!IsA(variable_node, String))
+            item->entity_position = get_target_entry_resno(query->targetList,
+                                                           variable_name);
+            if (item->entity_position == -1)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("undefined reference to variable %s in SET clause",
+                                variable_name),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            add_volatile_wrapper_to_target_entry(query->targetList,
+                                                 item->entity_position);
+
+            /* No prop_position needed for label operations */
+            item->prop_position = -1;
+
+            info->set_items = lappend(info->set_items, item);
+        }
+        else
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                     errmsg("SET clause expects a variable name"),
-                     parser_errposition(pstate, set_item->location)));
+            /* Property SET: original logic */
+            TargetEntry *target_item;
+            ColumnRef *ref;
+            A_Indirection *ind;
+            char *variable_name, *property_name;
+            String *property_node, *variable_node;
+            int is_entire_prop_update = 0;
+
+            item->is_label_op = false;
+            item->label_name = NULL;
+
+            /* LHS of set_item must be a variable or an indirection. */
+            if (IsA(set_item->prop, ColumnRef))
+            {
+                if (!is_ag_node(set_item->expr, cypher_map) &&
+                    !IsA(set_item->expr, FuncCall) &&
+                    !IsA(set_item->expr, ColumnRef))
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("SET clause expects a map"),
+                             parser_errposition(pstate, set_item->location)));
+                }
+
+                is_entire_prop_update = 1;
+
+                if (IsA(set_item->expr, ColumnRef))
+                {
+                    List *qualified_name, *args;
+
+                    qualified_name = list_make2(makeString("ag_catalog"),
+                                                makeString("age_properties"));
+                    args = list_make1(set_item->expr);
+                    set_item->expr = (Node *)makeFuncCall(qualified_name, args,
+                                                          COERCE_SQL_SYNTAX, -1);
+                }
+            }
+            else if (!IsA(set_item->prop, A_Indirection))
+            {
+                ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                                errmsg("SET clause expects a variable name"),
+                                parser_errposition(pstate, set_item->location)));
+            }
+
+            /* set variable, is_add and extract property name */
+            if (is_entire_prop_update)
+            {
+                ref = (ColumnRef *)set_item->prop;
+                item->is_add = set_item->is_add;
+                item->prop_name = NULL;
+            }
+            else
+            {
+                ind = (A_Indirection *)set_item->prop;
+                ref = (ColumnRef *)ind->arg;
+
+                if (set_item->is_add)
+                {
+                    ereport(
+                        ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg(
+                             "SET clause does not yet support incrementing a specific property"),
+                         parser_errposition(pstate, set_item->location)));
+                }
+                set_item->is_add = false;
+
+                /* extract property name */
+                if (list_length(ind->indirection) != 1)
+                {
+                    ereport(
+                        ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("SET clause doesn't not support updating maps or lists in a property"),
+                         parser_errposition(pstate, set_item->location)));
+                }
+
+                property_node = linitial(ind->indirection);
+                if (!IsA(property_node, String))
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                             errmsg("SET clause expects a property name"),
+                             parser_errposition(pstate, set_item->location)));
+                }
+
+                property_name = property_node->sval;
+                item->prop_name = property_name;
+            }
+
+            /* extract variable name */
+            variable_node = linitial(ref->fields);
+            if (!IsA(variable_node, String))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("SET clause expects a variable name"),
+                         parser_errposition(pstate, set_item->location)));
+            }
+
+            variable_name = variable_node->sval;
+            item->var_name = variable_name;
+
+            item->entity_position = get_target_entry_resno(query->targetList,
+                                                           variable_name);
+            if (item->entity_position == -1)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+                         errmsg("undefined reference to variable %s in SET clause",
+                                variable_name),
+                                parser_errposition(pstate, set_item->location)));
+            }
+
+            add_volatile_wrapper_to_target_entry(query->targetList,
+                                                 item->entity_position);
+
+            /* set keep_null property */
+            if (is_ag_node(set_item->expr, cypher_map))
+            {
+                ((cypher_map*)set_item->expr)->keep_null = set_item->is_add;
+            }
+
+            /* create target entry for the new property value */
+            item->prop_position = (AttrNumber)pstate->p_next_resno;
+            target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
+                                                EXPR_KIND_SELECT_TARGET, NULL,
+                                                false);
+
+            if (nodeTag(target_item->expr) == T_Aggref)
+            {
+                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("Invalid use of aggregation in this context"),
+                        parser_errposition(pstate, set_item->location)));
+            }
+
+            target_item->expr = add_volatile_wrapper(target_item->expr);
+
+            query->targetList = lappend(query->targetList, target_item);
+            info->set_items = lappend(info->set_items, item);
         }
-
-        variable_name = variable_node->sval;
-        item->var_name = variable_name;
-
-        item->entity_position = get_target_entry_resno(query->targetList,
-                                                       variable_name);
-        if (item->entity_position == -1)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-                     errmsg("undefined reference to variable %s in SET clause",
-                            variable_name),
-                            parser_errposition(pstate, set_item->location)));
-        }
-
-        add_volatile_wrapper_to_target_entry(query->targetList,
-                                             item->entity_position);
-
-        /* set keep_null property */
-        if (is_ag_node(set_item->expr, cypher_map))
-        {
-            ((cypher_map*)set_item->expr)->keep_null = set_item->is_add;
-        }
-
-        /* create target entry for the new property value */
-        item->prop_position = (AttrNumber)pstate->p_next_resno;
-        target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
-                                            EXPR_KIND_SELECT_TARGET, NULL,
-                                            false);
-
-        if (nodeTag(target_item->expr) == T_Aggref)
-        {
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                    errmsg("Invalid use of aggregation in this context"),
-                    parser_errposition(pstate, set_item->location)));
-        }
-
-        target_item->expr = add_volatile_wrapper(target_item->expr);
-
-        query->targetList = lappend(query->targetList, target_item);
-        info->set_items = lappend(info->set_items, item);
     }
 
     return info;

@@ -419,6 +419,8 @@ static void process_update_list(CustomScanState *node)
          */
         if (scanTupleSlot->tts_isnull[update_item->entity_position - 1])
         {
+            /* increment the loop index before continuing */
+            lidx++;
             continue;
         }
 
@@ -447,6 +449,151 @@ static void process_update_list(CustomScanState *node)
         label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
 
         label_name = pnstrdup(label->val.string.val, label->val.string.len);
+
+        /*
+         * Handle label SET/REMOVE operations
+         */
+        if (update_item->is_label_op)
+        {
+            Oid graph_namespace_oid;
+            Oid new_label_table_oid;
+            char *new_label_name;
+
+            /* Label operations only apply to vertices */
+            if (original_entity_value->type != AGTV_VERTEX)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("SET/REMOVE label can only be used on vertices")));
+            }
+
+            /* Get the original properties - we keep them unchanged */
+            original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
+                                                                "properties");
+
+            /* Get the namespace OID for the graph */
+            graph_namespace_oid = get_namespace_oid(css->set_list->graph_name, false);
+
+            /*
+             * Determine the new label. For REMOVE, set to default (empty) only
+             * if the vertex has the specified label. For SET, only allow if the
+             * vertex has no label (multiple labels are not supported).
+             */
+            if (update_item->remove_item)
+            {
+                /*
+                 * REMOVE label: only remove if the vertex has the specified label.
+                 * If the vertex has a different label (or no label), do nothing.
+                 */
+                if (label->val.string.len == 0 ||
+                    strcmp(label_name, update_item->label_name) != 0)
+                {
+                    /* Label doesn't match - skip this update, continue to next */
+                    lidx++;
+                    continue;
+                }
+
+                /* Label matches - set to default (no label) */
+                new_label_name = "";
+                new_label_table_oid = get_relname_relid(AG_DEFAULT_LABEL_VERTEX,
+                                                        graph_namespace_oid);
+            }
+            else
+            {
+                /*
+                 * SET label: only allow if the vertex currently has no label.
+                 * Multiple labels are not supported.
+                 */
+                if (label->val.string.len > 0)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                             errmsg("SET label failed: vertex already has label \"%s\"",
+                                    label_name),
+                             errhint("Multiple labels are not supported. Use REMOVE to clear the label first.")));
+                }
+
+                /* SET label: use the new label name */
+                new_label_name = update_item->label_name;
+
+                /* Check if the label exists, create if not */
+                new_label_table_oid = get_relname_relid(new_label_name,
+                                                        graph_namespace_oid);
+                if (!OidIsValid(new_label_table_oid))
+                {
+                    /*
+                     * Per Cypher specification, if the label doesn't exist,
+                     * we create it automatically.
+                     */
+                    create_label(css->set_list->graph_name, new_label_name,
+                                 LABEL_TYPE_VERTEX, NIL);
+
+                    /* Get the OID of the newly created label table */
+                    new_label_table_oid = get_relname_relid(new_label_name,
+                                                            graph_namespace_oid);
+                }
+            }
+
+            /* Use the unified vertex table for the update */
+            resultRelInfo = create_entity_result_rel_info(
+                estate, css->set_list->graph_name, AG_DEFAULT_LABEL_VERTEX);
+
+            slot = ExecInitExtraTupleSlot(
+                estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+                &TTSOpsHeapTuple);
+
+            /* Create the new vertex with updated label */
+            new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
+                                     CStringGetDatum(new_label_name),
+                                     AGTYPE_P_GET_DATUM(agtype_value_to_agtype(original_properties)));
+
+            /* Populate the tuple table slot */
+            slot = populate_vertex_tts(slot, id, original_properties);
+
+            /* Set the labels column to the new label table OID */
+            slot->tts_values[vertex_tuple_labels] = ObjectIdGetDatum(new_label_table_oid);
+            slot->tts_isnull[vertex_tuple_labels] = false;
+
+            /* Update in-memory tuple */
+            scanTupleSlot->tts_values[update_item->entity_position - 1] = new_entity;
+
+            /* Update any paths containing this entity */
+            update_all_paths(node, id->val.int_value, DATUM_GET_AGTYPE_P(new_entity));
+
+            /* Perform the on-disk update */
+            cid = estate->es_snapshot->curcid;
+            estate->es_snapshot->curcid = GetCurrentCommandId(false);
+
+            if (luindex[update_item->entity_position - 1] == lidx)
+            {
+                ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_INT8EQ,
+                            Int64GetDatum(id->val.int_value));
+
+                (void) RelationGetIndexList(resultRelInfo->ri_RelationDesc);
+                pk_index_oid = resultRelInfo->ri_RelationDesc->rd_pkindex;
+
+                scan_desc = systable_beginscan(resultRelInfo->ri_RelationDesc,
+                                               pk_index_oid, true,
+                                               estate->es_snapshot, 1, scan_keys);
+                heap_tuple = systable_getnext(scan_desc);
+
+                if (HeapTupleIsValid(heap_tuple))
+                {
+                    heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
+                                                     heap_tuple);
+                }
+                systable_endscan(scan_desc);
+            }
+
+            estate->es_snapshot->curcid = cid;
+            ExecCloseIndices(resultRelInfo);
+            table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
+
+            /* increment loop index and continue to next item */
+            lidx++;
+            continue;
+        }
+
         /* get the properties we need to update */
         original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
                                                             "properties");

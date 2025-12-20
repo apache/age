@@ -126,6 +126,7 @@ void copy_cypher_update_information(ExtensibleNode *newnode, const ExtensibleNod
 }
 
 /* copy function for cypher_update_item */
+/* copy function for cypher_update_item */
 void copy_cypher_update_item(ExtensibleNode *newnode, const ExtensibleNode *from)
 {
     COPY_LOCALS(cypher_update_item);
@@ -137,6 +138,8 @@ void copy_cypher_update_item(ExtensibleNode *newnode, const ExtensibleNode *from
     COPY_NODE_FIELD(qualified_name);
     COPY_SCALAR_FIELD(remove_item);
     COPY_SCALAR_FIELD(is_add);
+    COPY_SCALAR_FIELD(is_label_op);
+    COPY_STRING_FIELD(label_name);
 }
 
 /* copy function for cypher_delete_information */

@@ -463,7 +463,7 @@ ERROR:  REMOVE cannot be the first clause in a Cypher query
 LINE 1: SELECT * FROM cypher('cypher_remove', $$REMOVE n.i$$) AS (a ...
                                                 ^
 SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE n.i = NULL$$) AS (a agtype);
-ERROR:  REMOVE clause must be in the format: REMOVE variable.property_name
+ERROR:  REMOVE clause must be in the format: REMOVE variable.property_name or REMOVE variable:Label
 LINE 1: SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE n.i...
                                                 ^
 SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE wrong_var.i$$) AS (a agtype);

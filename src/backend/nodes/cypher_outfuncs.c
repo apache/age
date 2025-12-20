@@ -159,6 +159,8 @@ void out_cypher_set_item(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(prop);
     WRITE_NODE_FIELD(expr);
     WRITE_BOOL_FIELD(is_add);
+    WRITE_BOOL_FIELD(is_label_op);
+    WRITE_STRING_FIELD(label_name);
 }
 
 /* serialization function for the cypher_delete ExtensibleNode. */
@@ -428,6 +430,8 @@ void out_cypher_update_item(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(qualified_name);
     WRITE_BOOL_FIELD(remove_item);
     WRITE_BOOL_FIELD(is_add);
+    WRITE_BOOL_FIELD(is_label_op);
+    WRITE_STRING_FIELD(label_name);
 }
 
 /* serialization function for the cypher_delete_information ExtensibleNode. */
