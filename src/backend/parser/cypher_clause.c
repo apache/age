@@ -42,12 +42,14 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
+#include "common/hashfn.h"
 #include "parser/cypher_analyze.h"
 #include "parser/cypher_clause.h"
 #include "parser/cypher_expr.h"
 #include "parser/cypher_item.h"
 #include "parser/cypher_parse_agg.h"
 #include "parser/cypher_transform_entity.h"
+#include "storage/lock.h"
 #include "utils/ag_cache.h"
 #include "utils/ag_func.h"
 #include "utils/ag_guc.h"
@@ -5911,15 +5913,23 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     /* create the label entry if it does not exist */
     if (!label_exists(edge->label, cpstate->graph_oid))
     {
+        LOCKTAG tag;
+        uint32 key;
         List *parent;
 
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_EDGE);
+        key = hash_bytes((const unsigned char *)edge->label, strlen(edge->label));
+	    SET_LOCKTAG_ADVISORY(tag, MyDatabaseId, key, cpstate->graph_oid, 3);
+	    (void) LockAcquire(&tag, ExclusiveLock, false, false);
+        if (!label_exists(edge->label, cpstate->graph_oid))
+        {
+            rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+                                    AG_DEFAULT_LABEL_EDGE);
 
-        parent = list_make1(rv);
+            parent = list_make1(rv);
 
-        create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
-                     parent);
+            create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
+                        parent);
+        }
     }
 
     /* lock the relation of the label */
@@ -6188,15 +6198,23 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
     /* create the label entry if it does not exist */
     if (!label_exists(node->label, cpstate->graph_oid))
     {
+        LOCKTAG tag;
+        uint32 key;
         List *parent;
 
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_VERTEX);
+        key = hash_bytes((const unsigned char *)node->label, strlen(node->label));
+        SET_LOCKTAG_ADVISORY(tag, MyDatabaseId, key, cpstate->graph_oid, 3);
+        (void) LockAcquire(&tag, ExclusiveLock, false, false);
+        if (!label_exists(node->label, cpstate->graph_oid))
+        {
+            rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+                                    AG_DEFAULT_LABEL_VERTEX);
 
-        parent = list_make1(rv);
+            parent = list_make1(rv);
 
-        create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
-                     parent);
+            create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
+                        parent);
+        }
     }
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
@@ -7266,19 +7284,36 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     /* check to see if the label exists, create the label entry if it does not. */
     if (edge->label && !label_exists(edge->label, cpstate->graph_oid))
     {
+        LOCKTAG tag;
+        uint32 key;
         List *parent;
+
         /*
-         * setup the default edge table as the parent table, that we
-         * will inherit from.
+         * When merging nodes or edges concurrently, there is label with the same
+         * name created by different transactions. Advisory lock is acquired before
+         * creating label, and then check if label already exists. Note, the lock is
+         * not released until current transaction is over. This can ensure that the
+         * new tuple inserted in ag_label catalog table will be sent out, so other
+         * transactions can receive it when checking label exists after acquiring lock.
          */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_EDGE);
+        key = hash_bytes((const unsigned char *)edge->label, strlen(edge->label));
+	    SET_LOCKTAG_ADVISORY(tag, MyDatabaseId, key, cpstate->graph_oid, 3);
+	    (void) LockAcquire(&tag, ExclusiveLock, false, false);
+        if (!label_exists(edge->label, cpstate->graph_oid))
+        {
+            /*
+            * setup the default edge table as the parent table, that we
+            * will inherit from.
+            */
+            rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+                                    AG_DEFAULT_LABEL_EDGE);
 
-        parent = list_make1(rv);
+            parent = list_make1(rv);
 
-        /* create the label */
-        create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
-                     parent);
+            /* create the label */
+            create_label(cpstate->graph_name, edge->label, LABEL_TYPE_EDGE,
+                        parent);
+        }
     }
 
     /* lock the relation of the label */
@@ -7401,20 +7436,28 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
     /* check to see if the label exists, create the label entry if it does not. */
     if (node->label && !label_exists(node->label, cpstate->graph_oid))
     {
+        LOCKTAG tag;
+        uint32 key;
         List *parent;
 
-        /*
-         * setup the default vertex table as the parent table, that we
-         * will inherit from.
-         */
-        rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
-                                 AG_DEFAULT_LABEL_VERTEX);
+        key = hash_bytes((const unsigned char *)node->label, strlen(node->label));
+        SET_LOCKTAG_ADVISORY(tag, MyDatabaseId, key, cpstate->graph_oid, 3);
+        (void) LockAcquire(&tag, ExclusiveLock, false, false);
+        if (!label_exists(node->label, cpstate->graph_oid))
+        {
+            /*
+            * setup the default vertex table as the parent table, that we
+            * will inherit from.
+            */
+            rv = get_label_range_var(cpstate->graph_name, cpstate->graph_oid,
+                                    AG_DEFAULT_LABEL_VERTEX);
 
-        parent = list_make1(rv);
+            parent = list_make1(rv);
 
-        /* create the label */
-        create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
-                     parent);
+            /* create the label */
+            create_label(cpstate->graph_name, node->label, LABEL_TYPE_VERTEX,
+                        parent);
+        }
     }
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;
