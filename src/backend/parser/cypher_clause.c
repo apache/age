@@ -38,6 +38,7 @@
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
+#include "utils/lsyscache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -136,6 +137,7 @@ static Node *make_edge_expr(cypher_parsestate *cpstate,
                             ParseNamespaceItem *pnsi);
 static Node *make_qual(cypher_parsestate *cpstate,
                            transform_entity *entity, char *name);
+static Node *optimize_qual_expr_mutator(Node *node, void *context);
 static TargetEntry *
 transform_match_create_path_variable(cypher_parsestate *cpstate,
                                      cypher_path *path, List *entities);
@@ -3375,9 +3377,171 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
         expr = (Expr *)coerce_to_boolean(pstate, (Node *)expr, "WHERE");
     }
 
+    /*
+     * Apply optimization to the transformed expression tree. This looks for
+     * patterns like age_id(_agtype_build_vertex(...)) and replaces them with
+     * direct column references.
+     */
+    if (expr != NULL)
+    {
+        expr = (Expr *)optimize_qual_expr_mutator((Node *)expr, NULL);
+    }
+
     query->rtable = cpstate->pstate.p_rtable;
     query->rteperminfos = cpstate->pstate.p_rteperminfos;
     query->jointree = makeFromExpr(cpstate->pstate.p_joinlist, (Node *)expr);
+}
+
+/*
+ * optimize_qual_expr_mutator - Walk expression tree and optimize vertex/edge
+ * accessor patterns.
+ *
+ * This mutator looks for patterns like:
+ *   age_id(_agtype_build_vertex(id, label, props))
+ * and transforms them to:
+ *   graphid_to_agtype(id)
+ *
+ * This avoids the expensive reconstruction of vertex/edge agtype values
+ * just to immediately extract a single field from them. This is particularly
+ * important for join conditions where the vertex/edge comes from a previous
+ * clause.
+ */
+static Node *optimize_qual_expr_mutator(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return NULL;
+    }
+
+    /*
+     * Look for FuncExpr nodes that wrap accessor functions around
+     * _agtype_build_vertex or _agtype_build_edge calls.
+     */
+    if (IsA(node, FuncExpr))
+    {
+        FuncExpr *outer_func = (FuncExpr *)node;
+        char *outer_func_name;
+        Node *arg;
+        FuncExpr *inner_func;
+        char *inner_func_name;
+        List *inner_args;
+        int arg_index = -1;
+
+        /* Must have exactly one argument */
+        if (list_length(outer_func->args) != 1)
+        {
+            goto recurse;
+        }
+
+        outer_func_name = get_func_name(outer_func->funcid);
+        if (outer_func_name == NULL)
+        {
+            goto recurse;
+        }
+
+        /* Check if this is an accessor function we can optimize */
+        if (strcmp(outer_func_name, "age_id") != 0 &&
+            strcmp(outer_func_name, "age_start_id") != 0 &&
+            strcmp(outer_func_name, "age_end_id") != 0 &&
+            strcmp(outer_func_name, "age_properties") != 0)
+        {
+            goto recurse;
+        }
+
+        arg = (Node *)linitial(outer_func->args);
+
+        /* The argument must be a FuncExpr (the build function) */
+        if (!IsA(arg, FuncExpr))
+        {
+            goto recurse;
+        }
+
+        inner_func = (FuncExpr *)arg;
+        inner_func_name = get_func_name(inner_func->funcid);
+        if (inner_func_name == NULL)
+        {
+            goto recurse;
+        }
+
+        inner_args = inner_func->args;
+
+        /*
+         * Check for _agtype_build_vertex(id, label_name, properties)
+         * Arguments: 0=id (graphid), 1=label_name (cstring), 2=properties (agtype)
+         */
+        if (strcmp(inner_func_name, "_agtype_build_vertex") == 0 &&
+            list_length(inner_args) == 3)
+        {
+            if (strcmp(outer_func_name, "age_id") == 0)
+            {
+                arg_index = 0;  /* id */
+            }
+            else if (strcmp(outer_func_name, "age_properties") == 0)
+            {
+                arg_index = 2;  /* properties */
+            }
+        }
+        /*
+         * Check for _agtype_build_edge(id, startid, endid, label_name, properties)
+         * Arguments: 0=id (graphid), 1=start_id (graphid), 2=end_id (graphid),
+         *            3=label_name (cstring), 4=properties (agtype)
+         */
+        else if (strcmp(inner_func_name, "_agtype_build_edge") == 0 &&
+                 list_length(inner_args) == 5)
+        {
+            if (strcmp(outer_func_name, "age_id") == 0)
+            {
+                arg_index = 0;  /* id */
+            }
+            else if (strcmp(outer_func_name, "age_start_id") == 0)
+            {
+                arg_index = 1;  /* start_id */
+            }
+            else if (strcmp(outer_func_name, "age_end_id") == 0)
+            {
+                arg_index = 2;  /* end_id */
+            }
+            else if (strcmp(outer_func_name, "age_properties") == 0)
+            {
+                arg_index = 4;  /* properties */
+            }
+        }
+
+        /* If we found a pattern to optimize */
+        if (arg_index >= 0)
+        {
+            Node *extracted_arg = (Node *)list_nth(inner_args, arg_index);
+
+            /* For properties, return directly (already agtype) */
+            if (strcmp(outer_func_name, "age_properties") == 0)
+            {
+                return extracted_arg;
+            }
+            else
+            {
+                /*
+                 * For graphid fields (id, start_id, end_id), we need to wrap
+                 * in graphid_to_agtype to match the original return type.
+                 */
+                Oid cast_func_oid;
+                FuncExpr *cast_expr;
+
+                cast_func_oid = get_ag_func_oid("graphid_to_agtype", 1,
+                                                GRAPHIDOID);
+
+                cast_expr = makeFuncExpr(cast_func_oid, AGTYPEOID,
+                                         list_make1(extracted_arg),
+                                         InvalidOid, InvalidOid,
+                                         COERCE_EXPLICIT_CALL);
+                cast_expr->location = outer_func->location;
+
+                return (Node *)cast_expr;
+            }
+        }
+    }
+
+recurse:
+    return expression_tree_mutator(node, optimize_qual_expr_mutator, context);
 }
 
 /*

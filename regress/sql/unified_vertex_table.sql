@@ -810,6 +810,64 @@ SELECT * FROM cypher('unified_test', $$
 $$) AS (eid agtype, props agtype, sid agtype, eid2 agtype);
 
 --
+-- Test 29: Verify join condition optimization with EXPLAIN
+--
+-- When vertices/edges from previous clauses are joined, the optimization
+-- should replace patterns like:
+--   age_id(_agtype_build_vertex(r.id, ...))::graphid
+-- with direct column access:
+--   r.id
+--
+-- This avoids expensive vertex reconstruction in join conditions.
+--
+
+-- Create test data: Users following each other
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:JoinOptUser {name: 'Alice'}),
+           (:JoinOptUser {name: 'Bob'}),
+           (:JoinOptUser {name: 'Carol'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser {name: 'Alice'}), (b:JoinOptUser {name: 'Bob'})
+    CREATE (a)-[:JOPT_FOLLOWS]->(b)
+$$) AS (e agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (b:JoinOptUser {name: 'Bob'}), (c:JoinOptUser {name: 'Carol'})
+    CREATE (b)-[:JOPT_FOLLOWS]->(c)
+$$) AS (e agtype);
+
+-- EXPLAIN showing join conditions use direct column access
+-- Look for: graphid_to_agtype(id) instead of age_id(_agtype_build_vertex(...))
+-- And: direct id comparisons instead of age_id(...)::graphid
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser)
+    RETURN u.name, v.name
+$$) AS (u_name agtype, v_name agtype);
+
+-- Verify the query still returns correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser)
+    RETURN u.name, v.name
+    ORDER BY u.name
+$$) AS (u_name agtype, v_name agtype);
+
+-- Multi-hop pattern showing optimization across multiple joins
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
+    RETURN a.name, b.name, c.name
+$$) AS (a_name agtype, b_name agtype, c_name agtype);
+
+-- Verify multi-hop query results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
+    RETURN a.name, b.name, c.name
+$$) AS (a_name agtype, b_name agtype, c_name agtype);
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);
