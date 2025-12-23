@@ -189,7 +189,8 @@ CREATE TYPE graphid (
   SEND = ag_catalog.graphid_send,
   RECEIVE = ag_catalog.graphid_recv,
   INTERNALLENGTH = 8,
-  PASSEDBYVALUE,
+  -- Note: PASSEDBYVALUE removed for 32-bit WASM compatibility (PGlite)
+  -- On 32-bit systems, Datum is 4 bytes and cannot hold 8-byte graphid by value
   ALIGNMENT = float8,
   STORAGE = plain
 );
