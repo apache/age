@@ -116,6 +116,7 @@ static bool function_exists(char *funcname, char *extension);
 static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
                                   Oid source_oid, Oid target_oid,
                                   int32 t_typemod, bool error_out);
+static Node *optimize_vertex_field_access(Node *node);
 
 /* transform a cypher expression */
 Node *transform_cypher_expr(cypher_parsestate *cpstate, Node *expr,
@@ -2082,6 +2083,14 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     retval = ParseFuncOrColumn(pstate, fname, targs, last_srf, fn, false,
                                fn->location);
 
+    /*
+     * Optimize vertex field access patterns. This detects cases like:
+     *   age_id(_agtype_build_vertex(id, label, props))
+     * and optimizes them to directly use the underlying column, avoiding
+     * the expensive reconstruction of the vertex agtype just to extract a field.
+     */
+    retval = optimize_vertex_field_access(retval);
+
     /* flag that an aggregate was found during a transform */
     if (retval != NULL && retval->type == T_Aggref)
     {
@@ -2406,4 +2415,187 @@ static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink)
         elog(ERROR, "unsupported SubLink type");
 
     return result;
+}
+/*
+ * optimize_vertex_field_access
+ *
+ * This function optimizes patterns where we're extracting fields from
+ * a vertex that was just built from its underlying columns. The most
+ * common case is:
+ *
+ *   age_id(_agtype_build_vertex(id, label_name, properties))
+ *
+ * Which can be optimized to just use 'id' directly (cast to agtype).
+ *
+ * Similar optimizations apply to:
+ *   - age_properties(_agtype_build_vertex(...)) -> properties
+ *   - age_label(_agtype_build_vertex(...)) -> label_name (needs cast)
+ *
+ * The same optimizations apply to edges with _agtype_build_edge:
+ *   - age_id(_agtype_build_edge(id, startid, endid, label, props)) -> id
+ *   - age_start_id(_agtype_build_edge(...)) -> startid
+ *   - age_end_id(_agtype_build_edge(...)) -> endid
+ *   - age_properties(_agtype_build_edge(...)) -> props
+ *   - age_label(_agtype_build_edge(...)) -> label
+ */
+static Node *optimize_vertex_field_access(Node *node)
+{
+    FuncExpr *outer_func;
+    FuncExpr *inner_func;
+    char *outer_func_name;
+    char *inner_func_name;
+    Node *arg;
+    List *inner_args;
+    int arg_index = -1;
+    Oid result_type;
+    bool needs_agtype_cast = false;
+
+    /* Only optimize FuncExpr nodes */
+    if (node == NULL || !IsA(node, FuncExpr))
+    {
+        return node;
+    }
+
+    outer_func = (FuncExpr *)node;
+
+    /* Must have exactly one argument */
+    if (list_length(outer_func->args) != 1)
+    {
+        return node;
+    }
+
+    /* Get the function name */
+    outer_func_name = get_func_name(outer_func->funcid);
+    if (outer_func_name == NULL)
+    {
+        return node;
+    }
+
+    /* Check if this is an accessor function we can optimize */
+    arg = (Node *)linitial(outer_func->args);
+
+    /* The argument must be a FuncExpr (the build function) */
+    if (!IsA(arg, FuncExpr))
+    {
+        return node;
+    }
+
+    inner_func = (FuncExpr *)arg;
+    inner_func_name = get_func_name(inner_func->funcid);
+
+    if (inner_func_name == NULL)
+    {
+        return node;
+    }
+
+    inner_args = inner_func->args;
+
+    /*
+     * Check for _agtype_build_vertex(id, label_name, properties)
+     * Arguments: 0=id (graphid), 1=label_name (cstring), 2=properties (agtype)
+     *
+     * Note: We don't optimize age_label() because the label_name is a cstring
+     * from _label_name_from_table_oid() and converting it properly to agtype
+     * string is non-trivial. The id and properties optimizations are the most
+     * impactful for performance anyway.
+     */
+    if (strcmp(inner_func_name, "_agtype_build_vertex") == 0 &&
+        list_length(inner_args) == 3)
+    {
+        if (strcmp(outer_func_name, "age_id") == 0)
+        {
+            /* Extract id (arg 0), needs cast from graphid to agtype */
+            arg_index = 0;
+            result_type = GRAPHIDOID;
+            needs_agtype_cast = true;
+        }
+        else if (strcmp(outer_func_name, "age_properties") == 0)
+        {
+            /* Extract properties (arg 2), already agtype */
+            arg_index = 2;
+            result_type = AGTYPEOID;
+            needs_agtype_cast = false;
+        }
+        /* age_label() is intentionally not optimized - cstring conversion is complex */
+    }
+    /*
+     * Check for _agtype_build_edge(id, startid, endid, label_name, properties)
+     * Arguments: 0=id (graphid), 1=start_id (graphid), 2=end_id (graphid),
+     *            3=label_name (cstring), 4=properties (agtype)
+     *
+     * Note: Same as vertex, age_label() is not optimized for edges.
+     */
+    else if (strcmp(inner_func_name, "_agtype_build_edge") == 0 &&
+             list_length(inner_args) == 5)
+    {
+        if (strcmp(outer_func_name, "age_id") == 0)
+        {
+            /* Extract id (arg 0), needs cast from graphid to agtype */
+            arg_index = 0;
+            result_type = GRAPHIDOID;
+            needs_agtype_cast = true;
+        }
+        else if (strcmp(outer_func_name, "age_start_id") == 0)
+        {
+            /* Extract start_id (arg 1), needs cast from graphid to agtype */
+            arg_index = 1;
+            result_type = GRAPHIDOID;
+            needs_agtype_cast = true;
+        }
+        else if (strcmp(outer_func_name, "age_end_id") == 0)
+        {
+            /* Extract end_id (arg 2), needs cast from graphid to agtype */
+            arg_index = 2;
+            result_type = GRAPHIDOID;
+            needs_agtype_cast = true;
+        }
+        /* age_label() is intentionally not optimized - cstring conversion is complex */
+        else if (strcmp(outer_func_name, "age_properties") == 0)
+        {
+            /* Extract properties (arg 4), already agtype */
+            arg_index = 4;
+            result_type = AGTYPEOID;
+            needs_agtype_cast = false;
+        }
+    }
+
+    /* If we found a pattern to optimize */
+    if (arg_index >= 0)
+    {
+        Node *extracted_arg = (Node *)list_nth(inner_args, arg_index);
+
+        if (needs_agtype_cast)
+        {
+            /*
+             * For graphid: use graphid_to_agtype() function
+             * Currently only graphid needs casting - cstring (for labels)
+             * is intentionally not optimized.
+             */
+            if (result_type == GRAPHIDOID)
+            {
+                Oid cast_func_oid;
+                FuncExpr *cast_expr;
+
+                /* Get the graphid_to_agtype function OID */
+                cast_func_oid = get_ag_func_oid("graphid_to_agtype", 1,
+                                                GRAPHIDOID);
+
+                cast_expr = makeFuncExpr(cast_func_oid, AGTYPEOID,
+                                         list_make1(extracted_arg),
+                                         InvalidOid, InvalidOid,
+                                         COERCE_EXPLICIT_CALL);
+                cast_expr->location = outer_func->location;
+
+                return (Node *)cast_expr;
+            }
+        }
+        else
+        {
+            /* For properties, just return the extracted argument directly */
+            return extracted_arg;
+        }
+    }
+
+    /* No optimization possible */
+    return node;
 }
