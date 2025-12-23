@@ -1310,10 +1310,123 @@ $$) AS (eid agtype, props agtype, sid agtype, eid2 agtype);
 (1 row)
 
 --
+-- Test 29: Verify join condition optimization with EXPLAIN
+--
+-- When vertices/edges from previous clauses are joined, the optimization
+-- should replace patterns like:
+--   age_id(_agtype_build_vertex(r.id, ...))::graphid
+-- with direct column access:
+--   r.id
+--
+-- This avoids expensive vertex reconstruction in join conditions.
+--
+-- Create test data: Users following each other
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:JoinOptUser {name: 'Alice'}),
+           (:JoinOptUser {name: 'Bob'}),
+           (:JoinOptUser {name: 'Carol'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser {name: 'Alice'}), (b:JoinOptUser {name: 'Bob'})
+    CREATE (a)-[:JOPT_FOLLOWS]->(b)
+$$) AS (e agtype);
+ e 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (b:JoinOptUser {name: 'Bob'}), (c:JoinOptUser {name: 'Carol'})
+    CREATE (b)-[:JOPT_FOLLOWS]->(c)
+$$) AS (e agtype);
+ e 
+---
+(0 rows)
+
+-- EXPLAIN showing join conditions use direct column access
+-- Look for: graphid_to_agtype(id) instead of age_id(_agtype_build_vertex(...))
+-- And: direct id comparisons instead of age_id(...)::graphid
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser)
+    RETURN u.name, v.name
+$$) AS (u_name agtype, v_name agtype);
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Nested Loop
+   Join Filter: (e.start_id = u.id)
+   ->  Nested Loop
+         ->  Seq Scan on _ag_label_vertex u
+               Filter: (labels = '23814'::oid)
+         ->  Seq Scan on _ag_label_vertex v
+               Filter: (labels = '23814'::oid)
+   ->  Bitmap Heap Scan on "JOPT_FOLLOWS" e
+         Recheck Cond: (end_id = v.id)
+         ->  Bitmap Index Scan on "JOPT_FOLLOWS_end_id_idx"
+               Index Cond: (end_id = v.id)
+(11 rows)
+
+-- Verify the query still returns correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser)
+    RETURN u.name, v.name
+    ORDER BY u.name
+$$) AS (u_name agtype, v_name agtype);
+ u_name  | v_name  
+---------+---------
+ "Alice" | "Bob"
+ "Bob"   | "Carol"
+(2 rows)
+
+-- Multi-hop pattern showing optimization across multiple joins
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
+    RETURN a.name, b.name, c.name
+$$) AS (a_name agtype, b_name agtype, c_name agtype);
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Nested Loop
+   Join Filter: (e1.start_id = a.id)
+   ->  Nested Loop
+         Join Filter: _ag_enforce_edge_uniqueness2(e1.id, e2.id)
+         ->  Nested Loop
+               Join Filter: (e2.start_id = b.id)
+               ->  Nested Loop
+                     ->  Seq Scan on _ag_label_vertex b
+                           Filter: (labels = '23814'::oid)
+                     ->  Seq Scan on _ag_label_vertex c
+                           Filter: (labels = '23814'::oid)
+               ->  Bitmap Heap Scan on "JOPT_FOLLOWS" e2
+                     Recheck Cond: (end_id = c.id)
+                     ->  Bitmap Index Scan on "JOPT_FOLLOWS_end_id_idx"
+                           Index Cond: (end_id = c.id)
+         ->  Bitmap Heap Scan on "JOPT_FOLLOWS" e1
+               Recheck Cond: (end_id = b.id)
+               ->  Bitmap Index Scan on "JOPT_FOLLOWS_end_id_idx"
+                     Index Cond: (end_id = b.id)
+   ->  Seq Scan on _ag_label_vertex a
+         Filter: (labels = '23814'::oid)
+(21 rows)
+
+-- Verify multi-hop query results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
+    RETURN a.name, b.name, c.name
+$$) AS (a_name agtype, b_name agtype, c_name agtype);
+ a_name  | b_name | c_name  
+---------+--------+---------
+ "Alice" | "Bob"  | "Carol"
+(1 row)
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);
-NOTICE:  drop cascades to 42 other objects
+NOTICE:  drop cascades to 44 other objects
 DETAIL:  drop cascades to table unified_test._ag_label_vertex
 drop cascades to table unified_test._ag_label_edge
 drop cascades to table unified_test."Person"
@@ -1356,6 +1469,8 @@ drop cascades to table unified_test."OptimizeTest"
 drop cascades to table unified_test."OptStart"
 drop cascades to table unified_test."OPT_EDGE"
 drop cascades to table unified_test."OptEnd"
+drop cascades to table unified_test."JoinOptUser"
+drop cascades to table unified_test."JOPT_FOLLOWS"
 NOTICE:  graph "unified_test" has been dropped
  drop_graph 
 ------------
