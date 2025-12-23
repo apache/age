@@ -322,6 +322,10 @@ static Index transform_group_clause_expr(List **flatresult,
 static List *add_target_to_group_list(cypher_parsestate *cpstate,
                                       TargetEntry *tle, List *grouplist,
                                       List *targetlist, int location);
+static void optimize_sortgroupby_vertex_access(ParseState *pstate,
+                                               List *targetList,
+                                               List *sortClause,
+                                               List *groupClause);
 static void advance_transform_entities_to_next_clause(List *entities);
 
 static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
@@ -2281,6 +2285,265 @@ static List * transform_group_clause(cypher_parsestate *cpstate,
     return result;
 }
 
+/*
+ * optimize_sortgroupby_vertex_access
+ *
+ * Optimizes GROUP BY and ORDER BY expressions that access vertex/edge fields
+ * through Var references to subqueries. When we have:
+ *
+ *   MATCH (u:User) RETURN id(u), count(*)     -- GROUP BY case
+ *   MATCH (u:User) RETURN id(u) ORDER BY id(u) -- ORDER BY case
+ *
+ * The sort/group key is `age_id(Var)` where Var references the subquery's
+ * target entry containing `_agtype_build_vertex(id, label, props)`.
+ *
+ * This function walks the target list and for any expression matching
+ * this pattern, replaces it with the optimized form:
+ *   graphid_to_agtype(id)
+ *
+ * This avoids reconstructing the entire vertex just to extract the id.
+ */
+static void optimize_sortgroupby_vertex_access(ParseState *pstate,
+                                               List *targetList,
+                                               List *sortClause,
+                                               List *groupClause)
+{
+    ListCell *lc;
+
+    /* Only optimize if we have a GROUP BY or ORDER BY clause */
+    if (groupClause == NIL && sortClause == NIL)
+    {
+        return;
+    }
+
+    /* Walk through target entries involved in GROUP BY or ORDER BY */
+    foreach(lc, targetList)
+    {
+        TargetEntry *tle = (TargetEntry *)lfirst(lc);
+        FuncExpr *outer_func;
+        Var *var;
+        RangeTblEntry *rte;
+        Query *subquery;
+        TargetEntry *sub_tle;
+        FuncExpr *inner_func;
+        char *outer_func_name;
+        char *inner_func_name;
+        List *inner_args;
+        int arg_index = -1;
+        Oid result_type;
+        bool needs_cast = false;
+
+        /* Skip if not part of GROUP BY or ORDER BY */
+        if (tle->ressortgroupref == 0)
+        {
+            continue;
+        }
+
+        /* Must be a FuncExpr (like age_id) */
+        if (tle->expr == NULL || !IsA(tle->expr, FuncExpr))
+        {
+            continue;
+        }
+
+        outer_func = (FuncExpr *)tle->expr;
+
+        /* Must have exactly one argument */
+        if (list_length(outer_func->args) != 1)
+        {
+            continue;
+        }
+
+        /* Get outer function name */
+        outer_func_name = get_func_name(outer_func->funcid);
+        if (outer_func_name == NULL)
+        {
+            continue;
+        }
+
+        /* Check if it's an accessor function we can optimize */
+        if (strcmp(outer_func_name, "age_id") != 0 &&
+            strcmp(outer_func_name, "age_start_id") != 0 &&
+            strcmp(outer_func_name, "age_end_id") != 0 &&
+            strcmp(outer_func_name, "age_properties") != 0)
+        {
+            continue;
+        }
+
+        /* The argument must be a Var */
+        if (!IsA(linitial(outer_func->args), Var))
+        {
+            continue;
+        }
+
+        var = (Var *)linitial(outer_func->args);
+
+        /* The Var must reference a subquery RTE */
+        if (var->varno < 1 ||
+            var->varno > list_length(pstate->p_rtable))
+        {
+            continue;
+        }
+
+        rte = rt_fetch(var->varno, pstate->p_rtable);
+        if (rte->rtekind != RTE_SUBQUERY || rte->subquery == NULL)
+        {
+            continue;
+        }
+
+        subquery = rte->subquery;
+
+        /* Get the target entry in the subquery that this Var references */
+        if (var->varattno < 1 ||
+            var->varattno > list_length(subquery->targetList))
+        {
+            continue;
+        }
+
+        sub_tle = (TargetEntry *)list_nth(subquery->targetList,
+                                          var->varattno - 1);
+
+        /* The subquery target must be a FuncExpr (the build function) */
+        if (sub_tle->expr == NULL || !IsA(sub_tle->expr, FuncExpr))
+        {
+            continue;
+        }
+
+        inner_func = (FuncExpr *)sub_tle->expr;
+        inner_func_name = get_func_name(inner_func->funcid);
+
+        if (inner_func_name == NULL)
+        {
+            continue;
+        }
+
+        inner_args = inner_func->args;
+
+        /*
+         * Check for _agtype_build_vertex(id, label_name, properties)
+         * Arguments: 0=id (graphid), 1=label_name (cstring), 2=properties (agtype)
+         */
+        if (strcmp(inner_func_name, "_agtype_build_vertex") == 0 &&
+            list_length(inner_args) == 3)
+        {
+            if (strcmp(outer_func_name, "age_id") == 0)
+            {
+                arg_index = 0;
+                result_type = GRAPHIDOID;
+                needs_cast = true;
+            }
+            else if (strcmp(outer_func_name, "age_properties") == 0)
+            {
+                arg_index = 2;
+                result_type = AGTYPEOID;
+                needs_cast = false;
+            }
+        }
+        /*
+         * Check for _agtype_build_edge(id, startid, endid, label_name, properties)
+         * Arguments: 0=id, 1=start_id, 2=end_id, 3=label_name, 4=properties
+         */
+        else if (strcmp(inner_func_name, "_agtype_build_edge") == 0 &&
+                 list_length(inner_args) == 5)
+        {
+            if (strcmp(outer_func_name, "age_id") == 0)
+            {
+                arg_index = 0;
+                result_type = GRAPHIDOID;
+                needs_cast = true;
+            }
+            else if (strcmp(outer_func_name, "age_start_id") == 0)
+            {
+                arg_index = 1;
+                result_type = GRAPHIDOID;
+                needs_cast = true;
+            }
+            else if (strcmp(outer_func_name, "age_end_id") == 0)
+            {
+                arg_index = 2;
+                result_type = GRAPHIDOID;
+                needs_cast = true;
+            }
+            else if (strcmp(outer_func_name, "age_properties") == 0)
+            {
+                arg_index = 4;
+                result_type = AGTYPEOID;
+                needs_cast = false;
+            }
+        }
+
+        /* If we found a pattern to optimize */
+        if (arg_index >= 0)
+        {
+            Node *inner_arg = (Node *)list_nth(inner_args, arg_index);
+            Node *optimized_expr = NULL;
+
+            /*
+             * The inner argument is a Var in the subquery's context.
+             * We need to create a new expression that references it properly
+             * from the outer query. We do this by adding a new target entry
+             * to the subquery that directly exposes the field we need.
+             */
+
+            if (needs_cast && result_type == GRAPHIDOID)
+            {
+                Oid cast_func_oid;
+                FuncExpr *cast_expr;
+                TargetEntry *new_sub_tle;
+                AttrNumber new_attno;
+                Var *new_var;
+
+                /* Add a new target entry to the subquery with just the id */
+                new_attno = list_length(subquery->targetList) + 1;
+                new_sub_tle = makeTargetEntry((Expr *)copyObject(inner_arg),
+                                              new_attno,
+                                              NULL, /* no name - internal */
+                                              true); /* resjunk */
+                subquery->targetList = lappend(subquery->targetList, new_sub_tle);
+
+                /* Create a Var referencing this new target entry */
+                new_var = makeVar(var->varno, new_attno, GRAPHIDOID,
+                                  -1, InvalidOid, var->varlevelsup);
+
+                /* Wrap in graphid_to_agtype */
+                cast_func_oid = get_ag_func_oid("graphid_to_agtype", 1,
+                                                GRAPHIDOID);
+                cast_expr = makeFuncExpr(cast_func_oid, AGTYPEOID,
+                                         list_make1(new_var),
+                                         InvalidOid, InvalidOid,
+                                         COERCE_EXPLICIT_CALL);
+                cast_expr->location = outer_func->location;
+
+                optimized_expr = (Node *)cast_expr;
+            }
+            else if (!needs_cast)
+            {
+                /* For properties, already agtype */
+                TargetEntry *new_sub_tle;
+                AttrNumber new_attno;
+                Var *new_var;
+
+                new_attno = list_length(subquery->targetList) + 1;
+                new_sub_tle = makeTargetEntry((Expr *)copyObject(inner_arg),
+                                              new_attno,
+                                              NULL,
+                                              true); /* resjunk */
+                subquery->targetList = lappend(subquery->targetList, new_sub_tle);
+
+                new_var = makeVar(var->varno, new_attno, AGTYPEOID,
+                                  -1, InvalidOid, var->varlevelsup);
+
+                optimized_expr = (Node *)new_var;
+            }
+
+            /* Replace the target entry's expression with the optimized one */
+            if (optimized_expr != NULL)
+            {
+                tle->expr = (Expr *)optimized_expr;
+            }
+        }
+    }
+}
+
 static Query *transform_cypher_return(cypher_parsestate *cpstate,
                                       cypher_clause *clause)
 {
@@ -2314,6 +2577,16 @@ static Query *transform_cypher_return(cypher_parsestate *cpstate,
                                                 &query->targetList,
                                                 query->sortClause,
                                                 EXPR_KIND_GROUP_BY);
+
+    /*
+     * Optimize GROUP BY and ORDER BY expressions that reference vertex/edge
+     * fields through subquery Vars. This allows:
+     *   MATCH (u:User) RETURN id(u), count(*)      -- GROUP BY
+     *   MATCH (u:User) RETURN id(u) ORDER BY id(u) -- ORDER BY
+     * to use graphid_to_agtype(id) instead of rebuilding the entire vertex.
+     */
+    optimize_sortgroupby_vertex_access(pstate, query->targetList,
+                                       query->sortClause, query->groupClause);
 
     /* DISTINCT */
     if (self->distinct)

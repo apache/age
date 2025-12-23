@@ -821,6 +821,38 @@ $$) AS (eid agtype, props agtype, sid agtype, eid2 agtype);
 -- This avoids expensive vertex reconstruction in join conditions.
 --
 
+-- Helper function to check if join condition optimization is applied.
+-- Returns true if the plan uses direct column references (e.g., u.id)
+-- and NOT _agtype_build_vertex
+CREATE OR REPLACE FUNCTION plan_has_join_optimization(sql text)
+RETURNS boolean
+LANGUAGE plpgsql AS
+$$
+DECLARE
+    plan_row RECORD;
+    full_plan text := '';
+    has_direct_id boolean;
+    has_build_vertex boolean;
+BEGIN
+    -- Concatenate all rows of the EXPLAIN output
+    FOR plan_row IN EXECUTE format('EXPLAIN (FORMAT TEXT) %s', sql)
+    LOOP
+        full_plan := full_plan || plan_row."QUERY PLAN" || ' ';
+    END LOOP;
+    
+    -- Check for direct id references in join conditions (e.g., u.id, e.start_id)
+    has_direct_id := position('.id' in full_plan) > 0 OR
+                     position('start_id' in full_plan) > 0 OR
+                     position('end_id' in full_plan) > 0;
+    
+    -- Check for unoptimized pattern
+    has_build_vertex := position('_agtype_build_vertex' in full_plan) > 0;
+    
+    -- Optimization is applied if we see direct id references and no build_vertex
+    RETURN has_direct_id AND NOT has_build_vertex;
+END;
+$$;
+
 -- Create test data: Users following each other
 SELECT * FROM cypher('unified_test', $$
     CREATE (:JoinOptUser {name: 'Alice'}),
@@ -838,14 +870,10 @@ SELECT * FROM cypher('unified_test', $$
     CREATE (b)-[:JOPT_FOLLOWS]->(c)
 $$) AS (e agtype);
 
--- EXPLAIN showing join conditions use direct column access
--- Look for: graphid_to_agtype(id) instead of age_id(_agtype_build_vertex(...))
--- And: direct id comparisons instead of age_id(...)::graphid
-EXPLAIN (COSTS OFF)
-SELECT * FROM cypher('unified_test', $$
-    MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser)
-    RETURN u.name, v.name
-$$) AS (u_name agtype, v_name agtype);
+-- Test 29a: Simple join - check for direct column access optimization
+SELECT plan_has_join_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:JoinOptUser)-[e:JOPT_FOLLOWS]->(v:JoinOptUser) RETURN u.name, v.name $$) AS (u_name agtype, v_name agtype)'
+) AS simple_join_optimized;
 
 -- Verify the query still returns correct results
 SELECT * FROM cypher('unified_test', $$
@@ -854,18 +882,233 @@ SELECT * FROM cypher('unified_test', $$
     ORDER BY u.name
 $$) AS (u_name agtype, v_name agtype);
 
--- Multi-hop pattern showing optimization across multiple joins
-EXPLAIN (COSTS OFF)
-SELECT * FROM cypher('unified_test', $$
-    MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
-    RETURN a.name, b.name, c.name
-$$) AS (a_name agtype, b_name agtype, c_name agtype);
+-- Test 29b: Multi-hop pattern - check for optimization across multiple joins
+SELECT plan_has_join_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser) RETURN a.name, b.name, c.name $$) AS (a_name agtype, b_name agtype, c_name agtype)'
+) AS multihop_join_optimized;
 
 -- Verify multi-hop query results
 SELECT * FROM cypher('unified_test', $$
     MATCH (a:JoinOptUser)-[e1:JOPT_FOLLOWS]->(b:JoinOptUser)-[e2:JOPT_FOLLOWS]->(c:JoinOptUser)
     RETURN a.name, b.name, c.name
 $$) AS (a_name agtype, b_name agtype, c_name agtype);
+
+-- Clean up Test 29 helper function
+DROP FUNCTION plan_has_join_optimization(text);
+
+--
+-- Test 30: Verify GROUP BY optimization with EXPLAIN
+--
+-- When using aggregation with id(vertex) or id(edge) in the GROUP BY key,
+-- the optimization should replace patterns like:
+--   age_id(_agtype_build_vertex(u.id, ...))
+-- with direct column access:
+--   graphid_to_agtype(u.id)
+--
+-- This avoids expensive vertex/edge reconstruction during grouping.
+--
+
+-- Helper function to check if GROUP BY optimization is applied.
+-- Returns true if the plan uses graphid_to_agtype (optimized)
+-- and NOT _agtype_build_vertex (unoptimized)
+CREATE OR REPLACE FUNCTION plan_has_groupby_optimization(sql text)
+RETURNS boolean
+LANGUAGE plpgsql AS
+$$
+DECLARE
+    plan_row RECORD;
+    full_plan text := '';
+    has_graphid_to_agtype boolean;
+    has_build_vertex boolean;
+    has_build_edge boolean;
+BEGIN
+    -- Concatenate all rows of the EXPLAIN output
+    FOR plan_row IN EXECUTE format('EXPLAIN (FORMAT TEXT) %s', sql)
+    LOOP
+        full_plan := full_plan || plan_row."QUERY PLAN" || ' ';
+    END LOOP;
+    
+    -- Check for optimized pattern
+    has_graphid_to_agtype := position('graphid_to_agtype' in full_plan) > 0;
+    
+    -- Check for unoptimized patterns
+    has_build_vertex := position('_agtype_build_vertex' in full_plan) > 0;
+    has_build_edge := position('_agtype_build_edge' in full_plan) > 0;
+    
+    -- Optimization is applied if we see graphid_to_agtype 
+    -- and don't see _agtype_build in the Group Key
+    RETURN has_graphid_to_agtype AND NOT has_build_vertex AND NOT has_build_edge;
+END;
+$$;
+
+-- Create test data: Users and Books with interactions
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:GrpOptUser {name: 'Alice'}),
+           (:GrpOptUser {name: 'Bob'}),
+           (:GrpOptUser {name: 'Carol'}),
+           (:GrpOptBook {title: 'Book1'}),
+           (:GrpOptBook {title: 'Book2'})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:GrpOptUser {name: 'Alice'}), (b:GrpOptBook {title: 'Book1'})
+    CREATE (a)-[:GRPOPT_READ]->(b)
+$$) AS (e agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:GrpOptUser {name: 'Alice'}), (b:GrpOptBook {title: 'Book2'})
+    CREATE (a)-[:GRPOPT_READ]->(b)
+$$) AS (e agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a:GrpOptUser {name: 'Bob'}), (b:GrpOptBook {title: 'Book1'})
+    CREATE (a)-[:GRPOPT_READ]->(b)
+$$) AS (e agtype);
+
+-- Test 30a: Simple vertex id() GROUP BY optimization
+-- Checks that plan uses graphid_to_agtype(u.id) instead of age_id(_agtype_build_vertex(...))
+SELECT plan_has_groupby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser) RETURN id(u), count(*) $$) AS (user_id agtype, cnt agtype)'
+) AS vertex_id_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)
+    RETURN id(u), count(*) AS cnt
+    ORDER BY cnt DESC
+$$) AS (user_id agtype, cnt agtype);
+
+-- Test 30b: Multiple vertex id() GROUP BY keys optimization
+-- Checks that plan uses graphid_to_agtype for both u.id and b.id
+SELECT plan_has_groupby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook) RETURN id(u), id(b), count(*) $$) AS (user_id agtype, book_id agtype, cnt agtype)'
+) AS multi_vertex_id_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook)
+    RETURN id(u), id(b), count(*) AS cnt
+    ORDER BY cnt DESC
+$$) AS (user_id agtype, book_id agtype, cnt agtype);
+
+-- Test 30c: Edge id() GROUP BY optimization
+-- Checks that plan uses graphid_to_agtype(e.id)
+SELECT plan_has_groupby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook) RETURN id(e), count(*) $$) AS (edge_id agtype, cnt agtype)'
+) AS edge_id_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook)
+    RETURN id(e), count(*) AS cnt
+    ORDER BY cnt DESC
+$$) AS (edge_id agtype, cnt agtype);
+
+-- Test 30d: Edge start_id() and end_id() GROUP BY optimization
+-- Checks that plan uses graphid_to_agtype(e.start_id) and graphid_to_agtype(e.end_id)
+SELECT plan_has_groupby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook) RETURN start_id(e), end_id(e), count(*) $$) AS (start_id agtype, end_id agtype, cnt agtype)'
+) AS edge_start_end_id_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook)
+    RETURN start_id(e), end_id(e), count(*) AS cnt
+    ORDER BY cnt DESC
+$$) AS (start_id agtype, end_id agtype, cnt agtype);
+
+-- Cleanup the GROUP BY helper function
+DROP FUNCTION plan_has_groupby_optimization(text);
+
+--
+-- Test 31: ORDER BY optimization tests
+-- Test that ORDER BY id(v) uses graphid_to_agtype instead of rebuilding vertex
+--
+
+-- Create a helper function to check for ORDER BY optimization
+CREATE OR REPLACE FUNCTION plan_has_orderby_optimization(query_text text)
+RETURNS boolean AS $$
+DECLARE
+    plan_row record;
+    full_plan text := '';
+    has_graphid_to_agtype boolean;
+    has_build_vertex boolean;
+    has_build_edge boolean;
+BEGIN
+    -- Load AGE extension and set search path for the session
+    EXECUTE 'LOAD ''age''';
+    EXECUTE 'SET search_path = ag_catalog, public';
+    
+    -- Get the query plan
+    FOR plan_row IN EXECUTE 'EXPLAIN (COSTS OFF) ' || query_text
+    LOOP
+        full_plan := full_plan || plan_row."QUERY PLAN" || ' ';
+    END LOOP;
+    
+    -- Check for optimized pattern
+    has_graphid_to_agtype := position('graphid_to_agtype' in full_plan) > 0;
+    
+    -- Check for unoptimized patterns
+    has_build_vertex := position('_agtype_build_vertex' in full_plan) > 0;
+    has_build_edge := position('_agtype_build_edge' in full_plan) > 0;
+    
+    -- Optimization is applied if we see graphid_to_agtype 
+    -- and don't see _agtype_build in the Sort Key
+    RETURN has_graphid_to_agtype AND NOT has_build_vertex AND NOT has_build_edge;
+END;
+$$
+LANGUAGE plpgsql;
+
+-- Test 31a: Simple vertex id() ORDER BY optimization
+-- Checks that Sort Key uses graphid_to_agtype(u.id) instead of age_id(_agtype_build_vertex(...))
+SELECT plan_has_orderby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser) RETURN id(u) ORDER BY id(u) $$) AS (user_id agtype)'
+) AS vertex_id_orderby_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)
+    RETURN id(u) ORDER BY id(u)
+$$) AS (user_id agtype);
+
+-- Test 31b: ORDER BY with GROUP BY (both should be optimized)
+-- Checks that both Sort Key and Group Key use graphid_to_agtype
+SELECT plan_has_orderby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser) RETURN id(u), count(*) ORDER BY id(u) $$) AS (user_id agtype, cnt agtype)'
+) AS orderby_with_groupby_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)
+    RETURN id(u), count(*) AS cnt
+    ORDER BY id(u)
+$$) AS (user_id agtype, cnt agtype);
+
+-- Test 31c: Edge id() ORDER BY optimization
+-- Checks that Sort Key uses graphid_to_agtype(e.id)
+SELECT plan_has_orderby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook) RETURN id(e) ORDER BY id(e) $$) AS (edge_id agtype)'
+) AS edge_id_orderby_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook)
+    RETURN id(e) ORDER BY id(e)
+$$) AS (edge_id agtype);
+
+-- Test 31d: Edge start_id() ORDER BY optimization
+SELECT plan_has_orderby_optimization(
+    'SELECT * FROM cypher(''unified_test'', $$ MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook) RETURN start_id(e) ORDER BY start_id(e) $$) AS (start_id agtype)'
+) AS edge_start_id_orderby_optimized;
+
+-- Verify correct results
+SELECT * FROM cypher('unified_test', $$
+    MATCH (u:GrpOptUser)-[e:GRPOPT_READ]->(b:GrpOptBook)
+    RETURN start_id(e) ORDER BY start_id(e)
+$$) AS (start_id agtype);
+
+-- Cleanup the ORDER BY helper function
+DROP FUNCTION plan_has_orderby_optimization(text);
 
 --
 -- Cleanup
