@@ -749,6 +749,67 @@ SELECT * FROM cypher('unified_test', $$
 $$) AS (e agtype);
 
 --
+-- Test 28: Verify id() and properties() optimization
+--
+-- The optimization avoids rebuilding the full vertex agtype when accessing
+-- id() or properties() on a vertex. Instead of:
+--   age_id(_agtype_build_vertex(id, _label_name_from_table_oid(labels), properties))
+-- It generates:
+--   graphid_to_agtype(id)
+--
+-- And for properties:
+--   age_properties(_agtype_build_vertex(...))
+-- It generates:
+--   properties (direct column access)
+--
+
+-- Create test data
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OptimizeTest {val: 1}),
+           (:OptimizeTest {val: 2}),
+           (:OptimizeTest {val: 3})
+$$) AS (v agtype);
+
+-- Test that id() works correctly with optimization
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    RETURN id(n), n.val
+    ORDER BY n.val
+$$) AS (id agtype, val agtype);
+
+-- Test that properties() works correctly with optimization
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    RETURN properties(n), n.val
+    ORDER BY n.val
+$$) AS (props agtype, val agtype);
+
+-- Test id() in WHERE clause (common optimization target)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    WHERE id(n) % 10 = 0
+    RETURN n.val
+$$) AS (val agtype);
+
+-- Test properties() access in expressions
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    WHERE properties(n).val > 1
+    RETURN n.val
+    ORDER BY n.val
+$$) AS (val agtype);
+
+-- Test edge id/properties optimization
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OptStart {x: 1})-[:OPT_EDGE {weight: 10}]->(:OptEnd {y: 2})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a)-[e:OPT_EDGE]->(b)
+    RETURN id(e), properties(e), start_id(e), end_id(e)
+$$) AS (eid agtype, props agtype, sid agtype, eid2 agtype);
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);

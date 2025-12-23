@@ -1220,10 +1220,100 @@ SELECT * FROM cypher('unified_test', $$
 $$) AS (e agtype);
 ERROR:  SET/REMOVE label can only be used on vertices
 --
+-- Test 28: Verify id() and properties() optimization
+--
+-- The optimization avoids rebuilding the full vertex agtype when accessing
+-- id() or properties() on a vertex. Instead of:
+--   age_id(_agtype_build_vertex(id, _label_name_from_table_oid(labels), properties))
+-- It generates:
+--   graphid_to_agtype(id)
+--
+-- And for properties:
+--   age_properties(_agtype_build_vertex(...))
+-- It generates:
+--   properties (direct column access)
+--
+-- Create test data
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OptimizeTest {val: 1}),
+           (:OptimizeTest {val: 2}),
+           (:OptimizeTest {val: 3})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Test that id() works correctly with optimization
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    RETURN id(n), n.val
+    ORDER BY n.val
+$$) AS (id agtype, val agtype);
+        id         | val 
+-------------------+-----
+ 10977524091715585 | 1
+ 10977524091715586 | 2
+ 10977524091715587 | 3
+(3 rows)
+
+-- Test that properties() works correctly with optimization
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    RETURN properties(n), n.val
+    ORDER BY n.val
+$$) AS (props agtype, val agtype);
+   props    | val 
+------------+-----
+ {"val": 1} | 1
+ {"val": 2} | 2
+ {"val": 3} | 3
+(3 rows)
+
+-- Test id() in WHERE clause (common optimization target)
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    WHERE id(n) % 10 = 0
+    RETURN n.val
+$$) AS (val agtype);
+ val 
+-----
+(0 rows)
+
+-- Test properties() access in expressions
+SELECT * FROM cypher('unified_test', $$
+    MATCH (n:OptimizeTest)
+    WHERE properties(n).val > 1
+    RETURN n.val
+    ORDER BY n.val
+$$) AS (val agtype);
+ val 
+-----
+ 2
+ 3
+(2 rows)
+
+-- Test edge id/properties optimization
+SELECT * FROM cypher('unified_test', $$
+    CREATE (:OptStart {x: 1})-[:OPT_EDGE {weight: 10}]->(:OptEnd {y: 2})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+SELECT * FROM cypher('unified_test', $$
+    MATCH (a)-[e:OPT_EDGE]->(b)
+    RETURN id(e), properties(e), start_id(e), end_id(e)
+$$) AS (eid agtype, props agtype, sid agtype, eid2 agtype);
+        eid        |     props      |        sid        |       eid2        
+-------------------+----------------+-------------------+-------------------
+ 11540474045136897 | {"weight": 10} | 11258999068426241 | 11821949021847553
+(1 row)
+
+--
 -- Cleanup
 --
 SELECT drop_graph('unified_test', true);
-NOTICE:  drop cascades to 38 other objects
+NOTICE:  drop cascades to 42 other objects
 DETAIL:  drop cascades to table unified_test._ag_label_vertex
 drop cascades to table unified_test._ag_label_edge
 drop cascades to table unified_test."Person"
@@ -1262,6 +1352,10 @@ drop cascades to table unified_test."SameLabel"
 drop cascades to table unified_test."EdgeTest1"
 drop cascades to table unified_test."CONNECTS"
 drop cascades to table unified_test."EdgeTest2"
+drop cascades to table unified_test."OptimizeTest"
+drop cascades to table unified_test."OptStart"
+drop cascades to table unified_test."OPT_EDGE"
+drop cascades to table unified_test."OptEnd"
 NOTICE:  graph "unified_test" has been dropped
  drop_graph 
 ------------
