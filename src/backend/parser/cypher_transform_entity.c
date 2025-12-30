@@ -53,6 +53,12 @@ transform_entity *make_transform_entity(cypher_parsestate *cpstate,
     entity->expr = expr;
     entity->in_join_tree = expr != NULL;
 
+    /* Initialize exposed column Vars to NULL */
+    entity->id_var = NULL;
+    entity->start_id_var = NULL;
+    entity->end_id_var = NULL;
+    entity->props_var = NULL;
+
     return entity;
 }
 
