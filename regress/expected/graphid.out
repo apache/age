@@ -63,6 +63,96 @@ SELECT '0'::graphid >= '1'::graphid,
  f        | t        | t
 (1 row)
 
+-- graphid vs int8 cross-type comparisons
+SELECT '0'::graphid = 0::int8, '0'::graphid = 1::int8;
+ ?column? | ?column? 
+----------+----------
+ t        | f
+(1 row)
+
+SELECT '0'::graphid <> 0::int8, '0'::graphid <> 1::int8;
+ ?column? | ?column? 
+----------+----------
+ f        | t
+(1 row)
+
+SELECT '0'::graphid < 1::int8,
+       '0'::graphid < 0::int8,
+       '1'::graphid < 0::int8;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        | f        | f
+(1 row)
+
+SELECT '0'::graphid > 1::int8,
+       '0'::graphid > 0::int8,
+       '1'::graphid > 0::int8;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ f        | f        | t
+(1 row)
+
+SELECT '0'::graphid <= 1::int8,
+       '0'::graphid <= 0::int8,
+       '1'::graphid <= 0::int8;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        | t        | f
+(1 row)
+
+SELECT '0'::graphid >= 1::int8,
+       '0'::graphid >= 0::int8,
+       '1'::graphid >= 0::int8;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ f        | t        | t
+(1 row)
+
+-- int8 vs graphid cross-type comparisons
+SELECT 0::int8 = '0'::graphid, 0::int8 = '1'::graphid;
+ ?column? | ?column? 
+----------+----------
+ t        | f
+(1 row)
+
+SELECT 0::int8 <> '0'::graphid, 0::int8 <> '1'::graphid;
+ ?column? | ?column? 
+----------+----------
+ f        | t
+(1 row)
+
+SELECT 0::int8 < '1'::graphid,
+       0::int8 < '0'::graphid,
+       1::int8 < '0'::graphid;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        | f        | f
+(1 row)
+
+SELECT 0::int8 > '1'::graphid,
+       0::int8 > '0'::graphid,
+       1::int8 > '0'::graphid;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ f        | f        | t
+(1 row)
+
+SELECT 0::int8 <= '1'::graphid,
+       0::int8 <= '0'::graphid,
+       1::int8 <= '0'::graphid;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        | t        | f
+(1 row)
+
+SELECT 0::int8 >= '1'::graphid,
+       0::int8 >= '0'::graphid,
+       1::int8 >= '0'::graphid;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ f        | t        | t
+(1 row)
+
 -- b-tree index
 CREATE TABLE graphid_table (gid graphid);
 INSERT INTO graphid_table VALUES ('0'), ('1'), ('2');
@@ -80,6 +170,21 @@ EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid > '0';
 --------------------------------------------------------------
  Index Only Scan using graphid_table_gid_idx on graphid_table
    Index Cond: (gid > '0'::graphid)
+(2 rows)
+
+-- verify index usage with int8 cross-type comparison
+EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid = 1::int8;
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Index Only Scan using graphid_table_gid_idx on graphid_table
+   Index Cond: (gid = '1'::bigint)
+(2 rows)
+
+EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid > 0::int8;
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Index Only Scan using graphid_table_gid_idx on graphid_table
+   Index Cond: (gid > '0'::bigint)
 (2 rows)
 
 SET enable_seqscan = ON;

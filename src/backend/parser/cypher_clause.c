@@ -72,6 +72,12 @@
 #define AGE_VARNAME_ID AGE_DEFAULT_VARNAME_PREFIX"id"
 #define AGE_VARNAME_SET_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"set_clause"
 
+/* Hidden column varname prefixes for exposed column optimization */
+#define AGE_VARNAME_ID_PREFIX AGE_DEFAULT_VARNAME_PREFIX"id_"
+#define AGE_VARNAME_START_ID_PREFIX AGE_DEFAULT_VARNAME_PREFIX"start_id_"
+#define AGE_VARNAME_END_ID_PREFIX AGE_DEFAULT_VARNAME_PREFIX"end_id_"
+#define AGE_VARNAME_PROPS_PREFIX AGE_DEFAULT_VARNAME_PREFIX"props_"
+
 /*
  * In the transformation stage, we need to track
  * where a variable came from. When moving between
@@ -321,6 +327,10 @@ static List *add_target_to_group_list(cypher_parsestate *cpstate,
                                       TargetEntry *tle, List *grouplist,
                                       List *targetlist, int location);
 static void advance_transform_entities_to_next_clause(List *entities);
+static void export_entity_hidden_columns(cypher_parsestate *cpstate,
+                                         Query *query);
+static void update_entity_vars_from_rte(cypher_parsestate *cpstate,
+                                        ParseNamespaceItem *pnsi);
 
 static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
                                               RangeTblEntry *rte);
@@ -6377,6 +6387,13 @@ transform_cypher_clause_as_subquery(cypher_parsestate *cpstate,
     rte = pnsi->p_rte;
 
     /*
+     * Update entity Vars to reference the hidden columns in the new RTE.
+     * This must happen after the subquery is created so we can build Vars
+     * that reference the correct RTE index.
+     */
+    update_entity_vars_from_rte(cpstate, pnsi);
+
+    /*
      * NOTE: skip namespace conflicts check if the rte will be the only
      *       RangeTblEntry in pstate
      */
@@ -6408,6 +6425,256 @@ transform_cypher_clause_as_subquery(cypher_parsestate *cpstate,
     }
 
     return pnsi;
+}
+
+/*
+ * Export hidden columns for entities in the current clause.
+ *
+ * For each named vertex/edge entity, we export its id (and for edges:
+ * start_id, end_id) as target entries. These can be referenced by
+ * subsequent clauses without rebuilding the full vertex/edge.
+ *
+ * This function handles two cases:
+ * 1. Entities declared in the current clause: Extract id from _agtype_build_* args
+ * 2. Entities from previous clauses (with id_var set): Re-export using their Vars
+ *
+ * The column names use the AGE_VARNAME prefix pattern (AGE_DEFAULT_VARNAME_PREFIX)
+ * which makes them hidden from SELECT * output. The expand_star() function in
+ * cypher_item.c filters out columns with this prefix.
+ *
+ * Note: We use resjunk=false so these columns are included in the subquery RTE
+ * when PostgreSQL builds the column list via addRangeTableEntryForSubquery().
+ * If resjunk=true, PostgreSQL would skip them entirely.
+ */
+static void export_entity_hidden_columns(cypher_parsestate *cpstate,
+                                         Query *query)
+{
+    ListCell *lc;
+    int resno;
+    List *exported_names = NIL;  /* Track entity names already exported */
+
+    /* find the next resno for target entries */
+    resno = list_length(query->targetList) + 1;
+
+    foreach (lc, cpstate->entities)
+    {
+        transform_entity *entity = lfirst(lc);
+        char *entity_name;
+        char *col_name;
+        TargetEntry *te;
+        ListCell *lc2;
+        bool already_exported;
+
+        /* skip entities without names - they aren't referenced */
+        entity_name = get_entity_name(entity);
+        if (entity_name == NULL)
+        {
+            continue;
+        }
+
+        /*
+         * Skip if we've already exported columns for an entity with this name.
+         * This can happen when the same variable appears multiple times in a
+         * pattern, e.g., MATCH (a)-[]->(), ()-[]->(a)
+         */
+        already_exported = false;
+        foreach (lc2, exported_names)
+        {
+            if (strcmp((char *)lfirst(lc2), entity_name) == 0)
+            {
+                already_exported = true;
+                break;
+            }
+        }
+        if (already_exported)
+        {
+            continue;
+        }
+        exported_names = lappend(exported_names, entity_name);
+
+        /* skip path entities - they don't have id/start_id/end_id */
+        if (entity->type == ENT_PATH)
+        {
+            continue;
+        }
+
+        /* skip VLE edges for now - they have different structure */
+        if (entity->type == ENT_VLE_EDGE)
+        {
+            continue;
+        }
+
+        /*
+         * Only export hidden columns for entities declared in the current clause.
+         * Entities from previous clauses already have their id_var/start_id_var/end_id_var
+         * pointing to the subquery's hidden columns from when they were exported.
+         */
+        if (!entity->declared_in_current_clause)
+        {
+            continue;
+        }
+
+        /* Extract id from the entity's FuncExpr */
+        {
+            Expr *expr = entity->expr;
+            FuncExpr *func_expr;
+            Node *id_node;
+            Node *start_id_node;
+            Node *end_id_node;
+
+            if (expr == NULL)
+            {
+                continue;
+            }
+
+            /*
+             * The expr must be a FuncExpr (_agtype_build_vertex or _agtype_build_edge)
+             * for entities declared in the current clause.
+             */
+            if (!IsA(expr, FuncExpr))
+            {
+                continue;
+            }
+
+            func_expr = (FuncExpr *)expr;
+
+            /*
+             * For vertices: _agtype_build_vertex(id, label_name, properties)
+             * For edges: _agtype_build_edge(id, start_id, end_id, label_name, properties)
+             */
+            if (entity->type == ENT_VERTEX)
+            {
+                /* vertex: args are (id, label_name, properties) */
+                if (list_length(func_expr->args) < 3)
+                {
+                    continue;
+                }
+                id_node = (Node *)linitial(func_expr->args);
+                start_id_node = NULL;
+                end_id_node = NULL;
+            }
+            else if (entity->type == ENT_EDGE)
+            {
+                /* edge: args are (id, start_id, end_id, label_name, properties) */
+                if (list_length(func_expr->args) < 5)
+                {
+                    continue;
+                }
+                id_node = (Node *)linitial(func_expr->args);
+                start_id_node = (Node *)lsecond(func_expr->args);
+                end_id_node = (Node *)lthird(func_expr->args);
+            }
+            else
+            {
+                continue;
+            }
+
+            /*
+             * Create target entries for id as raw graphid.
+             * Previously we wrapped in graphid_to_agtype() but that forces
+             * comparisons into agtype space. By exposing raw graphid, we can
+             * use native integer comparisons with the cross-type operators.
+             */
+            col_name = psprintf("%s%s", AGE_VARNAME_ID_PREFIX, entity_name);
+            te = makeTargetEntry((Expr *)copyObject(id_node), resno++, col_name, false);
+            query->targetList = lappend(query->targetList, te);
+
+            /* For edges, also export start_id and end_id as raw graphid */
+            if (entity->type == ENT_EDGE)
+            {
+                col_name = psprintf("%s%s", AGE_VARNAME_START_ID_PREFIX, entity_name);
+                te = makeTargetEntry((Expr *)copyObject(start_id_node), resno++, col_name, false);
+                query->targetList = lappend(query->targetList, te);
+
+                col_name = psprintf("%s%s", AGE_VARNAME_END_ID_PREFIX, entity_name);
+                te = makeTargetEntry((Expr *)copyObject(end_id_node), resno++, col_name, false);
+                query->targetList = lappend(query->targetList, te);
+            }
+        }
+    }
+}
+
+/*
+ * Update entity Vars to reference the hidden columns in the subquery RTE.
+ *
+ * After a clause is transformed into a subquery and added to the parent's
+ * rtable, we need to update each entity's id_var, start_id_var, and end_id_var
+ * to reference the hidden columns we exported.
+ */
+static void update_entity_vars_from_rte(cypher_parsestate *cpstate,
+                                        ParseNamespaceItem *pnsi)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    ListCell *lc;
+
+    foreach (lc, cpstate->entities)
+    {
+        transform_entity *entity = lfirst(lc);
+        char *entity_name;
+        char *col_name;
+        Node *var_node;
+
+        /* skip entities without names */
+        entity_name = get_entity_name(entity);
+        if (entity_name == NULL)
+        {
+            continue;
+        }
+
+        /* skip path entities */
+        if (entity->type == ENT_PATH)
+        {
+            continue;
+        }
+
+        /* skip VLE edges */
+        if (entity->type == ENT_VLE_EDGE)
+        {
+            continue;
+        }
+
+        /*
+         * Clear existing vars before lookup. This is important for clauses
+         * like WITH that may not forward hidden columns - if the lookup fails,
+         * we need the vars to be NULL so the optimization correctly falls back
+         * to the normal function call path.
+         */
+        entity->id_var = NULL;
+        if (entity->type == ENT_EDGE)
+        {
+            entity->start_id_var = NULL;
+            entity->end_id_var = NULL;
+        }
+
+        /* Look up id column */
+        col_name = psprintf("%s%s", AGE_VARNAME_ID_PREFIX, entity_name);
+        var_node = scanNSItemForColumn(pstate, pnsi, 0, col_name, -1);
+        if (var_node != NULL && IsA(var_node, Var))
+        {
+            entity->id_var = (Var *)var_node;
+        }
+        pfree(col_name);
+
+        /* For edges, look up start_id and end_id columns */
+        if (entity->type == ENT_EDGE)
+        {
+            col_name = psprintf("%s%s", AGE_VARNAME_START_ID_PREFIX, entity_name);
+            var_node = scanNSItemForColumn(pstate, pnsi, 0, col_name, -1);
+            if (var_node != NULL && IsA(var_node, Var))
+            {
+                entity->start_id_var = (Var *)var_node;
+            }
+            pfree(col_name);
+
+            col_name = psprintf("%s%s", AGE_VARNAME_END_ID_PREFIX, entity_name);
+            var_node = scanNSItemForColumn(pstate, pnsi, 0, col_name, -1);
+            if (var_node != NULL && IsA(var_node, Var))
+            {
+                entity->end_id_var = (Var *)var_node;
+            }
+            pfree(col_name);
+        }
+    }
 }
 
 /*
@@ -6443,6 +6710,21 @@ static Query *analyze_cypher_clause(transform_method transform,
     pstate->p_expr_kind = parent_pstate->p_expr_kind;
 
     query = transform(cpstate, clause);
+
+    /*
+     * Export hidden columns for cross-clause optimization.
+     * This adds id, start_id (for edges), end_id (for edges), and properties
+     * as hidden target entries that can be referenced by subsequent clauses.
+     *
+     * Skip export for sub-patterns (EXISTS, subqueries) since they reference
+     * variables from the parent query context and the column numbers would
+     * conflict with the parent's target list during planning.
+     */
+    if (pstate->p_expr_kind != EXPR_KIND_WHERE &&
+        pstate->p_expr_kind != EXPR_KIND_SELECT_TARGET)
+    {
+        export_entity_hidden_columns(cpstate, query);
+    }
 
     advance_transform_entities_to_next_clause(cpstate->entities);
 

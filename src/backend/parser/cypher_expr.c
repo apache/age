@@ -93,6 +93,7 @@ static Node *transform_CoalesceExpr(cypher_parsestate *cpstate,
                                     CoalesceExpr *cexpr);
 static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink);
 static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn);
+static Node *try_optimize_id_funcs(cypher_parsestate *cpstate, FuncCall *fn);
 static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
                                    int location, int sublevels_up);
 static ArrayExpr *make_agtype_array_expr(List *args);
@@ -1976,6 +1977,332 @@ static bool function_exists(char *funcname, char *extension)
 }
 
 /*
+ * Try to optimize id(), start_id(), end_id() function calls.
+ *
+ * When the argument is a variable (vertex or edge) that came from a previous
+ * clause, we may have exposed column Vars (id_var, start_id_var, end_id_var)
+ * that can be used directly instead of calling the function on the full
+ * vertex/edge expression.
+ *
+ * This optimization avoids the expensive reconstruction of the vertex/edge
+ * object just to extract a single field like id.
+ *
+ * Returns NULL if optimization is not possible; otherwise returns the
+ * optimized expression.
+ */
+/*
+ * Helper function to find an entity only in the current cpstate's entities list,
+ * not walking up to parent parsestates. This is important for the optimization
+ * because the entity's Var fields (id_var, etc.) are only valid in the context
+ * where they were set.
+ */
+static transform_entity *find_entity_in_current_cpstate(cypher_parsestate *cpstate,
+                                                        char *name)
+{
+    ListCell *lc;
+
+    if (name == NULL)
+    {
+        return NULL;
+    }
+
+    foreach (lc, cpstate->entities)
+    {
+        transform_entity *entity = lfirst(lc);
+        char *entity_name = NULL;
+
+        if (entity->type == ENT_VERTEX)
+        {
+            entity_name = entity->entity.node->name;
+        }
+        else if (entity->type == ENT_EDGE || entity->type == ENT_VLE_EDGE)
+        {
+            entity_name = entity->entity.rel->name;
+        }
+        else if (entity->type == ENT_PATH)
+        {
+            entity_name = entity->entity.path->var_name;
+        }
+
+        if (entity_name != NULL && strcmp(name, entity_name) == 0)
+        {
+            return entity;
+        }
+    }
+
+    return NULL;
+}
+
+/*
+ * extract_id_var_from_entity_expr
+ *
+ * For current-clause entities, extracts the id/start_id/end_id Var directly
+ * from the entity's build expression (_agtype_build_vertex or _agtype_build_edge).
+ *
+ * Returns the raw graphid Var, or NULL if extraction fails.
+ *
+ * For _agtype_build_vertex(id, label, props): id is arg 0
+ * For _agtype_build_edge(id, start_id, end_id, label, props): id=0, start_id=1, end_id=2
+ */
+static Node *extract_id_var_from_entity_expr(cypher_parsestate *cpstate,
+                                             transform_entity *entity,
+                                             const char *func_name)
+{
+    int argno;
+    FuncExpr *build_expr;
+    List *args;
+    Node *id_node;
+    Var *id_var;
+
+    /* Entity's expr must be a FuncExpr for current-clause entities */
+    if (entity->expr == NULL || !IsA(entity->expr, FuncExpr))
+    {
+        ereport(DEBUG1,
+                (errmsg("extract_id_var_from_entity_expr: entity expr is not "
+                        "FuncExpr")));
+        return NULL;
+    }
+
+    build_expr = (FuncExpr *)entity->expr;
+    args = build_expr->args;
+
+    /* Determine which argument to extract based on function and entity type */
+    if (strcmp(func_name, "id") == 0)
+    {
+        argno = 0;  /* id is always arg 0 */
+    }
+    else if (strcmp(func_name, "start_id") == 0)
+    {
+        if (entity->type != ENT_EDGE)
+        {
+            return NULL;  /* start_id only works on edges */
+        }
+        argno = 1;  /* start_id is arg 1 for edges */
+    }
+    else if (strcmp(func_name, "end_id") == 0)
+    {
+        if (entity->type != ENT_EDGE)
+        {
+            return NULL;  /* end_id only works on edges */
+        }
+        argno = 2;  /* end_id is arg 2 for edges */
+    }
+    else
+    {
+        return NULL;
+    }
+
+    /* Verify we have enough arguments */
+    if (list_length(args) <= argno)
+    {
+        ereport(DEBUG1,
+                (errmsg("extract_id_var_from_entity_expr: insufficient args "
+                        "(%d <= %d)", list_length(args), argno)));
+        return NULL;
+    }
+
+    /* Extract the id/start_id/end_id node */
+    id_node = (Node *)list_nth(args, argno);
+
+    /* It should be a Var */
+    if (!IsA(id_node, Var))
+    {
+        ereport(DEBUG1,
+                (errmsg("extract_id_var_from_entity_expr: arg %d is not a Var",
+                        argno)));
+        return NULL;
+    }
+
+    id_var = (Var *)id_node;
+
+    /* The Var should be GRAPHIDOID type */
+    if (id_var->vartype != GRAPHIDOID)
+    {
+        ereport(DEBUG1,
+                (errmsg("extract_id_var_from_entity_expr: arg %d is not "
+                        "GRAPHIDOID", argno)));
+        return NULL;
+    }
+
+    /*
+     * Return the raw graphid Var directly.
+     * This allows native integer comparisons without agtype conversion.
+     */
+    ereport(DEBUG1,
+            (errmsg("extract_id_var_from_entity_expr: optimized %s() for "
+                    "current-clause entity", func_name)));
+
+    return (Node *)copyObject(id_var);
+}
+
+static Node *try_optimize_id_funcs(cypher_parsestate *cpstate, FuncCall *fn)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    char *func_name;
+    Node *arg_node;
+    ColumnRef *cref;
+    char *var_name;
+    transform_entity *entity;
+    Var *opt_var = NULL;
+
+    ereport(DEBUG1, (errmsg("try_optimize_id_funcs: ENTERING")));
+
+    /*
+     * Don't optimize in INSERT_TARGET context (MERGE/CREATE properties).
+     * The Var references created during parsing may not be valid in the
+     * execution context due to MERGE's complex lateral join structure.
+     */
+    if (pstate->p_expr_kind == EXPR_KIND_INSERT_TARGET)
+    {
+        return NULL;
+    }
+
+    /* Must be an unqualified function name */
+    if (list_length(fn->funcname) != 1)
+    {
+        return NULL;
+    }
+
+    /* Must have exactly one argument */
+    if (list_length(fn->args) != 1)
+    {
+        return NULL;
+    }
+
+    func_name = strVal(linitial(fn->funcname));
+
+    /* Check if this is id, start_id, or end_id */
+    if (strcmp(func_name, "id") != 0 &&
+        strcmp(func_name, "start_id") != 0 &&
+        strcmp(func_name, "end_id") != 0)
+    {
+        return NULL;
+    }
+
+    /* The argument must be a simple ColumnRef (variable name) */
+    arg_node = linitial(fn->args);
+    if (!IsA(arg_node, ColumnRef))
+    {
+        return NULL;
+    }
+
+    cref = (ColumnRef *)arg_node;
+
+    /* Must be a single-part name (just variable name, not qualified) */
+    if (list_length(cref->fields) != 1)
+    {
+        return NULL;
+    }
+
+    var_name = strVal(linitial(cref->fields));
+
+    /*
+     * Look up the transform entity ONLY in the current cpstate's entities list.
+     * We must not walk up to parent parsestates because the entity's Var fields
+     * (id_var, start_id_var, end_id_var) are only valid in the query context
+     * where they were set. Using them in a subquery (like EXISTS) would create
+     * Vars with invalid varno references.
+     */
+    entity = find_entity_in_current_cpstate(cpstate, var_name);
+    if (entity == NULL)
+    {
+        ereport(DEBUG1, (errmsg("try_optimize_id_funcs: entity '%s' not found in current cpstate", var_name)));
+        return NULL;
+    }
+
+    /*
+     * For current-clause entities, the hidden columns (id_var, etc.) are not
+     * yet set because export_entity_hidden_columns runs at clause end.
+     * Instead, extract the id Var directly from the entity's build expression.
+     */
+    if (entity->declared_in_current_clause)
+    {
+        ereport(DEBUG1,
+                (errmsg("try_optimize_id_funcs: entity '%s' is in current "
+                        "clause, extracting from build expr", var_name)));
+        return extract_id_var_from_entity_expr(cpstate, entity, func_name);
+    }
+
+    ereport(DEBUG1, (errmsg("try_optimize_id_funcs: entity '%s' found, id_var=%p", var_name, entity->id_var)));
+
+    /*
+     * Select the appropriate exposed column Var based on function and entity type.
+     */
+    if (strcmp(func_name, "id") == 0)
+    {
+        /* id() works on both vertices and edges */
+        if (entity->type == ENT_VERTEX || entity->type == ENT_EDGE)
+        {
+            opt_var = entity->id_var;
+        }
+    }
+    else if (strcmp(func_name, "start_id") == 0)
+    {
+        /* start_id() only works on edges */
+        if (entity->type == ENT_EDGE)
+        {
+            opt_var = entity->start_id_var;
+        }
+    }
+    else if (strcmp(func_name, "end_id") == 0)
+    {
+        /* end_id() only works on edges */
+        if (entity->type == ENT_EDGE)
+        {
+            opt_var = entity->end_id_var;
+        }
+    }
+
+    /* If we have an optimized Var, return a copy of it */
+    if (opt_var != NULL)
+    {
+        int rtindex;
+        RangeTblEntry *rte;
+
+        /*
+         * Verify the Var looks correct before returning.
+         * The hidden column should have GRAPHIDOID type (raw graphid).
+         */
+        if (opt_var->vartype != GRAPHIDOID)
+        {
+            return NULL;  /* Fall back to normal function processing */
+        }
+
+        /*
+         * Validate that the Var references a valid column in the current query.
+         * This check prevents using stale Vars from previous clause contexts
+         * that may have been invalidated by clauses like WITH that don't
+         * forward hidden columns.
+         */
+        rtindex = opt_var->varno;
+        if (rtindex < 1 || rtindex > list_length(pstate->p_rtable))
+        {
+            ereport(DEBUG1, (errmsg("try_optimize_id_funcs: invalid rtindex %d (rtable length %d), falling back",
+                                    rtindex, list_length(pstate->p_rtable))));
+            return NULL;  /* Invalid rtindex, fall back */
+        }
+
+        rte = (RangeTblEntry *)list_nth(pstate->p_rtable, rtindex - 1);
+        if (rte->rtekind == RTE_SUBQUERY)
+        {
+            Query *subquery = rte->subquery;
+            int max_attno = list_length(subquery->targetList);
+            
+            if (opt_var->varattno < 1 || opt_var->varattno > max_attno)
+            {
+                ereport(DEBUG1, (errmsg("try_optimize_id_funcs: varattno %d out of range (max %d), falling back",
+                                        opt_var->varattno, max_attno)));
+                return NULL;  /* varattno out of range, fall back */
+            }
+        }
+
+        return (Node *)copyObject(opt_var);
+    }
+
+    return NULL;
+}
+
+/*
  * Code borrowed from PG's transformFuncCall and updated for AGE
  */
 static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
@@ -1986,6 +2313,17 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     List *fname = NIL;
     ListCell *arg;
     Node *retval = NULL;
+
+    /*
+     * Try to optimize id(), start_id(), end_id() calls when the argument
+     * is a variable that has exposed column Vars from a previous clause.
+     * This avoids rebuilding the full vertex/edge just to extract the id.
+     */
+    retval = try_optimize_id_funcs(cpstate, fn);
+    if (retval != NULL)
+    {
+        return retval;
+    }
 
     /* Transform the list of arguments ... */
     foreach(arg, fn->args)

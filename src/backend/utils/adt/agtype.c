@@ -12185,6 +12185,12 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
             agtv_result.val.string.val = text_to_cstring(DatumGetTextPP(arg));
             agtv_result.val.string.len = strlen(agtv_result.val.string.val);
         }
+        else if (type == GRAPHIDOID)
+        {
+            /* graphid is internally int64 */
+            agtv_result.type = AGTV_INTEGER;
+            agtv_result.val.int_value = DatumGetInt64(arg);
+        }
         else
         {
             ereport(ERROR,
