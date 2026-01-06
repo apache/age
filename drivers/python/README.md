@@ -28,11 +28,11 @@ AGType parser and driver support for [Apache AGE](https://age.apache.org/), grap
 
 ### Features
 * Unmarshal AGE result data(AGType) to Vertex, Edge, Path
-* Cypher query support for Psycopg2 PostgreSQL driver (enables to use cypher queries directly)
+* Cypher query support for Psycopg3 PostgreSQL driver (enables to use cypher queries directly)
 
 ### Prerequisites
 * over Python 3.9
-* This module runs on [psycopg2](https://www.psycopg.org/) and [antlr4-python3](https://pypi.org/project/antlr4-python3-runtime/)
+* This module runs on [psycopg3](https://www.psycopg.org/) and [antlr4-python3](https://pypi.org/project/antlr4-python3-runtime/)
 ```
 sudo apt-get update
 sudo apt-get install python3-dev libpq-dev
@@ -80,7 +80,7 @@ SET search_path = ag_catalog, "$user", public;
 ```
 
 ### Usage
-* If you are not familiar with Psycopg2 driver : Go to [Jupyter Notebook : Basic Sample](samples/apache-age-basic.ipynb) 
+* If you are not familiar with Psycopg driver : Go to [Jupyter Notebook : Basic Sample](samples/apache-age-basic.ipynb) 
 * Simpler way to access Apache AGE [AGE Sample](samples/apache-age-note.ipynb) in Samples.
 * Agtype converting samples: [Agtype Sample](samples/apache-age-agtypes.ipynb) in Samples.
 
@@ -119,7 +119,7 @@ Here the following value required
 Insert From networkx directed graph into an AGE database.
 #### Parameters
 
-- `connection` (psycopg2.connect): Connection object to the AGE database.
+- `connection` (psycopg.connect): Connection object to the AGE database.
 
 - `G` (networkx.DiGraph): Networkx directed graph to be converted and inserted.
 
@@ -152,7 +152,7 @@ Converts data from a Apache AGE graph database into a Networkx directed graph.
 
 #### Parameters
 
-- `connection` (psycopg2.connect): Connection object to the PostgreSQL database.
+- `connection` (psycopg.connect): Connection object to the PostgreSQL database.
 - `graphName` (str): Name of the graph.
 - `G` (None | nx.DiGraph): Optional Networkx directed graph. If provided, the data will be added to this graph.
 - `query` (str | None): Optional Cypher query to retrieve data from the database.
@@ -167,3 +167,4 @@ Converts data from a Apache AGE graph database into a Networkx directed graph.
 # Call the function to convert data into a Networkx graph
 graph = age_to_networkx(connection, graphName="MyGraph" )
 ```
+
