@@ -147,8 +147,10 @@ src/include/parser/cypher_gram_def.h: src/backend/parser/cypher_gram.c
 
 src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cypher_gram_def.h
 
-src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c
-src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
+src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
+src/backend/parser/cypher_parser.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
+src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
+src/backend/parser/cypher_keywords.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 
 $(age_sql):
 	@cat $(SQLS) > $@
