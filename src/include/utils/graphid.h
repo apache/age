@@ -22,7 +22,6 @@
 
 #include "utils/fmgroids.h"
 #include "utils/syscache.h"
-#include "utils/palloc.h"
 
 #include "catalog/ag_namespace.h"
 #include "catalog/pg_type.h"
@@ -47,36 +46,11 @@ typedef int64 graphid;
 #define ENTRY_ID_BITS (32 + 16)
 #define ENTRY_ID_MASK INT64CONST(0x0000ffffffffffff)
 
-/*
- * graphid Datum conversion macros
- *
- * On 64-bit systems (SIZEOF_DATUM == 8), graphid is passed by value.
- * On 32-bit systems (SIZEOF_DATUM == 4), graphid must be passed by reference
- * because a 64-bit value cannot fit in a 32-bit Datum.
- *
- * PGlite compiles to 32-bit WebAssembly, so we need pass-by-reference there.
- */
-#if SIZEOF_DATUM >= 8
-/* 64-bit: pass by value (original behavior) */
 #define DATUM_GET_GRAPHID(d) DatumGetInt64(d)
 #define GRAPHID_GET_DATUM(x) Int64GetDatum(x)
-#define AG_GETARG_GRAPHID(a) DATUM_GET_GRAPHID(PG_GETARG_DATUM(a))
-#define AG_RETURN_GRAPHID(x) return GRAPHID_GET_DATUM(x)
-#else
-/* 32-bit: pass by reference */
-#define DATUM_GET_GRAPHID(d) (*((graphid *) DatumGetPointer(d)))
-#define GRAPHID_GET_DATUM(x) ag_graphid_get_datum(x)
-#define AG_GETARG_GRAPHID(a) DATUM_GET_GRAPHID(PG_GETARG_DATUM(a))
-#define AG_RETURN_GRAPHID(x) return GRAPHID_GET_DATUM(x)
 
-/* Helper function for 32-bit pass-by-reference - allocates and returns Datum */
-static inline Datum ag_graphid_get_datum(graphid gid)
-{
-    graphid *result = (graphid *) palloc(sizeof(graphid));
-    *result = gid;
-    return PointerGetDatum(result);
-}
-#endif
+#define AG_GETARG_GRAPHID(a) DATUM_GET_GRAPHID(PG_GETARG_DATUM(a))
+#define AG_RETURN_GRAPHID(x) return GRAPHID_GET_DATUM(x)
 
 /* Oid accessors for GRAPHID */
 #define GRAPHIDOID get_GRAPHIDOID()
