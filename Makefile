@@ -138,6 +138,13 @@ PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
+# 32-bit platform support: detect SIZEOF_DATUM (override with make SIZEOF_DATUM=4)
+SIZEOF_DATUM ?= $(shell printf '%s\n%s\n' '\#include "pg_config.h"' 'SIZEOF_VOID_P' | \
+    $(CC) -I$(shell $(PG_CONFIG) --includedir-server) -E -x c - 2>/dev/null | grep -E '^[0-9]+$$' | tail -1)
+ifeq ($(SIZEOF_DATUM),)
+  SIZEOF_DATUM := 8
+endif
+
 src/backend/parser/cypher_keywords.o: src/include/parser/cypher_kwlist_d.h
 
 src/include/parser/cypher_kwlist_d.h: src/include/parser/cypher_kwlist.h $(GEN_KEYWORDLIST_DEPS)
@@ -150,8 +157,12 @@ src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cyp
 src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c
 src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
 
-$(age_sql):
+# Strip PASSEDBYVALUE on 32-bit (SIZEOF_DATUM=4) for graphid pass-by-reference
+$(age_sql): $(SQLS)
 	@cat $(SQLS) > $@
+ifeq ($(SIZEOF_DATUM),4)
+	@sed 's/^[[:space:]]*PASSEDBYVALUE,$$/ -- PASSEDBYVALUE removed for 32-bit/' $@ > $@.tmp && mv $@.tmp $@
+endif
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
 
