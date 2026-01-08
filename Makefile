@@ -169,7 +169,7 @@ src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c
 $(age_sql): $(SQLS)
 	@cat $(SQLS) > $@
 ifeq ($(SIZEOF_DATUM),4)
-	@sed 's/^[[:space:]]*PASSEDBYVALUE[[:space:]]*,\?[[:space:]]*$$/ -- PASSEDBYVALUE removed for 32-bit/' $@ > $@.tmp && mv $@.tmp $@ && grep -q 'PASSEDBYVALUE removed for 32-bit' $@ || { echo "PASSEDBYVALUE marker not found or not replaced in $@"; exit 1; }
+	@sed 's/^[[:space:]]*PASSEDBYVALUE[[:space:]]*,\?[[:space:]]*$$/ -- PASSEDBYVALUE disabled on 32-bit (replaced at build time; see Makefile SIZEOF_DATUM rule)/' $@ > $@.tmp && mv $@.tmp $@ && grep -q 'PASSEDBYVALUE disabled on 32-bit' $@ || { echo "PASSEDBYVALUE marker not found or not replaced in $@"; exit 1; }
 endif
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
