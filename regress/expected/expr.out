@@ -319,6 +319,50 @@ $$RETURN 1 IN [[null]]$$) AS r(c boolean);
  f
 (1 row)
 
+-- empty list: x IN [] should always return false
+SELECT * FROM cypher('expr',
+$$RETURN 1 IN []$$) AS r(c boolean);
+ c 
+---
+ f
+(1 row)
+
+SELECT * FROM cypher('expr',
+$$RETURN 'a' IN []$$) AS r(c boolean);
+ c 
+---
+ f
+(1 row)
+
+SELECT * FROM cypher('expr',
+$$RETURN null IN []$$) AS r(c boolean);
+ c 
+---
+ f
+(1 row)
+
+SELECT * FROM cypher('expr',
+$$RETURN [1,2,3] IN []$$) AS r(c boolean);
+ c 
+---
+ f
+(1 row)
+
+-- NOT (x IN []) should always return true
+SELECT * FROM cypher('expr',
+$$RETURN NOT (1 IN [])$$) AS r(c boolean);
+ c 
+---
+ t
+(1 row)
+
+SELECT * FROM cypher('expr',
+$$RETURN NOT ('a' IN [])$$) AS r(c boolean);
+ c 
+---
+ t
+(1 row)
+
 -- should error - ERROR:  object of IN must be a list
 SELECT * FROM cypher('expr',
 $$RETURN null IN 'str' $$) AS r(c boolean);
@@ -9156,8 +9200,36 @@ LINE 2: ...({ a0:COUNT { MATCH () WHERE CASE WHEN true THEN (x IS NULL)...
                                                              ^
 HINT:  variable x does not exist within scope of usage
 --
+-- Issue 2289: 1 IN [] causes cache lookup failed for type 0
+--
+-- Additional test cases were added above to the IN operator
+--
+SELECT * FROM create_graph('issue_2289');
+NOTICE:  graph "issue_2289" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2289', $$ RETURN (1 IN []) AS v $$) AS (v agtype);
+   v   
+-------
+ false
+(1 row)
+
+--
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_2289', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table issue_2289._ag_label_vertex
+drop cascades to table issue_2289._ag_label_edge
+NOTICE:  graph "issue_2289" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT * FROM drop_graph('issue_2263', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table issue_2263._ag_label_vertex
