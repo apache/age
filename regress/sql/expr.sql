@@ -157,6 +157,20 @@ SELECT * FROM cypher('expr',
 $$RETURN 1 in [[1]]$$) AS r(c boolean);
 SELECT * FROM cypher('expr',
 $$RETURN 1 IN [[null]]$$) AS r(c boolean);
+-- empty list: x IN [] should always return false
+SELECT * FROM cypher('expr',
+$$RETURN 1 IN []$$) AS r(c boolean);
+SELECT * FROM cypher('expr',
+$$RETURN 'a' IN []$$) AS r(c boolean);
+SELECT * FROM cypher('expr',
+$$RETURN null IN []$$) AS r(c boolean);
+SELECT * FROM cypher('expr',
+$$RETURN [1,2,3] IN []$$) AS r(c boolean);
+-- NOT (x IN []) should always return true
+SELECT * FROM cypher('expr',
+$$RETURN NOT (1 IN [])$$) AS r(c boolean);
+SELECT * FROM cypher('expr',
+$$RETURN NOT ('a' IN [])$$) AS r(c boolean);
 -- should error - ERROR:  object of IN must be a list
 SELECT * FROM cypher('expr',
 $$RETURN null IN 'str' $$) AS r(c boolean);
@@ -3691,8 +3705,17 @@ SELECT * FROM cypher('issue_2263', $$
 $$) AS (out agtype);
 
 --
+-- Issue 2289: 1 IN [] causes cache lookup failed for type 0
+--
+-- Additional test cases were added above to the IN operator
+--
+SELECT * FROM create_graph('issue_2289');
+SELECT * FROM cypher('issue_2289', $$ RETURN (1 IN []) AS v $$) AS (v agtype);
+
+--
 -- Cleanup
 --
+SELECT * FROM drop_graph('issue_2289', true);
 SELECT * FROM drop_graph('issue_2263', true);
 SELECT * FROM drop_graph('issue_1988', true);
 SELECT * FROM drop_graph('issue_1953', true);
