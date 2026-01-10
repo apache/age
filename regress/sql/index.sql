@@ -357,6 +357,13 @@ SELECT * FROM cypher('cypher_index', $$
     ORDER BY a.city_id
 $$) as (name agtype);
 
+-- EXPLAIN for pattern with WHERE clause
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.country_code = 'US' AND a.west_coast = true
+    RETURN a
+$$) as (plan agtype);
+
 -- Test WHERE with multiple conditions (AND)
 SELECT * FROM cypher('cypher_index', $$
     MATCH (a:City)
@@ -403,6 +410,13 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE c.life_expectancy < 76.0
     RETURN c.name
 $$) as (name agtype);
+
+-- EXPLAIN for pattern with filters on both country and city
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (country:Country)<-[:has_city]-(city:City)
+    WHERE country.country_code = 'CA' AND city.west_coast = true
+    RETURN city.name
+$$) as (plan agtype);
 
 -- Test WHERE in combination with pattern matching
 SELECT * FROM cypher('cypher_index', $$
