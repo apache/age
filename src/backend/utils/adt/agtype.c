@@ -37,6 +37,7 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_collation_d.h"
 #include "catalog/pg_operator_d.h"
@@ -55,6 +56,7 @@
 #include "utils/agtype_raw.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
+#include "utils/ag_func.h"
 
 /* State structure for Percentile aggregate functions */
 typedef struct PercentileGroupAggState
@@ -157,7 +159,6 @@ static bool is_array_path(agtype_value *agtv);
 /* graph entity retrieval */
 static Datum get_vertex(const char *graph, const char *vertex_label,
                         int64 graphid);
-static char *get_label_name(const char *graph_name, graphid element_graphid);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null);
 static Numeric get_numeric_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -240,6 +241,43 @@ void clear_global_Oids_AGTYPE(void)
 {
     g_AGTYPEOID = InvalidOid;
     g_AGTYPEARRAYOID = InvalidOid;
+}
+
+/* global storage of OID for vertex and edge composite types */
+static Oid g_VERTEXOID = InvalidOid;
+static Oid g_EDGEOID = InvalidOid;
+
+/* helper function to quickly set, if necessary, and retrieve VERTEXOID */
+Oid get_VERTEXOID(void)
+{
+    if (g_VERTEXOID == InvalidOid)
+    {
+        g_VERTEXOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
+                                      CStringGetDatum("vertex"),
+                                      ObjectIdGetDatum(ag_catalog_namespace_id()));
+    }
+
+    return g_VERTEXOID;
+}
+
+/* helper function to quickly set, if necessary, and retrieve EDGEOID */
+Oid get_EDGEOID(void)
+{
+    if (g_EDGEOID == InvalidOid)
+    {
+        g_EDGEOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
+                                    CStringGetDatum("edge"),
+                                    ObjectIdGetDatum(ag_catalog_namespace_id()));
+    }
+
+    return g_EDGEOID;
+}
+
+/* helper function to clear the VERTEX/EDGE OIDs after a drop extension */
+void clear_global_Oids_VERTEX_EDGE(void)
+{
+    g_VERTEXOID = InvalidOid;
+    g_EDGEOID = InvalidOid;
 }
 
 /* fast helper function to test for AGTV_NULL in an agtype */
@@ -1437,17 +1475,22 @@ static void agtype_categorize_type(Oid typoid, agt_type_category *tcategory,
         break;
 
     default:
-        /* Check for arrays and composites */
         if (typoid == AGTYPEOID)
         {
             *tcategory = AGT_TYPE_AGTYPE;
+        }
+        else if (typoid == VERTEXOID || typoid == EDGEOID)
+        {
+            *tcategory = AGT_TYPE_AGTYPE;
+            *outfuncoid = (typoid == VERTEXOID) ?
+                get_ag_func_oid("vertex_to_agtype", 1, VERTEXOID) :
+                get_ag_func_oid("edge_to_agtype", 1, EDGEOID);
         }
         else if (OidIsValid(get_element_type(typoid)) ||
                  typoid == ANYARRAYOID || typoid == RECORDARRAYOID)
         {
             *tcategory = AGT_TYPE_ARRAY;
         }
-        /* includes RECORDOID */
         else if (type_is_rowtype(typoid))
         {
             *tcategory = AGT_TYPE_COMPOSITE;
@@ -1678,14 +1721,17 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
         case AGT_TYPE_AGTYPE:
         case AGT_TYPE_JSONB:
         {
-            agtype *jsonb = DATUM_GET_AGTYPE_P(val);
+            agtype *jsonb;
             agtype_iterator *it;
+
+            if (OidIsValid(outfuncoid))
+                val = OidFunctionCall1(outfuncoid, val);
 
             /*
              * val is actually jsonb datum but we can handle it as an agtype
              * datum because agtype is currently an extension of jsonb.
              */
-
+            jsonb = DATUM_GET_AGTYPE_P(val);
             it = agtype_iterator_init(&jsonb->root);
 
             if (AGT_ROOT_IS_SCALAR(jsonb))
@@ -2282,12 +2328,14 @@ Datum make_path(List *path)
 PG_FUNCTION_INFO_V1(_agtype_build_vertex);
 
 /*
- * SQL function agtype_build_vertex(graphid, cstring, agtype)
+ * SQL function agtype_build_vertex(graphid, agtype, agtype)
  */
 Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 {
     graphid id;
     char *label;
+    agtype *label_agtype;
+    agtype_value *label_value;
     agtype *properties;
     agtype_build_state *bstate;
     agtype *rawscalar;
@@ -2308,7 +2356,25 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     }
 
     id = AG_GETARG_GRAPHID(0);
-    label = PG_GETARG_CSTRING(1);
+    label_agtype = AG_GET_ARG_AGTYPE_P(1);
+
+    /* Extract the string from the agtype label */
+    if (!AGT_ROOT_IS_SCALAR(label_agtype))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_vertex() label must be a scalar string")));
+    }
+
+    label_value = get_ith_agtype_value_from_container(&label_agtype->root, 0);
+    if (label_value->type != AGTV_STRING)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_vertex() label must be a string")));
+    }
+
+    label = pnstrdup(label_value->val.string.val, label_value->val.string.len);
 
     if (fcinfo->args[2].isnull)
     {
@@ -2343,7 +2409,8 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     rawscalar = build_agtype(bstate);
     pfree_agtype_build_state(bstate);
 
-    PG_FREE_IF_COPY(label, 1);
+    pfree(label);
+    PG_FREE_IF_COPY(label_agtype, 1);
     PG_FREE_IF_COPY(properties, 2);
 
     PG_RETURN_POINTER(rawscalar);
@@ -2357,7 +2424,7 @@ Datum make_vertex(Datum id, Datum label, Datum properties)
 PG_FUNCTION_INFO_V1(_agtype_build_edge);
 
 /*
- * SQL function agtype_build_edge(graphid, graphid, graphid, cstring, agtype)
+ * SQL function agtype_build_edge(graphid, graphid, graphid, agtype, agtype)
  */
 Datum _agtype_build_edge(PG_FUNCTION_ARGS)
 {
@@ -2365,6 +2432,8 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     agtype *edge, *rawscalar;
     graphid id, start_id, end_id;
     char *label;
+    agtype *label_agtype;
+    agtype_value *label_value;
     agtype *properties;
 
     /* process graph id */
@@ -2381,10 +2450,28 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     if (fcinfo->args[3].isnull)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("_agtype_build_vertex() label cannot be NULL")));
+                        errmsg("_agtype_build_edge() label cannot be NULL")));
     }
 
-    label = PG_GETARG_CSTRING(3);
+    label_agtype = AG_GET_ARG_AGTYPE_P(3);
+
+    /* Extract the string from the agtype label */
+    if (!AGT_ROOT_IS_SCALAR(label_agtype))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_edge() label must be a scalar string")));
+    }
+
+    label_value = get_ith_agtype_value_from_container(&label_agtype->root, 0);
+    if (label_value->type != AGTV_STRING)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_edge() label must be a string")));
+    }
+
+    label = pnstrdup(label_value->val.string.val, label_value->val.string.len);
 
     /* process end_id */
     if (fcinfo->args[2].isnull)
@@ -2446,7 +2533,8 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     rawscalar = build_agtype(bstate);
     pfree_agtype_build_state(bstate);
 
-    PG_FREE_IF_COPY(label, 3);
+    pfree(label);
+    PG_FREE_IF_COPY(label_agtype, 3);
     PG_FREE_IF_COPY(properties, 4);
 
     PG_RETURN_POINTER(rawscalar);
@@ -2457,6 +2545,131 @@ Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
 {
     return DirectFunctionCall5(_agtype_build_edge, id, startid, endid, label,
                                properties);
+}
+
+PG_FUNCTION_INFO_V1(vertex_to_agtype);
+
+/*
+ * Cast function: vertex -> agtype
+ * Vertex: (id graphid, label agtype, properties agtype)
+ */
+Datum vertex_to_agtype(PG_FUNCTION_ARGS)
+{
+    HeapTupleHeader rec;
+    TupleDesc tupdesc;
+    HeapTupleData tuple;
+    Datum *values;
+    bool *nulls;
+    graphid id;
+    agtype *label;
+    agtype *properties;
+    Datum result;
+
+    rec = PG_GETARG_HEAPTUPLEHEADER(0);
+
+    tupdesc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(rec),
+                                     HeapTupleHeaderGetTypMod(rec));
+
+    tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
+    tuple.t_data = rec;
+
+    values = (Datum *) palloc(3 * sizeof(Datum));
+    nulls = (bool *) palloc(3 * sizeof(bool));
+    heap_deform_tuple(&tuple, tupdesc, values, nulls);
+
+    if (nulls[0])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("vertex id cannot be NULL")));
+    if (nulls[1])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("vertex label cannot be NULL")));
+
+    id = DatumGetInt64(values[0]);
+    label = DATUM_GET_AGTYPE_P(values[1]);
+    properties = nulls[2] ? NULL : DATUM_GET_AGTYPE_P(values[2]);
+
+    if (properties == NULL)
+    {
+        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
+    }
+
+    result = make_vertex(Int64GetDatum(id), PointerGetDatum(label),
+                         PointerGetDatum(properties));
+
+    ReleaseTupleDesc(tupdesc);
+    pfree(values);
+    pfree(nulls);
+
+    return result;
+}
+
+PG_FUNCTION_INFO_V1(edge_to_agtype);
+
+/*
+ * Cast function: edge -> agtype
+ * Edge: (id graphid, label agtype, start_id graphid, end_id graphid, properties agtype)
+ */
+Datum edge_to_agtype(PG_FUNCTION_ARGS)
+{
+    HeapTupleHeader rec;
+    TupleDesc tupdesc;
+    HeapTupleData tuple;
+    Datum *values;
+    bool *nulls;
+    graphid id, start_id, end_id;
+    agtype *label;
+    agtype *properties;
+    Datum result;
+
+    rec = PG_GETARG_HEAPTUPLEHEADER(0);
+
+    tupdesc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(rec),
+                                     HeapTupleHeaderGetTypMod(rec));
+
+    tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
+    tuple.t_data = rec;
+
+    values = (Datum *) palloc(5 * sizeof(Datum));
+    nulls = (bool *) palloc(5 * sizeof(bool));
+    heap_deform_tuple(&tuple, tupdesc, values, nulls);
+
+    if (nulls[0])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("edge id cannot be NULL")));
+    if (nulls[1])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("edge label cannot be NULL")));
+    if (nulls[2])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("edge start_id cannot be NULL")));
+    if (nulls[3])
+        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                        errmsg("edge end_id cannot be NULL")));
+
+    id = DatumGetInt64(values[0]);
+    label = DATUM_GET_AGTYPE_P(values[1]);
+    start_id = DatumGetInt64(values[2]);
+    end_id = DatumGetInt64(values[3]);
+    properties = nulls[4] ? NULL : DATUM_GET_AGTYPE_P(values[4]);
+
+    if (properties == NULL)
+    {
+        agtype_build_state *bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
+    }
+
+    result = make_edge(Int64GetDatum(id), Int64GetDatum(start_id),
+                       Int64GetDatum(end_id), PointerGetDatum(label),
+                       PointerGetDatum(properties));
+
+    ReleaseTupleDesc(tupdesc);
+    pfree(values);
+    pfree(nulls);
+
+    return result;
 }
 
 static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
@@ -5143,6 +5356,7 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
     agtype *arg_agt;
     agtype_value agtv_key;
     agtype_value *agtv_graphid, *agtv_label, *agtv_properties;
+    agtype *label_agtype;
     Datum result;
     int count;
 
@@ -5201,9 +5415,10 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
                  errmsg("vertex typecast object has invalid or missing properties")));
 
     /* Hand it off to the build vertex routine */
+    label_agtype = agtype_value_to_agtype(agtv_label);
     result = DirectFunctionCall3(_agtype_build_vertex,
                  Int64GetDatum(agtv_graphid->val.int_value),
-                 CStringGetDatum(agtv_label->val.string.val),
+                 PointerGetDatum(label_agtype),
                  PointerGetDatum(agtype_value_to_agtype(agtv_properties)));
     return result;
 }
@@ -5218,6 +5433,7 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
     agtype_value agtv_key;
     agtype_value *agtv_graphid, *agtv_label, *agtv_properties,
                  *agtv_startid, *agtv_endid;
+    agtype *label_agtype;
     Datum result;
     int count;
 
@@ -5294,11 +5510,12 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
                  errmsg("edge typecast object has an invalid or missing end_id")));
 
     /* Hand it off to the build edge routine */
+    label_agtype = agtype_value_to_agtype(agtv_label);
     result = DirectFunctionCall5(_agtype_build_edge,
                  Int64GetDatum(agtv_graphid->val.int_value),
                  Int64GetDatum(agtv_startid->val.int_value),
                  Int64GetDatum(agtv_endid->val.int_value),
-                 CStringGetDatum(agtv_label->val.string.val),
+                 PointerGetDatum(label_agtype),
                  PointerGetDatum(agtype_value_to_agtype(agtv_properties)));
     return result;
 }
@@ -5540,66 +5757,6 @@ Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
     return result;
 }
 
-/*
- * Function to retrieve a label name, given the graph name and graphid of the
- * node or edge. The function returns a pointer to a duplicated string that
- * needs to be freed when you are finished using it.
- */
-static char *get_label_name(const char *graph_name, graphid element_graphid)
-{
-    ScanKeyData scan_keys[2];
-    Relation ag_label;
-    SysScanDesc scan_desc;
-    HeapTuple tuple;
-    TupleDesc tupdesc;
-    char *result = NULL;
-    bool column_is_null = false;
-    Oid graph_oid = get_graph_oid(graph_name);
-    int32 label_id = get_graphid_label_id(element_graphid);
-
-    /* scankey for first match in ag_label, column 2, graphoid, BTEQ, OidEQ */
-    ScanKeyInit(&scan_keys[0], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
-    /* scankey for second match in ag_label, column 3, label id, BTEQ, Int4EQ */
-    ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
-                F_INT4EQ, Int32GetDatum(label_id));
-
-    ag_label = table_open(ag_label_relation_id(), ShareLock);
-    scan_desc = systable_beginscan(ag_label, ag_label_graph_oid_index_id(), true,
-                                   NULL, 2, scan_keys);
-
-    tuple = systable_getnext(scan_desc);
-    if (!HeapTupleIsValid(tuple))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                 errmsg("graphid %lu does not exist", element_graphid)));
-    }
-
-    /* get the tupdesc - we don't need to release this one */
-    tupdesc = RelationGetDescr(ag_label);
-
-    /* bail if the number of columns differs */
-    if (tupdesc->natts != Natts_ag_label)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid number of attributes for ag_catalog.ag_label")));
-    }
-
-    /* get the label name */
-    result = NameStr(*DatumGetName(heap_getattr(tuple, Anum_ag_label_name,
-                                                tupdesc, &column_is_null)));
-    /* duplicate it */
-    result = pstrdup(result);
-
-    /* end the scan and close the relation */
-    systable_endscan(scan_desc);
-    table_close(ag_label, ShareLock);
-
-    return result;
-}
-
 static Datum get_vertex(const char *graph, const char *vertex_label,
                         int64 graphid)
 {
@@ -5609,14 +5766,18 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     HeapTuple tuple;
     TupleDesc tupdesc;
     Datum id, properties, result;
+    agtype *label_agtype;
+    Oid graph_namespace_oid;
+    Oid vertex_label_table_oid;
+    Snapshot snapshot;
 
     /* get the specific graph namespace (schema) */
-    Oid graph_namespace_oid = get_namespace_oid(graph, false);
+    graph_namespace_oid = get_namespace_oid(graph, false);
     /* get the specific vertex label table (schema.vertex_label) */
-    Oid vertex_label_table_oid = get_relname_relid(vertex_label,
+    vertex_label_table_oid = get_relname_relid(vertex_label,
                                                  graph_namespace_oid);
     /* get the active snapshot */
-    Snapshot snapshot = GetActiveSnapshot();
+    snapshot = GetActiveSnapshot();
 
     /* initialize the scan key */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
@@ -5650,8 +5811,9 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     properties = column_get_datum(tupdesc, tuple, 1, "properties",
                                   AGTYPEOID, true);
     /* reconstruct the vertex */
+    label_agtype = DATUM_GET_AGTYPE_P(string_to_agtype((char *)vertex_label));
     result = DirectFunctionCall3(_agtype_build_vertex, id,
-                                 CStringGetDatum(vertex_label), properties);
+                                 PointerGetDatum(label_agtype), properties);
     /* end the scan and close the relation */
     table_endscan(scan_desc);
     table_close(graph_vertex_label, ShareLock);
@@ -5669,6 +5831,7 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     char *graph_name = NULL;
     char *label_name = NULL;
     graphid start_id;
+    int label_id;
     Datum result;
 
     /* we need the graph name */
@@ -5713,7 +5876,9 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     start_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, start_id);
+    label_id = get_graphid_label_id(start_id);
+    label_name = get_label_name(label_id, get_graph_oid(graph_name));
+
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
 
@@ -5732,6 +5897,7 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     char *graph_name = NULL;
     char *label_name = NULL;
     graphid end_id;
+    int32 label_id;
     Datum result;
 
     /* we need the graph name */
@@ -5776,11 +5942,49 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     end_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, end_id);
+    label_id = get_graphid_label_id(end_id);
+    label_name = get_label_name(label_id, get_graph_oid(graph_name));
+
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
 
     result = get_vertex(graph_name, label_name, end_id);
+
+    return result;
+}
+
+PG_FUNCTION_INFO_V1(_get_vertex_by_graphid);
+
+/*
+ * Helper function for optimized startNode/endNode
+ * Fetches a vertex given graph name and vertex graphid
+ */
+Datum _get_vertex_by_graphid(PG_FUNCTION_ARGS)
+{
+    char *graph_name = NULL;
+    graphid vertex_id;
+    int32 label_id;
+    char *label_name = NULL;
+    Datum result;
+
+    /* check for nulls */
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        PG_RETURN_NULL();
+
+    /* get the graph name from text */
+    graph_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
+
+    /* get the vertex graphid */
+    vertex_id = PG_GETARG_INT64(1);
+
+    /* get the label name */
+    label_id = get_graphid_label_id(vertex_id);
+    label_name = get_label_name(label_id, get_graph_oid(graph_name));
+    if (label_name == NULL)
+        PG_RETURN_NULL();
+
+    /* fetch and return the vertex */
+    result = get_vertex(graph_name, label_name, vertex_id);
 
     return result;
 }
@@ -12138,11 +12342,12 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
             agtv_result.type = AGTV_BOOL;
             agtv_result.val.boolean = DatumGetBool(arg);
         }
-        else if (type == INT2OID || type == INT4OID || type == INT8OID)
+        else if (type == INT2OID || type == INT4OID ||
+                 type == INT8OID || type == GRAPHIDOID)
         {
             agtv_result.type = AGTV_INTEGER;
 
-            if (type == INT8OID)
+            if (type == INT8OID || type == GRAPHIDOID)
             {
                 agtv_result.val.int_value = DatumGetInt64(arg);
             }
@@ -12184,6 +12389,14 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
             agtv_result.type = AGTV_STRING;
             agtv_result.val.string.val = text_to_cstring(DatumGetTextPP(arg));
             agtv_result.val.string.len = strlen(agtv_result.val.string.val);
+        }
+        else if (type == VERTEXOID)
+        {
+            PG_RETURN_DATUM(DirectFunctionCall1(vertex_to_agtype, arg));
+        }
+        else if (type == EDGEOID)
+        {
+            PG_RETURN_DATUM(DirectFunctionCall1(edge_to_agtype, arg));
         }
         else
         {

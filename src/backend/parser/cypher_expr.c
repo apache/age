@@ -116,6 +116,7 @@ static bool function_exists(char *funcname, char *extension);
 static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
                                   Oid source_oid, Oid target_oid,
                                   int32 t_typemod, bool error_out);
+static Oid get_entity_record_type(Node *node);
 
 /* transform a cypher expression */
 Node *transform_cypher_expr(cypher_parsestate *cpstate, Node *expr,
@@ -538,6 +539,10 @@ static Node *transform_AEXPR_OP(cypher_parsestate *cpstate, A_Expr *a)
     Node *lexpr = transform_cypher_expr_recurse(cpstate, a->lexpr);
     Node *rexpr = transform_cypher_expr_recurse(cpstate, a->rexpr);
 
+    /* Cast vertex/edge to agtype for operator compatibility */
+    lexpr = coerce_entity_to_agtype(pstate, lexpr);
+    rexpr = coerce_entity_to_agtype(pstate, rexpr);
+
     return (Node *)make_op(pstate, a->name, lexpr, rexpr, last_srf,
                            a->location);
 }
@@ -871,8 +876,7 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
     FuncExpr *fexpr_new_map;
     bool has_all_prop_selector;
     Node *transformed_map_var;
-    Oid foid_age_properties;
-    FuncExpr *fexpr_orig_map;
+    Node *fexpr_orig_map;
 
     pstate = (ParseState *)cpstate;
     keyvals = NIL;
@@ -886,11 +890,8 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
      */
     transformed_map_var = transform_cypher_expr_recurse(cpstate,
                                                         (Node *)cmp->map_var);
-    foid_age_properties = get_ag_func_oid("age_properties", 1, AGTYPEOID);
-    fexpr_orig_map = makeFuncExpr(foid_age_properties, AGTYPEOID,
-                                  list_make1(transformed_map_var), InvalidOid,
-                                  InvalidOid, COERCE_EXPLICIT_CALL);
-    fexpr_orig_map->location = cmp->location;
+
+    fexpr_orig_map = make_properties_expr(transformed_map_var);
 
     /*
      * Builds a new map. Each map projection element is transformed into a key
@@ -1162,6 +1163,67 @@ static Node *transform_cypher_map(cypher_parsestate *cpstate, cypher_map *cm)
 }
 
 /*
+ * Check if a node is a vertex or edge composite type.
+ */
+bool is_vertex_or_edge(Node *node)
+{
+    Oid typeid;
+
+    if (node == NULL)
+        return false;
+
+    if (IsA(node, RowExpr))
+        typeid = ((RowExpr *)node)->row_typeid;
+    else if (IsA(node, Var))
+        typeid = ((Var *)node)->vartype;
+    else
+        return false;
+
+    return (typeid == VERTEXOID || typeid == EDGEOID);
+}
+
+/*
+ * Extract a field from a vertex/edge Var or RowExpr.
+ */
+Node *extract_field_from_record(Node *node, char *field_name)
+{
+    AttrNumber fieldnum;
+    Oid fieldtype;
+    Oid type_id = get_entity_record_type(node);
+
+    get_record_field_info(field_name, type_id,
+                          &fieldnum, &fieldtype);
+
+    if (fieldnum == InvalidAttrNumber || fieldtype == InvalidOid)
+    {
+        ereport(ERROR,
+            (errcode(ERRCODE_UNDEFINED_COLUMN),
+             errmsg("fieldname '%s' does not exist for the entity", field_name)));
+    }
+
+    if (IsA(node, Var))
+    {
+        return (Node *)make_field_select((Var *)node, fieldnum, fieldtype);
+    }
+    else if (IsA(node, RowExpr))
+    {
+        RowExpr *re = (RowExpr *)node;
+
+        if (list_length(re->args) < fieldnum)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_COLUMN),
+                     errmsg("field '%s' does not exist in RowExpr", field_name)));
+        }
+        
+        /* RowExpr args are 0-indexed, but fieldnum is 1-indexed */
+        return (Node *)list_nth(re->args, fieldnum - 1);
+    }
+
+    return NULL;
+}
+
+/*
  * Helper function to transform a cypher list into an agtype list. The function
  * will use agtype_add to concatenate argument lists when the number of list
  * elements, parameters, exceeds 100, a PG limitation.
@@ -1198,9 +1260,10 @@ static Node *transform_cypher_list(cypher_parsestate *cpstate, cypher_list *cl)
     foreach (le, cl->elems)
     {
         Node *texpr = NULL;
+        Node *cexpr = lfirst(le);
 
         /* transform the argument */
-        texpr = transform_cypher_expr_recurse(cpstate, lfirst(le));
+        texpr = transform_cypher_expr_recurse(cpstate, cexpr);
 
         /*
          * If we have more than 100 elements we will need to add in the list
@@ -1313,32 +1376,36 @@ static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
     pnsi = refnameNamespaceItem(pstate, NULL, relname, cr->location,
                                 &levels_up);
 
-    /*
-     * If we didn't find anything, try looking for a previous variable
-     * reference. Otherwise, return NULL (colNameToVar will return NULL
-     * if nothing is found).
-     */
-    if (!pnsi)
+    if (pnsi)
     {
-        Node *prev_var = colNameToVar(pstate, relname, false, cr->location);
+        /* find the properties column of the NSI and return a var for it */
+        node = scanNSItemForColumn(pstate, pnsi, levels_up, "properties",
+                                   cr->location);
+        /*
+         * Error out if we couldn't find it.
+         *
+         * TODO: Should we error out or return NULL for further processing?
+         *       For now, just error out.
+         */
+        if (!node)
+        {
+            ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+                            errmsg("could not find properties for %s", relname)));
+        }
 
-        return prev_var;
+        if (is_vertex_or_edge(node))
+        {
+            node = extract_field_from_record(node, "properties");
+        }
+
+        return node;
     }
 
-    /* find the properties column of the NSI and return a var for it */
-    node = scanNSItemForColumn(pstate, pnsi, levels_up, "properties", 
-                               cr->location);
+    node = colNameToVar(pstate, relname, false, cr->location);
 
-    /*
-     * Error out if we couldn't find it.
-     *
-     * TODO: Should we error out or return NULL for further processing?
-     *       For now, just error out.
-     */
-    if (!node)
+    if (node && is_vertex_or_edge(node))
     {
-        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
-                        errmsg("could not find properties for %s", relname)));
+        return extract_field_from_record(node, "properties");
     }
 
     return node;
@@ -2002,6 +2069,145 @@ static bool function_exists(char *funcname, char *extension)
 }
 
 /*
+ * Check if function name is an accessor function that can be optimized
+ */
+static bool is_accessor_function(const char *func_name)
+{
+    return (strcasecmp("id", func_name) == 0 ||
+            strcasecmp("properties", func_name) == 0 ||
+            strcasecmp("type", func_name) == 0 ||
+            strcasecmp("label", func_name) == 0 ||
+            strcasecmp("start_id", func_name) == 0 ||
+            strcasecmp("end_id", func_name) == 0 ||
+            strcasecmp("startnode", func_name) == 0 ||
+            strcasecmp("endnode", func_name) == 0);
+}
+
+static Oid get_entity_record_type(Node *node)
+{
+    Oid typeid = InvalidOid;
+
+    if (IsA(node, RowExpr))
+    {
+        typeid = ((RowExpr *)node)->row_typeid;
+    }
+    else if (IsA(node, Var))
+    {
+        typeid = ((Var *)node)->vartype;
+    }
+    else
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("argument must be a vertex or edge record")));
+    }
+
+    if (typeid != VERTEXOID && typeid != EDGEOID)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("argument must be a vertex or edge record")));
+    }
+
+    return typeid;
+}
+
+/*
+ * Optimize accessor functions when called on RECORD entities
+ * Extracts fields directly using FieldSelect instead of building and parsing agtype
+ */
+static Node *optimize_accessor_function(cypher_parsestate *cpstate,
+                                        const char *func_name,
+                                        FuncCall *fn,
+                                        List *targs)
+{
+    ParseState *pstate = &cpstate->pstate;
+    Node *arg;
+    AttrNumber fieldnum;
+    Oid fieldtype;
+    Node *result;
+    Oid entity_type;
+    bool is_node_func = (strcasecmp(func_name, "startNode") == 0 ||
+                         strcasecmp(func_name, "endNode") == 0);
+
+    if (is_node_func)
+    {
+        if (list_length(targs) < 2)
+            return NULL;
+        arg = (Node *)lsecond(targs);
+    }
+    else
+    {
+        if (list_length(targs) < 1)
+            return NULL;
+        arg = (Node *)linitial(targs);
+    }
+
+    if (!is_vertex_or_edge(arg))
+    {
+        return NULL;
+    }
+
+    entity_type = get_entity_record_type(arg);
+    get_record_field_info((char *)func_name, entity_type, &fieldnum, &fieldtype);
+
+    if (fieldnum != InvalidAttrNumber && fieldtype != InvalidOid)
+    {
+        Node *field = NULL;
+
+        /* Validate RowExpr has enough fields */
+        if (IsA(arg, RowExpr))
+        {
+            RowExpr *re = (RowExpr *)arg;
+            if (list_length(re->args) < fieldnum)
+            {
+                return NULL;
+            }
+
+            /* RowExpr args are 0-indexed, but fieldnum is 1-indexed */
+            field = (Node *)list_nth(re->args, fieldnum - 1);
+        }
+        else if (IsA(arg, Var))
+        {
+            field = (Node *)make_field_select((Var *)arg, fieldnum, fieldtype);
+        }
+
+        /* For startNode/endNode functions on edges, look up the vertex */
+        if (is_node_func && entity_type == EDGEOID)
+        {
+            Oid func_oid;
+            Node *graph_name;
+
+            graph_name = (Node *) makeConst(TEXTOID, -1, InvalidOid, -1,
+                                            CStringGetTextDatum(cpstate->graph_name),
+                                            false, false);
+
+            /* Call _get_vertex_by_graphid(graph_name, vertex_id) */
+            func_oid = get_ag_func_oid("_get_vertex_by_graphid", 2, TEXTOID, GRAPHIDOID);
+            result = (Node *)makeFuncExpr(func_oid, AGTYPEOID,
+                                        list_make2(graph_name, field),
+                                        InvalidOid, InvalidOid,
+                                        COERCE_EXPLICIT_CALL);
+        }
+        else
+        {
+            result = field;
+        }
+    }
+    else
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                    errmsg("%s() argument must be an %s or null",
+                        func_name,
+                        (entity_type == VERTEXOID) ? "edge" : "vertex"),
+                    parser_errposition(pstate, fn->location)));
+    }
+
+    return result;
+}
+
+/*
  * Code borrowed from PG's transformFuncCall and updated for AGE
  */
 static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
@@ -2012,14 +2218,24 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     List *fname = NIL;
     ListCell *arg;
     Node *retval = NULL;
+    bool is_accessor = false;
+
+    /* Get function name to check if it has special optimizations */
+    if (list_length(fn->funcname) == 1)
+    {
+        is_accessor = is_accessor_function(strVal(linitial(fn->funcname)));
+    }
 
     /* Transform the list of arguments ... */
     foreach(arg, fn->args)
     {
         Node *farg = NULL;
+        Node *transformed_arg = NULL;
 
         farg = (Node *)lfirst(arg);
-        targs = lappend(targs, transform_cypher_expr_recurse(cpstate, farg));
+        transformed_arg = transform_cypher_expr_recurse(cpstate, farg);
+
+        targs = lappend(targs, transformed_arg);
     }
 
     /* within group should not happen */
@@ -2051,10 +2267,10 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
              * is not empty. Then prepend the graph name if necessary.
              */
             if ((list_length(targs) != 0) &&
-                (strcmp("startNode", name) == 0 ||
-                strcmp("endNode", name) == 0 ||
-                strcmp("vle", name) == 0 ||
-                strcmp("vertex_stats", name) == 0))
+                (strcasecmp("startNode", name) == 0 ||
+                 strcasecmp("endNode", name) == 0 ||
+                 strcasecmp("vle", name) == 0 ||
+                 strcasecmp("vertex_stats", name) == 0))
             {
                 char *graph_name = cpstate->graph_name;
                 Datum d = string_to_agtype(graph_name);
@@ -2062,6 +2278,16 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
                                     false);
 
                 targs = lcons(c, targs);
+            }
+
+            /*
+             * Try to optimize accessor functions on RECORD entities
+             */
+            if (is_accessor)
+            {
+                Node *optimized = optimize_accessor_function(cpstate, name, fn, targs);
+                if (optimized != NULL)
+                    return optimized;
             }
         }
         /*
@@ -2193,8 +2419,16 @@ static Node *transform_CaseExpr(cypher_parsestate *cpstate, CaseExpr
     /* generate placeholder for test expression */
     if (arg)
     {
-        if (exprType(arg) == UNKNOWNOID)
+        Oid argtype = exprType(arg);
+
+        if (argtype == UNKNOWNOID)
+        {
             arg = coerce_to_common_type(pstate, arg, TEXTOID, "CASE");
+        }
+        else if (argtype == VERTEXOID || argtype == EDGEOID)
+        {
+            arg = coerce_to_common_type(pstate, arg, AGTYPEOID, "CASE");
+        }
 
         assign_expr_collations(pstate, arg);
 
@@ -2284,15 +2518,33 @@ static Node *transform_CaseExpr(cypher_parsestate *cpstate, CaseExpr
     /*
      * we pass a NULL context to select_common_type because the common types can
      * only be AGTYPEOID or BOOLOID. If it returns invalidoid, we know there is a
-     * boolean involved.
+     * boolean or record involved.
      */
     ptype = select_common_type(pstate, resultexprs, NULL, NULL);
 
-    /* InvalidOid shows that there is a boolean in the result expr. */
+    /* InvalidOid shows that there is a boolean or record in the result expr. */
     if (ptype == InvalidOid)
     {
-        /* we manually set the type to boolean here to handle the bool casting. */
-        ptype = BOOLOID;
+        /*
+         * If we have record type, we need to cast it to agtype here,
+         * else return boolean
+         */
+        ListCell *lc;
+        bool has_vertex_edge = false;
+
+        foreach(lc, resultexprs)
+        {
+            Node *expr = (Node *) lfirst(lc);
+            Oid exprtype = exprType(expr);
+
+            if (exprtype == VERTEXOID || exprtype == EDGEOID)
+            {
+                has_vertex_edge = true;
+                break;
+            }
+        }
+
+        ptype = has_vertex_edge ? AGTYPEOID : BOOLOID;
     }
 
     Assert(OidIsValid(ptype));
@@ -2432,4 +2684,71 @@ static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink)
         elog(ERROR, "unsupported SubLink type");
 
     return result;
+}
+
+/*
+ * coerce_entity_to_agtype
+ *
+ * If the node is a vertex or edge type, coerce it to agtype.
+ * Returns the coerced node, or the original node if no coercion needed.
+ */
+Node *coerce_entity_to_agtype(ParseState *pstate, Node *node)
+{
+    Oid node_type = exprType(node);
+
+    if (node_type == VERTEXOID || node_type == EDGEOID)
+    {
+        return coerce_to_target_type(pstate, node, node_type,
+                                     AGTYPEOID, -1, COERCION_EXPLICIT,
+                                     COERCE_IMPLICIT_CAST, -1);
+    }
+
+    return node;
+}
+
+/*
+ * coerce_target_entities_to_agtype
+ *
+ * Iterate through a target list and coerce any vertex/edge types to agtype.
+ * Used for terminal clauses (SET, DELETE, CREATE, MERGE) to ensure the
+ * executor receives agtype.
+ */
+void coerce_target_entities_to_agtype(ParseState *pstate, List *target_list)
+{
+    ListCell *lc;
+
+    foreach(lc, target_list)
+    {
+        TargetEntry *te = (TargetEntry *)lfirst(lc);
+        Oid te_type = exprType((Node *)te->expr);
+
+        if (te_type == VERTEXOID || te_type == EDGEOID)
+        {
+            te->expr = (Expr *)coerce_to_target_type(
+                pstate, (Node *)te->expr, te_type,
+                AGTYPEOID, -1, COERCION_EXPLICIT,
+                COERCE_IMPLICIT_CAST, -1);
+        }
+    }
+}
+
+Node *make_properties_expr(Node *prop_var)
+{
+    Node *prop_expr;
+
+    if (is_vertex_or_edge(prop_var))
+    {
+        prop_expr = extract_field_from_record(prop_var, "properties");
+    }
+    else
+    {
+        /* Call age_properties for non-RECORD types */
+        Oid foid = get_ag_func_oid("age_properties", 1, AGTYPEOID);
+        prop_expr = (Node *)makeFuncExpr(foid, AGTYPEOID,
+                                            list_make1(prop_var),
+                                            InvalidOid, InvalidOid,
+                                            COERCE_EXPLICIT_CALL);
+    }
+
+    return prop_expr;
 }
