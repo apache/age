@@ -138,6 +138,21 @@ PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
+# 32-bit platform support: detect SIZEOF_DATUM (override with make SIZEOF_DATUM=4)
+# Only attempt auto-detection if SIZEOF_DATUM was not provided on the command line.
+ifeq ($(origin SIZEOF_DATUM), undefined)
+  SIZEOF_DATUM := $(shell printf '%s\n%s\n' '\#include "pg_config.h"' 'SIZEOF_VOID_P' | \
+      $(CC) -I$(shell $(PG_CONFIG) --includedir-server) -E -x c - 2>/dev/null | grep -E '^[0-9]+$$' | tail -1)
+  ifeq ($(SIZEOF_DATUM),)
+    $(warning Unable to detect SIZEOF_DATUM from pg_config.h; defaulting to 8. Check that PostgreSQL server headers are installed and that pg_config and the compiler are correctly configured.)
+    SIZEOF_DATUM := 8
+  endif
+  ifeq ($(filter 4 8,$(SIZEOF_DATUM)),)
+    $(warning Detected unexpected SIZEOF_DATUM '$(SIZEOF_DATUM)'; expected 4 or 8. Defaulting to 8.)
+    SIZEOF_DATUM := 8
+  endif
+endif
+
 src/backend/parser/cypher_keywords.o: src/include/parser/cypher_kwlist_d.h
 
 src/include/parser/cypher_kwlist_d.h: src/include/parser/cypher_kwlist.h $(GEN_KEYWORDLIST_DEPS)
@@ -152,8 +167,12 @@ src/backend/parser/cypher_parser.bc: src/backend/parser/cypher_gram.c src/includ
 src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 src/backend/parser/cypher_keywords.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 
-$(age_sql):
+# Strip PASSEDBYVALUE on 32-bit (SIZEOF_DATUM=4) for graphid pass-by-reference
+$(age_sql): $(SQLS)
 	@cat $(SQLS) > $@
+ifeq ($(SIZEOF_DATUM),4)
+	@sed 's/^[[:space:]]*PASSEDBYVALUE[[:space:]]*,\?[[:space:]]*$$/ -- PASSEDBYVALUE disabled on 32-bit (replaced at build time; see Makefile SIZEOF_DATUM rule)/' $@ > $@.tmp && mv $@.tmp $@ && grep -q 'PASSEDBYVALUE disabled on 32-bit' $@ || { echo "PASSEDBYVALUE marker not found or not replaced in $@"; exit 1; }
+endif
 
 src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
 
