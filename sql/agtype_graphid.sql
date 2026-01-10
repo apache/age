@@ -44,6 +44,33 @@ CREATE CAST (agtype AS graphid)
 AS IMPLICIT;
 
 --
+-- Composite types for vertex and edge
+--
+CREATE TYPE ag_catalog.vertex AS (
+    id graphid,
+    label agtype,
+    properties agtype
+);
+
+CREATE TYPE ag_catalog.edge AS (
+    id graphid,
+    label agtype,
+    start_id graphid,
+    end_id graphid,
+    properties agtype
+);
+
+--
+-- Label name function
+--
+CREATE FUNCTION ag_catalog._label_name(graph_oid oid, graphid)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+--
 -- agtype - path
 --
 CREATE FUNCTION ag_catalog._agtype_build_path(VARIADIC "any")
@@ -57,7 +84,7 @@ AS 'MODULE_PATHNAME';
 --
 -- agtype - vertex
 --
-CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, cstring, agtype)
+CREATE FUNCTION ag_catalog._agtype_build_vertex(graphid, agtype, agtype)
     RETURNS agtype
     LANGUAGE c
     IMMUTABLE
@@ -69,13 +96,65 @@ AS 'MODULE_PATHNAME';
 -- agtype - edge
 --
 CREATE FUNCTION ag_catalog._agtype_build_edge(graphid, graphid, graphid,
-                                              cstring, agtype)
+                                              agtype, agtype)
     RETURNS agtype
     LANGUAGE c
     IMMUTABLE
 CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
+
+--
+-- vertex/edge to agtype cast functions
+--
+CREATE FUNCTION ag_catalog.vertex_to_agtype(vertex)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.edge_to_agtype(edge)
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+--
+-- Implicit casts from vertex/edge to agtype
+--
+CREATE CAST (vertex AS agtype)
+    WITH FUNCTION ag_catalog.vertex_to_agtype(vertex)
+AS IMPLICIT;
+
+CREATE CAST (edge AS agtype)
+    WITH FUNCTION ag_catalog.edge_to_agtype(edge)
+AS IMPLICIT;
+
+CREATE FUNCTION ag_catalog.vertex_to_json(vertex)
+    RETURNS json
+    LANGUAGE sql
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS $$ SELECT ag_catalog.agtype_to_json(ag_catalog.vertex_to_agtype($1)) $$;
+
+CREATE FUNCTION ag_catalog.edge_to_json(edge)
+    RETURNS json
+    LANGUAGE sql
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS $$ SELECT ag_catalog.agtype_to_json(ag_catalog.edge_to_agtype($1)) $$;
+
+CREATE CAST (vertex AS json)
+    WITH FUNCTION ag_catalog.vertex_to_json(vertex);
+
+CREATE CAST (edge AS json)
+    WITH FUNCTION ag_catalog.edge_to_json(edge);
 
 CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness2(graphid, graphid)
     RETURNS bool

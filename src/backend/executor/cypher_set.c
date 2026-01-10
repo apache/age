@@ -23,6 +23,7 @@
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/agtype.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -513,7 +514,7 @@ static void process_update_list(CustomScanState *node)
         if (original_entity_value->type == AGTV_VERTEX)
         {
             new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
-                                     CStringGetDatum(label_name),
+                                     string_to_agtype(label_name),
                                      AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
 
             slot = populate_vertex_tts(slot, id, altered_properties);
@@ -526,7 +527,7 @@ static void process_update_list(CustomScanState *node)
             new_entity = make_edge(GRAPHID_GET_DATUM(id->val.int_value),
                                    GRAPHID_GET_DATUM(startid->val.int_value),
                                    GRAPHID_GET_DATUM(endid->val.int_value),
-                                   CStringGetDatum(label_name),
+                                   string_to_agtype(label_name),
                                    AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
 
             slot = populate_edge_tts(slot, id, startid, endid,
