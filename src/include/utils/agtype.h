@@ -323,6 +323,51 @@ enum agtype_value_type
 };
 
 /*
+ * Direct field access indices for vertex and edge objects.
+ *
+ * Vertex and edge objects are serialized with keys sorted by length first,
+ * then lexicographically (via uniqueify_agtype_object). This means field
+ * positions are deterministic and can be accessed directly without binary
+ * search, providing O(1) access instead of O(log n).
+ *
+ * Vertex keys by length: "id"(2), "label"(5), "properties"(10)
+ * Edge keys by length: "id"(2), "label"(5), "end_id"(6), "start_id"(8), "properties"(10)
+ */
+#define VERTEX_FIELD_ID         0
+#define VERTEX_FIELD_LABEL      1
+#define VERTEX_FIELD_PROPERTIES 2
+#define VERTEX_NUM_FIELDS       3
+
+#define EDGE_FIELD_ID           0
+#define EDGE_FIELD_LABEL        1
+#define EDGE_FIELD_END_ID       2
+#define EDGE_FIELD_START_ID     3
+#define EDGE_FIELD_PROPERTIES   4
+#define EDGE_NUM_FIELDS         5
+
+/*
+ * Macros for direct field access from vertex/edge agtype_value objects.
+ * These avoid the binary search overhead of GET_AGTYPE_VALUE_OBJECT_VALUE.
+ */
+#define AGTYPE_VERTEX_GET_ID(v) \
+    (&(v)->val.object.pairs[VERTEX_FIELD_ID].value)
+#define AGTYPE_VERTEX_GET_LABEL(v) \
+    (&(v)->val.object.pairs[VERTEX_FIELD_LABEL].value)
+#define AGTYPE_VERTEX_GET_PROPERTIES(v) \
+    (&(v)->val.object.pairs[VERTEX_FIELD_PROPERTIES].value)
+
+#define AGTYPE_EDGE_GET_ID(e) \
+    (&(e)->val.object.pairs[EDGE_FIELD_ID].value)
+#define AGTYPE_EDGE_GET_LABEL(e) \
+    (&(e)->val.object.pairs[EDGE_FIELD_LABEL].value)
+#define AGTYPE_EDGE_GET_END_ID(e) \
+    (&(e)->val.object.pairs[EDGE_FIELD_END_ID].value)
+#define AGTYPE_EDGE_GET_START_ID(e) \
+    (&(e)->val.object.pairs[EDGE_FIELD_START_ID].value)
+#define AGTYPE_EDGE_GET_PROPERTIES(e) \
+    (&(e)->val.object.pairs[EDGE_FIELD_PROPERTIES].value)
+
+/*
  * agtype_value: In-memory representation of agtype.  This is a convenient
  * deserialized representation, that can easily support using the "val"
  * union across underlying types during manipulation.  The agtype on-disk
