@@ -166,6 +166,17 @@ char *get_label_seq_relation_name(const char *label_name)
     return psprintf("%s_id_seq", label_name);
 }
 
+char *get_label_name(int32 label_id, Oid graph_oid)
+{
+    label_cache_data *cache_data;
+
+    cache_data = search_label_graph_oid_cache(graph_oid, label_id);
+    if (cache_data)
+        return NameStr(cache_data->name);
+    else
+        return NULL;
+}
+
 PG_FUNCTION_INFO_V1(_label_name);
 
 /*
@@ -175,9 +186,9 @@ PG_FUNCTION_INFO_V1(_label_name);
 Datum _label_name(PG_FUNCTION_ARGS)
 {
     char *label_name;
-    label_cache_data *label_cache;
     Oid graph;
     uint32 label_id;
+    agtype *result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -186,7 +197,7 @@ Datum _label_name(PG_FUNCTION_ARGS)
     }
 
     graph = PG_GETARG_OID(0);
-    
+
     /* Check if the graph OID is valid */
     if (!graph_namespace_exists(graph))
     {
@@ -194,11 +205,8 @@ Datum _label_name(PG_FUNCTION_ARGS)
                         errmsg("graph with oid %u does not exist", graph)));
     }
 
-    label_id = (int32)(((uint64)AG_GETARG_GRAPHID(1)) >> ENTRY_ID_BITS);
-
-    label_cache = search_label_graph_oid_cache(graph, label_id);
-
-    label_name = NameStr(label_cache->name);
+    label_id = get_graphid_label_id(AG_GETARG_GRAPHID(1));
+    label_name = get_label_name(label_id, graph);
 
     /* If label_name is not found, error out */
     if (label_name == NULL)
@@ -208,10 +216,17 @@ Datum _label_name(PG_FUNCTION_ARGS)
                                label_id, graph)));
     }
 
+    /* Convert cstring to agtype string */
     if (IS_AG_DEFAULT_LABEL(label_name))
-        PG_RETURN_CSTRING("");
+    {
+        result = DATUM_GET_AGTYPE_P(string_to_agtype(""));
+    }
+    else
+    {
+        result = DATUM_GET_AGTYPE_P(string_to_agtype(label_name));
+    }
 
-    PG_RETURN_CSTRING(label_name);
+    PG_RETURN_POINTER(result);
 }
 
 PG_FUNCTION_INFO_V1(_label_id);

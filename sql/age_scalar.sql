@@ -93,6 +93,15 @@ RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- Helper function for optimized startNode/endNode
+CREATE FUNCTION ag_catalog._get_vertex_by_graphid(text, graphid)
+    RETURNS agtype
+    LANGUAGE c
+    STABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.age_length(agtype)
     RETURNS agtype
     LANGUAGE c

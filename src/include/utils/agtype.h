@@ -565,4 +565,11 @@ void clear_global_Oids_AGTYPE(void);
 #define AGTYPEOID get_AGTYPEOID()
 #define AGTYPEARRAYOID get_AGTYPEARRAYOID()
 
+/* Oid accessors for vertex and edge composite types */
+Oid get_VERTEXOID(void);
+Oid get_EDGEOID(void);
+void clear_global_Oids_VERTEX_EDGE(void);
+#define VERTEXOID get_VERTEXOID()
+#define EDGEOID get_EDGEOID()
+
 #endif
