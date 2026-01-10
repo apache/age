@@ -50,6 +50,10 @@ github:
       required_pull_request_reviews:
         required_approving_review_count: 1
 
+    PG18:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+
     PG17:
       required_pull_request_reviews:
         required_approving_review_count: 1
