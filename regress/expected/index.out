@@ -626,6 +626,19 @@ $$) as (name agtype);
  "Tijuana"
 (6 rows)
 
+-- EXPLAIN for pattern with WHERE clause
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.country_code = 'US' AND a.west_coast = true
+    RETURN a
+$$) as (plan agtype);
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Index Scan using city_west_coast_idx on "City" a
+   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"west_coast"'::agtype]) = 'true'::agtype)
+   Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"country_code"'::agtype]) = '"US"'::agtype)
+(3 rows)
+
 -- Test WHERE with multiple conditions (AND)
 SELECT * FROM cypher('cypher_index', $$
     MATCH (a:City)
@@ -699,6 +712,27 @@ $$) as (name agtype);
 ----------
  "Mexico"
 (1 row)
+
+-- EXPLAIN for pattern with filters on both country and city
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (country:Country)<-[:has_city]-(city:City)
+    WHERE country.country_code = 'CA' AND city.west_coast = true
+    RETURN city.name
+$$) as (plan agtype);
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Nested Loop
+         ->  Index Scan using city_west_coast_idx on "City" city
+               Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"west_coast"'::agtype]) = 'true'::agtype)
+         ->  Bitmap Heap Scan on has_city _age_default_alias_0
+               Recheck Cond: (start_id = city.id)
+               ->  Bitmap Index Scan on has_city_start_id_idx
+                     Index Cond: (start_id = city.id)
+   ->  Index Scan using "Country_pkey" on "Country" country
+         Index Cond: (id = _age_default_alias_0.end_id)
+         Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"country_code"'::agtype]) = '"CA"'::agtype)
+(11 rows)
 
 -- Test WHERE in combination with pattern matching
 SELECT * FROM cypher('cypher_index', $$
