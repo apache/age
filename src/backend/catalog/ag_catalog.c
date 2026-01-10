@@ -160,6 +160,7 @@ static void drop_age_extension(DropStmt *stmt)
     /* reset global variables for OIDs */
     clear_global_Oids_AGTYPE();
     clear_global_Oids_GRAPHID();
+    clear_global_Oids_VERTEX_EDGE();
 }
 
 /* Check to see if the Utility Command is to drop the AGE Extension. */
