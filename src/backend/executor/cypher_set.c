@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "storage/bufmgr.h"
 
 #include "executor/cypher_executor.h"
@@ -102,6 +103,7 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
     TM_Result   result;
     CommandId cid = GetCurrentCommandId(true);
     ResultRelInfo **saved_resultRels = estate->es_result_relations;
+    bool close_indices = false;
 
     estate->es_result_relations = &resultRelInfo;
 
@@ -113,7 +115,16 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
     if (lock_result == TM_Ok)
     {
-        ExecOpenIndices(resultRelInfo, false);
+        /*
+         * Open indices if not already open. The resultRelInfo may already
+         * have indices opened by the caller (e.g., create_entity_result_rel_info),
+         * so only open if needed and track that we did so for cleanup.
+         */
+        if (resultRelInfo->ri_IndexRelationDescs == NULL)
+        {
+            ExecOpenIndices(resultRelInfo, false);
+            close_indices = true;
+        }
         ExecStoreVirtualTuple(elemTupleSlot);
         tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
         tuple->t_self = old_tuple->t_self;
@@ -141,7 +152,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                          errmsg("tuple to be updated was already modified")));
             }
 
-            ExecCloseIndices(resultRelInfo);
+            if (close_indices)
+            {
+                ExecCloseIndices(resultRelInfo);
+            }
             estate->es_result_relations = saved_resultRels;
 
             return tuple;
@@ -160,7 +174,10 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                 (update_indexes == TU_Summarizing));
         }
 
-        ExecCloseIndices(resultRelInfo);
+        if (close_indices)
+        {
+            ExecCloseIndices(resultRelInfo);
+        }
     }
     else if (lock_result == TM_SelfModified)
     {
@@ -310,7 +327,7 @@ static void update_all_paths(CustomScanState *node, graphid id,
         agtype_value *original_entity_value;
 
         /* skip nulls */
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[i].atttypid != AGTYPEOID)
+        if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, i)->atttypid != AGTYPEOID)
         {
             continue;
         }
@@ -414,7 +431,7 @@ static void process_update_list(CustomScanState *node)
             continue;
         }
 
-        if (scanTupleSlot->tts_tupleDescriptor->attrs[update_item->entity_position -1].atttypid != AGTYPEOID)
+        if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, update_item->entity_position -1)->atttypid != AGTYPEOID)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -588,7 +605,7 @@ static void process_update_list(CustomScanState *node)
         }
 
         estate->es_snapshot->curcid = cid;
-        /* close relation */
+        /* close relation */        
         ExecCloseIndices(resultRelInfo);
         table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
