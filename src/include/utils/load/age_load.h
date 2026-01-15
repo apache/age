@@ -17,6 +17,10 @@
  * under the License.
  */
 
+#ifndef AG_LOAD_H
+#define AG_LOAD_H
+
+#include "access/heapam.h"
 #include "commands/sequence.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -27,10 +31,8 @@
 #include "commands/graph_commands.h"
 #include "utils/ag_cache.h"
 
-#ifndef AGE_ENTITY_CREATOR_H
-#define AGE_ENTITY_CREATOR_H
-
 #define BATCH_SIZE 1000
+#define MAX_BUFFERED_BYTES 65535  /* 64KB, same as pg COPY */
 
 typedef struct batch_insert_state
 {
@@ -38,26 +40,29 @@ typedef struct batch_insert_state
     ResultRelInfo *resultRelInfo;
     TupleTableSlot **slots;
     int num_tuples;
-    int max_tuples;
+    size_t buffered_bytes;
+    BulkInsertState bistate;
 } batch_insert_state;
 
-agtype* create_empty_agtype(void);
-
-agtype* create_agtype_from_list(char **header, char **fields,
+agtype *create_empty_agtype(void);
+agtype *create_agtype_from_list(char **header, char **fields,
                                 size_t fields_len, int64 vertex_id,
                                 bool load_as_agtype);
-agtype* create_agtype_from_list_i(char **header, char **fields,
+agtype *create_agtype_from_list_i(char **header, char **fields,
                                   size_t fields_len, size_t start_index,
                                   bool load_as_agtype);
+
 void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
                           agtype *vertex_properties);
 void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
-                        agtype* end_properties);
-void insert_batch(batch_insert_state *batch_state);
+                        agtype *edge_properties);
 
 void init_batch_insert(batch_insert_state **batch_state,
                        char *label_name, Oid graph_oid);
+void insert_batch(batch_insert_state *batch_state);
 void finish_batch_insert(batch_insert_state **batch_state);
 
-#endif /* AGE_ENTITY_CREATOR_H */
+char *trim_whitespace(const char *str);
+
+#endif /* AG_LOAD_H */
