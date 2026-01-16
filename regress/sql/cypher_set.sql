@@ -380,6 +380,169 @@ SELECT * FROM cypher('issue_1634', $$ MERGE (v:PERSION {id: '1'})
 SELECT * FROM cypher('issue_1634', $$ MATCH (u) DELETE (u) $$) AS (u agtype);
 
 --
+-- Issue 1884: column reference is ambiguous when using same variable in
+--             SET expression and RETURN clause
+--
+-- These tests cover:
+-- 1. "column reference is ambiguous" error when variable is used in both
+--    SET expression RHS (e.g., SET n.prop = n) and RETURN clause
+-- 2. "Invalid AGT header value" error caused by incorrect offset calculation
+--    when nested VERTEX/EDGE/PATH values are serialized in properties
+--
+-- Tests use isolated data to keep output manageable and avoid cumulative nesting
+--
+SELECT * FROM create_graph('issue_1884');
+
+-- ============================================================================
+-- Test Group A: Basic "column reference is ambiguous" fix (Issue 1884)
+-- ============================================================================
+
+-- Test A1: Core issue - SET n.prop = n with RETURN n (the original bug)
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestA1 {name: 'A1'})
+    SET n.self = n
+    RETURN n
+$$) AS (result agtype);
+
+-- Test A2: Multiple variables in SET and RETURN
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (a:TestA2 {name: 'A'})-[e:LINK {w: 1}]->(b:TestA2 {name: 'B'})
+    SET a.edge = e, b.edge = e
+    RETURN a, e, b
+$$) AS (a agtype, e agtype, b agtype);
+
+-- Test A3: SET edge property to node reference
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (a:TestA3 {name: 'X'})-[e:REL]->(b:TestA3 {name: 'Y'})
+    SET e.src = a, e.dst = b
+    RETURN e
+$$) AS (e agtype);
+
+-- ============================================================================
+-- Test Group B: Nested VERTEX/EDGE/PATH serialization (offset error fix)
+-- ============================================================================
+
+-- Test B1: Vertex nested in vertex property (tests VERTEX serialization)
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestB1 {val: 1})
+    SET n.copy = n
+    RETURN n
+$$) AS (result agtype);
+
+-- Verify nested vertex can be read back
+SELECT * FROM cypher('issue_1884', $$
+    MATCH (n:TestB1)
+    RETURN n.copy
+$$) AS (copy agtype);
+
+-- Test B2: Edge nested in node property (tests EDGE serialization)
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (a:TestB2 {name: 'start'})-[e:B2REL {x: 100}]->(b:TestB2 {name: 'end'})
+    SET a.myEdge = e
+    RETURN a
+$$) AS (a agtype);
+
+-- Verify nested edge can be read back
+SELECT * FROM cypher('issue_1884', $$
+    MATCH (n:TestB2 {name: 'start'})
+    RETURN n.myEdge
+$$) AS (edge agtype);
+
+-- Test B3: Path nested in node property (tests PATH serialization)
+-- First create the pattern
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (a:TestB3)-[e:B3REL]->(b:TestB3)
+    RETURN a
+$$) AS (a agtype);
+
+-- Then match the path and set it (MATCH only sees committed data)
+SELECT * FROM cypher('issue_1884', $$
+    MATCH p = (a:TestB3)-[e:B3REL]->(b:TestB3)
+    SET a.myPath = p
+    RETURN a
+$$) AS (a agtype);
+
+-- Verify nested path can be read back
+SELECT * FROM cypher('issue_1884', $$
+    MATCH (n:TestB3)
+    WHERE n.myPath IS NOT NULL
+    RETURN n.myPath
+$$) AS (path agtype);
+
+-- ============================================================================
+-- Test Group C: Nested structures in arrays and maps
+-- ============================================================================
+
+-- Test C1: Vertex in array
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestC1 {tag: 'arrtest'})
+    SET n.arr = [n]
+    RETURN n
+$$) AS (result agtype);
+
+-- Verify array with nested vertex
+SELECT * FROM cypher('issue_1884', $$
+    MATCH (n:TestC1)
+    RETURN n.arr[0]
+$$) AS (elem agtype);
+
+-- Test C2: Vertex in map
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestC2 {tag: 'maptest'})
+    SET n.obj = {node: n}
+    RETURN n
+$$) AS (result agtype);
+
+-- Verify map with nested vertex
+SELECT * FROM cypher('issue_1884', $$
+    MATCH (n:TestC2)
+    RETURN n.obj.node
+$$) AS (node agtype);
+
+-- ============================================================================
+-- Test Group D: MERGE and CREATE with self-reference
+-- ============================================================================
+
+-- Test D1: MERGE with SET self-reference
+SELECT * FROM cypher('issue_1884', $$
+    MERGE (n:TestD1 {name: 'merged'})
+    SET n.ref = n
+    RETURN n
+$$) AS (result agtype);
+
+-- Test D2: CREATE with SET self-reference
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestD2 {name: 'created'})
+    SET n.ref = n
+    RETURN n
+$$) AS (result agtype);
+
+-- ============================================================================
+-- Test Group E: Functions with variable references
+-- ============================================================================
+
+-- Test E1: id() and label() functions
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (n:TestE1 {name: 'functest'})
+    SET n.myId = id(n), n.myLabel = label(n)
+    RETURN n
+$$) AS (result agtype);
+
+-- Test E2: nodes() and relationships() with path
+-- First create the pattern
+SELECT * FROM cypher('issue_1884', $$
+    CREATE (a:TestE2)-[e:E2REL]->(b:TestE2)
+    RETURN a
+$$) AS (a agtype);
+
+-- Then match the path and extract nodes/relationships (MATCH only sees committed data)
+SELECT * FROM cypher('issue_1884', $$
+    MATCH p = (a:TestE2)-[e:E2REL]->(b:TestE2)
+    SET a.pathNodes = nodes(p), a.pathRels = relationships(p)
+    RETURN a
+$$) AS (a agtype);
+
+--
 -- Clean up
 --
 DROP TABLE tbl;
@@ -387,6 +550,7 @@ DROP FUNCTION set_test;
 SELECT drop_graph('cypher_set', true);
 SELECT drop_graph('cypher_set_1', true);
 SELECT drop_graph('issue_1634', true);
+SELECT drop_graph('issue_1884', true);
 
 --
 -- End
