@@ -89,7 +89,7 @@ bool ag_serialize_extended_type(StringInfo buffer, agtentry *agtentry,
         object_ae += pad_buffer_to_int(buffer);
 
         *agtentry = AGTENTRY_IS_AGTYPE |
-                    ((AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
+                    (padlen + (AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
         break;
     }
 
@@ -109,7 +109,7 @@ bool ag_serialize_extended_type(StringInfo buffer, agtentry *agtentry,
         object_ae += pad_buffer_to_int(buffer);
 
         *agtentry = AGTENTRY_IS_AGTYPE |
-                    ((AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
+                    (padlen + (AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
         break;
     }
 
@@ -129,7 +129,7 @@ bool ag_serialize_extended_type(StringInfo buffer, agtentry *agtentry,
         object_ae += pad_buffer_to_int(buffer);
 
         *agtentry = AGTENTRY_IS_AGTYPE |
-                    ((AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
+                    (padlen + (AGTENTRY_OFFLENMASK & (int)object_ae) + AGT_HEADER_SIZE);
         break;
     }
 
@@ -175,7 +175,7 @@ void ag_deserialize_extended_type(char *base_addr, uint32 offset,
         break;
 
     default:
-        elog(ERROR, "Invalid AGT header value.");
+        ereport(ERROR, (errmsg("Invalid AGT header value: 0x%08x", agt_header)));
     }
 }
 

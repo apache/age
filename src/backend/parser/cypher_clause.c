@@ -71,6 +71,7 @@
 #define AGE_VARNAME_MERGE_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"merge_clause"
 #define AGE_VARNAME_ID AGE_DEFAULT_VARNAME_PREFIX"id"
 #define AGE_VARNAME_SET_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"set_clause"
+#define AGE_VARNAME_SET_VALUE AGE_DEFAULT_VARNAME_PREFIX"set_value"
 
 /*
  * In the transformation stage, we need to track
@@ -1911,10 +1912,24 @@ cypher_update_information *transform_cypher_set_item_list(
             ((cypher_map*)set_item->expr)->keep_null = set_item->is_add;
         }
 
-        /* create target entry for the new property value */
+        /*
+         * Create target entry for the new property value.
+         *
+         * We use a hidden variable name (AGE_VARNAME_SET_VALUE) for the
+         * SET expression value to prevent column name conflicts. This is
+         * necessary when the same variable is used on both the LHS and RHS
+         * of a SET clause (e.g., SET n.prop = n). Without this, the column
+         * name derived from the expression (e.g., "n") would duplicate the
+         * existing column name from the MATCH clause, causing a "column
+         * reference is ambiguous" error in subsequent clauses like RETURN.
+         *
+         * The hidden variable name will be filtered out by expand_pnsi_attrs
+         * when the targetlist is expanded for subsequent clauses.
+         */
         item->prop_position = (AttrNumber)pstate->p_next_resno;
         target_item = transform_cypher_item(cpstate, set_item->expr, NULL,
-                                            EXPR_KIND_SELECT_TARGET, NULL,
+                                            EXPR_KIND_SELECT_TARGET,
+                                            AGE_VARNAME_SET_VALUE,
                                             false);
 
         if (nodeTag(target_item->expr) == T_Aggref)
