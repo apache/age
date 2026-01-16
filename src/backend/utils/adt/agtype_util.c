@@ -42,6 +42,14 @@
 #include "utils/agtype_ext.h"
 
 /*
+ * Extended type header macros - must match definitions in agtype_ext.c.
+ * These are used for deserializing extended agtype values (INTEGER, FLOAT,
+ * VERTEX, EDGE, PATH) from their binary representation.
+ */
+#define AGT_HEADER_TYPE uint32
+#define AGT_HEADER_SIZE sizeof(AGT_HEADER_TYPE)
+
+/*
  * Maximum number of elements in an array (or key/value pairs in an object).
  * This is limited by two things: the size of the agtentry array must fit
  * in MaxAllocSize, and the number of elements (or pairs) must fit in the bits
@@ -56,6 +64,11 @@
 static void fill_agtype_value(agtype_container *container, int index,
                               char *base_addr, uint32 offset,
                               agtype_value *result);
+static void fill_agtype_value_no_copy(agtype_container *container, int index,
+                                      char *base_addr, uint32 offset,
+                                      agtype_value *result);
+static int compare_agtype_scalar_containers(agtype_container *a,
+                                            agtype_container *b);
 static bool equals_agtype_scalar_value(agtype_value *a, agtype_value *b);
 static agtype *convert_to_agtype(agtype_value *val);
 static void convert_agtype_value(StringInfo buffer, agtentry *header,
@@ -263,6 +276,24 @@ int compare_agtype_containers_orderability(agtype_container *a,
     agtype_iterator *ita;
     agtype_iterator *itb;
     int res = 0;
+
+    /*
+     * Fast path optimization for scalar values.
+     *
+     * The most common case in ORDER BY and comparison operations is comparing
+     * scalar values (integers, strings, floats, etc.). For these cases, we can
+     * avoid the overhead of the full iterator machinery by directly extracting
+     * and comparing the scalar values.
+     *
+     * This provides significant performance improvement because:
+     * 1. We avoid allocating two agtype_iterator structures
+     * 2. We avoid the iterator state machine overhead
+     * 3. We use no-copy extraction where possible
+     */
+    if (AGTYPE_CONTAINER_IS_SCALAR(a) && AGTYPE_CONTAINER_IS_SCALAR(b))
+    {
+        return compare_agtype_scalar_containers(a, b);
+    }
 
     ita = agtype_iterator_init(a);
     itb = agtype_iterator_init(b);
@@ -749,6 +780,173 @@ static void fill_agtype_value(agtype_container *container, int index,
         result->val.binary.len = get_agtype_length(container, index) -
                                  (INTALIGN(offset) - offset);
     }
+}
+
+/*
+ * A helper function to fill in an agtype_value WITHOUT making deep copies.
+ * This is used for read-only comparison operations where the agtype_value
+ * will not outlive the container data. The caller MUST NOT free the
+ * agtype_value content or use it after the container is freed.
+ *
+ * This function provides significant performance improvements for comparison
+ * operations by avoiding palloc/memcpy for strings and numerics.
+ *
+ * Note: For AGTV_STRING, val.string.val points directly into container data.
+ * Note: For AGTV_NUMERIC, val.numeric points directly into container data.
+ * Note: Extended types (VERTEX, EDGE, PATH) still require deserialization,
+ *       so they use the standard fill_agtype_value path.
+ */
+static void fill_agtype_value_no_copy(agtype_container *container, int index,
+                                      char *base_addr, uint32 offset,
+                                      agtype_value *result)
+{
+    agtentry entry = container->children[index];
+
+    if (AGTE_IS_NULL(entry))
+    {
+        result->type = AGTV_NULL;
+    }
+    else if (AGTE_IS_STRING(entry))
+    {
+        result->type = AGTV_STRING;
+        /* Point directly into the container data - no copy */
+        result->val.string.val = base_addr + offset;
+        result->val.string.len = get_agtype_length(container, index);
+    }
+    else if (AGTE_IS_NUMERIC(entry))
+    {
+        result->type = AGTV_NUMERIC;
+        /* Point directly into the container data - no copy */
+        result->val.numeric = (Numeric)(base_addr + INTALIGN(offset));
+    }
+    else if (AGTE_IS_AGTYPE(entry))
+    {
+        /*
+         * For extended types (INTEGER, FLOAT, VERTEX, EDGE, PATH), we need
+         * to deserialize. INTEGER and FLOAT don't allocate, but composite
+         * types (VERTEX, EDGE, PATH) do. For simple scalar comparisons,
+         * we handle INTEGER and FLOAT directly here.
+         */
+        char *base = base_addr + INTALIGN(offset);
+        AGT_HEADER_TYPE agt_header = *((AGT_HEADER_TYPE *)base);
+
+        switch (agt_header)
+        {
+        case AGT_HEADER_INTEGER:
+            result->type = AGTV_INTEGER;
+            result->val.int_value = *((int64 *)(base + AGT_HEADER_SIZE));
+            break;
+
+        case AGT_HEADER_FLOAT:
+            result->type = AGTV_FLOAT;
+            result->val.float_value = *((float8 *)(base + AGT_HEADER_SIZE));
+            break;
+
+        default:
+            /*
+             * For VERTEX, EDGE, PATH - use standard deserialization.
+             * These are composite types that require full parsing.
+             */
+            ag_deserialize_extended_type(base_addr, offset, result);
+            break;
+        }
+    }
+    else if (AGTE_IS_BOOL_TRUE(entry))
+    {
+        result->type = AGTV_BOOL;
+        result->val.boolean = true;
+    }
+    else if (AGTE_IS_BOOL_FALSE(entry))
+    {
+        result->type = AGTV_BOOL;
+        result->val.boolean = false;
+    }
+    else
+    {
+        Assert(AGTE_IS_CONTAINER(entry));
+        result->type = AGTV_BINARY;
+        /* Remove alignment padding from data pointer and length */
+        result->val.binary.data =
+            (agtype_container *)(base_addr + INTALIGN(offset));
+        result->val.binary.len = get_agtype_length(container, index) -
+                                 (INTALIGN(offset) - offset);
+    }
+}
+
+/*
+ * Fast path comparison for scalar agtype containers.
+ *
+ * This function compares two scalar containers directly without the overhead
+ * of the full iterator machinery. It extracts the scalar values using no-copy
+ * fill and compares them directly.
+ *
+ * Returns: negative if a < b, 0 if a == b, positive if a > b
+ */
+static int compare_agtype_scalar_containers(agtype_container *a,
+                                            agtype_container *b)
+{
+    agtype_value va;
+    agtype_value vb;
+    char *base_addr_a;
+    char *base_addr_b;
+    int result;
+    bool need_free_a = false;
+    bool need_free_b = false;
+
+    Assert(AGTYPE_CONTAINER_IS_SCALAR(a));
+    Assert(AGTYPE_CONTAINER_IS_SCALAR(b));
+
+    /* Scalars are stored as single-element arrays */
+    base_addr_a = (char *)&a->children[1];
+    base_addr_b = (char *)&b->children[1];
+
+    /* Use no-copy fill to avoid allocations for simple types */
+    fill_agtype_value_no_copy(a, 0, base_addr_a, 0, &va);
+    fill_agtype_value_no_copy(b, 0, base_addr_b, 0, &vb);
+
+    /*
+     * Check if we need to free the values after comparison.
+     * Only VERTEX, EDGE, and PATH types allocate memory in no-copy mode.
+     */
+    if (va.type == AGTV_VERTEX || va.type == AGTV_EDGE || va.type == AGTV_PATH)
+    {
+        need_free_a = true;
+    }
+    if (vb.type == AGTV_VERTEX || vb.type == AGTV_EDGE || vb.type == AGTV_PATH)
+    {
+        need_free_b = true;
+    }
+
+    /*
+     * Compare the scalar values. If types match or are numeric compatible,
+     * use scalar comparison. Otherwise, use type-based ordering.
+     */
+    if ((va.type == vb.type) ||
+        ((va.type == AGTV_INTEGER || va.type == AGTV_FLOAT ||
+          va.type == AGTV_NUMERIC) &&
+         (vb.type == AGTV_INTEGER || vb.type == AGTV_FLOAT ||
+          vb.type == AGTV_NUMERIC)))
+    {
+        result = compare_agtype_scalar_values(&va, &vb);
+    }
+    else
+    {
+        /* Type-defined order */
+        result = (get_type_sort_priority(va.type) <
+                  get_type_sort_priority(vb.type)) ? -1 : 1;
+    }
+
+    /* Free any allocated memory from composite types */
+    if (need_free_a)
+    {
+        pfree_agtype_value_content(&va);
+    }
+    if (need_free_b)
+    {
+        pfree_agtype_value_content(&vb);
+    }
+
+    return result;
 }
 
 /*
@@ -1597,7 +1795,8 @@ void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
     case AGTV_VERTEX:
     {
         graphid id;
-        agtype_value *id_agt = GET_AGTYPE_VALUE_OBJECT_VALUE(scalar_val, "id");
+        agtype_value *id_agt;
+        id_agt = AGTYPE_VERTEX_GET_ID(scalar_val);
         id = id_agt->val.int_value;
         tmp = DatumGetUInt64(DirectFunctionCall2(
             hashint8extended, Float8GetDatum(id), UInt64GetDatum(seed)));
@@ -1606,7 +1805,8 @@ void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
     case AGTV_EDGE:
     {
         graphid id;
-        agtype_value *id_agt = GET_AGTYPE_VALUE_OBJECT_VALUE(scalar_val, "id");
+        agtype_value *id_agt;
+        id_agt = AGTYPE_EDGE_GET_ID(scalar_val);
         id = id_agt->val.int_value;
         tmp = DatumGetUInt64(DirectFunctionCall2(
             hashint8extended, Float8GetDatum(id), UInt64GetDatum(seed)));
@@ -1704,8 +1904,8 @@ static bool equals_agtype_scalar_value(agtype_value *a, agtype_value *b)
         case AGTV_VERTEX:
         {
             graphid a_graphid, b_graphid;
-            a_graphid = a->val.object.pairs[0].value.val.int_value;
-            b_graphid = b->val.object.pairs[0].value.val.int_value;
+            a_graphid = AGTYPE_VERTEX_GET_ID(a)->val.int_value;
+            b_graphid = AGTYPE_VERTEX_GET_ID(b)->val.int_value;
 
             return a_graphid == b_graphid;
         }
@@ -1790,16 +1990,33 @@ int compare_agtype_scalar_values(agtype_value *a, agtype_value *b)
             return compare_two_floats_orderability(a->val.float_value,
                                                    b->val.float_value);
         case AGTV_VERTEX:
-        case AGTV_EDGE:
         {
-            agtype_value *a_id, *b_id;
             graphid a_graphid, b_graphid;
 
-            a_id = GET_AGTYPE_VALUE_OBJECT_VALUE(a, "id");
-            b_id = GET_AGTYPE_VALUE_OBJECT_VALUE(b, "id");
+            /* Direct field access optimization using macros defined in agtype.h. */
+            a_graphid = AGTYPE_VERTEX_GET_ID(a)->val.int_value;
+            b_graphid = AGTYPE_VERTEX_GET_ID(b)->val.int_value;
 
-            a_graphid = a_id->val.int_value;
-            b_graphid = b_id->val.int_value;
+            if (a_graphid == b_graphid)
+            {
+                return 0;
+            }
+            else if (a_graphid > b_graphid)
+            {
+                return 1;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+        case AGTV_EDGE:
+        {
+            graphid a_graphid, b_graphid;
+
+            /* Direct field access optimization using macros defined in agtype.h. */
+            a_graphid = AGTYPE_EDGE_GET_ID(a)->val.int_value;
+            b_graphid = AGTYPE_EDGE_GET_ID(b)->val.int_value;
 
             if (a_graphid == b_graphid)
             {

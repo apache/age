@@ -112,7 +112,8 @@ REGRESS = scan \
           name_validation \
           jsonb_operators \
           list_comprehension \
-          map_projection
+          map_projection \
+          direct_field_access
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)
