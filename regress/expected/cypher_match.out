@@ -3534,6 +3534,259 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 (2 rows)
 
 --
+-- Test: WHERE clause id(), start_id(), end_id() optimizations in current clause
+-- These tests verify that id/start_id/end_id calls in WHERE clauses use direct
+-- column access (raw graphid) instead of rebuilding the full vertex/edge.
+-- This allows PostgreSQL to use indexes on graphid columns.
+--
+SELECT create_graph('test_where_opt');
+NOTICE:  graph "test_where_opt" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Create test data
+SELECT * FROM cypher('test_where_opt', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS {since: 2020}]->(:Person {name: 'Bob'})
+$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- Test 1: WHERE with id(vertex) in current clause - uses raw graphid column
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (name agtype);
+  name   
+---------
+ "Alice"
+ "Bob"
+(2 rows)
+
+-- Test 2: EXPLAIN to verify optimization (raw graphid instead of age_id)
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (plan agtype);
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on test_where_opt."Person" p
+   Output: agtype_access_operator(VARIADIC ARRAY[_agtype_build_vertex(p.id, _label_name('20398'::oid, p.id), p.properties), '"name"'::agtype])
+   Recheck Cond: (p.id > '0'::graphid)
+   ->  Bitmap Index Scan on "Person_pkey"
+         Index Cond: (p.id > '0'::graphid)
+(5 rows)
+
+-- Test 3: WHERE with id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  | name2 
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+-- Test 4: WHERE with start_id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE start_id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  | name2 
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+-- Test 5: WHERE with end_id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE end_id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  | name2 
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+-- Test 6: EXPLAIN to verify edge optimization (all three: id, start_id, end_id)
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(e) > 0 AND start_id(e) > 0 AND end_id(e) > 0
+    RETURN p.name
+$$) as (plan agtype);
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Output: agtype_access_operator(VARIADIC ARRAY[_agtype_build_vertex(p.id, _label_name('20398'::oid, p.id), p.properties), '"name"'::agtype])
+   Hash Cond: (q.id = e.end_id)
+   ->  Seq Scan on test_where_opt."Person" q
+         Output: q.id, q.properties
+   ->  Hash
+         Output: p.id, p.properties, e.end_id
+         ->  Hash Join
+               Output: p.id, p.properties, e.end_id
+               Hash Cond: (p.id = e.start_id)
+               ->  Seq Scan on test_where_opt."Person" p
+                     Output: p.id, p.properties
+               ->  Hash
+                     Output: e.start_id, e.end_id
+                     ->  Bitmap Heap Scan on test_where_opt."KNOWS" e
+                           Output: e.start_id, e.end_id
+                           Recheck Cond: (e.end_id > '0'::graphid)
+                           Filter: ((e.id > '0'::graphid) AND (e.start_id > '0'::graphid))
+                           ->  Bitmap Index Scan on "KNOWS_end_id_idx"
+                                 Index Cond: (e.end_id > '0'::graphid)
+(20 rows)
+
+-- Test 7: Combined WHERE with multiple id() calls on different entities
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  | name2 
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+-- Test 8: WHERE with id() comparison between entities
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE start_id(e) = id(p) AND end_id(e) = id(q)
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  | name2 
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+-- Test 9: WHERE with id() in complex expression
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    WHERE id(p) > 0 AND id(p) < 9223372036854775807
+    RETURN p.name
+$$) as (name agtype);
+  name   
+---------
+ "Alice"
+ "Bob"
+(2 rows)
+
+-- Test 10: Cross-clause WHERE still works (entity from previous MATCH)
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    MATCH (q:Person)
+    WHERE id(p) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+  name1  |  name2  
+---------+---------
+ "Alice" | "Alice"
+ "Bob"   | "Alice"
+ "Alice" | "Bob"
+ "Bob"   | "Bob"
+(4 rows)
+
+-- Test 11: EXPLAIN cross-clause to verify optimization
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    MATCH (q:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (plan agtype);
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: agtype_access_operator(VARIADIC ARRAY[_agtype_build_vertex(p.id, _label_name('20398'::oid, p.id), p.properties), '"name"'::agtype])
+   ->  Seq Scan on test_where_opt."Person" q
+         Output: q.id, q.properties
+   ->  Materialize
+         Output: p.id, p.properties
+         ->  Bitmap Heap Scan on test_where_opt."Person" p
+               Output: p.id, p.properties
+               Recheck Cond: (p.id > '0'::graphid)
+               ->  Bitmap Index Scan on "Person_pkey"
+                     Index Cond: (p.id > '0'::graphid)
+(11 rows)
+
+-- Test 12: Combined cross-clause and current-clause WHERE optimization
+-- p is from previous clause (cross-clause), q and e are from current clause (intra-clause)
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    MATCH (q:Person)-[e:KNOWS]->(r:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0 AND start_id(e) > 0
+    RETURN p.name, q.name, r.name
+$$) as (name1 agtype, name2 agtype, name3 agtype);
+  name1  |  name2  | name3 
+---------+---------+-------
+ "Alice" | "Alice" | "Bob"
+ "Bob"   | "Alice" | "Bob"
+(2 rows)
+
+-- Test 13: EXPLAIN combined cross-clause and current-clause WHERE
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    MATCH (q:Person)-[e:KNOWS]->(r:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0 AND start_id(e) > 0
+    RETURN p.name
+$$) as (plan agtype);
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: agtype_access_operator(VARIADIC ARRAY[_agtype_build_vertex(p.id, _label_name('20398'::oid, p.id), p.properties), '"name"'::agtype])
+   ->  Bitmap Heap Scan on test_where_opt."Person" p
+         Output: p.id, p.properties
+         Recheck Cond: (p.id > '0'::graphid)
+         ->  Bitmap Index Scan on "Person_pkey"
+               Index Cond: (p.id > '0'::graphid)
+   ->  Materialize
+         ->  Nested Loop
+               Inner Unique: true
+               ->  Hash Join
+                     Output: e.end_id
+                     Inner Unique: true
+                     Hash Cond: (e.start_id = q.id)
+                     ->  Bitmap Heap Scan on test_where_opt."KNOWS" e
+                           Output: e.id, e.start_id, e.end_id, e.properties
+                           Recheck Cond: (e.start_id > '0'::graphid)
+                           Filter: (e.id > '0'::graphid)
+                           ->  Bitmap Index Scan on "KNOWS_start_id_idx"
+                                 Index Cond: (e.start_id > '0'::graphid)
+                     ->  Hash
+                           Output: q.id
+                           ->  Bitmap Heap Scan on test_where_opt."Person" q
+                                 Output: q.id
+                                 Recheck Cond: (q.id > '0'::graphid)
+                                 ->  Bitmap Index Scan on "Person_pkey"
+                                       Index Cond: (q.id > '0'::graphid)
+               ->  Index Only Scan using "Person_pkey" on test_where_opt."Person" r
+                     Output: r.id
+                     Index Cond: (r.id = e.end_id)
+(30 rows)
+
+SELECT drop_graph('test_where_opt', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table test_where_opt._ag_label_vertex
+drop cascades to table test_where_opt._ag_label_edge
+drop cascades to table test_where_opt."Person"
+drop cascades to table test_where_opt."KNOWS"
+NOTICE:  graph "test_where_opt" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);

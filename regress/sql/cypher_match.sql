@@ -1438,6 +1438,121 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
 
 --
+-- Test: WHERE clause id(), start_id(), end_id() optimizations in current clause
+-- These tests verify that id/start_id/end_id calls in WHERE clauses use direct
+-- column access (raw graphid) instead of rebuilding the full vertex/edge.
+-- This allows PostgreSQL to use indexes on graphid columns.
+--
+SELECT create_graph('test_where_opt');
+
+-- Create test data
+SELECT * FROM cypher('test_where_opt', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS {since: 2020}]->(:Person {name: 'Bob'})
+$$) as (a agtype);
+
+-- Test 1: WHERE with id(vertex) in current clause - uses raw graphid column
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (name agtype);
+
+-- Test 2: EXPLAIN to verify optimization (raw graphid instead of age_id)
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (plan agtype);
+
+-- Test 3: WHERE with id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 4: WHERE with start_id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE start_id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 5: WHERE with end_id(edge) in current clause
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE end_id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 6: EXPLAIN to verify edge optimization (all three: id, start_id, end_id)
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(e) > 0 AND start_id(e) > 0 AND end_id(e) > 0
+    RETURN p.name
+$$) as (plan agtype);
+
+-- Test 7: Combined WHERE with multiple id() calls on different entities
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 8: WHERE with id() comparison between entities
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)-[e:KNOWS]->(q:Person)
+    WHERE start_id(e) = id(p) AND end_id(e) = id(q)
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 9: WHERE with id() in complex expression
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    WHERE id(p) > 0 AND id(p) < 9223372036854775807
+    RETURN p.name
+$$) as (name agtype);
+
+-- Test 10: Cross-clause WHERE still works (entity from previous MATCH)
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    MATCH (q:Person)
+    WHERE id(p) > 0
+    RETURN p.name, q.name
+$$) as (name1 agtype, name2 agtype);
+
+-- Test 11: EXPLAIN cross-clause to verify optimization
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    MATCH (q:Person)
+    WHERE id(p) > 0
+    RETURN p.name
+$$) as (plan agtype);
+
+-- Test 12: Combined cross-clause and current-clause WHERE optimization
+-- p is from previous clause (cross-clause), q and e are from current clause (intra-clause)
+SELECT * FROM cypher('test_where_opt', $$
+    MATCH (p:Person)
+    MATCH (q:Person)-[e:KNOWS]->(r:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0 AND start_id(e) > 0
+    RETURN p.name, q.name, r.name
+$$) as (name1 agtype, name2 agtype, name3 agtype);
+
+-- Test 13: EXPLAIN combined cross-clause and current-clause WHERE
+SELECT * FROM cypher('test_where_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (p:Person)
+    MATCH (q:Person)-[e:KNOWS]->(r:Person)
+    WHERE id(p) > 0 AND id(q) > 0 AND id(e) > 0 AND start_id(e) > 0
+    RETURN p.name
+$$) as (plan agtype);
+
+SELECT drop_graph('test_where_opt', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);

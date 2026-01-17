@@ -309,6 +309,237 @@ CREATE OPERATOR >= (
 );
 
 --
+-- graphid - int8 cross-type comparison operators
+--
+-- These allow efficient comparison of graphid with integer literals,
+-- avoiding the need to convert to agtype for comparisons like id(v) > 0.
+--
+
+-- graphid vs int8 comparison functions
+CREATE FUNCTION ag_catalog.graphid_eq_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_ne_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_lt_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_gt_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_le_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.graphid_ge_int8(graphid, int8)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- int8 vs graphid comparison functions
+CREATE FUNCTION ag_catalog.int8_eq_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.int8_ne_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.int8_lt_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.int8_gt_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.int8_le_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.int8_ge_graphid(int8, graphid)
+    RETURNS boolean
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- Cross-type operators: graphid vs int8
+CREATE OPERATOR = (
+  FUNCTION = ag_catalog.graphid_eq_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = =,
+  NEGATOR = <>,
+  RESTRICT = eqsel,
+  JOIN = eqjoinsel,
+  HASHES,
+  MERGES
+);
+
+CREATE OPERATOR <> (
+  FUNCTION = ag_catalog.graphid_ne_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = <>,
+  NEGATOR = =,
+  RESTRICT = neqsel,
+  JOIN = neqjoinsel
+);
+
+CREATE OPERATOR < (
+  FUNCTION = ag_catalog.graphid_lt_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = >,
+  NEGATOR = >=,
+  RESTRICT = scalarltsel,
+  JOIN = scalarltjoinsel
+);
+
+CREATE OPERATOR > (
+  FUNCTION = ag_catalog.graphid_gt_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = <,
+  NEGATOR = <=,
+  RESTRICT = scalargtsel,
+  JOIN = scalargtjoinsel
+);
+
+CREATE OPERATOR <= (
+  FUNCTION = ag_catalog.graphid_le_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = >=,
+  NEGATOR = >,
+  RESTRICT = scalarlesel,
+  JOIN = scalarlejoinsel
+);
+
+CREATE OPERATOR >= (
+  FUNCTION = ag_catalog.graphid_ge_int8,
+  LEFTARG = graphid,
+  RIGHTARG = int8,
+  COMMUTATOR = <=,
+  NEGATOR = <,
+  RESTRICT = scalargesel,
+  JOIN = scalargejoinsel
+);
+
+-- Cross-type operators: int8 vs graphid
+CREATE OPERATOR = (
+  FUNCTION = ag_catalog.int8_eq_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = =,
+  NEGATOR = <>,
+  RESTRICT = eqsel,
+  JOIN = eqjoinsel,
+  HASHES,
+  MERGES
+);
+
+CREATE OPERATOR <> (
+  FUNCTION = ag_catalog.int8_ne_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = <>,
+  NEGATOR = =,
+  RESTRICT = neqsel,
+  JOIN = neqjoinsel
+);
+
+CREATE OPERATOR < (
+  FUNCTION = ag_catalog.int8_lt_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = >,
+  NEGATOR = >=,
+  RESTRICT = scalarltsel,
+  JOIN = scalarltjoinsel
+);
+
+CREATE OPERATOR > (
+  FUNCTION = ag_catalog.int8_gt_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = <,
+  NEGATOR = <=,
+  RESTRICT = scalargtsel,
+  JOIN = scalargtjoinsel
+);
+
+CREATE OPERATOR <= (
+  FUNCTION = ag_catalog.int8_le_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = >=,
+  NEGATOR = >,
+  RESTRICT = scalarlesel,
+  JOIN = scalarlejoinsel
+);
+
+CREATE OPERATOR >= (
+  FUNCTION = ag_catalog.int8_ge_graphid,
+  LEFTARG = int8,
+  RIGHTARG = graphid,
+  COMMUTATOR = <=,
+  NEGATOR = <,
+  RESTRICT = scalargesel,
+  JOIN = scalargejoinsel
+);
+
+--
 -- graphid - B-tree support functions
 --
 
@@ -324,6 +555,24 @@ AS 'MODULE_PATHNAME';
 -- sort support
 CREATE FUNCTION ag_catalog.graphid_btree_sort(internal)
     RETURNS void
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- cross-type btree comparison support: graphid vs int8
+CREATE FUNCTION ag_catalog.graphid_btree_cmp_int8(graphid, int8)
+    RETURNS int
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- cross-type btree comparison support: int8 vs graphid
+CREATE FUNCTION ag_catalog.int8_btree_cmp_graphid(int8, graphid)
+    RETURNS int
     LANGUAGE c
     IMMUTABLE
 RETURNS NULL ON NULL INPUT
@@ -349,13 +598,23 @@ AS 'MODULE_PATHNAME';
 --   3: compare a test value to a base value plus/minus an offset, and return
 --      true or false according to the comparison result (optional)
 CREATE OPERATOR CLASS graphid_ops DEFAULT FOR TYPE graphid USING btree AS
-  OPERATOR 1 <,
-  OPERATOR 2 <=,
-  OPERATOR 3 =,
-  OPERATOR 4 >=,
-  OPERATOR 5 >,
+  -- same-type operators (graphid vs graphid)
+  OPERATOR 1 < (graphid, graphid),
+  OPERATOR 2 <= (graphid, graphid),
+  OPERATOR 3 = (graphid, graphid),
+  OPERATOR 4 >= (graphid, graphid),
+  OPERATOR 5 > (graphid, graphid),
+  -- cross-type operators (graphid vs int8)
+  OPERATOR 1 < (graphid, int8),
+  OPERATOR 2 <= (graphid, int8),
+  OPERATOR 3 = (graphid, int8),
+  OPERATOR 4 >= (graphid, int8),
+  OPERATOR 5 > (graphid, int8),
+  -- same-type support functions
   FUNCTION 1 ag_catalog.graphid_btree_cmp (graphid, graphid),
-  FUNCTION 2 ag_catalog.graphid_btree_sort (internal);
+  FUNCTION 2 ag_catalog.graphid_btree_sort (internal),
+  -- cross-type support function (graphid vs int8)
+  FUNCTION 1 (graphid, int8) ag_catalog.graphid_btree_cmp_int8 (graphid, int8);
 
 --
 -- graphid functions

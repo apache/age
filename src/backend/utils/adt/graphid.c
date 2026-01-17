@@ -262,3 +262,167 @@ Datum graphid_hash_cmp(PG_FUNCTION_ARGS)
 
     PG_RETURN_INT32(hash);
 }
+
+/*
+ * Cross-type comparison functions: graphid vs int8
+ *
+ * Since graphid is internally an int64, we can compare directly with int8.
+ * These allow expressions like `id(v) > 0` to use native integer comparison
+ * instead of converting everything to agtype.
+ */
+PG_FUNCTION_INFO_V1(graphid_eq_int8);
+
+Datum graphid_eq_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid == ri8);
+}
+
+PG_FUNCTION_INFO_V1(graphid_ne_int8);
+
+Datum graphid_ne_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid != ri8);
+}
+
+PG_FUNCTION_INFO_V1(graphid_lt_int8);
+
+Datum graphid_lt_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid < ri8);
+}
+
+PG_FUNCTION_INFO_V1(graphid_gt_int8);
+
+Datum graphid_gt_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid > ri8);
+}
+
+PG_FUNCTION_INFO_V1(graphid_le_int8);
+
+Datum graphid_le_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid <= ri8);
+}
+
+PG_FUNCTION_INFO_V1(graphid_ge_int8);
+
+Datum graphid_ge_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    PG_RETURN_BOOL(lgid >= ri8);
+}
+
+/* Reverse versions: int8 vs graphid */
+PG_FUNCTION_INFO_V1(int8_eq_graphid);
+
+Datum int8_eq_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 == rgid);
+}
+
+PG_FUNCTION_INFO_V1(int8_ne_graphid);
+
+Datum int8_ne_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 != rgid);
+}
+
+PG_FUNCTION_INFO_V1(int8_lt_graphid);
+
+Datum int8_lt_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 < rgid);
+}
+
+PG_FUNCTION_INFO_V1(int8_gt_graphid);
+
+Datum int8_gt_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 > rgid);
+}
+
+PG_FUNCTION_INFO_V1(int8_le_graphid);
+
+Datum int8_le_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 <= rgid);
+}
+
+PG_FUNCTION_INFO_V1(int8_ge_graphid);
+
+Datum int8_ge_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    PG_RETURN_BOOL(li8 >= rgid);
+}
+
+/*
+ * Cross-type B-tree comparison functions for graphid vs int8
+ *
+ * These are required for the btree operator class to use cross-type
+ * comparisons in index scans.
+ */
+PG_FUNCTION_INFO_V1(graphid_btree_cmp_int8);
+
+Datum graphid_btree_cmp_int8(PG_FUNCTION_ARGS)
+{
+    graphid lgid = AG_GETARG_GRAPHID(0);
+    int64 ri8 = PG_GETARG_INT64(1);
+
+    if (lgid > ri8)
+        PG_RETURN_INT32(1);
+    else if (lgid == ri8)
+        PG_RETURN_INT32(0);
+    else
+        PG_RETURN_INT32(-1);
+}
+
+PG_FUNCTION_INFO_V1(int8_btree_cmp_graphid);
+
+Datum int8_btree_cmp_graphid(PG_FUNCTION_ARGS)
+{
+    int64 li8 = PG_GETARG_INT64(0);
+    graphid rgid = AG_GETARG_GRAPHID(1);
+
+    if (li8 > rgid)
+        PG_RETURN_INT32(1);
+    else if (li8 == rgid)
+        PG_RETURN_INT32(0);
+    else
+        PG_RETURN_INT32(-1);
+}
