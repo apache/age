@@ -1544,12 +1544,16 @@ SELECT * FROM cypher('type_coercion', $$
 	MATCH (v)
 	RETURN v
 $$) AS (i bigint);
-ERROR:  cannot cast agtype vertex to type int
+ERROR:  cannot cast type vertex to bigint for column "i"
+LINE 1: SELECT * FROM cypher('type_coercion', $$
+                      ^
 SELECT * FROM cypher('type_coercion', $$
 	MATCH ()-[e]-()
 	RETURN e
 $$) AS (i bigint);
-ERROR:  cannot cast agtype edge to type int
+ERROR:  cannot cast type edge to bigint for column "i"
+LINE 1: SELECT * FROM cypher('type_coercion', $$
+                      ^
 SELECT * FROM cypher('type_coercion', $$
 	MATCH p=()-[]-()
 	RETURN p
@@ -2762,6 +2766,8 @@ SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN start_id(v)
 $$) AS (start_id agtype);
 ERROR:  start_id() argument must be an edge or null
+LINE 2:     MATCH (v) RETURN start_id(v)
+                                     ^
 SELECT * FROM cypher('expr', $$
     RETURN start_id()
 $$) AS (start_id agtype);
@@ -2795,6 +2801,8 @@ SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN end_id(v)
 $$) AS (end_id agtype);
 ERROR:  end_id() argument must be an edge or null
+LINE 2:     MATCH (v) RETURN end_id(v)
+                                   ^
 SELECT * FROM cypher('expr', $$
     RETURN end_id()
 $$) AS (end_id agtype);
@@ -2828,6 +2836,8 @@ SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN startNode(v)
 $$) AS (startNode agtype);
 ERROR:  startNode() argument must be an edge or null
+LINE 2:     MATCH (v) RETURN startNode(v)
+                                      ^
 SELECT * FROM cypher('expr', $$
     RETURN startNode()
 $$) AS (startNode agtype);
@@ -2861,6 +2871,8 @@ SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN endNode(v)
 $$) AS (endNode agtype);
 ERROR:  endNode() argument must be an edge or null
+LINE 2:     MATCH (v) RETURN endNode(v)
+                                    ^
 SELECT * FROM cypher('expr', $$
     RETURN endNode()
 $$) AS (endNode agtype);
@@ -2894,6 +2906,8 @@ SELECT * FROM cypher('expr', $$
     MATCH (v) RETURN type(v)
 $$) AS (type agtype);
 ERROR:  type() argument must be an edge or null
+LINE 2:     MATCH (v) RETURN type(v)
+                                 ^
 SELECT * FROM cypher('expr', $$
     RETURN type()
 $$) AS (type agtype);
@@ -4139,7 +4153,7 @@ SELECT * FROM cypher('expr', $$
     MATCH (v)
     RETURN reverse(v)
 $$) AS (results agtype);
-ERROR:  reverse() unsupported argument agtype 6
+ERROR:  reverse() unsupported argument type 16835
 SELECT * FROM cypher('expr', $$
     RETURN reverse({})
 $$) AS (results agtype);
@@ -7436,12 +7450,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 1
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --concatenated
@@ -7454,12 +7468,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 6
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --count(n)
@@ -7472,12 +7486,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 1
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --concatenated
@@ -7490,12 +7504,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 6
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --count(1)
@@ -7508,12 +7522,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 1
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --concatenated
@@ -7526,12 +7540,12 @@ SELECT * FROM cypher('case_statement', $$
 $$ ) AS (n agtype, case_statement agtype);
                                                n                                                | case_statement 
 ------------------------------------------------------------------------------------------------+----------------
- {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710661, "label": "", "properties": {"i": [], "j": [0, 1, 2], "id": 5}}::vertex | "not count"
  {"id": 281474976710657, "label": "", "properties": {"i": 1, "id": 1}}::vertex                  | "not count"
  {"id": 281474976710659, "label": "", "properties": {"i": 0, "j": 1, "id": 3}}::vertex          | 6
- {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
+ {"id": 281474976710658, "label": "", "properties": {"i": "a", "j": "b", "id": 2}}::vertex      | "not count"
  {"id": 281474976710662, "label": "", "properties": {"i": {}, "j": {"i": 1}, "id": 6}}::vertex  | "not count"
+ {"id": 281474976710660, "label": "", "properties": {"i": true, "j": false, "id": 4}}::vertex   | "not count"
 (6 rows)
 
 --CASE with EXISTS()
@@ -9218,8 +9232,1102 @@ SELECT * FROM cypher('issue_2289', $$ RETURN (1 IN []) AS v $$) AS (v agtype);
 (1 row)
 
 --
+-- Accessor functions and properties extraction
+-- without _agtype_build.. functions
+--
+SELECT * FROM create_graph('accessor_opt');
+NOTICE:  graph "accessor_opt" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('accessor_opt', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+--
+-- Vertex accessor tests
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN id(n)
+$$) AS (plan agtype);
+             QUERY PLAN              
+-------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: (n.id)::agtype
+(2 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN properties(n)
+$$) AS (plan agtype);
+             QUERY PLAN              
+-------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: n.properties
+(2 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n:Person)
+    RETURN label(n)
+$$) AS (plan agtype);
+   plan   
+----------
+ "Person"
+ "Person"
+(2 rows)
+
+-- should use n.properties in _agtype_access_operator
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name, n.age
+$$) AS (a agtype, b agtype);
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype])
+(2 rows)
+
+--
+-- Edge accessor tests
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN id(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.id, r.end_id
+         ->  Nested Loop
+               Output: r.id, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN type(r)
+$$) AS (plan agtype);
+  plan   
+---------
+ "KNOWS"
+(1 row)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN start_id(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.start_id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.start_id, r.end_id
+         ->  Nested Loop
+               Output: r.start_id, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN end_id(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.end_id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.end_id
+         ->  Nested Loop
+               Output: r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN properties(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: r.properties
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.properties, r.end_id
+         ->  Nested Loop
+               Output: r.properties, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+-- should use r.properties in _agtype_access_operator
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN r.since
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype])
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.properties, r.end_id
+         ->  Nested Loop
+               Output: r.properties, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+--
+-- Multiple accessors in same query
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN id(n), properties(n), n.name
+$$) AS (a agtype, c agtype, d agtype);
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: (n.id)::agtype, n.properties, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+(2 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN id(r), start_id(r), end_id(r), properties(r)
+$$) AS (a agtype, c agtype, d agtype, e agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.id)::agtype, (r.start_id)::agtype, (r.end_id)::agtype, r.properties
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.id, r.start_id, r.end_id, r.properties
+         ->  Nested Loop
+               Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+--
+-- Accessors in WHERE clause
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE id(n) > 0
+    RETURN n.name
+$$) AS (plan agtype);
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Bitmap Heap Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+   Recheck Cond: (n.id > '0'::graphid)
+   ->  Bitmap Index Scan on "Person_pkey"
+         Index Cond: (n.id > '0'::graphid)
+(5 rows)
+
+-- Compare two node ids
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    WHERE id(a) < id(b)
+    RETURN a.name, b.name
+$$) AS (aname agtype, bname agtype);
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Output: agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype])
+   Inner Unique: true
+   Hash Cond: (r.end_id = b.id)
+   Join Filter: (a.id < b.id)
+   ->  Hash Join
+         Output: a.properties, a.id, r.end_id
+         Inner Unique: true
+         Hash Cond: (r.start_id = a.id)
+         ->  Seq Scan on accessor_opt."KNOWS" r
+               Output: r.id, r.start_id, r.end_id, r.properties
+         ->  Hash
+               Output: a.properties, a.id
+               ->  Seq Scan on accessor_opt."Person" a
+                     Output: a.properties, a.id
+   ->  Hash
+         Output: b.properties, b.id
+         ->  Seq Scan on accessor_opt."Person" b
+               Output: b.properties, b.id
+(19 rows)
+
+-- Compare edge start_id and end_id
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE start_id(r) <> end_id(r)
+    RETURN id(r)
+$$) AS (rid agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.id, r.end_id
+         ->  Nested Loop
+               Output: r.id, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+                     Filter: (r.start_id <> r.end_id)
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(23 rows)
+
+-- Property comparison
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE n.age >= 25
+    RETURN n.name
+$$) AS (name agtype);
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+   Filter: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]) >= '25'::agtype)
+(3 rows)
+
+-- Multiple property comparisons
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE n.age > 20 AND n.name <> 'Unknown'
+    RETURN n.name
+$$) AS (name agtype);
+                                                                                               QUERY PLAN                                                                                               
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+   Filter: ((agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]) > '20'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]) <> '"Unknown"'::agtype))
+(3 rows)
+
+-- Compare properties of two nodes
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    WHERE a.age > b.age
+    RETURN a.name, b.name
+$$) AS (aname agtype, bname agtype);
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Output: agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype])
+   Inner Unique: true
+   Hash Cond: (r.end_id = b.id)
+   Join Filter: (agtype_access_operator(VARIADIC ARRAY[a.properties, '"age"'::agtype]) > agtype_access_operator(VARIADIC ARRAY[b.properties, '"age"'::agtype]))
+   ->  Hash Join
+         Output: a.properties, r.end_id
+         Inner Unique: true
+         Hash Cond: (r.start_id = a.id)
+         ->  Seq Scan on accessor_opt."KNOWS" r
+               Output: r.id, r.start_id, r.end_id, r.properties
+         ->  Hash
+               Output: a.properties, a.id
+               ->  Seq Scan on accessor_opt."Person" a
+                     Output: a.properties, a.id
+   ->  Hash
+         Output: b.properties, b.id
+         ->  Seq Scan on accessor_opt."Person" b
+               Output: b.properties, b.id
+(19 rows)
+
+-- Compare id with property
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE id(n) > n.age
+    RETURN n.name
+$$) AS (name agtype);
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+   Filter: (n.id > (agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]))::graphid)
+(3 rows)
+
+-- Edge property comparison
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since > 2015
+    RETURN r.since
+$$) AS (since agtype);
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype])
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.properties, r.end_id
+         ->  Nested Loop
+               Output: r.properties, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+                     Filter: (agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype]) > '2015'::agtype)
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(23 rows)
+
+-- IS NOT NULL on accessor
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE properties(n) IS NOT NULL
+    RETURN n.name
+$$) AS (name agtype);
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+(2 rows)
+
+-- label() comparison
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n)
+    WHERE label(n) = 'Person'
+    RETURN n.name
+$$) AS (name agtype);
+  name   
+---------
+ "Alice"
+ "Bob"
+(2 rows)
+
+-- type() comparison on edge
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (rid agtype);
+       rid        
+------------------
+ 1125899906842625
+(1 row)
+
+--
+-- Accessors in ORDER BY
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name
+    ORDER BY n.name
+$$) AS (plan agtype);
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Sort
+   Output: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+   Sort Key: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+   ->  Seq Scan on accessor_opt."Person" n
+         Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+(5 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name
+    ORDER BY id(n)
+$$) AS (plan agtype);
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: _.name
+   ->  Index Scan using "Person_pkey" on accessor_opt."Person" n
+         Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), n.id
+(4 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name, n.age
+    ORDER BY n.age, n.name
+$$) AS (name agtype, age agtype);
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])), (agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]))
+   Sort Key: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype])), (agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+   ->  Seq Scan on accessor_opt."Person" n
+         Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype])
+(5 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN r.since
+    ORDER BY start_id(r)
+$$) AS (since agtype);
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: _.since
+   ->  Merge Join
+         Output: agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype]), r.start_id
+         Merge Cond: (_age_default_alias_0.id = r.start_id)
+         ->  Merge Append
+               Sort Key: _age_default_alias_0.id
+               ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                     Output: _age_default_alias_0_1.id
+               ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                     Output: _age_default_alias_0_2.id
+         ->  Materialize
+               Output: r.properties, r.start_id
+               ->  Nested Loop
+                     Output: r.properties, r.start_id
+                     ->  Index Scan using "KNOWS_start_id_idx" on accessor_opt."KNOWS" r
+                           Output: r.id, r.start_id, r.end_id, r.properties
+                     ->  Append
+                           ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_1_1
+                                 Output: _age_default_alias_1_1.id
+                                 Filter: (_age_default_alias_1_1.id = r.end_id)
+                           ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+                                 Output: _age_default_alias_1_2.id
+                                 Index Cond: (_age_default_alias_1_2.id = r.end_id)
+(24 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a.name, b.name
+    ORDER BY id(a), id(r), id(b)
+$$) AS (aname agtype, bname agtype);
+                                                                                       QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on _
+   Output: _.name, _.name_1
+   ->  Sort
+         Output: (agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype])), (agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype])), a.id, r.id, b.id
+         Sort Key: a.id, r.id, b.id
+         ->  Hash Join
+               Output: agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype]), a.id, r.id, b.id
+               Inner Unique: true
+               Hash Cond: (r.end_id = b.id)
+               ->  Hash Join
+                     Output: a.properties, a.id, r.id, r.end_id
+                     Inner Unique: true
+                     Hash Cond: (r.start_id = a.id)
+                     ->  Seq Scan on accessor_opt."KNOWS" r
+                           Output: r.id, r.start_id, r.end_id, r.properties
+                     ->  Hash
+                           Output: a.properties, a.id
+                           ->  Seq Scan on accessor_opt."Person" a
+                                 Output: a.properties, a.id
+               ->  Hash
+                     Output: b.properties, b.id
+                     ->  Seq Scan on accessor_opt."Person" b
+                           Output: b.properties, b.id
+(23 rows)
+
+--
+-- Accessors in expressions
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN [id(n), n.name]
+$$) AS (plan agtype);
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_build_list(n.id, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+(2 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN {id: id(n), name: n.name}
+$$) AS (plan agtype);
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_build_map_nonull('id'::text, n.id, 'name'::text, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+(2 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n {.name, .age}
+$$) AS (plan agtype);
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on accessor_opt."Person" n
+   Output: agtype_build_map_nonull('name'::text, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), 'age'::text, agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]))
+(2 rows)
+
+--
+-- Accessor function in multiple match
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    WHERE id(a) > 0
+    MATCH (a)-[r]->(b)
+    WHERE id(b) > 0
+    RETURN properties(a), start_id(r), end_id(r)
+$$) AS (props_a agtype, sid agtype, eid agtype);
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Hash Join
+   Output: a.properties, (r.start_id)::agtype, (r.end_id)::agtype
+   Hash Cond: (r.end_id = b.id)
+   ->  Hash Join
+         Output: a.properties, r.start_id, r.end_id
+         Inner Unique: true
+         Hash Cond: (r.start_id = a.id)
+         ->  Append
+               ->  Seq Scan on accessor_opt._ag_label_edge r_1
+                     Output: r_1.start_id, r_1.end_id
+               ->  Seq Scan on accessor_opt."KNOWS" r_2
+                     Output: r_2.start_id, r_2.end_id
+         ->  Hash
+               Output: a.properties, a.id
+               ->  Bitmap Heap Scan on accessor_opt."Person" a
+                     Output: a.properties, a.id
+                     Recheck Cond: (a.id > '0'::graphid)
+                     ->  Bitmap Index Scan on "Person_pkey"
+                           Index Cond: (a.id > '0'::graphid)
+   ->  Hash
+         Output: b.id
+         ->  Append
+               ->  Seq Scan on accessor_opt._ag_label_vertex b_1
+                     Output: b_1.id
+                     Filter: (b_1.id > '0'::graphid)
+               ->  Bitmap Heap Scan on accessor_opt."Person" b_2
+                     Output: b_2.id
+                     Recheck Cond: (b_2.id > '0'::graphid)
+                     ->  Bitmap Index Scan on "Person_pkey"
+                           Index Cond: (b_2.id > '0'::graphid)
+(30 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    MATCH (b:Person)
+    WHERE b.name <> a.name
+    RETURN a.name, b.name
+$$) AS (a_name agtype, b_name agtype);
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype])
+   Join Filter: (agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype]) <> agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]))
+   ->  Seq Scan on accessor_opt."Person" a
+         Output: a.id, a.properties
+   ->  Materialize
+         Output: b.properties
+         ->  Seq Scan on accessor_opt."Person" b
+               Output: b.properties
+(9 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    MATCH (a)-[r1]->(b)
+    MATCH (b)-[r2]->(c)
+    RETURN id(a), id(b), id(c), a.name
+$$) AS (a_id agtype, b_id agtype, c_id agtype, a_name agtype);
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (a.id)::agtype, (b.id)::agtype, (c.id)::agtype, agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype])
+   Merge Cond: (r2.start_id = r1.end_id)
+   ->  Nested Loop
+         Output: r2.start_id, c.id
+         ->  Merge Append
+               Sort Key: r2.start_id
+               ->  Index Scan using _ag_label_edge_start_id_idx on accessor_opt._ag_label_edge r2_1
+                     Output: r2_1.start_id, r2_1.end_id
+               ->  Index Scan using "KNOWS_start_id_idx" on accessor_opt."KNOWS" r2_2
+                     Output: r2_2.start_id, r2_2.end_id
+         ->  Append
+               ->  Seq Scan on accessor_opt._ag_label_vertex c_1
+                     Output: c_1.id
+                     Filter: (c_1.id = r2.end_id)
+               ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" c_2
+                     Output: c_2.id
+                     Index Cond: (c_2.id = r2.end_id)
+   ->  Materialize
+         Output: a.id, a.properties, r1.end_id, b.id
+         ->  Merge Join
+               Output: a.id, a.properties, r1.end_id, b.id
+               Merge Cond: (b.id = r1.end_id)
+               ->  Merge Append
+                     Sort Key: b.id
+                     ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex b_1
+                           Output: b_1.id
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" b_2
+                           Output: b_2.id
+               ->  Sort
+                     Output: a.id, a.properties, r1.end_id
+                     Sort Key: r1.end_id
+                     ->  Hash Join
+                           Output: a.id, a.properties, r1.end_id
+                           Inner Unique: true
+                           Hash Cond: (r1.start_id = a.id)
+                           ->  Append
+                                 ->  Seq Scan on accessor_opt._ag_label_edge r1_1
+                                       Output: r1_1.start_id, r1_1.end_id
+                                 ->  Seq Scan on accessor_opt."KNOWS" r1_2
+                                       Output: r1_2.start_id, r1_2.end_id
+                           ->  Hash
+                                 Output: a.id, a.properties
+                                 ->  Seq Scan on accessor_opt."Person" a
+                                       Output: a.id, a.properties
+(45 rows)
+
+--
+-- Composite types, vertex and edge
+--
+SELECT * FROM create_graph('composite_types');
+NOTICE:  graph "composite_types" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('composite_types', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- Return vertex as vertex type
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n vertex);
+                                  n                                  
+---------------------------------------------------------------------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}")
+ (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")
+(2 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+    ORDER BY n.name
+$$) AS (n vertex);
+                                  n                                  
+---------------------------------------------------------------------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}")
+ (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")
+(2 rows)
+
+-- Return edge as edge type
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r edge);
+                                         r                                          
+------------------------------------------------------------------------------------
+ (1125899906842625,"""KNOWS""",844424930131970,844424930131969,"{""since"": 2020}")
+(1 row)
+
+-- Return multiple entities
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a, b
+$$) AS (a vertex, b vertex);
+                                  a                                  |                                 b                                 
+---------------------------------------------------------------------+-------------------------------------------------------------------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}") | (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")
+(1 row)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a, r, b
+$$) AS (a vertex, r edge, b vertex);
+                                  a                                  |                                         r                                          |                                 b                                 
+---------------------------------------------------------------------+------------------------------------------------------------------------------------+-------------------------------------------------------------------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}") | (1125899906842625,"""KNOWS""",844424930131970,844424930131969,"{""since"": 2020}") | (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")
+(1 row)
+
+-- Mixed return: entity and agtype property
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n, n.name
+$$) AS (n vertex, name agtype);
+                                  n                                  |  name   
+---------------------------------------------------------------------+---------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}") | "Alice"
+ (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")   | "Bob"
+(2 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n, n.name
+    ORDER BY n.name
+$$) AS (n vertex, name agtype);
+                                  n                                  |  name   
+---------------------------------------------------------------------+---------
+ (844424930131969,"""Person""","{""age"": 30, ""name"": ""Alice""}") | "Alice"
+ (844424930131970,"""Person""","{""age"": 25, ""name"": ""Bob""}")   | "Bob"
+(2 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r, r.since
+$$) AS (r edge, since agtype);
+                                         r                                          | since 
+------------------------------------------------------------------------------------+-------
+ (1125899906842625,"""KNOWS""",844424930131970,844424930131969,"{""since"": 2020}") | 2020
+(1 row)
+
+-- IN operator with vertex and edge types
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a <> b AND a IN [a, b]
+    RETURN a.name
+$$) AS (name agtype);
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Nested Loop
+   Join Filter: ((a.id <> b.id) AND ((a.id = a.id) OR (a.id = b.id)))
+   ->  Seq Scan on "Person" a
+   ->  Materialize
+         ->  Seq Scan on "Person" b
+(5 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a <> b AND a IN [a, b]
+    RETURN a.name
+$$) AS (name agtype);
+  name   
+---------
+ "Alice"
+ "Bob"
+(2 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 IN [r1, r2]
+    RETURN id(r1)
+$$) AS (id agtype);
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (_age_default_alias_1.id = r1.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_1_1
+         ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_1_2
+   ->  Materialize
+         ->  Nested Loop
+               ->  Nested Loop
+                     ->  Nested Loop
+                           ->  Nested Loop
+                                 Join Filter: ((r1.id = r1.id) OR (r1.id = r2.id))
+                                 ->  Index Scan using "KNOWS_end_id_idx" on "KNOWS" r1
+                                 ->  Materialize
+                                       ->  Seq Scan on "KNOWS" r2
+                           ->  Append
+                                 ->  Seq Scan on _ag_label_vertex _age_default_alias_2_1
+                                       Filter: (id = r2.start_id)
+                                 ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_2_2
+                                       Index Cond: (id = r2.start_id)
+                     ->  Append
+                           ->  Seq Scan on _ag_label_vertex _age_default_alias_3_1
+                                 Filter: (id = r2.end_id)
+                           ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_3_2
+                                 Index Cond: (id = r2.end_id)
+               ->  Append
+                     ->  Seq Scan on _ag_label_vertex _age_default_alias_0_1
+                           Filter: (id = r1.start_id)
+                     ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_0_2
+                           Index Cond: (id = r1.start_id)
+(30 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 IN [r1, r2]
+    RETURN id(r1)
+$$) AS (id agtype);
+        id        
+------------------
+ 1125899906842625
+(1 row)
+
+-- Equality operators with vertex and edge types
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a = b
+    RETURN a.name
+$$) AS (name agtype);
+             QUERY PLAN             
+------------------------------------
+ Hash Join
+   Hash Cond: (a.id = b.id)
+   ->  Seq Scan on "Person" a
+   ->  Hash
+         ->  Seq Scan on "Person" b
+(5 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a = b
+    RETURN a.name
+$$) AS (name agtype);
+  name   
+---------
+ "Alice"
+ "Bob"
+(2 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 = r2
+    RETURN id(r1)
+$$) AS (id agtype);
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (r1.id = r2.id)
+   ->  Sort
+         Sort Key: r1.id
+         ->  Merge Join
+               Merge Cond: (_age_default_alias_1.id = r1.end_id)
+               ->  Merge Append
+                     Sort Key: _age_default_alias_1.id
+                     ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_1_1
+                     ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_1_2
+               ->  Materialize
+                     ->  Nested Loop
+                           ->  Index Scan using "KNOWS_end_id_idx" on "KNOWS" r1
+                           ->  Append
+                                 ->  Seq Scan on _ag_label_vertex _age_default_alias_0_1
+                                       Filter: (id = r1.start_id)
+                                 ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_0_2
+                                       Index Cond: (id = r1.start_id)
+   ->  Sort
+         Sort Key: r2.id
+         ->  Merge Join
+               Merge Cond: (_age_default_alias_3.id = r2.end_id)
+               ->  Merge Append
+                     Sort Key: _age_default_alias_3.id
+                     ->  Index Only Scan using _ag_label_vertex_pkey on _ag_label_vertex _age_default_alias_3_1
+                     ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_3_2
+               ->  Materialize
+                     ->  Nested Loop
+                           ->  Index Scan using "KNOWS_end_id_idx" on "KNOWS" r2
+                           ->  Append
+                                 ->  Seq Scan on _ag_label_vertex _age_default_alias_2_1
+                                       Filter: (id = r2.start_id)
+                                 ->  Index Only Scan using "Person_pkey" on "Person" _age_default_alias_2_2
+                                       Index Cond: (id = r2.start_id)
+(34 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 = r2
+    RETURN id(r1)
+$$) AS (id agtype);
+        id        
+------------------
+ 1125899906842625
+(1 row)
+
+-- Cast vertex and edge to json
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n json);
+                                           n                                            
+----------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Person", "properties": {"age": 30, "name": "Alice"}}
+ {"id": 844424930131970, "label": "Person", "properties": {"age": 25, "name": "Bob"}}
+(2 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r json);
+                                                                 r                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {"since": 2020}}
+(1 row)
+
+-- Cast vertex and edge to jsonb
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n jsonb);
+                                           n                                            
+----------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Person", "properties": {"age": 30, "name": "Alice"}}
+ {"id": 844424930131970, "label": "Person", "properties": {"age": 25, "name": "Bob"}}
+(2 rows)
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r jsonb);
+                                                                 r                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131970, "start_id": 844424930131969, "properties": {"since": 2020}}
+(1 row)
+
+--
 -- Cleanup
 --
+SELECT * FROM drop_graph('composite_types', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table composite_types._ag_label_vertex
+drop cascades to table composite_types._ag_label_edge
+drop cascades to table composite_types."Person"
+drop cascades to table composite_types."KNOWS"
+NOTICE:  graph "composite_types" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT * FROM drop_graph('accessor_opt', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table accessor_opt._ag_label_vertex
+drop cascades to table accessor_opt._ag_label_edge
+drop cascades to table accessor_opt."Person"
+drop cascades to table accessor_opt."KNOWS"
+NOTICE:  graph "accessor_opt" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT * FROM drop_graph('issue_2289', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table issue_2289._ag_label_vertex

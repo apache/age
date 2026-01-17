@@ -3713,8 +3713,408 @@ SELECT * FROM create_graph('issue_2289');
 SELECT * FROM cypher('issue_2289', $$ RETURN (1 IN []) AS v $$) AS (v agtype);
 
 --
+-- Accessor functions and properties extraction
+-- without _agtype_build.. functions
+--
+SELECT * FROM create_graph('accessor_opt');
+
+SELECT * FROM cypher('accessor_opt', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+$$) AS (a agtype);
+
+--
+-- Vertex accessor tests
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN id(n)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN properties(n)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n:Person)
+    RETURN label(n)
+$$) AS (plan agtype);
+
+-- should use n.properties in _agtype_access_operator
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name, n.age
+$$) AS (a agtype, b agtype);
+
+--
+-- Edge accessor tests
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN id(r)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN type(r)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN start_id(r)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN end_id(r)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN properties(r)
+$$) AS (plan agtype);
+
+-- should use r.properties in _agtype_access_operator
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN r.since
+$$) AS (plan agtype);
+
+--
+-- Multiple accessors in same query
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN id(n), properties(n), n.name
+$$) AS (a agtype, c agtype, d agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN id(r), start_id(r), end_id(r), properties(r)
+$$) AS (a agtype, c agtype, d agtype, e agtype);
+
+--
+-- Accessors in WHERE clause
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE id(n) > 0
+    RETURN n.name
+$$) AS (plan agtype);
+
+-- Compare two node ids
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    WHERE id(a) < id(b)
+    RETURN a.name, b.name
+$$) AS (aname agtype, bname agtype);
+
+-- Compare edge start_id and end_id
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE start_id(r) <> end_id(r)
+    RETURN id(r)
+$$) AS (rid agtype);
+
+-- Property comparison
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE n.age >= 25
+    RETURN n.name
+$$) AS (name agtype);
+
+-- Multiple property comparisons
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE n.age > 20 AND n.name <> 'Unknown'
+    RETURN n.name
+$$) AS (name agtype);
+
+-- Compare properties of two nodes
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    WHERE a.age > b.age
+    RETURN a.name, b.name
+$$) AS (aname agtype, bname agtype);
+
+-- Compare id with property
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE id(n) > n.age
+    RETURN n.name
+$$) AS (name agtype);
+
+-- Edge property comparison
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since > 2015
+    RETURN r.since
+$$) AS (since agtype);
+
+-- IS NOT NULL on accessor
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WHERE properties(n) IS NOT NULL
+    RETURN n.name
+$$) AS (name agtype);
+
+-- label() comparison
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n)
+    WHERE label(n) = 'Person'
+    RETURN n.name
+$$) AS (name agtype);
+
+-- type() comparison on edge
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (rid agtype);
+
+--
+-- Accessors in ORDER BY
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name
+    ORDER BY n.name
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name
+    ORDER BY id(n)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n.name, n.age
+    ORDER BY n.age, n.name
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    RETURN r.since
+    ORDER BY start_id(r)
+$$) AS (since agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a.name, b.name
+    ORDER BY id(a), id(r), id(b)
+$$) AS (aname agtype, bname agtype);
+
+--
+-- Accessors in expressions
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN [id(n), n.name]
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN {id: id(n), name: n.name}
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    RETURN n {.name, .age}
+$$) AS (plan agtype);
+
+--
+-- Accessor function in multiple match
+--
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    WHERE id(a) > 0
+    MATCH (a)-[r]->(b)
+    WHERE id(b) > 0
+    RETURN properties(a), start_id(r), end_id(r)
+$$) AS (props_a agtype, sid agtype, eid agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    MATCH (b:Person)
+    WHERE b.name <> a.name
+    RETURN a.name, b.name
+$$) AS (a_name agtype, b_name agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    MATCH (a)-[r1]->(b)
+    MATCH (b)-[r2]->(c)
+    RETURN id(a), id(b), id(c), a.name
+$$) AS (a_id agtype, b_id agtype, c_id agtype, a_name agtype);
+
+--
+-- Composite types, vertex and edge
+--
+SELECT * FROM create_graph('composite_types');
+
+SELECT * FROM cypher('composite_types', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+
+-- Return vertex as vertex type
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n vertex);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+    ORDER BY n.name
+$$) AS (n vertex);
+
+-- Return edge as edge type
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r edge);
+
+-- Return multiple entities
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a, b
+$$) AS (a vertex, b vertex);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    RETURN a, r, b
+$$) AS (a vertex, r edge, b vertex);
+
+-- Mixed return: entity and agtype property
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n, n.name
+$$) AS (n vertex, name agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n, n.name
+    ORDER BY n.name
+$$) AS (n vertex, name agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r, r.since
+$$) AS (r edge, since agtype);
+
+-- IN operator with vertex and edge types
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a <> b AND a IN [a, b]
+    RETURN a.name
+$$) AS (name agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a <> b AND a IN [a, b]
+    RETURN a.name
+$$) AS (name agtype);
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 IN [r1, r2]
+    RETURN id(r1)
+$$) AS (id agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 IN [r1, r2]
+    RETURN id(r1)
+$$) AS (id agtype);
+
+-- Equality operators with vertex and edge types
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a = b
+    RETURN a.name
+$$) AS (name agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH (a:Person), (b:Person)
+    WHERE a = b
+    RETURN a.name
+$$) AS (name agtype);
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 = r2
+    RETURN id(r1)
+$$) AS (id agtype);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r1:KNOWS]->(), ()-[r2:KNOWS]->()
+    WHERE r1 = r2
+    RETURN id(r1)
+$$) AS (id agtype);
+
+-- Cast vertex and edge to json
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n json);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r json);
+
+-- Cast vertex and edge to jsonb
+SELECT * FROM cypher('composite_types', $$
+    MATCH (n:Person)
+    RETURN n
+$$) AS (n jsonb);
+
+SELECT * FROM cypher('composite_types', $$
+    MATCH ()-[r:KNOWS]->()
+    RETURN r
+$$) AS (r jsonb);
+
+--
 -- Cleanup
 --
+
+SELECT * FROM drop_graph('composite_types', true);
+SELECT * FROM drop_graph('accessor_opt', true);
 SELECT * FROM drop_graph('issue_2289', true);
 SELECT * FROM drop_graph('issue_2263', true);
 SELECT * FROM drop_graph('issue_1988', true);
