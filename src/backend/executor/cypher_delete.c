@@ -19,8 +19,11 @@
 
 #include "postgres.h"
 
-#include "storage/bufmgr.h"
 #include "common/hashfn.h"
+#include "miscadmin.h"
+#include "storage/bufmgr.h"
+#include "utils/acl.h"
+#include "utils/rls.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
@@ -370,6 +373,16 @@ static void process_delete_list(CustomScanState *node)
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     EState *estate = node->ss.ps.state;
+    HTAB *qual_cache = NULL;
+    HASHCTL hashctl;
+
+    /* Hash table for caching compiled security quals per label */
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(RLSCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+    qual_cache = hash_create("delete_qual_cache", 8, &hashctl,
+                             HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
     foreach(lc, css->delete_data->delete_items)
     {
@@ -382,6 +395,7 @@ static void process_delete_list(CustomScanState *node)
         char *label_name;
         Integer *pos;
         int entity_position;
+        Oid relid;
 
         item = lfirst(lc);
 
@@ -400,6 +414,7 @@ static void process_delete_list(CustomScanState *node)
         label_name = pnstrdup(label->val.string.val, label->val.string.len);
 
         resultRelInfo = create_entity_result_rel_info(estate, css->delete_data->graph_name, label_name);
+        relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 
         /*
          * Setup the scan key to require the id field on-disc to match the
@@ -447,6 +462,36 @@ static void process_delete_list(CustomScanState *node)
             continue;
         }
 
+        /* Check RLS security quals (USING policy) before delete */
+        if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+        {
+            RLSCacheEntry *entry;
+            bool found;
+
+            /* Get cached security quals and slot for this label */
+            entry = hash_search(qual_cache, &relid, HASH_ENTER, &found);
+            if (!found)
+            {
+                entry->qualExprs = setup_security_quals(resultRelInfo, estate,
+                                                        node, CMD_DELETE);
+                entry->slot = ExecInitExtraTupleSlot(
+                    estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+                    &TTSOpsHeapTuple);
+                entry->withCheckOptions = NIL;
+                entry->withCheckOptionExprs = NIL;
+            }
+
+            ExecStoreHeapTuple(heap_tuple, entry->slot, false);
+
+            /* Silently skip if USING policy filters out this row */
+            if (!check_security_quals(entry->qualExprs, entry->slot, econtext))
+            {
+                table_endscan(scan_desc);
+                destroy_entity_result_rel_info(resultRelInfo);
+                continue;
+            }
+        }
+
         /*
          * For vertices, we insert the vertex ID in the hashtable
          * vertex_id_htab. This hashtable is used later to process
@@ -466,6 +511,9 @@ static void process_delete_list(CustomScanState *node)
         table_endscan(scan_desc);
         destroy_entity_result_rel_info(resultRelInfo);
     }
+
+    /* Clean up the cache */
+    hash_destroy(qual_cache);
 }
 
 /*
@@ -489,9 +537,14 @@ static void check_for_connected_edges(CustomScanState *node)
         TableScanDesc scan_desc;
         HeapTuple tuple;
         TupleTableSlot *slot;
+        Oid relid;
+        bool rls_enabled = false;
+        List *qualExprs = NIL;
+        ExprContext *econtext = NULL;
 
         resultRelInfo = create_entity_result_rel_info(estate, graph_name,
                                                       label_name);
+        relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
         estate->es_snapshot->curcid = GetCurrentCommandId(false);
         estate->es_output_cid = GetCurrentCommandId(false);
         scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
@@ -499,6 +552,22 @@ static void check_for_connected_edges(CustomScanState *node)
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
             &TTSOpsHeapTuple);
+
+        /*
+         * For DETACH DELETE with RLS enabled, compile the security qual
+         * expressions once per label for efficient evaluation.
+         */
+        if (css->delete_data->detach)
+        {
+            /* Setup RLS security quals for this label */
+            if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+            {
+                rls_enabled = true;
+                econtext = css->css.ss.ps.ps_ExprContext;
+                qualExprs = setup_security_quals(resultRelInfo, estate, node,
+                                                 CMD_DELETE);
+            }
+        }
 
         /* for each row */
         while (true)
@@ -537,6 +606,34 @@ static void check_for_connected_edges(CustomScanState *node)
             {
                 if (css->delete_data->detach)
                 {
+                    AclResult aclresult;
+
+                    /* Check that the user has DELETE permission on the edge table */
+                    aclresult = pg_class_aclcheck(relid, GetUserId(), ACL_DELETE);
+                    if (aclresult != ACLCHECK_OK)
+                    {
+                        aclcheck_error(aclresult, OBJECT_TABLE, label_name);
+                    }
+
+                    /* Check RLS security quals (USING policy) before delete */
+                    if (rls_enabled)
+                    {
+                        /*
+                         * For DETACH DELETE, error out if edge RLS check fails.
+                         * Unlike normal DELETE which silently skips, we cannot
+                         * silently skip edges here as it would leave dangling
+                         * edges pointing to deleted vertices.
+                         */
+                        if (!check_security_quals(qualExprs, slot, econtext))
+                        {
+                            ereport(ERROR,
+                                    (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+                                     errmsg("cannot delete edge due to row-level security policy on \"%s\"",
+                                            label_name),
+                                     errhint("DETACH DELETE requires permission to delete all connected edges.")));
+                        }
+                    }
+
                     delete_entity(estate, resultRelInfo, tuple);
                 }
                 else
