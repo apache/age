@@ -264,19 +264,19 @@ $$) as (n agtype);
 (0 rows)
 
 -- Verify that the incices are created on id columns
-SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index';
+SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index' ORDER BY 1;
           indexname          |                                            indexdef                                            
 -----------------------------+------------------------------------------------------------------------------------------------
+ City_pkey                   | CREATE UNIQUE INDEX "City_pkey" ON cypher_index."City" USING btree (id)
+ Country_pkey                | CREATE UNIQUE INDEX "Country_pkey" ON cypher_index."Country" USING btree (id)
+ _ag_label_edge_end_id_idx   | CREATE INDEX _ag_label_edge_end_id_idx ON cypher_index._ag_label_edge USING btree (end_id)
  _ag_label_edge_pkey         | CREATE UNIQUE INDEX _ag_label_edge_pkey ON cypher_index._ag_label_edge USING btree (id)
  _ag_label_edge_start_id_idx | CREATE INDEX _ag_label_edge_start_id_idx ON cypher_index._ag_label_edge USING btree (start_id)
- _ag_label_edge_end_id_idx   | CREATE INDEX _ag_label_edge_end_id_idx ON cypher_index._ag_label_edge USING btree (end_id)
  _ag_label_vertex_pkey       | CREATE UNIQUE INDEX _ag_label_vertex_pkey ON cypher_index._ag_label_vertex USING btree (id)
- idx_pkey                    | CREATE UNIQUE INDEX idx_pkey ON cypher_index.idx USING btree (id)
  cypher_index_idx_props_uq   | CREATE UNIQUE INDEX cypher_index_idx_props_uq ON cypher_index.idx USING btree (properties)
- Country_pkey                | CREATE UNIQUE INDEX "Country_pkey" ON cypher_index."Country" USING btree (id)
- has_city_start_id_idx       | CREATE INDEX has_city_start_id_idx ON cypher_index.has_city USING btree (start_id)
  has_city_end_id_idx         | CREATE INDEX has_city_end_id_idx ON cypher_index.has_city USING btree (end_id)
- City_pkey                   | CREATE UNIQUE INDEX "City_pkey" ON cypher_index."City" USING btree (id)
+ has_city_start_id_idx       | CREATE INDEX has_city_start_id_idx ON cypher_index.has_city USING btree (start_id)
+ idx_pkey                    | CREATE UNIQUE INDEX idx_pkey ON cypher_index.idx USING btree (id)
 (10 rows)
 
 SET enable_mergejoin = ON;

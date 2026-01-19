@@ -165,7 +165,7 @@ SELECT * FROM cypher('cypher_index', $$
 $$) as (n agtype);
 
 -- Verify that the incices are created on id columns
-SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index';
+SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index' ORDER BY 1;
 
 SET enable_mergejoin = ON;
 SET enable_hashjoin = OFF;

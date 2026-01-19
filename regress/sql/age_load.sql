@@ -195,5 +195,130 @@ SELECT load_edges_from_file('agload_conversion', 'Edges1', '../../etc/passwd', t
 SELECT drop_graph('agload_conversion', true);
 
 --
+-- Test security and permissions
+--
+
+SELECT create_graph('agload_security');
+SELECT create_vlabel('agload_security', 'Person1');
+SELECT create_vlabel('agload_security', 'Person2');
+SELECT create_elabel('agload_security', 'SecEdge');
+
+--
+-- Test 1: File read permission (pg_read_server_files role)
+--
+-- Create a user without pg_read_server_files role
+CREATE USER load_test_user;
+GRANT USAGE ON SCHEMA ag_catalog TO load_test_user;
+
+-- This should fail because load_test_user doesn't have pg_read_server_files
+SET ROLE load_test_user;
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+RESET ROLE;
+
+-- Grant pg_read_server_files and try again - should fail on table permission now
+GRANT pg_read_server_files TO load_test_user;
+
+--
+-- Test 2: Table INSERT permission (ACL_INSERT)
+--
+-- User has file read permission but no INSERT on the label table
+SET ROLE load_test_user;
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+RESET ROLE;
+
+-- Grant INSERT permission and try again - should succeed
+GRANT USAGE ON SCHEMA agload_security TO load_test_user;
+GRANT INSERT ON agload_security."Person1" TO load_test_user;
+GRANT INSERT ON agload_security."SecEdge" TO load_test_user;
+GRANT UPDATE ON SEQUENCE agload_security."Person1_id_seq" TO load_test_user;
+GRANT UPDATE ON SEQUENCE agload_security."SecEdge_id_seq" TO load_test_user;
+GRANT SELECT ON ag_catalog.ag_label TO load_test_user;
+GRANT SELECT ON ag_catalog.ag_graph TO load_test_user;
+
+SET ROLE load_test_user;
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+RESET ROLE;
+
+-- Verify data was loaded
+SELECT COUNT(*) FROM agload_security."Person1";
+SELECT COUNT(*) FROM agload_security."SecEdge";
+
+-- cleanup
+DELETE FROM agload_security."Person1";
+DELETE FROM agload_security."SecEdge";
+
+--
+-- Test 3: Row-Level Security (RLS)
+--
+
+-- Enable RLS on the label tables
+ALTER TABLE agload_security."Person1" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agload_security."SecEdge" ENABLE ROW LEVEL SECURITY;
+
+-- Switch to load_test_user
+SET ROLE load_test_user;
+
+-- Loading should fail when RLS is enabled
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+
+RESET ROLE;
+
+-- Disable RLS and try again - should succeed
+ALTER TABLE agload_security."Person1" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE agload_security."SecEdge" DISABLE ROW LEVEL SECURITY;
+
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+
+-- Verify data was loaded
+SELECT COUNT(*) FROM agload_security."Person1";
+SELECT COUNT(*) FROM agload_security."SecEdge";
+
+-- cleanup
+DELETE FROM agload_security."Person1";
+DELETE FROM agload_security."SecEdge";
+
+--
+-- Test 4: Constraint checking (CHECK constraint)
+--
+
+-- Add constraint on vertex properties - fail if bool property is false
+ALTER TABLE agload_security."Person1" ADD CONSTRAINT check_bool_true
+    CHECK ((properties->>'"bool"')::boolean = true);
+
+-- This should fail - constraint violation
+SELECT load_labels_from_file('agload_security', 'Person1', 'age_load/conversion_vertices.csv', true);
+
+-- Add constraint on edge properties - fail if bool property is false
+ALTER TABLE agload_security."SecEdge" ADD CONSTRAINT check_bool_true
+    CHECK ((properties->>'"bool"')::boolean = true);
+
+-- This should fail - some edges have bool = false
+SELECT load_edges_from_file('agload_security', 'SecEdge', 'age_load/conversion_edges.csv');
+
+-- cleanup
+ALTER TABLE agload_security."Person1" DROP CONSTRAINT check_bool_true;
+ALTER TABLE agload_security."SecEdge" DROP CONSTRAINT check_bool_true;
+
+--
+-- Cleanup
+--
+REVOKE ALL ON agload_security."Person1" FROM load_test_user;
+REVOKE ALL ON agload_security."SecEdge" FROM load_test_user;
+REVOKE ALL ON SEQUENCE agload_security."Person1_id_seq" FROM load_test_user;
+REVOKE ALL ON SEQUENCE agload_security."SecEdge_id_seq" FROM load_test_user;
+REVOKE ALL ON ag_catalog.ag_label FROM load_test_user;
+REVOKE ALL ON ag_catalog.ag_graph FROM load_test_user;
+REVOKE ALL ON SCHEMA agload_security FROM load_test_user;
+REVOKE ALL ON SCHEMA ag_catalog FROM load_test_user;
+REVOKE pg_read_server_files FROM load_test_user;
+DROP USER load_test_user;
+SELECT drop_graph('agload_security', true);
+
+--
 -- End
 --

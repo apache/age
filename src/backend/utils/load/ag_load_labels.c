@@ -17,155 +17,114 @@
  * under the License.
  */
 #include "postgres.h"
-#include "executor/spi.h"
+
+#include "access/heapam.h"
+#include "access/table.h"
 #include "catalog/namespace.h"
+#include "commands/copy.h"
 #include "executor/executor.h"
+#include "nodes/makefuncs.h"
+#include "parser/parse_node.h"
+#include "utils/memutils.h"
+#include "utils/rel.h"
 
 #include "utils/load/ag_load_labels.h"
-#include "utils/load/csv.h"
 
-void vertex_field_cb(void *field, size_t field_len, void *data)
+/*
+ * Process a single vertex row from COPY's raw fields.
+ * Vertex CSV format: [id,] [properties...]
+ */
+static void process_vertex_row(char **fields, int nfields,
+                               char **header, int header_count,
+                               int label_id, Oid label_seq_relid,
+                               bool id_field_exists, bool load_as_agtype,
+                               int64 *curr_seq_num,
+                               batch_insert_state *batch_state)
 {
-
-    csv_vertex_reader *cr = (csv_vertex_reader *) data;
-
-    if (cr->error)
-    {
-        cr->error = 1;
-        ereport(NOTICE,(errmsg("There is some unknown error")));
-    }
-
-    /* check for space to store this field */
-    if (cr->cur_field == cr->alloc)
-    {
-        cr->alloc *= 2;
-        cr->fields = repalloc_check(cr->fields, sizeof(char *) * cr->alloc);
-        cr->fields_len = repalloc_check(cr->header, sizeof(size_t *) * cr->alloc);
-        if (cr->fields == NULL)
-        {
-            cr->error = 1;
-            ereport(ERROR,
-                    (errmsg("field_cb: failed to reallocate %zu bytes\n",
-                            sizeof(char *) * cr->alloc)));
-        }
-    }
-    cr->fields_len[cr->cur_field] = field_len;
-    cr->curr_row_length += field_len;
-    cr->fields[cr->cur_field] = pnstrdup((char *) field, field_len);
-    cr->cur_field += 1;
-}
-
-void vertex_row_cb(int delim __attribute__((unused)), void *data)
-{
-    csv_vertex_reader *cr = (csv_vertex_reader*)data;
-    batch_insert_state *batch_state = cr->batch_state;
-    size_t i, n_fields;
     graphid vertex_id;
     int64 entry_id;
     TupleTableSlot *slot;
+    agtype *vertex_properties;
 
-    n_fields = cr->cur_field;
-
-    if (cr->row == 0)
+    /* Generate or use provided entry_id */
+    if (id_field_exists)
     {
-        cr->header_num = cr->cur_field;
-        cr->header_row_length = cr->curr_row_length;
-        cr->header_len = (size_t* )palloc(sizeof(size_t *) * cr->cur_field);
-        cr->header = palloc((sizeof (char*) * cr->cur_field));
-
-        for (i = 0; i<cr->cur_field; i++)
+        entry_id = strtol(fields[0], NULL, 10);
+        if (entry_id > *curr_seq_num)
         {
-            cr->header_len[i] = cr->fields_len[i];
-            cr->header[i] = pnstrdup(cr->fields[i], cr->header_len[i]);
+            /* This is needed to ensure the sequence is up-to-date */
+            DirectFunctionCall2(setval_oid,
+                                ObjectIdGetDatum(label_seq_relid),
+                                Int64GetDatum(entry_id));
+            *curr_seq_num = entry_id;
         }
     }
     else
     {
-        if (cr->id_field_exists)
-        {
-            entry_id = strtol(cr->fields[0], NULL, 10);
-            if (entry_id > cr->curr_seq_num)
-            {
-                DirectFunctionCall2(setval_oid,
-                                    ObjectIdGetDatum(cr->label_seq_relid),
-                                    Int64GetDatum(entry_id));
-                cr->curr_seq_num = entry_id;
-            }
-        }
-        else
-        {
-            entry_id = nextval_internal(cr->label_seq_relid, true);
-        }
-
-        vertex_id = make_graphid(cr->label_id, entry_id);
-
-        /* Get the appropriate slot from the batch state */
-        slot = batch_state->slots[batch_state->num_tuples];
-
-        /* Clear the slots contents */
-        ExecClearTuple(slot);
-
-        /* Fill the values in the slot */
-        slot->tts_values[0] = GRAPHID_GET_DATUM(vertex_id);
-        slot->tts_values[1] = AGTYPE_P_GET_DATUM(
-                                create_agtype_from_list(cr->header, cr->fields,
-                                                        n_fields, entry_id,
-                                                        cr->load_as_agtype));
-        slot->tts_isnull[0] = false;
-        slot->tts_isnull[1] = false;
-
-        /* Make the slot as containing virtual tuple */
-        ExecStoreVirtualTuple(slot);
-
-        batch_state->num_tuples++;
-
-        if (batch_state->num_tuples >= batch_state->max_tuples)
-        {
-            /* Insert the batch when it is full (i.e. BATCH_SIZE) */
-            insert_batch(batch_state);
-            batch_state->num_tuples = 0;
-        }
+        entry_id = nextval_internal(label_seq_relid, true);
     }
 
-    for (i = 0; i < n_fields; ++i)
+    vertex_id = make_graphid(label_id, entry_id);
+
+    /* Get the appropriate slot from the batch state */
+    slot = batch_state->slots[batch_state->num_tuples];
+
+    /* Clear the slots contents */
+    ExecClearTuple(slot);
+
+    /* Build the agtype properties */
+    vertex_properties = create_agtype_from_list(header, fields,
+                                                nfields, entry_id,
+                                                load_as_agtype);
+
+    /* Fill the values in the slot */
+    slot->tts_values[0] = GRAPHID_GET_DATUM(vertex_id);
+    slot->tts_values[1] = AGTYPE_P_GET_DATUM(vertex_properties);
+    slot->tts_isnull[0] = false;
+    slot->tts_isnull[1] = false;
+
+    /* Make the slot as containing virtual tuple */
+    ExecStoreVirtualTuple(slot);
+
+    batch_state->buffered_bytes += VARSIZE(vertex_properties);
+    batch_state->num_tuples++;
+
+    /* Insert the batch when tuple count OR byte threshold is reached */
+    if (batch_state->num_tuples >= BATCH_SIZE ||
+        batch_state->buffered_bytes >= MAX_BUFFERED_BYTES)
     {
-        pfree_if_not_null(cr->fields[i]);
+        insert_batch(batch_state);
+        batch_state->num_tuples = 0;
+        batch_state->buffered_bytes = 0;
     }
-
-    if (cr->error)
-    {
-        ereport(NOTICE,(errmsg("THere is some error")));
-    }
-
-    cr->cur_field = 0;
-    cr->curr_row_length = 0;
-    cr->row += 1;
 }
 
-static int is_space(unsigned char c)
+/*
+ * Create COPY options for csv parsing.
+ * Returns a List of DefElem nodes.
+ */
+static List *create_copy_options(void)
 {
-    if (c == CSV_SPACE || c == CSV_TAB)
-    {
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
+    List *options = NIL;
 
-}
-static int is_term(unsigned char c)
-{
-    if (c == CSV_CR || c == CSV_LF)
-    {
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
+    /* FORMAT csv */
+    options = lappend(options,
+                      makeDefElem("format",
+                                  (Node *) makeString("csv"),
+                                  -1));
+
+    /* HEADER false - we'll read the header ourselves */
+    options = lappend(options,
+                      makeDefElem("header",
+                                  (Node *) makeBoolean(false),
+                                  -1));
+
+    return options;
 }
 
+/*
+ * Load vertex labels from csv file using pg's COPY infrastructure.
+ */
 int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
                                 Oid graph_oid,
@@ -174,94 +133,144 @@ int create_labels_from_csv_file(char *file_path,
                                 bool id_field_exists,
                                 bool load_as_agtype)
 {
+    Relation        label_rel;
+    Oid             label_relid;
+    CopyFromState   cstate;
+    List           *copy_options;
+    ParseState     *pstate;
+    char          **fields;
+    int             nfields;
+    char          **header = NULL;
+    int             header_count = 0;
+    bool            is_first_row = true;
+    char           *label_seq_name;
+    Oid             label_seq_relid;
+    int64           curr_seq_num = 0;
+    batch_insert_state *batch_state = NULL;
+    MemoryContext   batch_context;
+    MemoryContext   old_context;
 
-    FILE *fp;
-    struct csv_parser p;
-    char buf[1024];
-    size_t bytes_read;
-    unsigned char options = 0;
-    csv_vertex_reader cr;
-    char *label_seq_name;
+    /* Create a memory context for batch processing - reset after each batch */
+    batch_context = AllocSetContextCreate(CurrentMemoryContext,
+                                          "AGE CSV Load Batch Context",
+                                          ALLOCSET_DEFAULT_SIZES);
 
-    if (csv_init(&p, options) != 0)
+    /* Get the label relation */
+    label_relid = get_label_relation(label_name, graph_oid);
+    label_rel = table_open(label_relid, RowExclusiveLock);
+
+    /* Get sequence info */
+    label_seq_name = get_label_seq_relation_name(label_name);
+    label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
+
+    if (id_field_exists)
     {
-        ereport(ERROR,
-                (errmsg("Failed to initialize csv parser\n")));
+        /*
+         * Set the curr_seq_num since we will need it to compare with
+         * incoming entry_id.
+         */
+        curr_seq_num = nextval_internal(label_seq_relid, true);
     }
 
-    p.malloc_func = palloc;
-    p.realloc_func = repalloc_check;
-    p.free_func = pfree_if_not_null;
+    /* Initialize the batch insert state */
+    init_batch_insert(&batch_state, label_name, graph_oid);
 
-    csv_set_space_func(&p, is_space);
-    csv_set_term_func(&p, is_term);
+    /* Create COPY options for CSV parsing */
+    copy_options = create_copy_options();
 
-    fp = fopen(file_path, "rb");
-    if (!fp)
-    {
-        ereport(ERROR,
-                (errmsg("Failed to open %s\n", file_path)));
-    }
+    /* Create a minimal ParseState for BeginCopyFrom */
+    pstate = make_parsestate(NULL);
 
     PG_TRY();
     {
-        label_seq_name = get_label_seq_relation_name(label_name);
+        /*
+         * Initialize COPY FROM state.
+         * We pass the label relation but will only use NextCopyFromRawFields
+         * which returns raw parsed strings without type conversion.
+         */
+        cstate = BeginCopyFrom(pstate,
+                               label_rel,
+                               NULL,           /* whereClause */
+                               file_path,
+                               false,          /* is_program */
+                               NULL,           /* data_source_cb */
+                               NIL,            /* attnamelist - NULL means all columns */
+                               copy_options);
 
-        memset((void*)&cr, 0, sizeof(csv_vertex_reader));
-
-        cr.alloc = 2048;
-        cr.fields = palloc(sizeof(char *) * cr.alloc);
-        cr.fields_len = palloc(sizeof(size_t *) * cr.alloc);
-        cr.header_row_length = 0;
-        cr.curr_row_length = 0;
-        cr.graph_name = graph_name;
-        cr.graph_oid = graph_oid;
-        cr.label_name = label_name;
-        cr.label_id = label_id;
-        cr.id_field_exists = id_field_exists;
-        cr.label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
-        cr.load_as_agtype = load_as_agtype;
-            
-        if (cr.id_field_exists)
+        /*
+         * Process rows using COPY's csv parsing.
+         * NextCopyFromRawFields uses 64KB buffers internally.
+         */
+        while (NextCopyFromRawFields(cstate, &fields, &nfields))
         {
-            /*
-            * Set the curr_seq_num since we will need it to compare with
-            * incoming entry_id.
-            * 
-            * We cant use currval because it will error out if nextval was
-            * not called before in the session.
-            */
-            cr.curr_seq_num = nextval_internal(cr.label_seq_relid, true);
-        }
-
-        /* Initialize the batch insert state */
-        init_batch_insert(&cr.batch_state, label_name, graph_oid);
-
-        while ((bytes_read=fread(buf, 1, 1024, fp)) > 0)
-        {
-            if (csv_parse(&p, buf, bytes_read, vertex_field_cb,
-                        vertex_row_cb, &cr) != bytes_read)
+            if (is_first_row)
             {
-                ereport(ERROR, (errmsg("Error while parsing file: %s\n",
-                                    csv_strerror(csv_error(&p)))));
+                int i;
+
+                /* First row is the header - save column names (in main context) */
+                header_count = nfields;
+                header = (char **) palloc(sizeof(char *) * nfields);
+
+                for (i = 0; i < nfields; i++)
+                {
+                    /* Trim whitespace from header fields */
+                    header[i] = trim_whitespace(fields[i]);
+                }
+
+                is_first_row = false;
+            }
+            else
+            {
+                /* Switch to batch context for row processing */
+                old_context = MemoryContextSwitchTo(batch_context);
+
+                /* Data row - process it */
+                process_vertex_row(fields, nfields,
+                                   header, header_count,
+                                   label_id, label_seq_relid,
+                                   id_field_exists, load_as_agtype,
+                                   &curr_seq_num,
+                                   batch_state);
+
+                /* Switch back to main context */
+                MemoryContextSwitchTo(old_context);
+
+                /* Reset batch context after each batch to free memory */
+                if (batch_state->num_tuples == 0)
+                {
+                    MemoryContextReset(batch_context);
+                }
             }
         }
 
-        csv_fini(&p, vertex_field_cb, vertex_row_cb, &cr);
-
         /* Finish any remaining batch inserts */
-        finish_batch_insert(&cr.batch_state);
+        finish_batch_insert(&batch_state);
+        MemoryContextReset(batch_context);
 
-        if (ferror(fp))
-        {
-            ereport(ERROR, (errmsg("Error while reading file %s\n",
-                                file_path)));
-        }
+        /* Clean up COPY state */
+        EndCopyFrom(cstate);
     }
     PG_FINALLY();
     {
-        fclose(fp);
-        csv_free(&p);
+        /* Free header if allocated */
+        if (header != NULL)
+        {
+            int i;
+            for (i = 0; i < header_count; i++)
+            {
+                pfree(header[i]);
+            }
+            pfree(header);
+        }
+
+        /* Close the relation */
+        table_close(label_rel, RowExclusiveLock);
+
+        /* Delete batch context */
+        MemoryContextDelete(batch_context);
+
+        /* Free parse state */
+        free_parsestate(pstate);
     }
     PG_END_TRY();
 
