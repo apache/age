@@ -38,6 +38,8 @@
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
+#include "utils/builtins.h"
+#include "utils/lsyscache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -910,6 +912,15 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
             int32 rescoltypmod;
             Oid rescolcoll;
 
+            /* Cast vertex/edge to agtype for UNION compatibility */
+            lcolnode = coerce_entity_to_agtype(pstate, lcolnode);
+            ltle->expr = (Expr *) lcolnode;
+            lcoltype = exprType(lcolnode);
+
+            rcolnode = coerce_entity_to_agtype(pstate, rcolnode);
+            rtle->expr = (Expr *) rcolnode;
+            rcoltype = exprType(rcolnode);
+
             /* select common type, same as CASE et al */
             rescoltype = select_common_type(pstate,
                                             list_make2(lcolnode, rcolnode),
@@ -1316,6 +1327,9 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
     if (!clause->next)
     {
         delete_data->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
+
+        /* query expects agtype from delete */
+        coerce_target_entities_to_agtype(pstate, query->targetList);
     }
 
     func_expr = make_clause_func_expr(DELETE_CLAUSE_FUNCTION_NAME,
@@ -1630,6 +1644,9 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
     if (!clause->next)
     {
         set_items_target_list->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
+
+        /* query expects agtype from set */
+        coerce_target_entities_to_agtype(pstate, query->targetList);
     }
 
     func_expr = make_clause_func_expr(SET_CLAUSE_FUNCTION_NAME,
@@ -1806,12 +1823,14 @@ cypher_update_information *transform_cypher_set_item_list(
              */
             if (IsA(set_item->expr, ColumnRef))
             {
-                List *qualified_name, *args;
+                List *fname;
 
-                qualified_name = list_make2(makeString("ag_catalog"),
-                                            makeString("age_properties"));
-                args = list_make1(set_item->expr);
-                set_item->expr = (Node *)makeFuncCall(qualified_name, args,
+                /*
+                 * make unqualified function name so that potential
+                 * optimization can kick in
+                 */
+                fname = list_make1(makeString("properties"));
+                set_item->expr = (Node *)makeFuncCall(fname, list_make1(set_item->expr),
                                                       COERCE_SQL_SYNTAX, -1);
             }
         }
@@ -4549,26 +4568,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                  */
                 else if (prop_var != NULL)
                 {
-                    /*
-                     * Remember that prop_var is already transformed. We need
-                     * to built the transform manually.
-                     */
-                    FuncCall *fc = NULL;
-                    List *targs = NIL;
-                    List *fname = NIL;
-
-                    targs = lappend(targs, prop_var);
-                    fname = list_make2(makeString("ag_catalog"),
-                                       makeString("age_properties"));
-                    fc = makeFuncCall(fname, targs, COERCE_SQL_SYNTAX, -1);
-
-                    /*
-                     * Hand off to ParseFuncOrColumn to create the function
-                     * expression for properties(prop_var)
-                     */
-                    prop_expr = ParseFuncOrColumn(pstate, fname, targs,
-                                                  pstate->p_last_srf, fc, false,
-                                                  -1);
+                    prop_expr = make_properties_expr(prop_var);
                 }
 
                 ((cypher_map*)node->props)->keep_null = true;
@@ -4678,26 +4678,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                      */
                     else if (prop_var != NULL)
                     {
-                        /*
-                         * Remember that prop_var is already transformed. We need
-                         * to built the transform manually.
-                         */
-                        FuncCall *fc = NULL;
-                        List *targs = NIL;
-                        List *fname = NIL;
-
-                        targs = lappend(targs, prop_var);
-                        fname = list_make2(makeString("ag_catalog"),
-                                           makeString("age_properties"));
-                        fc = makeFuncCall(fname, targs, COERCE_SQL_SYNTAX, -1);
-
-                        /*
-                         * Hand off to ParseFuncOrColumn to create the function
-                         * expression for properties(prop_var)
-                         */
-                        prop_expr = ParseFuncOrColumn(pstate, fname, targs,
-                                                      pstate->p_last_srf, fc,
-                                                      false, -1);
+                        prop_expr = make_properties_expr(prop_var);
                     }
 
                     ((cypher_map*)rel->props)->keep_null = true;
@@ -4853,17 +4834,25 @@ transform_match_create_path_variable(cypher_parsestate *cpstate,
 
         if (entity->expr != NULL)
         {
+            Node *entity_expr = (Node *)entity->expr;
+
             /*
              * Is it a NULL constant, meaning there was an invalid label?
              * If so, flag it for later
              */
-            if (IsA(entity->expr, Const) &&
-                ((Const*)(entity->expr))->constisnull)
+            if (IsA(entity_expr, Const) &&
+                ((Const*)(entity_expr))->constisnull)
             {
                 null_path_entity = true;
             }
 
-            entity_exprs = lappend(entity_exprs, entity->expr);
+            /*
+             * If the entity is a vertex/edge, convert it to agtype since
+             * _agtype_build_path expects agtype arguments.
+             */
+            entity_expr = coerce_entity_to_agtype(pstate, entity_expr);
+
+            entity_exprs = lappend(entity_exprs, entity_expr);
         }
     }
 
@@ -4959,8 +4948,36 @@ static Node *make_qual(cypher_parsestate *cpstate,
 {
     List *qualified_name, *args;
     Node *node;
+    char *entity_name;
 
-    if (IsA(entity->expr, Var))
+    if (is_vertex_or_edge((Node *) entity->expr))
+    {
+        A_Indirection *indir = makeNode(A_Indirection);
+        ColumnRef *cr = makeNode(ColumnRef);
+
+        if (entity->type == ENT_VERTEX)
+        {
+            entity_name = entity->entity.node->name;
+        }
+        else if (entity->type == ENT_EDGE)
+        {
+            entity_name = entity->entity.rel->name;
+        }
+        else
+        {
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                            errmsg("unknown entity type")));
+        }
+
+        cr->fields = list_make1(makeString(entity_name));
+        cr->location = -1;
+
+        indir->arg = (Node *)cr;
+        indir->indirection = list_make1(makeString(col_name));
+
+        node = (Node *)indir;
+    }
+    else if (IsA(entity->expr, Var))
     {
         char *function_name;
 
@@ -4969,14 +4986,12 @@ static Node *make_qual(cypher_parsestate *cpstate,
         qualified_name = list_make2(makeString("ag_catalog"),
                                     makeString(function_name));
 
-
         args = list_make1(entity->expr);
         node = (Node *)makeFuncCall(qualified_name, args, COERCE_EXPLICIT_CALL,
                                     -1);
     }
     else
     {
-        char *entity_name;
         ColumnRef *cr = makeNode(ColumnRef);
 
         if (entity->type == ENT_EDGE)
@@ -4999,6 +5014,87 @@ static Node *make_qual(cypher_parsestate *cpstate,
     }
 
     return node;
+}
+
+/*
+ * Helper function to get field number and type for vertex/edge field access.
+ * Vertex: (id(1), label(2), properties(3))
+ * Edge: (id(1), label(2), end_id(3), start_id(4), properties(5))
+ */
+void get_record_field_info(char *field_name, Oid entity_type,
+                           AttrNumber *fieldnum, Oid *fieldtype)
+{
+    bool is_vertex = (entity_type == VERTEXOID);
+    bool is_edge = (entity_type == EDGEOID);
+
+    Assert(field_name != NULL);
+    Assert(fieldnum != NULL);
+    Assert(fieldtype != NULL);
+    Assert(is_vertex || is_edge);
+
+    *fieldnum = InvalidAttrNumber;
+    *fieldtype = InvalidOid;
+
+    if (strcasecmp(field_name, "id") == 0)
+    {
+        *fieldnum = 1;
+        *fieldtype = GRAPHIDOID;
+    }
+    else if (is_vertex)
+    {
+        if (strcasecmp(field_name, "label") == 0)
+        {
+            *fieldnum = 2;
+            *fieldtype = AGTYPEOID;
+        }
+        else if (strcasecmp(field_name, "properties") == 0)
+        {
+            *fieldnum = 3;
+            *fieldtype = AGTYPEOID;
+        }
+    }
+    else if (is_edge)
+    {
+        if (strcasecmp(field_name, "label") == 0 ||
+            strcasecmp(field_name, "type") == 0)
+        {
+            *fieldnum = 2;
+            *fieldtype = AGTYPEOID;
+        }
+        else if (strcasecmp(field_name, "end_id") == 0 ||
+                 strcasecmp(field_name, "endnode") == 0)
+        {
+            *fieldnum = 3;
+            *fieldtype = GRAPHIDOID;
+        }
+        else if (strcasecmp(field_name, "start_id") == 0 ||
+                 strcasecmp(field_name, "startnode") == 0)
+        {
+            *fieldnum = 4;
+            *fieldtype = GRAPHIDOID;
+        }
+        else if (strcasecmp(field_name, "properties") == 0)
+        {
+            *fieldnum = 5;
+            *fieldtype = AGTYPEOID;
+        }
+    }
+}
+
+/*
+ * Helper function to build a FieldSelect node
+ */
+FieldSelect *make_field_select(Var *var, AttrNumber fieldnum, Oid resulttype)
+{
+    FieldSelect *fselect = makeNode(FieldSelect);
+
+    fselect->arg = (Expr *)copyObject(var);
+    fselect->fieldnum = fieldnum;
+    fselect->resulttype = resulttype;
+    fselect->resulttypmod = -1;
+    fselect->resultcollid = InvalidOid;
+
+    return fselect;
 }
 
 static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
@@ -5551,17 +5647,14 @@ static Node *make_edge_expr(cypher_parsestate *cpstate,
 {
     ParseState *pstate = (ParseState *)cpstate;
     Oid label_name_func_oid;
-    Oid func_oid;
     Node *id, *start_id, *end_id;
     Const *graph_oid_const;
     Node *props;
-    List *args, *label_name_args;
-    FuncExpr *func_expr;
+    List *label_name_args;
     FuncExpr *label_name_func_expr;
+    RowExpr *row_expr;
 
-    func_oid = get_ag_func_oid("_agtype_build_edge", 5, GRAPHIDOID, GRAPHIDOID,
-                               GRAPHIDOID, CSTRINGOID, AGTYPEOID);
-
+    /* Get raw column references */
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_EDGE_COLNAME_ID, -1);
 
     start_id = scanNSItemForColumn(pstate, pnsi, 0, AG_EDGE_COLNAME_START_ID, -1);
@@ -5577,39 +5670,44 @@ static Node *make_edge_expr(cypher_parsestate *cpstate,
 
     label_name_args = list_make2(graph_oid_const, id);
 
-    label_name_func_expr = makeFuncExpr(label_name_func_oid, CSTRINGOID,
+    label_name_func_expr = makeFuncExpr(label_name_func_oid, AGTYPEOID,
                                         label_name_args, InvalidOid,
                                         InvalidOid, COERCE_EXPLICIT_CALL);
     label_name_func_expr->location = -1;
 
     props = scanNSItemForColumn(pstate, pnsi, 0, AG_EDGE_COLNAME_PROPERTIES, -1);
 
-    args = list_make4(id, start_id, end_id, label_name_func_expr);
-    args = lappend(args, props);
+    /*
+     * Create a RowExpr with the edge composite type.
+     * Edge format: (id, label, end_id, start_id, properties)
+     * Implicit cast to agtype is used when needed.
+     */
+    row_expr = makeNode(RowExpr);
+    row_expr->args = list_make5(id, label_name_func_expr, end_id, start_id, props);
+    row_expr->row_typeid = EDGEOID;
+    row_expr->row_format = COERCE_EXPLICIT_CALL;
+    row_expr->colnames = list_make5(makeString("id"),
+                                    makeString("label"),
+                                    makeString("end_id"),
+                                    makeString("start_id"),
+                                    makeString("properties"));
+    row_expr->location = -1;
 
-    func_expr = makeFuncExpr(func_oid, AGTYPEOID, args, InvalidOid, InvalidOid,
-                             COERCE_EXPLICIT_CALL);
-    func_expr->location = -1;
-
-    return (Node *)func_expr;
+    return (Node *)row_expr;
 }
 static Node *make_vertex_expr(cypher_parsestate *cpstate,
                               ParseNamespaceItem *pnsi)
 {
     ParseState *pstate = (ParseState *)cpstate;
     Oid label_name_func_oid;
-    Oid func_oid;
     Node *id;
     Const *graph_oid_const;
     Node *props;
-    List *args, *label_name_args;
-    FuncExpr *func_expr;
+    List *label_name_args;
     FuncExpr *label_name_func_expr;
+    RowExpr *row_expr;
 
     Assert(pnsi != NULL);
-
-    func_oid = get_ag_func_oid("_agtype_build_vertex", 3, GRAPHIDOID,
-                               CSTRINGOID, AGTYPEOID);
 
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_ID, -1);
 
@@ -5622,7 +5720,7 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
 
     label_name_args = list_make2(graph_oid_const, id);
 
-    label_name_func_expr = makeFuncExpr(label_name_func_oid, CSTRINGOID,
+    label_name_func_expr = makeFuncExpr(label_name_func_oid, AGTYPEOID,
                                         label_name_args, InvalidOid,
                                         InvalidOid, COERCE_EXPLICIT_CALL);
     label_name_func_expr->location = -1;
@@ -5630,13 +5728,21 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
     props = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_PROPERTIES,
                                 -1);
 
-    args = list_make3(id, label_name_func_expr, props);
+    /*
+     * Create a RowExpr with the vertex composite type.
+     * Vertex format: (id, label, properties)
+     * Implicit cast to agtype is used when needed.
+     */
+    row_expr = makeNode(RowExpr);
+    row_expr->args = list_make3(id, label_name_func_expr, props);
+    row_expr->row_typeid = VERTEXOID;
+    row_expr->row_format = COERCE_EXPLICIT_CALL;
+    row_expr->colnames = list_make3(makeString("id"),
+                                     makeString("label"),
+                                     makeString("properties"));
+    row_expr->location = -1;
 
-    func_expr = makeFuncExpr(func_oid, AGTYPEOID, args, InvalidOid, InvalidOid,
-                             COERCE_EXPLICIT_CALL);
-    func_expr->location = -1;
-
-    return (Node *)func_expr;
+    return (Node *)row_expr;
 }
 
 static Query *transform_cypher_create(cypher_parsestate *cpstate,
@@ -5683,8 +5789,10 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
     if (!clause->next)
     {
         target_nodes->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
-    }
 
+        /* query expects agtype from create */
+        coerce_target_entities_to_agtype(pstate, query->targetList);
+    }
 
     func_expr = make_clause_func_expr(CREATE_CLAUSE_FUNCTION_NAME,
                                       (Node *)target_nodes);
@@ -6099,7 +6207,6 @@ static void add_volatile_wrapper_to_target_entry(List *target_list, int resno)
         TargetEntry *te = (TargetEntry *)lfirst(lc);
         if (te->resno == resno)
         {
-            /* wrap it */
             te->expr = add_volatile_wrapper(te->expr);
             return;
         }
@@ -6695,6 +6802,9 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     if (!clause->next)
     {
         merge_information->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
+
+        /* query expects agtype from merge */
+        coerce_target_entities_to_agtype(pstate, query->targetList);
     }
 
     /*
@@ -6765,6 +6875,36 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
      */
     j->larg = transform_clause_for_join(cpstate, clause->prev, &l_rte,
                                         &l_nsitem, l_alias);
+
+    /*
+     * Wrap vertex/edge columns in the left subquery with volatile wrapper
+     * before adding to namespace and building property expressions since
+     * our executors are strictly tied to agtype.
+     *
+     * This is necessary because:
+     * 1. The volatile wrapper will be applied to the final targetList later,
+     *    changing column types from VERTEXOID/EDGEOID to AGTYPEOID
+     * 2. If we build property expressions before this, the Vars will have
+     *    vartype=VERTEXOID but the execution slot will have AGTYPEOID
+     * 3. By wrapping now, the namespace lookups will see AGTYPEOID columns
+     *    and build expressions with correct type expectations
+     */
+    foreach(lc, l_rte->subquery->targetList)
+    {
+        TargetEntry *te = (TargetEntry *)lfirst(lc);
+        Oid te_type = exprType((Node *)te->expr);
+
+        if (te_type == VERTEXOID || te_type == EDGEOID)
+        {
+            /* resno is 1-based */
+            int col_idx = te->resno - 1;
+
+            /* Wrap the expression in the subquery targetList */
+            te->expr = add_volatile_wrapper(te->expr);
+            l_nsitem->p_nscolumns[col_idx].p_vartype = AGTYPEOID;
+        }
+    }
+
     pstate->p_namespace = lappend(pstate->p_namespace, l_nsitem);
 
     /*
