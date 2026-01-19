@@ -69,7 +69,6 @@ OBJS = src/backend/age.o \
        src/backend/utils/load/ag_load_labels.o \
        src/backend/utils/load/ag_load_edges.o \
        src/backend/utils/load/age_load.o \
-       src/backend/utils/load/libcsv.o \
        src/backend/utils/name_validation.o \
        src/backend/utils/ag_guc.o
 
