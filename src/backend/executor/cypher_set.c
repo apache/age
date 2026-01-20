@@ -19,7 +19,10 @@
 
 #include "postgres.h"
 
+#include "common/hashfn.h"
+#include "executor/executor.h"
 #include "storage/bufmgr.h"
+#include "utils/rls.h"
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
@@ -123,6 +126,13 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         if (resultRelInfo->ri_RelationDesc->rd_att->constr != NULL)
         {
             ExecConstraints(resultRelInfo, elemTupleSlot, estate);
+        }
+
+        /* Check RLS WITH CHECK policies if configured */
+        if (resultRelInfo->ri_WithCheckOptions != NIL)
+        {
+            ExecWithCheckOptions(WCO_RLS_UPDATE_CHECK, resultRelInfo,
+                                 elemTupleSlot, estate);
         }
 
         result = table_tuple_update(resultRelInfo->ri_RelationDesc,
@@ -355,9 +365,20 @@ static void process_update_list(CustomScanState *node)
     EState *estate = css->css.ss.ps.state;
     int *luindex = NULL;
     int lidx = 0;
+    HTAB *qual_cache = NULL;
+    HASHCTL hashctl;
 
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
+
+    /* Hash table for caching compiled security quals per label */
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(RLSCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+    qual_cache = hash_create("update_qual_cache", 8, &hashctl,
+                             HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
     /*
      * Iterate through the SET items list and store the loop index of each
      * 'entity' update. As there is only one entry for each entity, this will
@@ -505,6 +526,38 @@ static void process_update_list(CustomScanState *node)
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
             &TTSOpsHeapTuple);
 
+        /* Setup RLS policies if RLS is enabled */
+        if (check_enable_rls(resultRelInfo->ri_RelationDesc->rd_id,
+                             InvalidOid, true) == RLS_ENABLED)
+        {
+            Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+            RLSCacheEntry *entry;
+            bool found;
+
+            /* Get cached RLS state for this label, or set it up */
+            entry = hash_search(qual_cache, &relid, HASH_ENTER, &found);
+            if (!found)
+            {
+                /* Setup WITH CHECK policies */
+                setup_wcos(resultRelInfo, estate, node, CMD_UPDATE);
+                entry->withCheckOptions = resultRelInfo->ri_WithCheckOptions;
+                entry->withCheckOptionExprs = resultRelInfo->ri_WithCheckOptionExprs;
+
+                /* Setup security quals */
+                entry->qualExprs = setup_security_quals(resultRelInfo, estate,
+                                                        node, CMD_UPDATE);
+                entry->slot = ExecInitExtraTupleSlot(
+                    estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+                    &TTSOpsHeapTuple);
+            }
+            else
+            {
+                /* Use cached WCOs */
+                resultRelInfo->ri_WithCheckOptions = entry->withCheckOptions;
+                resultRelInfo->ri_WithCheckOptionExprs = entry->withCheckOptionExprs;
+            }
+        }
+
         /*
          *  Now that we have the updated properties, create a either a vertex or
          *  edge Datum for the in-memory update, and setup the tupleTableSlot
@@ -580,8 +633,36 @@ static void process_update_list(CustomScanState *node)
              */
             if (HeapTupleIsValid(heap_tuple))
             {
-                heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
-                                                 heap_tuple);
+                bool should_update = true;
+                Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+
+                /* Check RLS security quals (USING policy) before update */
+                if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                {
+                    RLSCacheEntry *entry;
+
+                    /* Entry was already created earlier when setting up WCOs */
+                    entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
+                    if (!entry)
+                    {
+                        ereport(ERROR,
+                                (errcode(ERRCODE_INTERNAL_ERROR),
+                                 errmsg("missing RLS cache entry for relation %u",
+                                        relid)));
+                    }
+
+                    ExecStoreHeapTuple(heap_tuple, entry->slot, false);
+                    should_update = check_security_quals(entry->qualExprs,
+                                                         entry->slot,
+                                                         econtext);
+                }
+
+                /* Silently skip if USING policy filters out this row */
+                if (should_update)
+                {
+                    heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
+                                                     heap_tuple);
+                }
             }
             /* close the ScanDescription */
             table_endscan(scan_desc);
@@ -595,6 +676,10 @@ static void process_update_list(CustomScanState *node)
         /* increment loop index */
         lidx++;
     }
+
+    /* Clean up the cache */
+    hash_destroy(qual_cache);
+
     /* free our lookup array */
     pfree_if_not_null(luindex);
 }
