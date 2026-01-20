@@ -21,6 +21,7 @@
 #define AG_CYPHER_UTILS_H
 
 #include "access/heapam.h"
+#include "nodes/execnodes.h"
 
 #include "nodes/cypher_nodes.h"
 #include "utils/agtype.h"
@@ -126,5 +127,26 @@ HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
 HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
                                   TupleTableSlot *elemTupleSlot,
                                   EState *estate, CommandId cid);
+
+/* RLS support */
+void setup_wcos(ResultRelInfo *resultRelInfo, EState *estate,
+                CustomScanState *node, CmdType cmd);
+List *setup_security_quals(ResultRelInfo *resultRelInfo, EState *estate,
+                           CustomScanState *node, CmdType cmd);
+bool check_security_quals(List *qualExprs, TupleTableSlot *slot,
+                          ExprContext *econtext);
+bool check_rls_for_tuple(Relation rel, HeapTuple tuple, CmdType cmd);
+
+/* Hash table entry for caching RLS state per label */
+typedef struct RLSCacheEntry
+{
+    Oid relid;                      /* hash key */
+    /* Security quals (USING policies) for UPDATE/DELETE */
+    List *qualExprs;
+    TupleTableSlot *slot;           /* slot for old tuple (RLS check) */
+    /* WCOs - used only in SET */
+    List *withCheckOptions;
+    List *withCheckOptionExprs;
+} RLSCacheEntry;
 
 #endif
