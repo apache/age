@@ -19,6 +19,8 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
+
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
