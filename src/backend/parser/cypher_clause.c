@@ -345,6 +345,91 @@ static ParseNamespaceItem *find_pnsi(cypher_parsestate *cpstate, char *varname);
 static bool has_list_comp_or_subquery(Node *expr, void *context);
 
 /*
+ * Add required permissions to the matching relation's range table entry.
+ * PostgreSQL 15 stores permission information directly in RangeTblEntry.
+ * Recursively search subqueries as well as the current query level.
+ */
+static bool
+add_rte_permissions_recurse(List *rtable, Oid relid, AclMode permissions)
+{
+    ListCell *lc;
+
+    foreach(lc, rtable)
+    {
+        RangeTblEntry *rte = lfirst(lc);
+
+        if (rte->rtekind == RTE_RELATION && rte->relid == relid)
+        {
+            rte->requiredPerms |= permissions;
+            return true;
+        }
+    }
+
+    foreach(lc, rtable)
+    {
+        RangeTblEntry *rte = lfirst(lc);
+
+        if (rte->rtekind == RTE_SUBQUERY && rte->subquery != NULL)
+        {
+            if (add_rte_permissions_recurse(rte->subquery->rtable,
+                                            relid, permissions))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static void
+add_rte_permissions(ParseState *pstate, Oid relid, AclMode permissions)
+{
+    add_rte_permissions_recurse(pstate->p_rtable, relid, permissions);
+}
+
+/*
+ * Add required permissions to the label table for a given entity variable.
+ * Looks up the entity by variable name, extracts its label, and adds
+ * the specified permissions to the corresponding RangeTblEntry.
+ */
+static void
+add_entity_permissions(cypher_parsestate *cpstate, char *var_name,
+                       AclMode permissions)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    transform_entity *entity;
+    char *label = NULL;
+    Oid relid;
+
+    entity = find_variable(cpstate, var_name);
+    if (entity == NULL)
+    {
+        return;
+    }
+
+    if (entity->type == ENT_VERTEX)
+    {
+        label = entity->entity.node->label;
+    }
+    else if (entity->type == ENT_EDGE)
+    {
+        label = entity->entity.rel->label;
+    }
+
+    if (label == NULL)
+    {
+        return;
+    }
+
+    relid = get_label_relation(label, cpstate->graph_oid);
+    if (OidIsValid(relid))
+    {
+        add_rte_permissions(pstate, relid, permissions);
+    }
+}
+
+/*
  * transform a cypher_clause
  */
 Query *transform_cypher_clause(cypher_parsestate *cpstate,
@@ -1554,6 +1639,9 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
                      parser_errposition(pstate, col->location)));
         }
 
+        /* Add ACL_DELETE permission to the entity's label table */
+        add_entity_permissions(cpstate, val->sval, ACL_DELETE);
+
         add_volatile_wrapper_to_target_entry(query->targetList, resno);
 
         pos = makeInteger(resno);
@@ -1717,6 +1805,9 @@ cypher_update_information *transform_cypher_remove_item_list(
                             variable_name),
                      parser_errposition(pstate, set_item->location)));
         }
+
+        /* Add ACL_UPDATE permission to the entity's label table */
+        add_entity_permissions(cpstate, variable_name, ACL_UPDATE);
 
         add_volatile_wrapper_to_target_entry(query->targetList,
                                              item->entity_position);
@@ -1894,6 +1985,9 @@ cypher_update_information *transform_cypher_set_item_list(
                             variable_name),
                             parser_errposition(pstate, set_item->location)));
         }
+
+        /* Add ACL_UPDATE permission to the entity's label table */
+        add_entity_permissions(cpstate, variable_name, ACL_UPDATE);
 
         add_volatile_wrapper_to_target_entry(query->targetList,
                                              item->entity_position);
