@@ -20,11 +20,12 @@
 #include "postgres.h"
 
 #include "executor/executor.h"
+#include "utils/datum.h"
+#include "utils/rls.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
-#include "utils/datum.h"
 
 /*
  * The following structure is used to hold a single vertex or edge component
@@ -181,6 +182,12 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         {
             cypher_node->prop_expr_state = ExecInitExpr(cypher_node->prop_expr,
                                                         (PlanState *)node);
+        }
+
+        /* Setup RLS WITH CHECK policies if RLS is enabled */
+        if (check_enable_rls(rel->rd_id, InvalidOid, true) == RLS_ENABLED)
+        {
+            setup_wcos(cypher_node->resultRelInfo, estate, node, CMD_INSERT);
         }
     }
 

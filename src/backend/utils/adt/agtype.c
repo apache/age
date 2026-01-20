@@ -44,7 +44,10 @@
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
 #include "parser/parse_coerce.h"
+#include "nodes/nodes.h"
+#include "utils/acl.h"
 #include "utils/builtins.h"
+#include "executor/cypher_utils.h"
 #include "utils/float.h"
 #include "utils/lsyscache.h"
 #include "utils/snapmgr.h"
@@ -5625,14 +5628,23 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     HeapTuple tuple;
     TupleDesc tupdesc;
     Datum id, properties, result;
+    AclResult aclresult;
 
     /* get the specific graph namespace (schema) */
     Oid graph_namespace_oid = get_namespace_oid(graph, false);
     /* get the specific vertex label table (schema.vertex_label) */
     Oid vertex_label_table_oid = get_relname_relid(vertex_label,
-                                                 graph_namespace_oid);
+                                                   graph_namespace_oid);
     /* get the active snapshot */
     Snapshot snapshot = GetActiveSnapshot();
+
+    /* check for SELECT permission on the table */
+    aclresult = pg_class_aclcheck(vertex_label_table_oid, GetUserId(),
+                                  ACL_SELECT);
+    if (aclresult != ACLCHECK_OK)
+    {
+        aclcheck_error(aclresult, OBJECT_TABLE, vertex_label);
+    }
 
     /* initialize the scan key */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
@@ -5646,9 +5658,22 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* bail if the tuple isn't valid */
     if (!HeapTupleIsValid(tuple))
     {
+        table_endscan(scan_desc);
+        table_close(graph_vertex_label, ShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("graphid %lu does not exist", graphid)));
+    }
+
+    /* Check RLS policies - error if filtered out */
+    if (!check_rls_for_tuple(graph_vertex_label, tuple, CMD_SELECT))
+    {
+        table_endscan(scan_desc);
+        table_close(graph_vertex_label, ShareLock);
+        ereport(ERROR,
+                (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+                 errmsg("access to vertex %lu denied by row-level security policy on \"%s\"",
+                        graphid, vertex_label)));
     }
 
     /* get the tupdesc - we don't need to release this one */
