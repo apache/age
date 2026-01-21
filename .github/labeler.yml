@@ -19,5 +19,8 @@ PG16:
 PG17:
 - base-branch: 'PG17'
 
+PG18:
+- base-branch: 'PG18'
+
 master:
 - base-branch: 'master'

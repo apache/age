@@ -2729,9 +2729,9 @@ static void get_res_cols(ParseState *pstate, ParseNamespaceItem *l_pnsi,
     List *colnames = NIL;
     List *colvars = NIL;
 
-    expandRTE(l_pnsi->p_rte, l_pnsi->p_rtindex, 0, -1, false,
+    expandRTE(l_pnsi->p_rte, l_pnsi->p_rtindex, 0, VAR_RETURNING_DEFAULT, -1, false,
               &l_colnames, &l_colvars);
-    expandRTE(r_pnsi->p_rte, r_pnsi->p_rtindex, 0, -1, false,
+    expandRTE(r_pnsi->p_rte, r_pnsi->p_rtindex, 0, VAR_RETURNING_DEFAULT, -1, false,
               &r_colnames, &r_colvars);
 
     /* add in all colnames and colvars from the l_rte. */
