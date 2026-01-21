@@ -26,6 +26,7 @@
 #include "access/skey.h"
 #include "access/stratnum.h"
 #include "catalog/indexing.h"
+#include "executor/executor.h"
 #include "catalog/namespace.h"
 #include "fmgr.h"
 #include "nodes/execnodes.h"

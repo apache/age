@@ -78,6 +78,9 @@ typedef enum ag_node_tag
     cypher_merge_information_t
 } ag_node_tag;
 
+extern const char *node_names[];
+extern const ExtensibleNodeMethods node_methods[];
+
 void register_ag_nodes(void);
 
 ExtensibleNode *_new_ag_node(Size size, ag_node_tag tag);

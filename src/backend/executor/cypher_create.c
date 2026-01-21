@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "utils/rls.h"
 
 #include "catalog/ag_label.h"

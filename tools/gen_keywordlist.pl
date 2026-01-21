@@ -112,6 +112,7 @@ printf $kwdef <<EOM, $base_filename, uc $base_filename, uc $base_filename;
 #define %s_H
 
 #include "common/kwlookup.h"
+#include "parser/cypher_keywords.h"
 
 EOM
 
