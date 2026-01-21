@@ -186,6 +186,116 @@ SELECT * FROM cypher('cypher_with', $$
     RETURN id(start_node),end_node.name
 $$) AS (id agtype, node agtype);
 
+--
+-- WITH clause with id(), start_id(), end_id() functions
+-- These tests verify that graph entity id functions work correctly
+-- when the entity is passed through WITH clauses
+--
+
+-- Simple WITH vertex RETURN id(vertex)
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (n)
+    WITH n
+    RETURN id(n), n.name
+    ORDER BY id(n)
+$$) AS (id agtype, name agtype);
+
+-- WITH vertex RETURN id(vertex) with WHERE clause
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (n)
+    WITH n
+    WHERE n.age > 30
+    RETURN id(n), n.name
+    ORDER BY id(n)
+$$) AS (id agtype, name agtype);
+
+-- Simple WITH edge RETURN id(edge), start_id(edge), end_id(edge)
+SELECT * FROM cypher('cypher_with', $$
+    MATCH ()-[e]->()
+    WITH e
+    RETURN id(e), start_id(e), end_id(e)
+    ORDER BY id(e)
+$$) AS (id agtype, start_id agtype, end_id agtype);
+
+-- WITH edge with label filter
+SELECT * FROM cypher('cypher_with', $$
+    MATCH ()-[e:KNOWS]->()
+    WITH e
+    RETURN id(e), start_id(e), end_id(e)
+    ORDER BY id(e)
+$$) AS (id agtype, start_id agtype, end_id agtype);
+
+-- WITH both vertex and edge, return all id functions
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[e]->(b)
+    WITH a, e, b
+    RETURN id(a), id(e), start_id(e), end_id(e), id(b)
+    ORDER BY id(a), id(e)
+$$) AS (id_a agtype, id_e agtype, start_e agtype, end_e agtype, id_b agtype);
+
+-- Chained WITH clauses with id functions
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[e]->(b)
+    WITH a, e, b
+    WHERE label(e) = 'KNOWS'
+    WITH a, e, b
+    RETURN id(a), id(e), id(b), a.name, b.name
+    ORDER BY id(a)
+$$) AS (id_a agtype, id_e agtype, id_b agtype, name_a agtype, name_b agtype);
+
+-- Triple WITH chain with id functions
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[e]->(b)
+    WITH a, e, b
+    WITH a, e, b
+    WITH a, e, b
+    RETURN id(a), id(e), id(b)
+    ORDER BY id(a), id(e)
+$$) AS (id_a agtype, id_e agtype, id_b agtype);
+
+-- WITH ... AS alias, then id() on alias
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (n)
+    WITH n AS person
+    RETURN id(person), person.name
+    ORDER BY id(person)
+$$) AS (id agtype, name agtype);
+
+-- WITH edge AS alias, then edge id functions on alias
+SELECT * FROM cypher('cypher_with', $$
+    MATCH ()-[e]->()
+    WITH e AS rel
+    RETURN id(rel), start_id(rel), end_id(rel)
+    ORDER BY id(rel)
+$$) AS (id agtype, start_id agtype, end_id agtype);
+
+-- Mix of id functions and property access after WITH
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[e]->(b)
+    WITH a, e, b
+    WHERE a.age > 30
+    RETURN id(a), a.name, id(e), id(b), b.name
+    ORDER BY id(a)
+$$) AS (id_a agtype, name_a agtype, id_e agtype, id_b agtype, name_b agtype);
+
+-- WITH in subquery pattern - vertex ids
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[]->(b)
+    WITH a, b
+    MATCH (b)-[]->(c)
+    RETURN id(a), id(b), id(c), a.name, b.name, c.name
+    ORDER BY id(a), id(b), id(c)
+$$) AS (id_a agtype, id_b agtype, id_c agtype, name_a agtype, name_b agtype, name_c agtype);
+
+-- WITH in subquery pattern - edge ids
+SELECT * FROM cypher('cypher_with', $$
+    MATCH (a)-[e1]->(b)
+    WITH a, e1, b
+    MATCH (b)-[e2]->(c)
+    RETURN id(e1), start_id(e1), end_id(e1), id(e2), start_id(e2), end_id(e2)
+    ORDER BY id(e1), id(e2)
+$$) AS (id_e1 agtype, start_e1 agtype, end_e1 agtype, id_e2 agtype, start_e2 agtype, end_e2 agtype);
+
 -- Clean up
 
 SELECT drop_graph('cypher_with', true);

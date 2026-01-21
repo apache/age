@@ -71,6 +71,18 @@ typedef struct
     Expr *expr;
 
     /*
+     * Exposed column Vars for cross-clause optimization.
+     * When an entity is exported to a subsequent clause, we also export its
+     * id, start_id (edges only), end_id (edges only), and properties as
+     * hidden columns. These Vars allow direct access to these values without
+     * rebuilding the full vertex/edge object.
+     */
+    Var *id_var;        /* Var for the exposed id column */
+    Var *start_id_var;  /* Var for the exposed start_id column (edges only) */
+    Var *end_id_var;    /* Var for the exposed end_id column (edges only) */
+    Var *props_var;     /* Var for the exposed properties column */
+
+    /*
      * tells each clause whether this variable was
      * declared by itself or a previous clause.
      */

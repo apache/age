@@ -36,6 +36,38 @@ SELECT '0'::graphid >= '1'::graphid,
        '0'::graphid >= '0'::graphid,
        '1'::graphid >= '0'::graphid;
 
+-- graphid vs int8 cross-type comparisons
+SELECT '0'::graphid = 0::int8, '0'::graphid = 1::int8;
+SELECT '0'::graphid <> 0::int8, '0'::graphid <> 1::int8;
+SELECT '0'::graphid < 1::int8,
+       '0'::graphid < 0::int8,
+       '1'::graphid < 0::int8;
+SELECT '0'::graphid > 1::int8,
+       '0'::graphid > 0::int8,
+       '1'::graphid > 0::int8;
+SELECT '0'::graphid <= 1::int8,
+       '0'::graphid <= 0::int8,
+       '1'::graphid <= 0::int8;
+SELECT '0'::graphid >= 1::int8,
+       '0'::graphid >= 0::int8,
+       '1'::graphid >= 0::int8;
+
+-- int8 vs graphid cross-type comparisons
+SELECT 0::int8 = '0'::graphid, 0::int8 = '1'::graphid;
+SELECT 0::int8 <> '0'::graphid, 0::int8 <> '1'::graphid;
+SELECT 0::int8 < '1'::graphid,
+       0::int8 < '0'::graphid,
+       1::int8 < '0'::graphid;
+SELECT 0::int8 > '1'::graphid,
+       0::int8 > '0'::graphid,
+       1::int8 > '0'::graphid;
+SELECT 0::int8 <= '1'::graphid,
+       0::int8 <= '0'::graphid,
+       1::int8 <= '0'::graphid;
+SELECT 0::int8 >= '1'::graphid,
+       0::int8 >= '0'::graphid,
+       1::int8 >= '0'::graphid;
+
 -- b-tree index
 CREATE TABLE graphid_table (gid graphid);
 INSERT INTO graphid_table VALUES ('0'), ('1'), ('2');
@@ -43,5 +75,8 @@ CREATE INDEX ON graphid_table (gid);
 SET enable_seqscan = OFF;
 EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid = '1';
 EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid > '0';
+-- verify index usage with int8 cross-type comparison
+EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid = 1::int8;
+EXPLAIN (COSTS FALSE) SELECT * FROM graphid_table WHERE gid > 0::int8;
 SET enable_seqscan = ON;
 DROP TABLE graphid_table;
