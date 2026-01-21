@@ -809,7 +809,7 @@ void init_batch_insert(batch_insert_state **batch_state,
     perminfos = list_make1(perminfo);
 
     /* Initialize range table in executor state */
-    ExecInitRangeTable(estate, range_table, perminfos);
+    ExecInitRangeTable(estate, range_table, perminfos, NULL);
 
     /* Initialize resultRelInfo - this opens the relation */
     resultRelInfo = makeNode(ResultRelInfo);
