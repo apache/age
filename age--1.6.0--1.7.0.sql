@@ -17,19 +17,11 @@
  * under the License.
  */
 
---* This is a TEMPLATE for upgrading from the previous version of Apache AGE
---* Please adjust the below ALTER EXTENSION to reflect the -- correct version it
---* is upgrading to.
-
 -- This will only work within a major version of PostgreSQL, not across
 -- major versions.
 
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
-\echo Use "ALTER EXTENSION age UPDATE TO '1.X.0'" to load this file. \quit
-
---* Please add all additions, deletions, and modifications to the end of this
---* file. We need to keep the order of these changes.
---* REMOVE ALL LINES ABOVE, and this one, that start with --*
+\echo Use "ALTER EXTENSION age UPDATE TO '1.7.0'" to load this file. \quit
 
 CREATE FUNCTION ag_catalog._ag_enforce_edge_uniqueness2(graphid, graphid)
     RETURNS bool
