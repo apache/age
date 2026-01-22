@@ -49,7 +49,7 @@ ENV LC_COLLATE=en_US.UTF-8
 ENV LC_CTYPE=en_US.UTF-8
 
 COPY --from=build /usr/lib/postgresql/18/lib/age.so /usr/lib/postgresql/18/lib/
-COPY --from=build /usr/share/postgresql/18/extension/age--1.6.0.sql /usr/share/postgresql/18/extension/
+COPY --from=build /usr/share/postgresql/18/extension/age--1.7.0.sql /usr/share/postgresql/18/extension/
 COPY --from=build /usr/share/postgresql/18/extension/age.control /usr/share/postgresql/18/extension/
 COPY docker/docker-entrypoint-initdb.d/00-create-extension-age.sql /docker-entrypoint-initdb.d/00-create-extension-age.sql
 
