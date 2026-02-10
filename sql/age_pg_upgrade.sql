@@ -17,27 +17,41 @@
  * under the License.
  */
 
---* This is a TEMPLATE for upgrading from the previous version of Apache AGE
---* Please adjust the below ALTER EXTENSION to reflect the -- correct version it
---* is upgrading to.
-
--- This will only work within a major version of PostgreSQL, not across
--- major versions.
-
--- complain if script is sourced in psql, rather than via CREATE EXTENSION
-\echo Use "ALTER EXTENSION age UPDATE TO '1.X.0'" to load this file. \quit
-
---* Please add all additions, deletions, and modifications to the end of this
---* file. We need to keep the order of these changes.
---* REMOVE ALL LINES ABOVE, and this one, that start with --*
-
 --
 -- pg_upgrade support functions
 --
 -- These functions help users upgrade PostgreSQL major versions using pg_upgrade
--- while preserving Apache AGE graph data.
+-- while preserving Apache AGE graph data. The ag_graph.namespace column uses
+-- the regnamespace type which is not supported by pg_upgrade. These functions
+-- temporarily convert the schema to be pg_upgrade compatible, then restore it
+-- to the original state after the upgrade completes.
+--
+-- Usage:
+--   1. Before pg_upgrade: SELECT age_prepare_pg_upgrade();
+--   2. Run pg_upgrade as normal
+--   3. After pg_upgrade:  SELECT age_finish_pg_upgrade();
+--
+-- To cancel an upgrade after preparation (before running pg_upgrade):
+--   SELECT age_revert_pg_upgrade_changes();
 --
 
+--
+-- age_prepare_pg_upgrade()
+--
+-- Prepares an AGE database for pg_upgrade by converting the ag_graph.namespace
+-- column from regnamespace to oid type. This is necessary because pg_upgrade
+-- does not support the regnamespace type in user tables.
+--
+-- This function:
+--   1. Creates a backup table with graph name to namespace name mappings
+--   2. Drops the existing namespace index
+--   3. Converts the namespace column from regnamespace to oid
+--   4. Recreates the namespace index with oid type
+--   5. Creates a view for backward-compatible namespace display
+--
+-- Returns: void
+-- Side effects: Modifies ag_graph table structure
+--
 CREATE FUNCTION ag_catalog.age_prepare_pg_upgrade()
     RETURNS void
     LANGUAGE plpgsql
@@ -102,9 +116,30 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION ag_catalog.age_prepare_pg_upgrade() IS
+COMMENT ON FUNCTION ag_catalog.age_prepare_pg_upgrade() IS 
 'Prepares an AGE database for pg_upgrade by converting ag_graph.namespace from regnamespace to oid type. Run this before pg_upgrade.';
 
+--
+-- age_finish_pg_upgrade()
+--
+-- Completes the pg_upgrade process by remapping stale OIDs in ag_graph and
+-- ag_label tables to their new values, then restores the original schema.
+-- After pg_upgrade, the namespace OIDs stored in these tables no longer match
+-- the actual pg_namespace OIDs because PostgreSQL assigns new OIDs to schemas
+-- during the upgrade.
+--
+-- This function:
+--   1. Reads the backup table created by age_prepare_pg_upgrade()
+--   2. Looks up new namespace OIDs by schema name
+--   3. Updates ag_label.graph references
+--   4. Updates ag_graph.graphid and ag_graph.namespace
+--   5. Restores namespace column to regnamespace type
+--   6. Cleans up the backup table and view
+--   7. Invalidates AGE caches to ensure cypher queries work immediately
+--
+-- Returns: void
+-- Side effects: Updates OIDs in ag_graph and ag_label tables, restores schema
+--
 CREATE FUNCTION ag_catalog.age_finish_pg_upgrade()
     RETURNS void
     LANGUAGE plpgsql
@@ -270,6 +305,28 @@ $function$;
 COMMENT ON FUNCTION ag_catalog.age_finish_pg_upgrade() IS
 'Completes pg_upgrade by remapping stale OIDs and restoring the original schema. Run this after pg_upgrade.';
 
+--
+-- age_revert_pg_upgrade_changes()
+--
+-- Reverts the schema changes made by age_prepare_pg_upgrade() if you need to
+-- cancel the upgrade process before running pg_upgrade. This restores the
+-- namespace column to its original regnamespace type.
+--
+-- NOTE: This function is NOT needed after age_finish_pg_upgrade(), which
+-- automatically restores the original schema. Use this only if you called
+-- age_prepare_pg_upgrade() but decided not to proceed with pg_upgrade.
+--
+-- This function:
+--   1. Drops the ag_graph_view (no longer needed)
+--   2. Drops the oid-based namespace index
+--   3. Converts namespace column back to regnamespace
+--   4. Recreates the namespace index with regnamespace type
+--   5. Invalidates AGE caches to ensure cypher queries work immediately
+--   6. Does NOT clean up the backup table (manual cleanup may be needed)
+--
+-- Returns: void
+-- Side effects: Modifies ag_graph table structure
+--
 CREATE FUNCTION ag_catalog.age_revert_pg_upgrade_changes()
     RETURNS void
     LANGUAGE plpgsql
@@ -336,6 +393,14 @@ $function$;
 COMMENT ON FUNCTION ag_catalog.age_revert_pg_upgrade_changes() IS
 'Reverts schema changes if you need to cancel after age_prepare_pg_upgrade() but before pg_upgrade. Not needed after age_finish_pg_upgrade().';
 
+--
+-- age_pg_upgrade_status()
+--
+-- Returns the current pg_upgrade readiness status of the AGE installation.
+-- Useful for checking whether the database needs preparation before pg_upgrade.
+--
+-- Returns: TABLE with status information
+--
 CREATE FUNCTION ag_catalog.age_pg_upgrade_status()
     RETURNS TABLE (
         status text,
