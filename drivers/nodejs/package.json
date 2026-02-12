@@ -30,7 +30,7 @@
   "author": "Alex Kwak <take-me-home@kakao.com>",
   "dependencies": {
     "antlr4ts": "^0.5.0-alpha.4",
-    "pg": ">=6.0.0"
+    "pg": ">=8.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
