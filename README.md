@@ -12,7 +12,7 @@
     <a href="https://age.apache.org/age-manual/master/_static/logo.png" target="_blank">
     </a>
      is a leading multi-model graph database </h3>
-     
+
 </h3>
 
 <h3 align="center">Graph Processing & Analytics for Relational Databases</h3>
@@ -24,7 +24,7 @@
 
 
 
-<p align="center">                                                                                                    
+<p align="center">
   <a href="https://github.com/apache/age/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/apache/age"/>
   </a>
