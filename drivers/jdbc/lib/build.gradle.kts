@@ -30,19 +30,24 @@ repositories {
 }
 
 dependencies {
-    implementation("org.postgresql:postgresql:42.6.0")
-    api("org.apache.commons:commons-text:1.10.0")
-    antlr("org.antlr:antlr4:4.12.0")
+    // SECURITY: Updated from 42.6.0 - fixes CVE-2024-1597 (Critical: SQL injection
+    // in simple query mode) and CVE-2025-49146 (High: auth bypass with
+    // channelBinding=require). See:
+    // https://github.com/pgjdbc/pgjdbc/security/advisories/GHSA-24rp-q3w6-vc56
+    // https://github.com/pgjdbc/pgjdbc/security/advisories/GHSA-hq9p-pm7w-8p54
+    implementation("org.postgresql:postgresql:42.7.5")
+    api("org.apache.commons:commons-text:1.13.0")
+    antlr("org.antlr:antlr4:4.13.2")
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.4")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    testImplementation("org.testcontainers:testcontainers:1.18.0")
-    testImplementation("org.postgresql:postgresql:42.6.0")
+    testImplementation("org.testcontainers:testcontainers:1.20.4")
+    testImplementation("org.postgresql:postgresql:42.7.5")
 
-    testImplementation("org.slf4j:slf4j-api:2.0.7")
-    testImplementation("org.slf4j:slf4j-simple:2.0.7")
+    testImplementation("org.slf4j:slf4j-api:2.0.16")
+    testImplementation("org.slf4j:slf4j-simple:2.0.16")
 }
 
 tasks.generateGrammarSource {
