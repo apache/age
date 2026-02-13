@@ -21,6 +21,7 @@ package org.apache.age.jdbc;
 
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.time.Duration;
 import org.apache.age.jdbc.base.Agtype;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.postgresql.jdbc.PgConnection;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 @TestInstance(Lifecycle.PER_CLASS)
@@ -54,20 +56,19 @@ public class BaseDockerizedTest {
         agensGraphContainer = new GenericContainer<>(DockerImageName
             .parse("apache/age:dev_snapshot_master"))
             .withEnv("POSTGRES_PASSWORD", CORRECT_DB_PASSWORDS)
-            .withExposedPorts(5432);
+            .withExposedPorts(5432)
+            .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\n", 2)
+                .withStartupTimeout(Duration.ofSeconds(60)));
         agensGraphContainer.start();
 
+        String host = agensGraphContainer.getHost();
         int mappedPort = agensGraphContainer.getMappedPort(5432);
         String jdbcUrl = String
-            .format("jdbc:postgresql://%s:%d/%s", "localhost", mappedPort, "postgres");
+            .format("jdbc:postgresql://%s:%d/%s?sslmode=disable", host, mappedPort, "postgres");
 
-        try {
-            this.connection = DriverManager.getConnection(jdbcUrl, "postgres", CORRECT_DB_PASSWORDS)
-                         .unwrap(PgConnection.class);
-            this.connection.addDataType("agtype", Agtype.class);
-        } catch (Exception e) {
-            System.out.println(e);
-        }
+        this.connection = DriverManager.getConnection(jdbcUrl, "postgres", CORRECT_DB_PASSWORDS)
+                     .unwrap(PgConnection.class);
+        this.connection.addDataType("agtype", Agtype.class);
         try (Statement statement = connection.createStatement()) {
             statement.execute("CREATE EXTENSION IF NOT EXISTS age;");
             statement.execute("LOAD 'age'");
