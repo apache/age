@@ -124,7 +124,7 @@ class ResultVisitor(AgtypeVisitor):
             elif text == 'Infinity':
                 return float('inf')
             else:
-                return Exception("Unknown float expression:"+text)
+                raise ValueError("Unknown float expression: " + text)
         
 
     # Visit a parse tree produced by AgtypeParser#TrueBoolean.
