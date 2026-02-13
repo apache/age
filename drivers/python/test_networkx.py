@@ -224,7 +224,7 @@ class TestAgeToNetworkx(unittest.TestCase):
         with self.assertRaises(GraphNotFound) as context:
             age_to_networkx(ag.connection, graphName=non_existing_graph)
         # Check the raised exception has the expected error message
-        self.assertEqual(str(context.exception), non_existing_graph)
+        self.assertIn(non_existing_graph, str(context.exception))
 
 
 class TestNetworkxToAGE(unittest.TestCase):

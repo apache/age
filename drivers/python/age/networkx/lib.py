@@ -20,17 +20,18 @@ import networkx as nx
 from psycopg import sql
 from typing import Dict, Any, List, Set
 from age.models import Vertex, Edge, Path
+from age.age import validate_graph_name, validate_identifier
 
 
 def checkIfGraphNameExistInAGE(connection: psycopg.connect,
                                graphName: str):
     """Check if the age graph exists"""
+    validate_graph_name(graphName)
     with connection.cursor() as cursor:
-        cursor.execute(sql.SQL("""
-                    SELECT count(*) 
-                    FROM ag_catalog.ag_graph 
-                    WHERE name='%s'
-                """ % (graphName)))
+        cursor.execute(
+            sql.SQL("SELECT count(*) FROM ag_catalog.ag_graph WHERE name={gn}")
+            .format(gn=sql.Literal(graphName))
+        )
         if cursor.fetchone()[0] == 0:
             raise GraphNotFound(graphName)
 
@@ -38,11 +39,13 @@ def checkIfGraphNameExistInAGE(connection: psycopg.connect,
 def getOidOfGraph(connection: psycopg.connect,
                   graphName: str) -> int:
     """Returns oid of a graph"""
+    validate_graph_name(graphName)
     try:
         with connection.cursor() as cursor:
-            cursor.execute(sql.SQL("""
-                        SELECT graphid FROM ag_catalog.ag_graph WHERE name='%s' ;
-                    """ % (graphName)))
+            cursor.execute(
+                sql.SQL("SELECT graphid FROM ag_catalog.ag_graph WHERE name={gn}")
+                .format(gn=sql.Literal(graphName))
+            )
             oid = cursor.fetchone()[0]
             return oid
     except Exception as e:
@@ -56,7 +59,9 @@ def get_vlabel(connection: psycopg.connect,
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                """SELECT name FROM ag_catalog.ag_label WHERE kind='v' AND graph=%s;""" % oid)
+                sql.SQL("SELECT name FROM ag_catalog.ag_label WHERE kind='v' AND graph={oid}")
+                .format(oid=sql.Literal(oid))
+            )
             for row in cursor:
                 node_label_list.append(row[0])
 
@@ -69,18 +74,19 @@ def create_vlabel(connection: psycopg.connect,
                   graphName: str,
                   node_label_list: List):
     """create_vlabels from list if not exist"""
+    validate_graph_name(graphName)
     try:
         node_label_set = set(get_vlabel(connection, graphName))
-        crete_label_statement = ''
         for label in node_label_list:
             if label in node_label_set:
                 continue
-            crete_label_statement += """SELECT create_vlabel('%s','%s');\n""" % (
-                graphName, label)
-        if crete_label_statement != '':
+            validate_identifier(label, "Vertex label")
             with connection.cursor() as cursor:
-                cursor.execute(crete_label_statement)
-                connection.commit()
+                cursor.execute(
+                    sql.SQL("SELECT create_vlabel({gn},{lbl})")
+                    .format(gn=sql.Literal(graphName), lbl=sql.Literal(label))
+                )
+        connection.commit()
     except Exception as e:
         raise Exception(e)
 
@@ -92,7 +98,9 @@ def get_elabel(connection: psycopg.connect,
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                """SELECT name FROM ag_catalog.ag_label WHERE kind='e' AND graph=%s;""" % oid)
+                sql.SQL("SELECT name FROM ag_catalog.ag_label WHERE kind='e' AND graph={oid}")
+                .format(oid=sql.Literal(oid))
+            )
             for row in cursor:
                 edge_label_list.append(row[0])
     except Exception as ex:
@@ -103,19 +111,20 @@ def get_elabel(connection: psycopg.connect,
 def create_elabel(connection: psycopg.connect,
                   graphName: str,
                   edge_label_list: List):
-    """create_vlabels from list if not exist"""
+    """create_elabels from list if not exist"""
+    validate_graph_name(graphName)
     try:
         edge_label_set = set(get_elabel(connection, graphName))
-        crete_label_statement = ''
         for label in edge_label_list:
             if label in edge_label_set:
                 continue
-            crete_label_statement += """SELECT create_elabel('%s','%s');\n""" % (
-                graphName, label)
-        if crete_label_statement != '':
+            validate_identifier(label, "Edge label")
             with connection.cursor() as cursor:
-                cursor.execute(crete_label_statement)
-                connection.commit()
+                cursor.execute(
+                    sql.SQL("SELECT create_elabel({gn},{lbl})")
+                    .format(gn=sql.Literal(graphName), lbl=sql.Literal(label))
+                )
+        connection.commit()
     except Exception as e:
         raise Exception(e)
 
@@ -171,6 +180,7 @@ def getEdgeLabelListAfterPreprocessing(G: nx.DiGraph):
 
 def addAllNodesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGraph, node_label_list: Set):
     """Add all node to AGE"""
+    validate_graph_name(graphName)
     try:
         queue_data = {label: [] for label in node_label_list}
         id_data = {}
@@ -180,8 +190,11 @@ def addAllNodesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGrap
             queue_data[data['label']].append((json_string,))
 
         for label, rows in queue_data.items():
-            table_name = """%s."%s" """ % (graphName, label)
-            insert_query = f"INSERT INTO {table_name} (properties) VALUES (%s) RETURNING id"
+            validate_identifier(label, "Node label")
+            insert_query = sql.SQL("INSERT INTO {schema}.{table} (properties) VALUES (%s) RETURNING id").format(
+                schema=sql.Identifier(graphName),
+                table=sql.Identifier(label)
+            )
             cursor = connection.cursor()
             cursor.executemany(insert_query, rows, returning=True)
             ids = []
@@ -205,6 +218,7 @@ def addAllNodesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGrap
 
 def addAllEdgesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGraph, edge_label_list: Set):
     """Add all edge to AGE"""
+    validate_graph_name(graphName)
     try:
         queue_data = {label: [] for label in edge_label_list}
         for u, v, data in G.edges(data=True):
@@ -213,8 +227,11 @@ def addAllEdgesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGrap
                 (G.nodes[u]['properties']['__gid__'], G.nodes[v]['properties']['__gid__'], json_string,))
 
         for label, rows in queue_data.items():
-            table_name = """%s."%s" """ % (graphName, label)
-            insert_query = f"INSERT INTO {table_name} (start_id,end_id,properties) VALUES (%s, %s, %s)"
+            validate_identifier(label, "Edge label")
+            insert_query = sql.SQL("INSERT INTO {schema}.{table} (start_id,end_id,properties) VALUES (%s, %s, %s)").format(
+                schema=sql.Identifier(graphName),
+                table=sql.Identifier(label)
+            )
             cursor = connection.cursor()
             cursor.executemany(insert_query, rows)
             connection.commit()
@@ -225,14 +242,19 @@ def addAllEdgesIntoAGE(connection: psycopg.connect, graphName: str, G: nx.DiGrap
 
 def addAllNodesIntoNetworkx(connection: psycopg.connect, graphName: str, G: nx.DiGraph):
     """Add all nodes to Networkx"""
+    validate_graph_name(graphName)
     node_label_list = get_vlabel(connection, graphName)
     try:
         for label in node_label_list:
+            validate_identifier(label, "Node label")
             with connection.cursor() as cursor:
-                cursor.execute("""
-                SELECT id, CAST(properties AS VARCHAR) 
-                FROM %s."%s";
-                """ % (graphName, label))
+                cursor.execute(
+                    sql.SQL("SELECT id, CAST(properties AS VARCHAR) FROM {schema}.{table}")
+                    .format(
+                        schema=sql.Identifier(graphName),
+                        table=sql.Identifier(label)
+                    )
+                )
                 rows = cursor.fetchall()
                 for row in rows:
                     G.add_node(int(row[0]), label=label,
@@ -243,14 +265,19 @@ def addAllNodesIntoNetworkx(connection: psycopg.connect, graphName: str, G: nx.D
 
 def addAllEdgesIntoNetworkx(connection: psycopg.connect, graphName: str, G: nx.DiGraph):
     """Add All edges to Networkx"""
+    validate_graph_name(graphName)
     try:
         edge_label_list = get_elabel(connection, graphName)
         for label in edge_label_list:
+            validate_identifier(label, "Edge label")
             with connection.cursor() as cursor:
-                cursor.execute("""
-                               SELECT start_id, end_id, CAST(properties AS VARCHAR) 
-                               FROM %s."%s";
-                               """ % (graphName, label))
+                cursor.execute(
+                    sql.SQL("SELECT start_id, end_id, CAST(properties AS VARCHAR) FROM {schema}.{table}")
+                    .format(
+                        schema=sql.Identifier(graphName),
+                        table=sql.Identifier(label)
+                    )
+                )
                 rows = cursor.fetchall()
                 for row in rows:
                     G.add_edge(int(row[0]), int(
