@@ -7498,9 +7498,11 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
     for (i = 0; i < count; i++)
     {
         /* TODO: check element's type, it's value, and convert it to string if possible. */
+        enum agtype_value_type elem_type;
+
         elem = get_ith_agtype_value_from_container(&agt_arg->root, i);
         string_elem.type = AGTV_STRING;
-        enum agtype_value_type elem_type = elem ? elem->type : AGTV_NULL;
+        elem_type = elem ? elem->type : AGTV_NULL;
 
         switch (elem_type)
         {
