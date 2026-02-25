@@ -448,7 +448,7 @@ static void create_index_on_column(char *schema_name,
     index_col->name = colname;
     index_col->expr = NULL;
     index_col->indexcolname = NULL;
-    index_col->collation = InvalidOid;
+    index_col->collation = NIL;
     index_col->opclass = list_make1(makeString("graphid_ops"));
     index_col->opclassopts = NIL;
     index_col->ordering = SORTBY_DEFAULT;
