@@ -357,6 +357,59 @@ SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*2..2]-({name:
 
 SELECT drop_graph('issue_1910', true);
 
+-- issue 2092: VLE with chained OPTIONAL MATCH and NULL handling
+-- Previously, chained OPTIONAL MATCH with VLE would either segfault
+-- (with WHERE IS NOT NULL) or error with "arguments cannot be NULL"
+-- (without WHERE) instead of producing correct NULL-extended rows.
+SELECT create_graph('issue_2092');
+
+-- Set up a small graph where some OPTIONAL MATCH paths exist and some don't
+SELECT * FROM cypher('issue_2092', $$
+    CREATE (a:Person {name: 'Alice'})
+    CREATE (b:Person {name: 'Bob'})
+    CREATE (c:City {name: 'NYC'})
+    CREATE (d:City {name: 'LA'})
+    CREATE (e:Place {name: 'Central Park'})
+    CREATE (a)-[:LIVES_IN]->(c)
+    CREATE (c)-[:HAS_PLACE]->(e)
+    CREATE (b)-[:LIVES_IN]->(d)
+$$) AS (result agtype);
+
+-- Alice lives in NYC which has Central Park.
+-- Bob lives in LA which has no places.
+-- VLE + chained OPTIONAL MATCH + WHERE IS NOT NULL: should return rows
+-- without crashing (was: segfault)
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    WHERE place IS NOT NULL
+    RETURN p.name, place.name, other
+    ORDER BY p.name
+$$) AS (person agtype, place agtype, other agtype);
+
+-- VLE + chained OPTIONAL MATCH without WHERE: should return NULL-extended
+-- rows without error (was: "match_vle_terminal_edge() arguments cannot be
+-- NULL")
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    RETURN p.name, place.name, other
+    ORDER BY p.name
+$$) AS (person agtype, place agtype, other agtype);
+
+-- Verify the happy path still works: Alice's full chain resolves
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    WHERE place IS NOT NULL
+    RETURN p.name, c.name, place.name
+    ORDER BY p.name
+$$) AS (person agtype, city agtype, place agtype);
+
+SELECT drop_graph('issue_2092', true);
+
 --
 -- Clean up
 --
