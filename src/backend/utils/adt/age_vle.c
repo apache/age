@@ -2260,7 +2260,7 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
     if (nargs != 3)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("age_match_terminal_edge() invalid number of arguments")));
+                        errmsg("age_match_vle_terminal_edge() invalid number of arguments")));
     }
 
     /*

@@ -385,6 +385,7 @@ SELECT * FROM cypher('issue_2092', $$
     OPTIONAL MATCH (place)-[:NEARBY*]->(other)
     WHERE place IS NOT NULL
     RETURN p.name, place.name, other
+    ORDER BY p.name
 $$) AS (person agtype, place agtype, other agtype);
 
 -- VLE + chained OPTIONAL MATCH without WHERE: should return NULL-extended
@@ -395,6 +396,7 @@ SELECT * FROM cypher('issue_2092', $$
     OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
     OPTIONAL MATCH (place)-[:NEARBY*]->(other)
     RETURN p.name, place.name, other
+    ORDER BY p.name
 $$) AS (person agtype, place agtype, other agtype);
 
 -- Verify the happy path still works: Alice's full chain resolves
@@ -403,6 +405,7 @@ SELECT * FROM cypher('issue_2092', $$
     OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
     WHERE place IS NOT NULL
     RETURN p.name, c.name, place.name
+    ORDER BY p.name
 $$) AS (person agtype, city agtype, place agtype);
 
 SELECT drop_graph('issue_2092', true);
