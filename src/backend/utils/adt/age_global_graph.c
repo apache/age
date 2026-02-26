@@ -215,7 +215,7 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                 F_CHAREQ, CharGetDatum(label_type));
 
     /* setup the table to be scanned, ag_label in this case */
-    ag_label = table_open(ag_label_relation_id(), ShareLock);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
     scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
 
     /* get the tupdesc - we don't need to release this one */
@@ -241,7 +241,7 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
 
     /* close up scan */
     table_endscan(scan_desc);
-    table_close(ag_label, ShareLock);
+    table_close(ag_label, AccessShareLock);
 
     return labels;
 }
@@ -493,7 +493,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
         vertex_label_table_oid = get_relname_relid(vertex_label_name,
                                                    graph_namespace_oid);
         /* open the relation (table) and begin the scan */
-        graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
+        graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL);
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_vertex_label);
@@ -544,7 +544,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
 
         /* end the scan and close the relation */
         table_endscan(scan_desc);
-        table_close(graph_vertex_label, ShareLock);
+        table_close(graph_vertex_label, AccessShareLock);
     }
 }
 
@@ -601,7 +601,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
         edge_label_table_oid = get_relname_relid(edge_label_name,
                                                  graph_namespace_oid);
         /* open the relation (table) and begin the scan */
-        graph_edge_label = table_open(edge_label_table_oid, ShareLock);
+        graph_edge_label = table_open(edge_label_table_oid, AccessShareLock);
         scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL);
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_edge_label);
@@ -678,7 +678,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
 
         /* end the scan and close the relation */
         table_endscan(scan_desc);
-        table_close(graph_edge_label, ShareLock);
+        table_close(graph_edge_label, AccessShareLock);
     }
 }
 
