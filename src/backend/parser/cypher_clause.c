@@ -2639,7 +2639,15 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
     cypher_match *match_self = (cypher_match*) clause->self;
     Node *where = match_self->where;
 
-    if(!match_check_valid_label(match_self, cpstate))
+    /*
+     * Check label validity early unless the predecessor clause chain
+     * contains a data-modifying operation (CREATE, SET, DELETE, MERGE).
+     * DML predecessors may create new labels that are not yet in the
+     * cache, so the check is deferred to after transform_prev_cypher_clause()
+     * for those cases.
+     */
+    if (!clause_chain_has_dml(clause->prev) &&
+        !match_check_valid_label(match_self, cpstate))
     {
         cypher_bool_const *l = make_ag_node(cypher_bool_const);
         cypher_bool_const *r = make_ag_node(cypher_bool_const);
@@ -2910,6 +2918,8 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     }
     else
     {
+        bool valid_labels = true;
+
         if (clause->prev)
         {
             RangeTblEntry *rte;
@@ -2949,9 +2959,33 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
              */
             pnsi = get_namespace_item(pstate, rte);
             query->targetList = expandNSItemAttrs(pstate, pnsi, 0, true, -1);
+
+            /*
+             * Now that the predecessor chain is fully transformed and
+             * any CREATE-generated labels exist in the cache, check
+             * whether the MATCH pattern references valid labels. This
+             * deferred check is only needed when the chain has DML,
+             * since labels created by CREATE are not in the cache at
+             * the time of the early check in transform_cypher_match().
+             */
+            if (clause_chain_has_dml(clause->prev) &&
+                !match_check_valid_label(self, cpstate))
+            {
+                valid_labels = false;
+            }
         }
 
-        transform_match_pattern(cpstate, query, self->pattern, where);
+        if (valid_labels)
+        {
+            transform_match_pattern(cpstate, query, self->pattern, where);
+        }
+        else
+        {
+            query->rtable = pstate->p_rtable;
+            query->rteperminfos = pstate->p_rteperminfos;
+            query->jointree = makeFromExpr(pstate->p_joinlist,
+                                           makeBoolConst(false, false));
+        }
     }
 
     markTargetListOrigins(pstate, query->targetList);
