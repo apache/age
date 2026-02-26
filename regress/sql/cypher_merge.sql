@@ -786,11 +786,67 @@ SELECT * FROM cypher('issue_1907', $$ MERGE (a {name: 'Test Node A'})-[r:RELATED
 SELECT * FROM cypher('issue_1907', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype);
 
 --
+-- Fix issue 1446: First MERGE does not see the second MERGE's changes
+--
+-- When chained MERGEs appear (MATCH ... MERGE ... MERGE ...), the first
+-- (non-terminal) MERGE returned rows one at a time, so the second MERGE's
+-- lateral join was materialized before the first finished all iterations.
+-- This caused duplicate nodes. The fix makes non-terminal MERGE eager:
+-- it processes ALL input rows before returning any.
+--
+SELECT * FROM create_graph('issue_1446');
+-- Reporter's exact setup: two initial nodes
+SELECT * FROM cypher('issue_1446', $$ CREATE (:A), (:C) $$) AS (a agtype);
+-- Reporter's exact reproduction case: two chained MERGEs
+-- Without fix: C is created multiple times (once per MATCH row) because the
+-- second MERGE's lateral join materializes before the first MERGE finishes.
+-- With fix: returns 2 rows, C is found and reused by the second MERGE.
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (x)
+    MERGE (x)-[:r]->(:t)
+    MERGE (:C)-[:r]->(:t)
+    RETURN x
+$$) AS (a agtype);
+-- Verify: A(1), C(1), t(2) = 4 nodes, 2 edges
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN labels(n) AS label, count(*) AS cnt
+    ORDER BY label
+$$) AS (label agtype, cnt agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
+-- Test with 3 initial nodes: ensures eager buffering works for larger sets
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$ CREATE (:X), (:Y), (:Z) $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    MERGE (n)-[:link]->(:shared)
+    MERGE (:hub)-[:link]->(:shared)
+    RETURN n
+$$) AS (a agtype);
+-- Without fix: hub is created 3 times (once per MATCH row).
+-- With fix: hub(1), shared(4), X(1), Y(1), Z(1) = 8 nodes, 4 edges
+-- (3 n->shared edges + 1 hub->shared edge; hub reused for rows 2 & 3)
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN labels(n) AS label, count(*) AS cnt
+    ORDER BY label
+$$) AS (label agtype, cnt agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
+--
 -- clean up graphs
 --
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1630', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
 --
 -- delete graphs
@@ -800,6 +856,7 @@ SELECT drop_graph('cypher_merge', true);
 SELECT drop_graph('issue_1630', true);
 SELECT drop_graph('issue_1691', true);
 SELECT drop_graph('issue_1709', true);
+SELECT drop_graph('issue_1446', true);
 
 --
 -- End
