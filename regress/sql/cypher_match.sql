@@ -1438,6 +1438,61 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
 
 --
+-- issue 2308: MATCH after CREATE returns 0 rows
+--
+-- When all MATCH variables are already bound from a preceding CREATE + WITH,
+-- the MATCH filter quals must evaluate after CREATE, not before.
+--
+SELECT create_graph('issue_2308');
+
+-- Reporter's exact case: CREATE + WITH + MATCH + SET + RETURN
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:TestB3)-[e:B3REL]->(b:TestB3)
+    WITH a, e, b
+    MATCH p = (a)-[e]->(b)
+    SET a.something = 'something'
+    RETURN a
+$$) AS (a agtype);
+
+-- Bound variables, no SET
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T2)-[e:R2]->(b:T2)
+    WITH a, e, b
+    MATCH (a)-[e]->(b)
+    RETURN a, e, b
+$$) AS (a agtype, e agtype, b agtype);
+
+-- Reversed direction: filter should reject (0 rows expected)
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T3)-[e:R3]->(b:T3)
+    WITH a, e, b
+    MATCH (b)-[e]->(a)
+    RETURN a
+$$) AS (a agtype);
+
+-- Node-only MATCH with bound variable
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T4 {name: 'test'})
+    WITH a
+    MATCH (a)
+    RETURN a
+$$) AS (a agtype);
+
+-- MATCH after SET (SET is also DML, chain must be protected)
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T5 {val: 1})-[e:R5]->(b:T5 {val: 2})
+$$) AS (r agtype);
+SELECT * FROM cypher('issue_2308', $$
+    MATCH (a:T5)-[e:R5]->(b:T5)
+    SET a.val = 10
+    WITH a, e, b
+    MATCH (a)-[e]->(b)
+    RETURN a.val
+$$) AS (val agtype);
+
+SELECT drop_graph('issue_2308', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
