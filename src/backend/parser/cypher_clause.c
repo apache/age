@@ -4261,6 +4261,17 @@ static Node *create_property_constraints(cypher_parsestate *cpstate,
     }
     else
     {
+        /*
+         * Map decomposition into individual index lookups requires known
+         * keys at parse time. When the property constraint is a parameter
+         * (cypher_param), the keys are not available until execution, so
+         * fall back to the containment operator.
+         */
+        if (is_ag_node(property_constraints, cypher_param))
+        {
+            return (Node *)make_op(pstate, list_make1(makeString("@>")),
+                                   prop_expr, const_expr, last_srf, -1);
+        }
         return (Node *)transform_map_to_ind(
             cpstate, entity, (cypher_map *)property_constraints);
     }
@@ -4690,7 +4701,10 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                                                   -1);
                 }
 
-                ((cypher_map*)node->props)->keep_null = true;
+                if (is_ag_node(node->props, cypher_map))
+                {
+                    ((cypher_map*)node->props)->keep_null = true;
+                }
                 n = create_property_constraints(cpstate, entity, node->props,
                                                 prop_expr);
 
@@ -4819,7 +4833,10 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                                                       false, -1);
                     }
 
-                    ((cypher_map*)rel->props)->keep_null = true;
+                    if (is_ag_node(rel->props, cypher_map))
+                    {
+                        ((cypher_map*)rel->props)->keep_null = true;
+                    }
                     r = create_property_constraints(cpstate, entity, rel->props,
                                                     prop_expr);
 
