@@ -1438,6 +1438,50 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
 
 --
+-- Issue 1964
+--
+-- PREPARE with property parameter ($props) crashed the server when
+-- age.enable_containment was set to off. The crash was in
+-- transform_map_to_ind_recursive which blindly cast cypher_param
+-- nodes to cypher_map, accessing invalid memory.
+--
+
+SELECT create_graph('issue_1964');
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice', age: 30}),
+           (:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS {since: 2020}]->(:Person {name: 'Bob'})
+$$) AS (result agtype);
+
+-- Test PREPARE with enable_containment off (was crashing)
+SET age.enable_containment = off;
+
+PREPARE issue_1964_vertex(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex('{"props": {"name": "Alice"}}');
+EXECUTE issue_1964_vertex('{"props": {"age": 25}}');
+DEALLOCATE issue_1964_vertex;
+
+-- Test edge property parameter with enable_containment off
+PREPARE issue_1964_edge(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge('{"props": {"since": 2020}}');
+DEALLOCATE issue_1964_edge;
+
+-- Verify enable_containment on still works with PREPARE
+SET age.enable_containment = on;
+
+PREPARE issue_1964_vertex_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_on('{"props": {"name": "Alice"}}');
+DEALLOCATE issue_1964_vertex_on;
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
@@ -1446,6 +1490,7 @@ SELECT drop_graph('test_enable_containment', true);
 SELECT drop_graph('issue_945', true);
 SELECT drop_graph('issue_1399', true);
 SELECT drop_graph('issue_1393', true);
+SELECT drop_graph('issue_1964', true);
 
 --
 -- End
