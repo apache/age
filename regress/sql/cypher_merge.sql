@@ -860,6 +860,69 @@ SELECT * FROM cypher('issue_1446', $$
     RETURN count(*) AS edge_count
 $$) AS (edge_count agtype);
 
+-- Issue 1954: CREATE + WITH + MERGE causes "vertex was deleted" error
+-- when the number of input rows exceeds the snapshot's command ID window.
+-- entity_exists() used a stale curcid, making recently-created vertices
+-- invisible on later iterations.
+--
+SELECT * FROM create_graph('issue_1954');
+
+-- Setup: create source nodes and relationships (3 rows to trigger the bug)
+SELECT * FROM cypher('issue_1954', $$
+    CREATE (:A {name: 'a1'})-[:R]->(:B {name: 'b1'}),
+           (:A {name: 'a2'})-[:R]->(:B {name: 'b2'}),
+           (:A {name: 'a3'})-[:R]->(:B {name: 'b3'})
+$$) AS (result agtype);
+
+-- This query would fail with "vertex assigned to variable c was deleted"
+-- on the 3rd row before the fix.
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Verify edges were created
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+
+-- Test with two MERGEs (more complex case from the original report)
+SELECT * FROM cypher('issue_1954', $$
+    MATCH ()-[e:LINK]->() DELETE e
+$$) AS (result agtype);
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (c:C) DELETE c
+$$) AS (result agtype);
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK1]->(c)
+    MERGE (b)-[:LINK2]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Verify both sets of edges
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK1]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (b:B)-[:LINK2]->(c:C)
+    RETURN b.name, c.name
+    ORDER BY b.name
+$$) AS (b agtype, c agtype);
+
 --
 -- clean up graphs
 --
@@ -867,6 +930,7 @@ SELECT * FROM cypher('cypher_merge', $$ MATCH (n) DETACH DELETE n $$) AS (a agty
 SELECT * FROM cypher('issue_1630', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1954', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
 --
 -- delete graphs
@@ -877,6 +941,7 @@ SELECT drop_graph('issue_1630', true);
 SELECT drop_graph('issue_1691', true);
 SELECT drop_graph('issue_1709', true);
 SELECT drop_graph('issue_1446', true);
+SELECT drop_graph('issue_1954', true);
 
 --
 -- End

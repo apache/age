@@ -1728,9 +1728,9 @@ SELECT * FROM cypher('issue_1907', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype
 --
 SELECT * FROM create_graph('issue_1446');
 NOTICE:  graph "issue_1446" has been created
- create_graph 
+ create_graph
 --------------
- 
+
 (1 row)
 
 -- Reporter's exact setup: two initial nodes
@@ -1864,6 +1864,113 @@ $$) AS (edge_count agtype);
 ------------
  0
 (1 row)
+-- Issue 1954: CREATE + WITH + MERGE causes "vertex was deleted" error
+-- when the number of input rows exceeds the snapshot's command ID window.
+-- entity_exists() used a stale curcid, making recently-created vertices
+-- invisible on later iterations.
+--
+SELECT * FROM create_graph('issue_1954');
+NOTICE:  graph "issue_1954" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Setup: create source nodes and relationships (3 rows to trigger the bug)
+SELECT * FROM cypher('issue_1954', $$
+    CREATE (:A {name: 'a1'})-[:R]->(:B {name: 'b1'}),
+           (:A {name: 'a2'})-[:R]->(:B {name: 'b2'}),
+           (:A {name: 'a3'})-[:R]->(:B {name: 'b3'})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- This query would fail with "vertex assigned to variable c was deleted"
+-- on the 3rd row before the fix.
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+  a   |  b   |    c    
+------+------+---------
+ "a1" | "b1" | "a1|b1"
+ "a2" | "b2" | "a2|b2"
+ "a3" | "b3" | "a3|b3"
+(3 rows)
+
+-- Verify edges were created
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+  a   |    c    
+------+---------
+ "a1" | "a1|b1"
+ "a2" | "a2|b2"
+ "a3" | "a3|b3"
+(3 rows)
+
+-- Test with two MERGEs (more complex case from the original report)
+SELECT * FROM cypher('issue_1954', $$
+    MATCH ()-[e:LINK]->() DELETE e
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (c:C) DELETE c
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK1]->(c)
+    MERGE (b)-[:LINK2]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+  a   |  b   |    c    
+------+------+---------
+ "a1" | "b1" | "a1|b1"
+ "a2" | "b2" | "a2|b2"
+ "a3" | "b3" | "a3|b3"
+(3 rows)
+
+-- Verify both sets of edges
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK1]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+  a   |    c    
+------+---------
+ "a1" | "a1|b1"
+ "a2" | "a2|b2"
+ "a3" | "a3|b3"
+(3 rows)
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (b:B)-[:LINK2]->(c:C)
+    RETURN b.name, c.name
+    ORDER BY b.name
+$$) AS (b agtype, c agtype);
+  b   |    c    
+------+---------
+ "b1" | "a1|b1"
+ "b2" | "a2|b2"
+ "b3" | "a3|b3"
+(3 rows)
 
 --
 -- clean up graphs
@@ -1884,6 +1991,11 @@ SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype
 (0 rows)
 
 SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('issue_1954', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
  a 
 ---
 (0 rows)
@@ -1980,6 +2092,23 @@ drop cascades to table issue_1446.link
 drop cascades to table issue_1446.shared
 drop cascades to table issue_1446.hub
 NOTICE:  graph "issue_1446" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('issue_1954', true);
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to table issue_1954._ag_label_vertex
+drop cascades to table issue_1954._ag_label_edge
+drop cascades to table issue_1954."A"
+drop cascades to table issue_1954."R"
+drop cascades to table issue_1954."B"
+drop cascades to table issue_1954."C"
+drop cascades to table issue_1954."LINK"
+drop cascades to table issue_1954."LINK1"
+drop cascades to table issue_1954."LINK2"
+NOTICE:  graph "issue_1954" has been dropped
  drop_graph 
 ------------
  
