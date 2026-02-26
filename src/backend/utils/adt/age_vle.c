@@ -561,6 +561,11 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         /* get and update the start vertex id */
         if (PG_ARGISNULL(1) || is_agtype_null(AG_GET_ARG_AGTYPE_P(1)))
         {
+            /* if there are no more vertices to process, return NULL */
+            if (vlelctx->next_vertex == NULL)
+            {
+                return NULL;
+            }
             vlelctx->vsid = get_graphid(vlelctx->next_vertex);
             /* increment to the next vertex */
             vlelctx->next_vertex = next_GraphIdNode(vlelctx->next_vertex);
@@ -1734,6 +1739,16 @@ Datum age_vle(PG_FUNCTION_ARGS)
         vlelctx = build_local_vle_context(fcinfo, funcctx);
 
         /*
+         * If the context is NULL, there are no paths to find.
+         * This can happen when a cached VLE context has exhausted
+         * its vertex list (e.g., from a NULL OPTIONAL MATCH variable).
+         */
+        if (vlelctx == NULL)
+        {
+            SRF_RETURN_DONE(funcctx);
+        }
+
+        /*
          * Point the function call context's user pointer to the local VLE
          * context just created
          */
@@ -1934,6 +1949,16 @@ Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
     graphid *left_array, *right_array;
     int left_array_size;
 
+    /*
+     * If either argument is NULL, return FALSE. This can occur in
+     * OPTIONAL MATCH (LEFT JOIN) contexts where a preceding clause
+     * produced no results.
+     */
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_BOOL(false);
+    }
+
     /* get the VLE_path_container argument */
     agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
 
@@ -2008,12 +2033,14 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
                         errmsg("age_match_vle_edge_to_id_qual() invalid number of arguments")));
     }
 
-    /* the arguments cannot be NULL */
+    /*
+     * If any argument is NULL, return FALSE. This can occur in
+     * OPTIONAL MATCH (LEFT JOIN) contexts where a preceding clause
+     * produced no results.
+     */
     if (nulls[0] || nulls[1] || nulls[2])
     {
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("age_match_vle_edge_to_id_qual() arguments must be non NULL")));
+        PG_RETURN_BOOL(false);
     }
 
     /* get the VLE_path_container argument */
@@ -2236,23 +2263,24 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
                         errmsg("age_match_terminal_edge() invalid number of arguments")));
     }
 
-    /* the arguments cannot be NULL */
+    /*
+     * If any argument is NULL, return FALSE. This can occur when this
+     * function is used as a join qual in an OPTIONAL MATCH (LEFT JOIN)
+     * where a preceding OPTIONAL MATCH produced no results. Returning
+     * FALSE allows PostgreSQL to produce the correct NULL-extended rows.
+     */
     if (nulls[0] || nulls[1] || nulls[2])
     {
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("match_vle_terminal_edge() arguments cannot be NULL")));
+        PG_RETURN_BOOL(false);
     }
 
     /* get the vpc */
     agt_arg_path = DATUM_GET_AGTYPE_P(args[2]);
 
-    /* it cannot be NULL */
+    /* if the vpc is an agtype NULL, return FALSE */
     if (is_agtype_null(agt_arg_path))
     {
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("match_vle_terminal_edge() argument 3 cannot be NULL")));
+        PG_RETURN_BOOL(false);
     }
 
     /*
@@ -2290,9 +2318,7 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
         }
         else
         {
-            ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("match_vle_terminal_edge() argument 1 must be non NULL")));
+            PG_RETURN_BOOL(false);
         }
     }
     else if (types[0] == GRAPHIDOID)
@@ -2320,9 +2346,7 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
         }
         else
         {
-            ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("match_vle_terminal_edge() argument 2 must be non NULL")));
+            PG_RETURN_BOOL(false);
         }
     }
     else if (types[1] == GRAPHIDOID)

@@ -1109,6 +1109,92 @@ NOTICE:  graph "issue_1910" has been dropped
  
 (1 row)
 
+-- issue 2092: VLE with chained OPTIONAL MATCH and NULL handling
+-- Previously, chained OPTIONAL MATCH with VLE would either segfault
+-- (with WHERE IS NOT NULL) or error with "arguments cannot be NULL"
+-- (without WHERE) instead of producing correct NULL-extended rows.
+SELECT create_graph('issue_2092');
+NOTICE:  graph "issue_2092" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Set up a small graph where some OPTIONAL MATCH paths exist and some don't
+SELECT * FROM cypher('issue_2092', $$
+    CREATE (a:Person {name: 'Alice'})
+    CREATE (b:Person {name: 'Bob'})
+    CREATE (c:City {name: 'NYC'})
+    CREATE (d:City {name: 'LA'})
+    CREATE (e:Place {name: 'Central Park'})
+    CREATE (a)-[:LIVES_IN]->(c)
+    CREATE (c)-[:HAS_PLACE]->(e)
+    CREATE (b)-[:LIVES_IN]->(d)
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- Alice lives in NYC which has Central Park.
+-- Bob lives in LA which has no places.
+-- VLE + chained OPTIONAL MATCH + WHERE IS NOT NULL: should return rows
+-- without crashing (was: segfault)
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    WHERE place IS NOT NULL
+    RETURN p.name, place.name, other
+$$) AS (person agtype, place agtype, other agtype);
+ person  |     place      | other 
+---------+----------------+-------
+ "Alice" | "Central Park" | 
+ "Bob"   |                | 
+(2 rows)
+
+-- VLE + chained OPTIONAL MATCH without WHERE: should return NULL-extended
+-- rows without error (was: "match_vle_terminal_edge() arguments cannot be
+-- NULL")
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    RETURN p.name, place.name, other
+$$) AS (person agtype, place agtype, other agtype);
+ person  |     place      | other 
+---------+----------------+-------
+ "Alice" | "Central Park" | 
+ "Bob"   |                | 
+(2 rows)
+
+-- Verify the happy path still works: Alice's full chain resolves
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    WHERE place IS NOT NULL
+    RETURN p.name, c.name, place.name
+$$) AS (person agtype, city agtype, place agtype);
+ person  | city  |     place      
+---------+-------+----------------
+ "Alice" | "NYC" | "Central Park"
+ "Bob"   | "LA"  | 
+(2 rows)
+
+SELECT drop_graph('issue_2092', true);
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to table issue_2092._ag_label_vertex
+drop cascades to table issue_2092._ag_label_edge
+drop cascades to table issue_2092."Person"
+drop cascades to table issue_2092."City"
+drop cascades to table issue_2092."Place"
+drop cascades to table issue_2092."LIVES_IN"
+drop cascades to table issue_2092."HAS_PLACE"
+NOTICE:  graph "issue_2092" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 --
 -- Clean up
 --
