@@ -1506,7 +1506,7 @@ SELECT * FROM cypher('issue_2193', $$
            (b:Person {name: 'Tom', livesIn: 'Copenhagen'})
     WITH a, b
     MATCH (p:Person)
-    RETURN p.name
+    RETURN p.name ORDER BY p.name
 $$) AS (result agtype);
 
 -- Single CREATE + MATCH on brand-new label
@@ -1522,13 +1522,22 @@ SELECT * FROM cypher('issue_2193', $$
     CREATE (a:City {name: 'Paris'})
     WITH a
     MATCH (c:City)
-    RETURN c.name
+    RETURN c.name ORDER BY c.name
 $$) AS (result agtype);
 
 -- MATCH on non-existent label without DML predecessor still returns 0 rows
 SELECT * FROM cypher('issue_2193', $$
     MATCH (x:NonExistentLabel)
     RETURN x
+$$) AS (result agtype);
+
+-- MATCH on non-existent label after DML predecessor still returns 0 rows
+-- and MATCH-introduced variable (p) is properly registered
+SELECT * FROM cypher('issue_2193', $$
+    CREATE (a:Person {name: 'Alice'})
+    WITH a
+    MATCH (p:NonExistentLabel)
+    RETURN p
 $$) AS (result agtype);
 
 SELECT drop_graph('issue_2193', true);

@@ -2918,8 +2918,6 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
     }
     else
     {
-        bool valid_labels = true;
-
         if (clause->prev)
         {
             RangeTblEntry *rte;
@@ -2971,21 +2969,21 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
             if (clause_chain_has_dml(clause->prev) &&
                 !match_check_valid_label(self, cpstate))
             {
-                valid_labels = false;
+                cypher_bool_const *l = make_ag_node(cypher_bool_const);
+                cypher_bool_const *r = make_ag_node(cypher_bool_const);
+
+                l->boolean = true;
+                l->location = -1;
+                r->boolean = false;
+                r->location = -1;
+
+                where = (Node *)makeSimpleA_Expr(AEXPR_OP, "=",
+                                                 (Node *)l,
+                                                 (Node *)r, -1);
             }
         }
 
-        if (valid_labels)
-        {
-            transform_match_pattern(cpstate, query, self->pattern, where);
-        }
-        else
-        {
-            query->rtable = pstate->p_rtable;
-            query->rteperminfos = pstate->p_rteperminfos;
-            query->jointree = makeFromExpr(pstate->p_joinlist,
-                                           makeBoolConst(false, false));
-        }
+        transform_match_pattern(cpstate, query, self->pattern, where);
     }
 
     markTargetListOrigins(pstate, query->targetList);
