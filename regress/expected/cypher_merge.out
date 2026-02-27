@@ -1728,9 +1728,9 @@ SELECT * FROM cypher('issue_1907', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype
 --
 SELECT * FROM create_graph('issue_1446');
 NOTICE:  graph "issue_1446" has been created
- create_graph
+ create_graph 
 --------------
-
+ 
 (1 row)
 
 -- Reporter's exact setup: two initial nodes
@@ -1864,6 +1864,7 @@ $$) AS (edge_count agtype);
 ------------
  0
 (1 row)
+
 -- Issue 1954: CREATE + WITH + MERGE causes "vertex was deleted" error
 -- when the number of input rows exceeds the snapshot's command ID window.
 -- entity_exists() used a stale curcid, making recently-created vertices

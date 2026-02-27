@@ -221,16 +221,21 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
                 F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
 
     /*
-     * Temporarily advance the snapshot's curcid to the current global
-     * command ID so that entities inserted by preceding clauses (e.g.,
-     * CREATE) in the same query are visible. CREATE calls
-     * CommandCounterIncrement() which advances the global CID, but does
-     * not update es_snapshot->curcid. The Decrement/Increment CID
-     * macros used by the executors can leave curcid behind the global
+     * Temporarily advance the snapshot's curcid so that entities inserted
+     * by preceding clauses (e.g., CREATE) in the same query are visible.
+     * CREATE calls CommandCounterIncrement() which advances the global
+     * CID, but does not update es_snapshot->curcid. The Decrement/Increment
+     * CID macros used by the executors can leave curcid behind the global
      * CID, making recently created entities invisible to this scan.
+     *
+     * Use Max to ensure we never decrease curcid. The executor macros
+     * (Increment_Estate_CommandId) can push curcid above the global CID,
+     * and blindly assigning GetCurrentCommandId could make tuples that
+     * are visible at the current curcid become invisible.
      */
     saved_curcid = estate->es_snapshot->curcid;
-    estate->es_snapshot->curcid = GetCurrentCommandId(false);
+    estate->es_snapshot->curcid = Max(saved_curcid,
+                                      GetCurrentCommandId(false));
 
     rel = table_open(label->relation, RowExclusiveLock);
     scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
