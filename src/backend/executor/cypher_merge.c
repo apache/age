@@ -596,23 +596,126 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
          * it did, we don't need to create the pattern. If the lateral join did
          * not find the whole path, create the whole path.
          *
-         * If this is a terminal clause, process all tuples. If not, pass the
-         * tuple to up the execution tree.
+         * For non-terminal MERGE, we eagerly process ALL input rows before
+         * returning any results. This ensures that all entities created by
+         * this MERGE are committed to the database before any parent plan
+         * node (such as another MERGE's lateral join) scans the tables.
+         * Without eager processing, chained MERGEs cannot see each other's
+         * changes because the parent's join scan is materialized before the
+         * child MERGE finishes all its iterations.
+         *
+         * For terminal MERGE, all tuples are processed in a single pass
+         * and NULL is returned.
+         */
+
+        /*
+         * Non-terminal: eagerly process all rows and buffer the results.
+         */
+        if (!terminal && !css->eager_buffer_filled)
+        {
+            css->eager_tuples = NIL;
+            css->eager_tuples_index = 0;
+
+            while (true)
+            {
+                TupleTableSlot *projected;
+                HeapTuple htup;
+
+                /* Process the subtree first */
+                Decrement_Estate_CommandId(estate)
+                slot = ExecProcNode(node->ss.ps.lefttree);
+                Increment_Estate_CommandId(estate)
+
+                if (TupIsNull(slot))
+                {
+                    break;
+                }
+
+                /* setup the scantuple that the process_path needs */
+                econtext->ecxt_scantuple =
+                    node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
+
+                /*
+                 * Check the subtree to see if the lateral join
+                 * representing the MERGE path found results. If not,
+                 * we need to create the path.
+                 */
+                if (check_path(css, econtext->ecxt_scantuple))
+                {
+                    path_entry **prebuilt_path_array = NULL;
+                    path_entry **found_path_array = NULL;
+                    int path_length =
+                        list_length(css->path->target_nodes);
+
+                    prebuilt_path_array = prebuild_path(node);
+
+                    found_path_array =
+                        find_duplicate_path(node, prebuilt_path_array);
+
+                    if (found_path_array)
+                    {
+                        free_path_entry_array(prebuilt_path_array,
+                                              path_length);
+                        process_path(css, found_path_array, false);
+                    }
+                    else
+                    {
+                        created_path *new_path =
+                            palloc0(sizeof(created_path));
+
+                        new_path->next = css->created_paths_list;
+                        new_path->entry = prebuilt_path_array;
+                        css->created_paths_list = new_path;
+
+                        process_path(css, prebuilt_path_array, true);
+                    }
+                }
+
+                /* Project the result and save a copy */
+                econtext->ecxt_scantuple =
+                    ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
+                projected = ExecProject(node->ss.ps.ps_ProjInfo);
+
+                htup = ExecCopySlotHeapTuple(projected);
+                css->eager_tuples =
+                    lappend(css->eager_tuples, htup);
+            }
+
+            css->eager_buffer_filled = true;
+        }
+
+        /* Non-terminal: return the next buffered row (or NULL if empty) */
+        if (!terminal && css->eager_buffer_filled)
+        {
+            if (css->eager_tuples_index < list_length(css->eager_tuples))
+            {
+                HeapTuple htup;
+                TupleTableSlot *result_slot =
+                    node->ss.ps.ps_ResultTupleSlot;
+
+                htup = (HeapTuple)
+                    list_nth(css->eager_tuples, css->eager_tuples_index);
+                css->eager_tuples_index++;
+
+                ExecForceStoreHeapTuple(htup, result_slot, false);
+                return result_slot;
+            }
+
+            return NULL;
+        }
+
+        /*
+         * Terminal: process all tuples and return NULL.
          */
         do
         {
-            /*Process the subtree first */
+            /* Process the subtree first */
             Decrement_Estate_CommandId(estate)
             slot = ExecProcNode(node->ss.ps.lefttree);
             Increment_Estate_CommandId(estate)
 
-            /*
-             * We are done processing the subtree, mark as terminal
-             * so the function returns NULL.
-             */
             if (TupIsNull(slot))
             {
-                terminal = true;
                 break;
             }
 
@@ -622,7 +725,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
 
             /*
              * Check the subtree to see if the lateral join representing the
-             * MERGE path found results. If not, we need to create the path
+             * MERGE path found results. If not, we need to create the path.
              */
             if (check_path(css, econtext->ecxt_scantuple))
             {
@@ -630,71 +733,31 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                 path_entry **found_path_array = NULL;
                 int path_length = list_length(css->path->target_nodes);
 
-                /*
-                 * Prebuild our path and verify that it wasn't already created.
-                 *
-                 * Note: This is currently only needed when there is a previous
-                 *       clause. This is due to the fact that MERGE can't see
-                 *       what it has just created. This isn't due to transaction
-                 *       or command ids, it's due to the join's scan not being
-                 *       able to add in the newly inserted tuples and rescan
-                 *       with these tuples.
-                 *
-                 * Note: The prebuilt path is purposely generic as it needs to
-                 *       only match a path. The more specific items will be
-                 *       added by merge_vertex and merge_edge if it is inserted.
-                 *
-                 * Note: The IDs are purposely not created here because we may
-                 *       need to throw them away if a path was previously
-                 *       created. Remember, the IDs are automatically
-                 *       incremented when fetched.
-                 */
                 prebuilt_path_array = prebuild_path(node);
 
                 found_path_array = find_duplicate_path(node,
                                                        prebuilt_path_array);
 
-                /* if found we don't need to insert anything, just reuse it */
                 if (found_path_array)
                 {
-                    /* we don't need our prebuilt path anymore */
                     free_path_entry_array(prebuilt_path_array, path_length);
-
-                    /* as this path exists, we don't need to insert it */
                     process_path(css, found_path_array, false);
                 }
-                /* otherwise, we need to insert the new, prebuilt, path */
                 else
                 {
                     created_path *new_path = palloc0(sizeof(created_path));
 
-                    /* build the next linked list entry for our created_paths */
-                    new_path = palloc0(sizeof(created_path));
                     new_path->next = css->created_paths_list;
                     new_path->entry = prebuilt_path_array;
-
-                    /* we need to push our prebuilt path onto the list */
                     css->created_paths_list = new_path;
 
-                    /*
-                     * We need to pass in the prebuilt path so that it can get
-                     * filled in with more specific information
-                     */
                     process_path(css, prebuilt_path_array, true);
                 }
             }
 
-        } while (terminal);
+        } while (true);
 
-        /* if this was a terminal MERGE just return NULL */
-        if (terminal)
-        {
-            return NULL;
-        }
-
-        econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
-
-        return ExecProject(node->ss.ps.ps_ProjInfo);
+        return NULL;
 
     }
     else if (terminal)
@@ -910,6 +973,18 @@ static void end_cypher_merge(CustomScanState *node)
         css->created_paths_list = next;
     }
 
+    /* free the eager buffer if it was used */
+    if (css->eager_tuples != NIL)
+    {
+        ListCell *lc2;
+
+        foreach(lc2, css->eager_tuples)
+        {
+            heap_freetuple((HeapTuple) lfirst(lc2));
+        }
+        list_free(css->eager_tuples);
+        css->eager_tuples = NIL;
+    }
 }
 
 /*
