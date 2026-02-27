@@ -343,6 +343,7 @@ static bool isa_special_VLE_case(cypher_path *path);
 
 static ParseNamespaceItem *find_pnsi(cypher_parsestate *cpstate, char *varname);
 static bool has_list_comp_or_subquery(Node *expr, void *context);
+static bool clause_chain_has_dml(cypher_clause *clause);
 
 /*
  * Add required permissions to the matching relation's range table entry.
@@ -2881,6 +2882,21 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
 
             pnsi = transform_prev_cypher_clause(cpstate, clause->prev, true);
             rte = pnsi->p_rte;
+
+            /*
+             * If the predecessor clause chain contains a data-modifying
+             * operation (CREATE, SET, DELETE, MERGE), mark the subquery
+             * RTE as a security barrier. This prevents PostgreSQL's
+             * optimizer from pushing MATCH filter quals down into the
+             * subquery, which would cause them to evaluate before the
+             * DML executes -- resulting in quals checking NULL values
+             * and filtering out all rows.
+             */
+            if (clause_chain_has_dml(clause->prev))
+            {
+                rte->security_barrier = true;
+            }
+
             rtindex = list_length(pstate->p_rtable);
             /* rte is the first RangeTblEntry in pstate */
             if (rtindex != 1)
@@ -6503,6 +6519,28 @@ static void advance_transform_entities_to_next_clause(List *entities)
 
         entity->declared_in_current_clause = false;
     }
+}
+
+/*
+ * Walk the clause chain and return true if any clause is a
+ * data-modifying operation (CREATE, SET, DELETE, or MERGE).
+ */
+static bool clause_chain_has_dml(cypher_clause *clause)
+{
+    while (clause != NULL)
+    {
+        if (is_ag_node(clause->self, cypher_create) ||
+            is_ag_node(clause->self, cypher_set) ||
+            is_ag_node(clause->self, cypher_delete) ||
+            is_ag_node(clause->self, cypher_merge))
+        {
+            return true;
+        }
+
+        clause = clause->prev;
+    }
+
+    return false;
 }
 
 static Query *analyze_cypher_clause(transform_method transform,
