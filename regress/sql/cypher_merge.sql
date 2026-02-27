@@ -840,6 +840,26 @@ SELECT * FROM cypher('issue_1446', $$
     RETURN count(*) AS edge_count
 $$) AS (edge_count agtype);
 
+-- Test chained MERGE with empty MATCH result (empty buffer scenario)
+-- Without fix: non-terminal MERGE falls through to terminal logic,
+-- incorrectly creating entities when MATCH returns 0 rows.
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (x:NonExistent)
+    MERGE (x)-[:r]->(:t)
+    MERGE (:C)-[:r]->(:t)
+    RETURN count(*) AS cnt
+$$) AS (cnt agtype);
+-- Verify no nodes or edges were created
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN count(*) AS node_count
+$$) AS (node_count agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
 --
 -- clean up graphs
 --

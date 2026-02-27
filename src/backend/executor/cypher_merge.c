@@ -684,8 +684,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             css->eager_buffer_filled = true;
         }
 
-        /* Non-terminal: return the next buffered row */
-        if (!terminal && css->eager_tuples != NIL)
+        /* Non-terminal: return the next buffered row (or NULL if empty) */
+        if (!terminal && css->eager_buffer_filled)
         {
             if (css->eager_tuples_index < list_length(css->eager_tuples))
             {
