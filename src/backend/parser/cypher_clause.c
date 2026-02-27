@@ -4269,8 +4269,29 @@ static Node *create_property_constraints(cypher_parsestate *cpstate,
          */
         if (is_ag_node(property_constraints, cypher_param))
         {
-            return (Node *)make_op(pstate, list_make1(makeString("@>")),
-                                   prop_expr, const_expr, last_srf, -1);
+            /*
+             * Use @>> (top-level containment) for =properties form,
+             * @> (deep containment) otherwise — matching the
+             * enable_containment=on path above.
+             */
+            if ((entity->type == ENT_VERTEX &&
+                 entity->entity.node->use_equals) ||
+                ((entity->type == ENT_EDGE ||
+                  entity->type == ENT_VLE_EDGE) &&
+                 entity->entity.rel->use_equals))
+            {
+                return (Node *)make_op(pstate,
+                                       list_make1(makeString("@>>")),
+                                       prop_expr, const_expr,
+                                       last_srf, -1);
+            }
+            else
+            {
+                return (Node *)make_op(pstate,
+                                       list_make1(makeString("@>")),
+                                       prop_expr, const_expr,
+                                       last_srf, -1);
+            }
         }
         return (Node *)transform_map_to_ind(
             cpstate, entity, (cypher_map *)property_constraints);

@@ -3628,9 +3628,9 @@ drop cascades to table issue_2308."T4"
 drop cascades to table issue_2308."T5"
 drop cascades to table issue_2308."R5"
 NOTICE:  graph "issue_2308" has been dropped
- drop_graph
+ drop_graph 
 ------------
-
+ 
 (1 row)
 
 -- Issue 1964
@@ -3642,9 +3642,9 @@ NOTICE:  graph "issue_2308" has been dropped
 --
 SELECT create_graph('issue_1964');
 NOTICE:  graph "issue_1964" has been created
- create_graph
+ create_graph 
 --------------
-
+ 
 (1 row)
 
 SELECT * FROM cypher('issue_1964', $$
@@ -3705,6 +3705,38 @@ EXECUTE issue_1964_vertex_on('{"props": {"name": "Alice"}}');
 (2 rows)
 
 DEALLOCATE issue_1964_vertex_on;
+-- Test =properties form with PREPARE (uses @>> top-level containment)
+SET age.enable_containment = off;
+PREPARE issue_1964_vertex_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq('{"props": {"name": "Alice", "age": 25}}');
+ p 
+---
+(0 rows)
+
+DEALLOCATE issue_1964_vertex_eq;
+PREPARE issue_1964_edge_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r = $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge_eq('{"props": {"since": 2020}}');
+                                                                    p                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {"since": 2020}}::edge
+(1 row)
+
+DEALLOCATE issue_1964_edge_eq;
+-- Same with enable_containment on
+SET age.enable_containment = on;
+PREPARE issue_1964_vertex_eq_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq_on('{"props": {"name": "Alice", "age": 25}}');
+ p 
+---
+(0 rows)
+
+DEALLOCATE issue_1964_vertex_eq_on;
 --
 -- Clean up
 --

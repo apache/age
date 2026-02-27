@@ -1534,6 +1534,30 @@ PREPARE issue_1964_vertex_on(agtype) AS
 EXECUTE issue_1964_vertex_on('{"props": {"name": "Alice"}}');
 DEALLOCATE issue_1964_vertex_on;
 
+-- Test =properties form with PREPARE (uses @>> top-level containment)
+SET age.enable_containment = off;
+
+PREPARE issue_1964_vertex_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq('{"props": {"name": "Alice", "age": 25}}');
+DEALLOCATE issue_1964_vertex_eq;
+
+PREPARE issue_1964_edge_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r = $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge_eq('{"props": {"since": 2020}}');
+DEALLOCATE issue_1964_edge_eq;
+
+-- Same with enable_containment on
+SET age.enable_containment = on;
+
+PREPARE issue_1964_vertex_eq_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq_on('{"props": {"name": "Alice", "age": 25}}');
+DEALLOCATE issue_1964_vertex_eq_on;
+
 --
 -- Clean up
 --
