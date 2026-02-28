@@ -869,8 +869,86 @@ SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype
 SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
 --
+-- ON CREATE SET / ON MATCH SET tests (issue #1619)
+--
+SELECT create_graph('merge_actions');
+
+-- Basic ON CREATE SET: first run creates the node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON CREATE SET n.created = true
+  RETURN n.name, n.created
+$$) AS (name agtype, created agtype);
+
+-- ON MATCH SET: second run matches the existing node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON MATCH SET n.found = true
+  RETURN n.name, n.created, n.found
+$$) AS (name agtype, created agtype, found agtype);
+
+-- Both ON CREATE SET and ON MATCH SET (first run = create)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+
+-- Both ON CREATE SET and ON MATCH SET (second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+
+-- ON MATCH SET with MERGE after MATCH (Case 1: has predecessor)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Alice'})
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
+    ON CREATE SET b.source = 'merge_create'
+  RETURN a.name, b.name, b.source
+$$) AS (a agtype, b agtype, source agtype);
+
+-- Multiple SET items in a single ON CREATE SET
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Dave'})
+    ON CREATE SET n.a = 1, n.b = 2
+  RETURN n.name, n.a, n.b
+$$) AS (name agtype, a agtype, b agtype);
+
+-- Reverse order: ON MATCH before ON CREATE should work
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Eve'})
+    ON MATCH SET n.seen = true
+    ON CREATE SET n.new = true
+  RETURN n.name, n.new
+$$) AS (name agtype, new agtype);
+
+-- Error: ON CREATE SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON CREATE SET n.a = 1
+    ON CREATE SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+
+-- Error: ON MATCH SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON MATCH SET n.a = 1
+    ON MATCH SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+
+-- cleanup
+SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+
+--
 -- delete graphs
 --
+SELECT drop_graph('merge_actions', true);
 SELECT drop_graph('issue_1907', true);
 SELECT drop_graph('cypher_merge', true);
 SELECT drop_graph('issue_1630', true);

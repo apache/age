@@ -124,6 +124,8 @@ typedef struct cypher_merge
 {
     ExtensibleNode extensible;
     Node *path;
+    List *on_match;   /* List of cypher_set_item, or NIL */
+    List *on_create;  /* List of cypher_set_item, or NIL */
 } cypher_merge;
 
 /*
@@ -451,6 +453,8 @@ typedef struct cypher_update_item
     List *qualified_name;
     bool remove_item;
     bool is_add;
+    Node *prop_expr;    /* SET value expression, used by MERGE ON CREATE/MATCH SET
+                         * where the expression is not in the plan's target list */
 } cypher_update_item;
 
 typedef struct cypher_delete_information
@@ -477,6 +481,8 @@ typedef struct cypher_merge_information
     uint32 graph_oid;
     AttrNumber merge_function_attr;
     cypher_create_path *path;
+    cypher_update_information *on_match_set_info;  /* NULL if no ON MATCH SET */
+    cypher_update_information *on_create_set_info;  /* NULL if no ON CREATE SET */
 } cypher_merge_information;
 
 /* grammar node for typecasts */

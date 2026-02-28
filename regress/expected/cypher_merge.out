@@ -1889,8 +1889,137 @@ SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype
 (0 rows)
 
 --
+-- ON CREATE SET / ON MATCH SET tests (issue #1619)
+--
+SELECT create_graph('merge_actions');
+NOTICE:  graph "merge_actions" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Basic ON CREATE SET: first run creates the node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON CREATE SET n.created = true
+  RETURN n.name, n.created
+$$) AS (name agtype, created agtype);
+  name   | created 
+---------+---------
+ "Alice" | true
+(1 row)
+
+-- ON MATCH SET: second run matches the existing node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON MATCH SET n.found = true
+  RETURN n.name, n.created, n.found
+$$) AS (name agtype, created agtype, found agtype);
+  name   | created | found 
+---------+---------+-------
+ "Alice" | true    | true
+(1 row)
+
+-- Both ON CREATE SET and ON MATCH SET (first run = create)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+ name  | created | matched 
+-------+---------+---------
+ "Bob" | true    | 
+(1 row)
+
+-- Both ON CREATE SET and ON MATCH SET (second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+ name  | created | matched 
+-------+---------+---------
+ "Bob" | true    | true
+(1 row)
+
+-- ON MATCH SET with MERGE after MATCH (Case 1: has predecessor)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Alice'})
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
+    ON CREATE SET b.source = 'merge_create'
+  RETURN a.name, b.name, b.source
+$$) AS (a agtype, b agtype, source agtype);
+    a    |     b     |     source     
+---------+-----------+----------------
+ "Alice" | "Charlie" | "merge_create"
+(1 row)
+
+-- Multiple SET items in a single ON CREATE SET
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Dave'})
+    ON CREATE SET n.a = 1, n.b = 2
+  RETURN n.name, n.a, n.b
+$$) AS (name agtype, a agtype, b agtype);
+  name  | a | b 
+--------+---+---
+ "Dave" | 1 | 2
+(1 row)
+
+-- Reverse order: ON MATCH before ON CREATE should work
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Eve'})
+    ON MATCH SET n.seen = true
+    ON CREATE SET n.new = true
+  RETURN n.name, n.new
+$$) AS (name agtype, new agtype);
+ name  | new  
+-------+------
+ "Eve" | true
+(1 row)
+
+-- Error: ON CREATE SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON CREATE SET n.a = 1
+    ON CREATE SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+ERROR:  ON CREATE SET specified more than once
+LINE 1: SELECT * FROM cypher('merge_actions', $$
+                                               ^
+-- Error: ON MATCH SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON MATCH SET n.a = 1
+    ON MATCH SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+ERROR:  ON MATCH SET specified more than once
+LINE 1: SELECT * FROM cypher('merge_actions', $$
+                                               ^
+-- cleanup
+SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+--
 -- delete graphs
 --
+SELECT drop_graph('merge_actions', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table merge_actions._ag_label_vertex
+drop cascades to table merge_actions._ag_label_edge
+drop cascades to table merge_actions."Person"
+drop cascades to table merge_actions."KNOWS"
+NOTICE:  graph "merge_actions" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 SELECT drop_graph('issue_1907', true);
 NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table issue_1907._ag_label_vertex

@@ -269,6 +269,7 @@ void read_cypher_update_item(struct ExtensibleNode *node)
     READ_NODE_FIELD(qualified_name);
     READ_BOOL_FIELD(remove_item);
     READ_BOOL_FIELD(is_add);
+    READ_NODE_FIELD(prop_expr);
 }
 
 /*
@@ -310,4 +311,6 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_UINT_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
+    READ_NODE_FIELD(on_match_set_info);
+    READ_NODE_FIELD(on_create_set_info);
 }
