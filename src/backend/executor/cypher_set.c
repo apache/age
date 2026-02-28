@@ -325,8 +325,7 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
 static void update_all_paths(CustomScanState *node, graphid id,
                              agtype *updated_entity)
 {
-    cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
-    ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
+    ExprContext *econtext = node->ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     int i;
 
@@ -372,13 +371,18 @@ static void update_all_paths(CustomScanState *node, graphid id,
     }
 }
 
-static void process_update_list(CustomScanState *node)
+/*
+ * Core SET logic that can be called from any executor (SET, MERGE, etc.).
+ * Takes the CustomScanState for expression context and a
+ * cypher_update_information describing which properties to set.
+ */
+void apply_update_list(CustomScanState *node,
+                       cypher_update_information *set_info)
 {
-    cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
-    ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
+    ExprContext *econtext = node->ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     ListCell *lc;
-    EState *estate = css->css.ss.ps.state;
+    EState *estate = node->ss.ps.state;
     int *luindex = NULL;
     int lidx = 0;
     HTAB *qual_cache = NULL;
@@ -404,7 +408,7 @@ static void process_update_list(CustomScanState *node)
      * to correctly update an 'entity' after all other previous updates to that
      * 'entity' have been done.
      */
-    foreach (lc, css->set_list->set_items)
+    foreach (lc, set_info->set_items)
     {
         cypher_update_item *update_item = NULL;
 
@@ -419,7 +423,7 @@ static void process_update_list(CustomScanState *node)
     lidx = 0;
 
     /* iterate through SET set items */
-    foreach (lc, css->set_list->set_items)
+    foreach (lc, set_info->set_items)
     {
         agtype_value *altered_properties;
         agtype_value *original_entity_value;
@@ -437,7 +441,7 @@ static void process_update_list(CustomScanState *node)
         cypher_update_item *update_item;
         Datum new_entity;
         HeapTuple heap_tuple;
-        char *clause_name = css->set_list->clause_name;
+        char *clause_name = set_info->clause_name;
         int cid;
 
         update_item = (cypher_update_item *)lfirst(lc);
@@ -485,10 +489,30 @@ static void process_update_list(CustomScanState *node)
          * this is a REMOVE clause or the variable references a variable that is
          * NULL. It will be possible for a variable to be NULL when OPTIONAL
          * MATCH is implemented.
+         *
+         * If prop_expr is set (used by MERGE ON CREATE/MATCH SET), evaluate
+         * the expression directly rather than reading from the scan tuple.
+         * The planner may have stripped the target entry at prop_position.
          */
         if (update_item->remove_item)
         {
             remove_property = true;
+        }
+        else if (update_item->prop_expr != NULL)
+        {
+            ExprState *expr_state;
+            Datum val;
+            bool isnull;
+
+            expr_state = ExecInitExpr((Expr *)update_item->prop_expr,
+                                      (PlanState *)node);
+            val = ExecEvalExpr(expr_state, econtext, &isnull);
+            remove_property = isnull;
+
+            if (!isnull)
+            {
+                new_property_value = DATUM_GET_AGTYPE_P(val);
+            }
         }
         else
         {
@@ -503,7 +527,7 @@ static void process_update_list(CustomScanState *node)
         {
             new_property_value = NULL;
         }
-        else
+        else if (update_item->prop_expr == NULL)
         {
             new_property_value = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[update_item->prop_position - 1]);
         }
@@ -536,7 +560,7 @@ static void process_update_list(CustomScanState *node)
         }
 
         resultRelInfo = create_entity_result_rel_info(
-            estate, css->set_list->graph_name, label_name);
+            estate, set_info->graph_name, label_name);
 
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
@@ -698,6 +722,13 @@ static void process_update_list(CustomScanState *node)
 
     /* free our lookup array */
     pfree_if_not_null(luindex);
+}
+
+static void process_update_list(CustomScanState *node)
+{
+    cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
+
+    apply_update_list(node, css->set_list);
 }
 
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)

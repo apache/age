@@ -64,6 +64,10 @@
     bool boolean;
     Node *node;
     List *list;
+    struct {
+        List *on_match;
+        List *on_create;
+    } merge_actions;
 }
 
 %token <integer> INTEGER
@@ -89,7 +93,7 @@
                  LIMIT
                  MATCH MERGE
                  NOT NULL_P
-                 OPERATOR OPTIONAL OR ORDER
+                 ON OPERATOR OPTIONAL OR ORDER
                  REMOVE RETURN
                  SET SKIP STARTS
                  THEN TRUE_P
@@ -139,6 +143,7 @@
 
 /* MERGE clause */
 %type <node> merge
+%type <merge_actions> merge_actions_opt merge_actions merge_action
 
 /* CALL ... YIELD clause */
 %type <node> call_stmt yield_item
@@ -1131,14 +1136,69 @@ detach_opt:
  * MERGE clause
  */
 merge:
-    MERGE path
+    MERGE path merge_actions_opt
         {
             cypher_merge *n;
 
             n = make_ag_node(cypher_merge);
             n->path = $2;
+            n->on_match = $3.on_match;
+            n->on_create = $3.on_create;
 
             $$ = (Node *)n;
+        }
+    ;
+
+merge_actions_opt:
+    /* empty */
+        {
+            $$.on_match = NIL;
+            $$.on_create = NIL;
+        }
+    | merge_actions
+        {
+            $$ = $1;
+        }
+    ;
+
+merge_actions:
+    merge_action
+        {
+            $$ = $1;
+        }
+    | merge_actions merge_action
+        {
+            if ($2.on_match != NIL)
+            {
+                if ($1.on_match != NIL)
+                    ereport(ERROR,
+                            (errcode(ERRCODE_SYNTAX_ERROR),
+                             errmsg("ON MATCH SET specified more than once")));
+                $$.on_match = $2.on_match;
+                $$.on_create = $1.on_create;
+            }
+            else
+            {
+                if ($1.on_create != NIL)
+                    ereport(ERROR,
+                            (errcode(ERRCODE_SYNTAX_ERROR),
+                             errmsg("ON CREATE SET specified more than once")));
+                $$.on_create = $2.on_create;
+                $$.on_match = $1.on_match;
+            }
+        }
+    ;
+
+merge_action:
+    ON MATCH SET set_item_list
+        {
+            $$.on_match = $4;
+            $$.on_create = NIL;
+        }
+    | ON CREATE SET set_item_list
+        {
+            $$.on_match = NIL;
+            $$.on_create = $4;
         }
     ;
 

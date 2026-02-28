@@ -6833,6 +6833,52 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     merge_information->graph_oid = cpstate->graph_oid;
     merge_information->path = merge_path;
 
+    /* Transform ON MATCH SET items, if any */
+    if (self->on_match != NIL)
+    {
+        ListCell *lc2;
+
+        merge_information->on_match_set_info =
+            transform_cypher_set_item_list(cpstate, self->on_match, query);
+        merge_information->on_match_set_info->clause_name = "MERGE ON MATCH SET";
+        merge_information->on_match_set_info->graph_name = cpstate->graph_name;
+
+        /*
+         * Store prop_expr for direct evaluation in the MERGE executor.
+         * The planner may strip SET expression target entries from the plan,
+         * so we embed the Expr in the update item for direct evaluation.
+         */
+        foreach(lc2, merge_information->on_match_set_info->set_items)
+        {
+            cypher_update_item *item = lfirst(lc2);
+            TargetEntry *set_tle = get_tle_by_resno(query->targetList,
+                                                    item->prop_position);
+            if (set_tle != NULL)
+                item->prop_expr = (Node *)set_tle->expr;
+        }
+    }
+
+    /* Transform ON CREATE SET items, if any */
+    if (self->on_create != NIL)
+    {
+        ListCell *lc2;
+
+        merge_information->on_create_set_info =
+            transform_cypher_set_item_list(cpstate, self->on_create, query);
+        merge_information->on_create_set_info->clause_name = "MERGE ON CREATE SET";
+        merge_information->on_create_set_info->graph_name = cpstate->graph_name;
+
+        /* Store prop_expr for MERGE executor (see comment above) */
+        foreach(lc2, merge_information->on_create_set_info->set_items)
+        {
+            cypher_update_item *item = lfirst(lc2);
+            TargetEntry *set_tle = get_tle_by_resno(query->targetList,
+                                                    item->prop_position);
+            if (set_tle != NULL)
+                item->prop_expr = (Node *)set_tle->expr;
+        }
+    }
+
     if (!clause->next)
     {
         merge_information->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;

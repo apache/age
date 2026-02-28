@@ -189,12 +189,14 @@ void out_cypher_list_comprehension(StringInfo str, const ExtensibleNode *node)
 }
 
 
-/* serialization function for the cypher_delete ExtensibleNode. */
+/* serialization function for the cypher_merge ExtensibleNode. */
 void out_cypher_merge(StringInfo str, const ExtensibleNode *node)
 {
     DEFINE_AG_NODE(cypher_merge);
 
     WRITE_NODE_FIELD(path);
+    WRITE_NODE_FIELD(on_match);
+    WRITE_NODE_FIELD(on_create);
 }
 
 /* serialization function for the cypher_path ExtensibleNode. */
@@ -427,6 +429,7 @@ void out_cypher_update_item(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(qualified_name);
     WRITE_BOOL_FIELD(remove_item);
     WRITE_BOOL_FIELD(is_add);
+    WRITE_NODE_FIELD(prop_expr);
 }
 
 /* serialization function for the cypher_delete_information ExtensibleNode. */
@@ -459,6 +462,8 @@ void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node)
     WRITE_INT32_FIELD(graph_oid);
     WRITE_INT32_FIELD(merge_function_attr);
     WRITE_NODE_FIELD(path);
+    WRITE_NODE_FIELD(on_match_set_info);
+    WRITE_NODE_FIELD(on_create_set_info);
 }
 
 /*
