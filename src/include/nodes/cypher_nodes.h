@@ -455,6 +455,7 @@ typedef struct cypher_update_item
     bool is_add;
     Node *prop_expr;    /* SET value expression, used by MERGE ON CREATE/MATCH SET
                          * where the expression is not in the plan's target list */
+    ExprState *prop_expr_state;  /* initialized at plan init, not per-row */
 } cypher_update_item;
 
 typedef struct cypher_delete_information

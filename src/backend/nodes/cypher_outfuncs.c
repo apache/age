@@ -430,6 +430,7 @@ void out_cypher_update_item(StringInfo str, const ExtensibleNode *node)
     WRITE_BOOL_FIELD(remove_item);
     WRITE_BOOL_FIELD(is_add);
     WRITE_NODE_FIELD(prop_expr);
+    WRITE_NODE_FIELD(prop_expr_state);
 }
 
 /* serialization function for the cypher_delete_information ExtensibleNode. */

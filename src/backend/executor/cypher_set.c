@@ -504,8 +504,20 @@ void apply_update_list(CustomScanState *node,
             Datum val;
             bool isnull;
 
-            expr_state = ExecInitExpr((Expr *)update_item->prop_expr,
-                                      (PlanState *)node);
+            /*
+             * Use the pre-initialized ExprState if available (set during
+             * plan init in begin_cypher_merge). Fall back to per-row init
+             * for callers that haven't pre-initialized (e.g. plain SET).
+             */
+            if (update_item->prop_expr_state != NULL)
+            {
+                expr_state = update_item->prop_expr_state;
+            }
+            else
+            {
+                expr_state = ExecInitExpr((Expr *)update_item->prop_expr,
+                                          (PlanState *)node);
+            }
             val = ExecEvalExpr(expr_state, econtext, &isnull);
             remove_property = isnull;
 
