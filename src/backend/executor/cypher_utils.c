@@ -208,6 +208,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     HeapTuple tuple;
     Relation rel;
     bool result = true;
+    CommandId saved_curcid;
 
     /*
      * Extract the label id from the graph id and get the table name
@@ -218,6 +219,23 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     /* Setup the scan key to be the graphid */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                 F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
+
+    /*
+     * Temporarily advance the snapshot's curcid so that entities inserted
+     * by preceding clauses (e.g., CREATE) in the same query are visible.
+     * CREATE calls CommandCounterIncrement() which advances the global
+     * CID, but does not update es_snapshot->curcid. The Decrement/Increment
+     * CID macros used by the executors can leave curcid behind the global
+     * CID, making recently created entities invisible to this scan.
+     *
+     * Use Max to ensure we never decrease curcid. The executor macros
+     * (Increment_Estate_CommandId) can push curcid above the global CID,
+     * and blindly assigning GetCurrentCommandId could make tuples that
+     * are visible at the current curcid become invisible.
+     */
+    saved_curcid = estate->es_snapshot->curcid;
+    estate->es_snapshot->curcid = Max(saved_curcid,
+                                      GetCurrentCommandId(false));
 
     rel = table_open(label->relation, RowExclusiveLock);
     scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
@@ -235,6 +253,9 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 
     table_endscan(scan_desc);
     table_close(rel, RowExclusiveLock);
+
+    /* Restore the original curcid */
+    estate->es_snapshot->curcid = saved_curcid;
 
     return result;
 }
