@@ -1514,7 +1514,7 @@ SELECT * FROM cypher('issue_2193', $$
     CREATE (a:City {name: 'Berlin'})
     WITH a
     MATCH (c:City)
-    RETURN c.name
+    RETURN c.name ORDER BY c.name
 $$) AS (result agtype);
 
 -- MATCH on a label that now exists (second execution) still works
