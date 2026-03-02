@@ -192,6 +192,35 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     }
 
     /*
+     * Pre-initialize ExprStates for ON CREATE SET / ON MATCH SET items.
+     * This must happen once at plan init time, not per-row.
+     */
+    if (css->on_create_set_info != NULL)
+    {
+        foreach(lc, css->on_create_set_info->set_items)
+        {
+            cypher_update_item *item = (cypher_update_item *)lfirst(lc);
+            if (item->prop_expr != NULL)
+            {
+                item->prop_expr_state = ExecInitExpr(
+                    (Expr *)item->prop_expr, (PlanState *)node);
+            }
+        }
+    }
+    if (css->on_match_set_info != NULL)
+    {
+        foreach(lc, css->on_match_set_info->set_items)
+        {
+            cypher_update_item *item = (cypher_update_item *)lfirst(lc);
+            if (item->prop_expr != NULL)
+            {
+                item->prop_expr_state = ExecInitExpr(
+                    (Expr *)item->prop_expr, (PlanState *)node);
+            }
+        }
+    }
+
+    /*
      * Postgres does not assign the es_output_cid in queries that do
      * not write to disk, ie: SELECT commands. We need the command id
      * for our clauses, and we may need to initialize it. We cannot use

@@ -137,6 +137,7 @@ void copy_cypher_update_item(ExtensibleNode *newnode, const ExtensibleNode *from
     COPY_SCALAR_FIELD(remove_item);
     COPY_SCALAR_FIELD(is_add);
     COPY_NODE_FIELD(prop_expr);
+    COPY_NODE_FIELD(prop_expr_state);
 }
 
 /* copy function for cypher_delete_information */

@@ -967,13 +967,21 @@ SELECT * FROM cypher('merge_actions', $$
   RETURN n.name, n.created, n.matched
 $$) AS (name agtype, created agtype, matched agtype);
 
--- ON MATCH SET with MERGE after MATCH (Case 1: has predecessor)
+-- ON CREATE SET with MERGE after MATCH (Case 1: has predecessor, first run = create)
 SELECT * FROM cypher('merge_actions', $$
   MATCH (a:Person {name: 'Alice'})
   MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
     ON CREATE SET b.source = 'merge_create'
   RETURN a.name, b.name, b.source
 $$) AS (a agtype, b agtype, source agtype);
+
+-- ON MATCH SET with MERGE after MATCH (Case 1: has predecessor, second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Alice'})
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
+    ON MATCH SET b.visited = true
+  RETURN a.name, b.name, b.visited
+$$) AS (a agtype, b agtype, visited agtype);
 
 -- Multiple SET items in a single ON CREATE SET
 SELECT * FROM cypher('merge_actions', $$
