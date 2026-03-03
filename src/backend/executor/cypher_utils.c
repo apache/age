@@ -208,6 +208,8 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     HeapTuple tuple;
     Relation rel;
     bool result = true;
+    TupleTableSlot *slot;
+    Oid index_oid = InvalidOid;
 
     /*
      * Extract the label id from the graph id and get the table name
@@ -220,20 +222,68 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
                 F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
 
     rel = table_open(label->relation, RowExclusiveLock);
-    scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
 
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
+    index_oid = RelationGetPrimaryKeyIndex(rel, false);
 
-    /*
-     * If a single tuple was returned, the tuple is still valid, otherwise'
-     * set to false.
-     */
-    if (!HeapTupleIsValid(tuple))
+    if (!OidIsValid(index_oid))
     {
-        result = false;
+        List *idx_list = RelationGetIndexList(rel);
+        ListCell *lc;
+        foreach(lc, idx_list)
+        {
+            Oid curr = lfirst_oid(lc);
+            Relation idx_rel = index_open(curr, AccessShareLock);
+
+            if (idx_rel->rd_index->indisvalid &&
+                idx_rel->rd_index->indnatts >= 1 &&
+                idx_rel->rd_index->indkey.values[0] == 1)
+            {
+                index_oid = curr;
+                index_close(idx_rel, AccessShareLock);
+                break;
+            }
+            index_close(idx_rel, AccessShareLock);
+        }
+        list_free(idx_list);
     }
 
-    table_endscan(scan_desc);
+    if (OidIsValid(index_oid))
+    {
+        IndexScanDesc index_scan_desc;
+        Relation index_rel;
+
+        slot = table_slot_create(rel, NULL);
+
+        index_rel = index_open(index_oid, RowExclusiveLock);
+
+        index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
+
+        if (!index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        {
+            result = false;
+        } 
+
+        index_endscan(index_scan_desc);
+        index_close(index_rel, RowExclusiveLock);
+        ExecDropSingleTupleTableSlot(slot);
+    } else
+    {        
+        scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
+        tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+        /*
+        * If a single tuple was returned, the tuple is still valid, otherwise'
+        * set to false.
+        */
+        if (!HeapTupleIsValid(tuple))
+        {
+            result = false;
+        }
+
+        table_endscan(scan_desc);
+    }
+
     table_close(rel, RowExclusiveLock);
 
     return result;

@@ -5624,11 +5624,14 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
 {
     ScanKeyData scan_keys[1];
     Relation graph_vertex_label;
-    TableScanDesc scan_desc;
-    HeapTuple tuple;
+    TableScanDesc scan_desc = NULL;
+    HeapTuple tuple = NULL;
     TupleDesc tupdesc;
     Datum id, properties, result;
     AclResult aclresult;
+    TupleTableSlot *slot;
+    Oid index_oid;
+    bool should_free_tuple = false;
 
     /* get the specific graph namespace (schema) */
     Oid graph_namespace_oid = get_namespace_oid(graph, false);
@@ -5646,19 +5649,74 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         aclcheck_error(aclresult, OBJECT_TABLE, vertex_label);
     }
 
-    /* initialize the scan key */
-    ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
-                Int64GetDatum(graphid));
-
-    /* open the relation (table), begin the scan, and get the tuple  */
+    /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
-    scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+    index_oid = RelationGetPrimaryKeyIndex(graph_vertex_label, false);
+
+    if (!OidIsValid(index_oid))
+    {
+        List *idx_list = RelationGetIndexList(graph_vertex_label);
+        ListCell *lc;
+        foreach(lc, idx_list)
+        {
+            Oid curr = lfirst_oid(lc);
+            Relation idx_rel = index_open(curr, ShareLock);
+
+            if (idx_rel->rd_index->indisvalid &&
+                idx_rel->rd_index->indnatts >= 1 &&
+                idx_rel->rd_index->indkey.values[0] == 1)
+            {
+                index_oid = curr;
+                index_close(idx_rel, ShareLock);
+                break;
+            }
+            index_close(idx_rel, ShareLock);
+        }
+        list_free(idx_list);
+    }
+
+    if (OidIsValid(index_oid))
+    {
+        IndexScanDesc index_scan_desc;
+        Relation index_rel;
+
+        index_rel = index_open(index_oid, ShareLock);
+        slot = table_slot_create(graph_vertex_label, NULL);
+
+        /* initialize the scan key using GRAPHIDEQ for index */
+        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
+                    F_GRAPHIDEQ, Int64GetDatum(graphid));
+
+        index_scan_desc = index_beginscan(graph_vertex_label, index_rel, 
+                                          snapshot, NULL, 1, 0);
+        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
+
+        if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        {
+            tuple = ExecCopySlotHeapTuple(slot);
+            should_free_tuple = true;
+        }
+
+        index_endscan(index_scan_desc);
+        index_close(index_rel, ShareLock);
+        ExecDropSingleTupleTableSlot(slot);
+    }
+    else
+    {
+        /* fallback to sequential scan */
+        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
+                    Int64GetDatum(graphid));
+
+        scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
+        tuple = heap_getnext(scan_desc, ForwardScanDirection);
+    }
 
     /* bail if the tuple isn't valid */
     if (!HeapTupleIsValid(tuple))
     {
-        table_endscan(scan_desc);
+        if (scan_desc)
+            table_endscan(scan_desc);
         table_close(graph_vertex_label, ShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
@@ -5668,7 +5726,11 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* Check RLS policies - error if filtered out */
     if (!check_rls_for_tuple(graph_vertex_label, tuple, CMD_SELECT))
     {
-        table_endscan(scan_desc);
+        if (scan_desc)
+            table_endscan(scan_desc);
+        if (should_free_tuple && tuple != NULL)
+            heap_freetuple(tuple);
+
         table_close(graph_vertex_label, ShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -5693,8 +5755,13 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* reconstruct the vertex */
     result = DirectFunctionCall3(_agtype_build_vertex, id,
                                  CStringGetDatum(vertex_label), properties);
-    /* end the scan and close the relation */
-    table_endscan(scan_desc);
+
+    /* end the scan and close the relation with new cleanup logic */
+    if (scan_desc)
+        table_endscan(scan_desc);
+    if (should_free_tuple && tuple != NULL)
+        heap_freetuple(tuple);
+
     table_close(graph_vertex_label, ShareLock);
     /* return the vertex datum */
     return result;
