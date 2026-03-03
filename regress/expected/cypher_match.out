@@ -3633,6 +3633,110 @@ NOTICE:  graph "issue_2308" has been dropped
  
 (1 row)
 
+-- Issue 1964
+--
+-- PREPARE with property parameter ($props) crashed the server when
+-- age.enable_containment was set to off. The crash was in
+-- transform_map_to_ind_recursive which blindly cast cypher_param
+-- nodes to cypher_map, accessing invalid memory.
+--
+SELECT create_graph('issue_1964');
+NOTICE:  graph "issue_1964" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice', age: 30}),
+           (:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS {since: 2020}]->(:Person {name: 'Bob'})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- Test PREPARE with enable_containment off (was crashing)
+SET age.enable_containment = off;
+PREPARE issue_1964_vertex(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex('{"props": {"name": "Alice"}}');
+                                               p                                                
+------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Person", "properties": {"age": 30, "name": "Alice"}}::vertex
+ {"id": 844424930131971, "label": "Person", "properties": {"name": "Alice"}}::vertex
+(2 rows)
+
+EXECUTE issue_1964_vertex('{"props": {"age": 25}}');
+                                              p                                               
+----------------------------------------------------------------------------------------------
+ {"id": 844424930131970, "label": "Person", "properties": {"age": 25, "name": "Bob"}}::vertex
+(1 row)
+
+DEALLOCATE issue_1964_vertex;
+-- Test edge property parameter with enable_containment off
+PREPARE issue_1964_edge(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge('{"props": {"since": 2020}}');
+                                                                    p                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {"since": 2020}}::edge
+(1 row)
+
+DEALLOCATE issue_1964_edge;
+-- Verify enable_containment on still works with PREPARE
+SET age.enable_containment = on;
+PREPARE issue_1964_vertex_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_on('{"props": {"name": "Alice"}}');
+                                               p                                                
+------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Person", "properties": {"age": 30, "name": "Alice"}}::vertex
+ {"id": 844424930131971, "label": "Person", "properties": {"name": "Alice"}}::vertex
+(2 rows)
+
+DEALLOCATE issue_1964_vertex_on;
+-- Test =properties form with PREPARE (uses @>> top-level containment)
+SET age.enable_containment = off;
+PREPARE issue_1964_vertex_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq('{"props": {"name": "Alice", "age": 25}}');
+ p 
+---
+(0 rows)
+
+DEALLOCATE issue_1964_vertex_eq;
+PREPARE issue_1964_edge_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r = $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge_eq('{"props": {"since": 2020}}');
+                                                                    p                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "KNOWS", "end_id": 844424930131972, "start_id": 844424930131971, "properties": {"since": 2020}}::edge
+(1 row)
+
+DEALLOCATE issue_1964_edge_eq;
+-- Same with enable_containment on
+SET age.enable_containment = on;
+PREPARE issue_1964_vertex_eq_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq_on('{"props": {"name": "Alice", "age": 25}}');
+ p 
+---
+(0 rows)
+
+DEALLOCATE issue_1964_vertex_eq_on;
 --
 -- Clean up
 --
@@ -3716,6 +3820,18 @@ drop cascades to table issue_1393._ag_label_edge
 drop cascades to table issue_1393."Object"
 drop cascades to table issue_1393.knows
 NOTICE:  graph "issue_1393" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('issue_1964', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table issue_1964._ag_label_vertex
+drop cascades to table issue_1964._ag_label_edge
+drop cascades to table issue_1964."Person"
+drop cascades to table issue_1964."KNOWS"
+NOTICE:  graph "issue_1964" has been dropped
  drop_graph 
 ------------
  
