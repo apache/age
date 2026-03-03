@@ -195,6 +195,8 @@ dquote        \"
 dqchars       [^"\\]+
 squote        '
 sqchars       [^'\\]+
+esdquote      {dquote}{dquote}
+essquote      {squote}{squote}
 esascii       \\["'/\\bfnrt]
 esasciifail   \\[^Uu]?
 esunicode     \\(U{hexdigit}{8}|u{hexdigit}{4})
@@ -418,6 +420,14 @@ ag_token token;
 <dqstr>{dqchars} |
 <sqstr>{sqchars} {
     strbuf_append_buf(&yyextra.literal_buf, yytext, yyleng);
+}
+
+<dqstr>{esdquote} {
+    strbuf_append_char(&yyextra.literal_buf, '"');
+}
+
+<sqstr>{essquote} {
+    strbuf_append_char(&yyextra.literal_buf, '\'');
 }
 
 <dqstr,sqstr>{esascii} {
