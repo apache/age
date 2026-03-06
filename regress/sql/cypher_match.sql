@@ -1540,6 +1540,14 @@ SELECT * FROM cypher('issue_2193', $$
     RETURN p
 $$) AS (result agtype);
 
+-- Verify that the CREATE side effect was preserved even though MATCH
+-- returned 0 rows (guards against plan-elimination regressions where
+-- a constant-false predicate causes PG to skip the DML predecessor)
+SELECT * FROM cypher('issue_2193', $$
+    MATCH (a:Person {name: 'Alice'})
+    RETURN a.name
+$$) AS (result agtype);
+
 SELECT drop_graph('issue_2193', true);
 
 --
