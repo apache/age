@@ -2650,7 +2650,7 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
     if (!clause_chain_has_dml(clause->prev) &&
         !match_check_valid_label(match_self, cpstate))
     {
-        /* Label is invalid — inject a false WHERE so the MATCH returns
+        /* Label is invalid -- inject a false WHERE so the MATCH returns
          * zero rows. No DML predecessor here, so constant-foldable is fine. */
         match_self->where = make_false_where_clause(false);
     }
@@ -2964,8 +2964,8 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
              * We use a volatile false predicate (random() IS NULL)
              * instead of a constant one (true = false) because PG's
              * planner can constant-fold the latter into a One-Time
-             * Filter: false, eliminating the entire plan subtree —
-             * including the DML predecessor scan — without executing it.
+             * Filter: false, eliminating the entire plan subtree --
+             * including the DML predecessor scan -- without executing it.
              */
             if (has_dml && !match_check_valid_label(self, cpstate))
             {
@@ -6610,7 +6610,7 @@ static bool clause_chain_has_dml(cypher_clause *clause)
  * Used when the MATCH pattern references a label that does not exist.
  *
  * When volatile_needed is false, returns a constant (true = false) that
- * PG's planner may constant-fold — this is fine when there is no DML
+ * PG's planner may constant-fold -- this is fine when there is no DML
  * predecessor whose execution must be preserved.
  *
  * When volatile_needed is true, returns (random() IS NULL) instead.
