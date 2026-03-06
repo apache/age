@@ -346,6 +346,7 @@ static bool isa_special_VLE_case(cypher_path *path);
 static ParseNamespaceItem *find_pnsi(cypher_parsestate *cpstate, char *varname);
 static bool has_list_comp_or_subquery(Node *expr, void *context);
 static bool clause_chain_has_dml(cypher_clause *clause);
+static Node *make_false_where_clause(bool volatile_needed);
 
 /*
  * Add required permissions to the RTEPermissionInfo for a relation.
@@ -2639,20 +2640,19 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
     cypher_match *match_self = (cypher_match*) clause->self;
     Node *where = match_self->where;
 
-    if(!match_check_valid_label(match_self, cpstate))
+    /*
+     * Check label validity early unless the predecessor clause chain
+     * contains a data-modifying operation (CREATE, SET, DELETE, MERGE).
+     * DML predecessors may create new labels that are not yet in the
+     * cache, so the check is deferred to after transform_prev_cypher_clause()
+     * for those cases.
+     */
+    if (!clause_chain_has_dml(clause->prev) &&
+        !match_check_valid_label(match_self, cpstate))
     {
-        cypher_bool_const *l = make_ag_node(cypher_bool_const);
-        cypher_bool_const *r = make_ag_node(cypher_bool_const);
-
-        l->boolean = true;
-        l->location = -1;
-        r->boolean = false;
-        r->location = -1;
-
-        /*if the label is invalid, create a paradoxical where to get null*/
-        match_self->where = (Node *)makeSimpleA_Expr(AEXPR_OP, "=",
-                                                     (Node *)l,
-                                                     (Node *)r, -1);
+        /* Label is invalid -- inject a false WHERE so the MATCH returns
+         * zero rows. No DML predecessor here, so constant-foldable is fine. */
+        match_self->where = make_false_where_clause(false);
     }
 
     if (has_list_comp_or_subquery((Node *)match_self->where, NULL))
@@ -2915,6 +2915,7 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
             RangeTblEntry *rte;
             int rtindex;
             ParseNamespaceItem *pnsi;
+            bool has_dml;
 
             pnsi = transform_prev_cypher_clause(cpstate, clause->prev, true);
             rte = pnsi->p_rte;
@@ -2928,7 +2929,9 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
              * DML executes -- resulting in quals checking NULL values
              * and filtering out all rows.
              */
-            if (clause_chain_has_dml(clause->prev))
+            has_dml = clause_chain_has_dml(clause->prev);
+
+            if (has_dml)
             {
                 rte->security_barrier = true;
             }
@@ -2949,6 +2952,25 @@ static Query *transform_cypher_match_pattern(cypher_parsestate *cpstate,
              */
             pnsi = get_namespace_item(pstate, rte);
             query->targetList = expandNSItemAttrs(pstate, pnsi, 0, true, -1);
+
+            /*
+             * Now that the predecessor chain is fully transformed and
+             * any CREATE-generated labels exist in the cache, check
+             * whether the MATCH pattern references valid labels. This
+             * deferred check is only needed when the chain has DML,
+             * since labels created by CREATE are not in the cache at
+             * the time of the early check in transform_cypher_match().
+             *
+             * We use a volatile false predicate (random() IS NULL)
+             * instead of a constant one (true = false) because PG's
+             * planner can constant-fold the latter into a One-Time
+             * Filter: false, eliminating the entire plan subtree --
+             * including the DML predecessor scan -- without executing it.
+             */
+            if (has_dml && !match_check_valid_label(self, cpstate))
+            {
+                where = make_false_where_clause(true);
+            }
         }
 
         transform_match_pattern(cpstate, query, self->pattern, where);
@@ -6619,6 +6641,59 @@ static bool clause_chain_has_dml(cypher_clause *clause)
     }
 
     return false;
+}
+
+/*
+ * Build a false WHERE clause that forces a MATCH to return zero rows.
+ * Used when the MATCH pattern references a label that does not exist.
+ *
+ * When volatile_needed is false, returns a constant (true = false) that
+ * PG's planner may constant-fold -- this is fine when there is no DML
+ * predecessor whose execution must be preserved.
+ *
+ * When volatile_needed is true, returns (random() IS NULL) instead.
+ * random() is VOLATILE, so eval_const_expressions() cannot fold this,
+ * preventing PG from creating a One-Time Filter: false that would
+ * eliminate the DML predecessor scan without executing it.
+ *
+ * Note: AGE's add_volatile_wrapper() serves a similar anti-fold purpose
+ * but operates at the Expr level (post-transform) and returns agtype,
+ * so it cannot be used here in the parse-tree WHERE clause context.
+ */
+static Node *make_false_where_clause(bool volatile_needed)
+{
+    if (volatile_needed)
+    {
+        FuncCall *random_fn;
+        NullTest *nt;
+
+        random_fn = makeFuncCall(
+            list_make2(makeString("pg_catalog"), makeString("random")),
+            NIL,
+            COERCE_EXPLICIT_CALL,
+            -1);
+
+        nt = makeNode(NullTest);
+        nt->arg = (Expr *)random_fn;
+        nt->nulltesttype = IS_NULL;
+        nt->argisrow = false;
+        nt->location = -1;
+
+        return (Node *)nt;
+    }
+    else
+    {
+        cypher_bool_const *l = make_ag_node(cypher_bool_const);
+        cypher_bool_const *r = make_ag_node(cypher_bool_const);
+
+        l->boolean = true;
+        l->location = -1;
+        r->boolean = false;
+        r->location = -1;
+
+        return (Node *)makeSimpleA_Expr(AEXPR_OP, "=",
+                                        (Node *)l, (Node *)r, -1);
+    }
 }
 
 static Query *analyze_cypher_clause(transform_method transform,
