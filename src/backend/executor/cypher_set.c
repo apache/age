@@ -439,6 +439,8 @@ static void process_update_list(CustomScanState *node)
         HeapTuple heap_tuple;
         char *clause_name = css->set_list->clause_name;
         int cid;
+        Oid index_oid = InvalidOid;
+        Relation rel;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -538,6 +540,32 @@ static void process_update_list(CustomScanState *node)
         resultRelInfo = create_entity_result_rel_info(
             estate, css->set_list->graph_name, label_name);
 
+        rel = resultRelInfo->ri_RelationDesc;
+
+        /*  Check if there is a valid  index on the 'id' column */
+        {
+            List *index_list = RelationGetIndexList(rel);
+            ListCell *ilc;
+
+            foreach(ilc, index_list)
+            {
+                Oid curr_idx_oid = lfirst_oid(ilc);
+                Relation curr_idx_rel = index_open(curr_idx_oid, AccessShareLock);
+
+                /* Check: valid, B-Tree, and the first key column is attribute 1 (id) */
+                if (curr_idx_rel->rd_index->indisvalid &&
+                    curr_idx_rel->rd_index->indnatts >= 1 &&
+                    curr_idx_rel->rd_index->indkey.values[0] == 1) 
+                {
+                    index_oid = curr_idx_oid;
+                    index_close(curr_idx_rel, AccessShareLock);
+                    break; 
+                }
+                index_close(curr_idx_rel, AccessShareLock);
+            }
+            list_free(index_list);
+        }
+
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
             &TTSOpsHeapTuple);
@@ -628,60 +656,100 @@ static void process_update_list(CustomScanState *node)
 
         if (luindex[update_item->entity_position - 1] == lidx)
         {
-            /*
-             * Setup the scan key to require the id field on-disc to match the
-             * entity's graphid.
-             */
-            ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
-            /*
-             * Setup the scan description, with the correct snapshot and scan
-             * keys.
-             */
-            scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
-                                        estate->es_snapshot, 1, scan_keys);
-            /* Retrieve the tuple. */
-            heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
+            if (OidIsValid(index_oid))
+             {
+                Relation index_rel;
+                IndexScanDesc scan_desc;
+                TupleTableSlot *index_slot;
 
-            /*
-             * If the heap tuple still exists (It wasn't deleted between the
-             * match and this SET/REMOVE) update the heap_tuple.
-             */
-            if (HeapTupleIsValid(heap_tuple))
-            {
-                bool should_update = true;
-                Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+                index_rel = index_open(index_oid, RowExclusiveLock);
+                
+                /*
+                 * Setup the scan key to require the id field on-disc to match the
+                 * entity's graphid.
+                 */
+                ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                            GRAPHID_GET_DATUM(id->val.int_value));
 
-                /* Check RLS security quals (USING policy) before update */
-                if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                index_slot = table_slot_create(rel, NULL);
+                scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+                index_rescan(scan_desc, scan_keys, 1, NULL, 0);
+
+                if (index_getnext_slot(scan_desc, ForwardScanDirection, index_slot))
                 {
-                    RLSCacheEntry *entry;
+                    bool shouldFree;
+                    
+                    /* Retrieve the tuple from the slot */
+                    heap_tuple = ExecFetchSlotHeapTuple(index_slot, true, &shouldFree);
 
-                    /* Entry was already created earlier when setting up WCOs */
-                    entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
-                    if (!entry)
+                    if (HeapTupleIsValid(heap_tuple))
                     {
-                        ereport(ERROR,
-                                (errcode(ERRCODE_INTERNAL_ERROR),
-                                 errmsg("missing RLS cache entry for relation %u",
-                                        relid)));
+                        heap_tuple = update_entity_tuple(resultRelInfo, slot, estate, heap_tuple);
                     }
 
-                    ExecStoreHeapTuple(heap_tuple, entry->slot, false);
-                    should_update = check_security_quals(entry->qualExprs,
-                                                         entry->slot,
-                                                         econtext);
+                    if (shouldFree)
+                        heap_freetuple(heap_tuple);
                 }
 
-                /* Silently skip if USING policy filters out this row */
-                if (should_update)
+                ExecDropSingleTupleTableSlot(index_slot);
+                index_endscan(scan_desc);
+                index_close(index_rel, RowExclusiveLock);
+            } else {
+                /*
+                * Setup the scan key to require the id field on-disc to match the
+                * entity's graphid.
+                */
+               ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                            GRAPHID_GET_DATUM(id->val.int_value));
+                /*
+                 * Setup the scan description, with the correct snapshot and scan
+                 * keys.
+                 */
+                scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                            estate->es_snapshot, 1, scan_keys);
+                /* Retrieve the tuple. */
+                heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+                /*
+                * If the heap tuple still exists (It wasn't deleted between the
+                * match and this SET/REMOVE) update the heap_tuple.
+                */
+                if (HeapTupleIsValid(heap_tuple))
                 {
-                    heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
-                                                     heap_tuple);
+                    bool should_update = true;
+                    Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+
+                    /* Check RLS security quals (USING policy) before update */
+                    if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                    {
+                        RLSCacheEntry *entry;
+
+                        /* Entry was already created earlier when setting up WCOs */
+                        entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
+                        if (!entry)
+                        {
+                            ereport(ERROR,
+                                    (errcode(ERRCODE_INTERNAL_ERROR),
+                                    errmsg("missing RLS cache entry for relation %u",
+                                            relid)));
+                        }
+
+                        ExecStoreHeapTuple(heap_tuple, entry->slot, false);
+                        should_update = check_security_quals(entry->qualExprs,
+                                                            entry->slot,
+                                                            econtext);
+                    }
+
+                    /* Silently skip if USING policy filters out this row */
+                    if (should_update)
+                    {
+                        heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
+                                                        heap_tuple);
+                    }
                 }
+                /* close the ScanDescription */
+                table_endscan(scan_desc);
             }
-            /* close the ScanDescription */
-            table_endscan(scan_desc);
         }
 
         estate->es_snapshot->curcid = cid;
