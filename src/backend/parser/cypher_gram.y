@@ -2457,6 +2457,7 @@ safe_keywords:
     | MATCH      { $$ = KEYWORD_STRDUP($1); }
     | MERGE      { $$ = KEYWORD_STRDUP($1); }
     | NOT        { $$ = KEYWORD_STRDUP($1); }
+    | ON         { $$ = KEYWORD_STRDUP($1); }
     | OPERATOR   { $$ = KEYWORD_STRDUP($1); }
     | OPTIONAL   { $$ = KEYWORD_STRDUP($1); }
     | OR         { $$ = KEYWORD_STRDUP($1); }
