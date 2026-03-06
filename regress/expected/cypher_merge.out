@@ -2037,6 +2037,16 @@ $$) AS (a_name agtype, a_matched agtype, b_name agtype, b_matched agtype);
  "Frank" | true      | "Grace" | true
 (1 row)
 
+-- ON keyword as label name (backward compat via safe_keywords)
+SELECT * FROM cypher('merge_actions', $$
+  CREATE (n:on {name: 'test'})
+  RETURN n.name
+$$) AS (name agtype);
+  name  
+--------
+ "test"
+(1 row)
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
  a 
@@ -2047,11 +2057,12 @@ SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agt
 -- delete graphs
 --
 SELECT drop_graph('merge_actions', true);
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to table merge_actions._ag_label_vertex
 drop cascades to table merge_actions._ag_label_edge
 drop cascades to table merge_actions."Person"
 drop cascades to table merge_actions."KNOWS"
+drop cascades to table merge_actions."on"
 NOTICE:  graph "merge_actions" has been dropped
  drop_graph 
 ------------
