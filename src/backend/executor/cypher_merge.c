@@ -723,6 +723,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                         css->created_paths_list = new_path;
 
                         process_path(css, prebuilt_path_array, true);
+                        ExecStoreVirtualTuple(econtext->ecxt_scantuple);
 
                         /* ON CREATE SET: path was just created */
                         if (css->on_create_set_info)
@@ -822,6 +823,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                     css->created_paths_list = new_path;
 
                     process_path(css, prebuilt_path_array, true);
+                    ExecStoreVirtualTuple(econtext->ecxt_scantuple);
 
                     /* ON CREATE SET: path was just created */
                     if (css->on_create_set_info)

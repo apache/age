@@ -7269,6 +7269,33 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * similar to OPTIONAL MATCH, however with the added feature of creating the
  * path if not there, rather than just emitting NULL.
  */
+/*
+ * Resolve prop_expr for each SET item by looking up its target entry.
+ * The planner may strip SET expression target entries from the plan,
+ * so we embed the Expr in the update item for direct evaluation.
+ */
+static void
+resolve_merge_set_exprs(List *set_items, List *targetList,
+                        const char *clause_name)
+{
+    ListCell *lc;
+
+    foreach(lc, set_items)
+    {
+        cypher_update_item *item = lfirst(lc);
+        TargetEntry *set_tle = get_tle_by_resno(targetList,
+                                                item->prop_position);
+        if (set_tle == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                     errmsg("%s target entry not found at position %d",
+                            clause_name, item->prop_position)));
+        }
+        item->prop_expr = (Node *)set_tle->expr;
+    }
+}
+
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)
 {
@@ -7344,47 +7371,27 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
     /* Transform ON MATCH SET items, if any */
     if (self->on_match != NIL)
     {
-        ListCell *lc2;
-
         merge_information->on_match_set_info =
             transform_cypher_set_item_list(cpstate, self->on_match, query);
         merge_information->on_match_set_info->clause_name = "MERGE ON MATCH SET";
         merge_information->on_match_set_info->graph_name = cpstate->graph_name;
 
-        /*
-         * Store prop_expr for direct evaluation in the MERGE executor.
-         * The planner may strip SET expression target entries from the plan,
-         * so we embed the Expr in the update item for direct evaluation.
-         */
-        foreach(lc2, merge_information->on_match_set_info->set_items)
-        {
-            cypher_update_item *item = lfirst(lc2);
-            TargetEntry *set_tle = get_tle_by_resno(query->targetList,
-                                                    item->prop_position);
-            if (set_tle != NULL)
-                item->prop_expr = (Node *)set_tle->expr;
-        }
+        resolve_merge_set_exprs(
+            merge_information->on_match_set_info->set_items,
+            query->targetList, "ON MATCH SET");
     }
 
     /* Transform ON CREATE SET items, if any */
     if (self->on_create != NIL)
     {
-        ListCell *lc2;
-
         merge_information->on_create_set_info =
             transform_cypher_set_item_list(cpstate, self->on_create, query);
         merge_information->on_create_set_info->clause_name = "MERGE ON CREATE SET";
         merge_information->on_create_set_info->graph_name = cpstate->graph_name;
 
-        /* Store prop_expr for MERGE executor (see comment above) */
-        foreach(lc2, merge_information->on_create_set_info->set_items)
-        {
-            cypher_update_item *item = lfirst(lc2);
-            TargetEntry *set_tle = get_tle_by_resno(query->targetList,
-                                                    item->prop_position);
-            if (set_tle != NULL)
-                item->prop_expr = (Node *)set_tle->expr;
-        }
+        resolve_merge_set_exprs(
+            merge_information->on_create_set_info->set_items,
+            query->targetList, "ON CREATE SET");
     }
 
     if (!clause->next)

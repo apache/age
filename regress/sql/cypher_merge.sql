@@ -1032,6 +1032,12 @@ SELECT * FROM cypher('merge_actions', $$
   RETURN a.name, a.matched, b.name, b.matched
 $$) AS (a_name agtype, a_matched agtype, b_name agtype, b_matched agtype);
 
+-- ON keyword as label name (backward compat via safe_keywords)
+SELECT * FROM cypher('merge_actions', $$
+  CREATE (n:on {name: 'test'})
+  RETURN n.name
+$$) AS (name agtype);
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
