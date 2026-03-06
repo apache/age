@@ -1014,6 +1014,24 @@ SELECT * FROM cypher('merge_actions', $$
   RETURN n
 $$) AS (n agtype);
 
+-- Chained (non-terminal) MERGE with ON CREATE SET (eager-buffering path)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (a:Person {name: 'Frank'})
+    ON CREATE SET a.created = true
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Grace'})
+    ON CREATE SET b.created = true
+  RETURN a.name, a.created, b.name, b.created
+$$) AS (a_name agtype, a_created agtype, b_name agtype, b_created agtype);
+
+-- Chained (non-terminal) MERGE with ON MATCH SET (second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (a:Person {name: 'Frank'})
+    ON MATCH SET a.matched = true
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Grace'})
+    ON MATCH SET b.matched = true
+  RETURN a.name, a.matched, b.name, b.matched
+$$) AS (a_name agtype, a_matched agtype, b_name agtype, b_matched agtype);
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
