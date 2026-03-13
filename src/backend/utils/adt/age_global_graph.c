@@ -204,43 +204,117 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
     TableScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
+    Oid index_oid = InvalidOid;
 
     /* we need a valid snapshot */
     Assert(snapshot != NULL);
 
-    /* setup scan keys to get all edges for the given graph oid */
-    ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
-    ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
-                F_CHAREQ, CharGetDatum(label_type));
-
     /* setup the table to be scanned, ag_label in this case */
     ag_label = table_open(ag_label_relation_id(), AccessShareLock);
-    scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
 
     /* get the tupdesc - we don't need to release this one */
     tupdesc = RelationGetDescr(ag_label);
     /* bail if the number of columns differs - this table has 5 */
     Assert(tupdesc->natts == Natts_ag_label);
 
-    /* get all of the label names */
-    while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
-    {
-        Name label;
-        bool is_null = false;
+    /* We look for 'ag_label_graph_oid_index' or any index starting with 'graph' */
+    index_oid = find_usable_index_for_attr(ag_label, Anum_ag_label_graph);
 
-        /* something is wrong if this tuple isn't valid */
-        Assert(HeapTupleIsValid(tuple));
-        /* get the label name */
-        label = DatumGetName(heap_getattr(tuple, Anum_ag_label_name, tupdesc,
-                                          &is_null));
-        Assert(!is_null);
-        /* add it to our list */
-        labels = lappend(labels, label);
+    if (OidIsValid(index_oid))
+    {
+        Relation index_rel;
+        IndexScanDesc idx_scan_desc;
+        ScanKeyData key;
+        TupleTableSlot *slot;
+
+        index_rel = index_open(index_oid, AccessShareLock);
+        slot = table_slot_create(ag_label, NULL);
+
+        /* 
+         * Setup ScanKey: ag_label.graph = graph_oid 
+         * Note: We CANNOT filter by 'kind' here because it is not in the index.
+         */
+        ScanKeyInit(&key, 1, BTEqualStrategyNumber,
+                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
+
+        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
+        index_rescan(idx_scan_desc, &key, 1, NULL, 0);
+
+        while (index_getnext_slot(idx_scan_desc, ForwardScanDirection, slot))
+        {
+            bool shouldFree;
+            
+            tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+
+            if (HeapTupleIsValid(tuple))
+            {
+                bool is_null;
+                Datum kind_datum;
+
+                /* 
+                 * Since the index only gave us rows for the correct graph,
+                 * we must now check if the label 'kind' matches (vertex 'v' or edge 'e').
+                 */
+                kind_datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
+
+                if (!is_null && DatumGetChar(kind_datum) == label_type)
+                {
+                    Datum name_datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
+                    if (!is_null)
+                    {
+                        Name label_name_ptr;
+                        Name lval;
+
+                        label_name_ptr = DatumGetName(name_datum);
+                        lval = (Name) palloc(NAMEDATALEN);
+                        namestrcpy(lval, NameStr(*label_name_ptr));
+                        labels = lappend(labels, lval);
+                    }
+                }
+            }
+
+            if (shouldFree) heap_freetuple(tuple);
+            ExecClearTuple(slot);
+        }
+
+        ExecDropSingleTupleTableSlot(slot);
+        index_endscan(idx_scan_desc);
+        index_close(index_rel, AccessShareLock);
+    } 
+    else
+    {
+        /* setup scan keys to get all edges for the given graph oid */
+        ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
+                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
+        ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
+                    F_CHAREQ, CharGetDatum(label_type));
+
+        scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
+
+        /* get all of the label names */
+        while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+        {
+            Name label;
+            Name lval;
+            bool is_null = false;
+
+            /* something is wrong if this tuple isn't valid */
+            Assert(HeapTupleIsValid(tuple));
+            /* get the label name */
+            label = DatumGetName(heap_getattr(tuple, Anum_ag_label_name, tupdesc,
+                                            &is_null));
+
+            Assert(!is_null);
+            /* add it to our list */
+            lval = (Name) palloc(NAMEDATALEN);
+            namestrcpy(lval, NameStr(*label));
+            labels = lappend(labels, lval);
+        }
+
+        /* close up scan */
+        table_endscan(scan_desc);
     }
 
-    /* close up scan */
-    table_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
 
     return labels;
