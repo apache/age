@@ -383,6 +383,8 @@ static void process_update_list(CustomScanState *node)
     int lidx = 0;
     HTAB *qual_cache = NULL;
     HASHCTL hashctl;
+    HTAB *index_cache = NULL;
+    HASHCTL idx_hashctl;
 
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
@@ -394,6 +396,13 @@ static void process_update_list(CustomScanState *node)
     hashctl.hcxt = CurrentMemoryContext;
     qual_cache = hash_create("update_qual_cache", 8, &hashctl,
                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
+    idx_hashctl.keysize = sizeof(Oid);
+    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
+    idx_hashctl.hcxt = CurrentMemoryContext;
+    index_cache = hash_create("update_index_cache", 8, &idx_hashctl,
+                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
     /*
      * Iterate through the SET items list and store the loop index of each
@@ -441,6 +450,9 @@ static void process_update_list(CustomScanState *node)
         int cid;
         Oid index_oid = InvalidOid;
         Relation rel;
+        Oid relid;
+        IndexCacheEntry *idx_entry;
+        bool found_idx_entry;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -541,30 +553,15 @@ static void process_update_list(CustomScanState *node)
             estate, css->set_list->graph_name, label_name);
 
         rel = resultRelInfo->ri_RelationDesc;
+        relid = RelationGetRelid(rel);
 
-        /*  Check if there is a valid  index on the 'id' column */
+        idx_entry = hash_search(index_cache, &relid, HASH_ENTER, &found_idx_entry);
+        if (!found_idx_entry)
         {
-            List *index_list = RelationGetIndexList(rel);
-            ListCell *ilc;
-
-            foreach(ilc, index_list)
-            {
-                Oid curr_idx_oid = lfirst_oid(ilc);
-                Relation curr_idx_rel = index_open(curr_idx_oid, AccessShareLock);
-
-                /* Check: valid, B-Tree, and the first key column is attribute 1 (id) */
-                if (curr_idx_rel->rd_index->indisvalid &&
-                    curr_idx_rel->rd_index->indnatts >= 1 &&
-                    curr_idx_rel->rd_index->indkey.values[0] == 1) 
-                {
-                    index_oid = curr_idx_oid;
-                    index_close(curr_idx_rel, AccessShareLock);
-                    break; 
-                }
-                index_close(curr_idx_rel, AccessShareLock);
-            }
-            list_free(index_list);
+            /*  Check if there is a valid  index on the 'id' column */
+            idx_entry->index_oid = find_usable_index_for_attr(rel, 1);
         }
+        index_oid = idx_entry->index_oid;
 
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
@@ -574,7 +571,6 @@ static void process_update_list(CustomScanState *node)
         if (check_enable_rls(resultRelInfo->ri_RelationDesc->rd_id,
                              InvalidOid, true) == RLS_ENABLED)
         {
-            Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
             RLSCacheEntry *entry;
             bool found;
 
@@ -659,7 +655,7 @@ static void process_update_list(CustomScanState *node)
             if (OidIsValid(index_oid))
              {
                 Relation index_rel;
-                IndexScanDesc scan_desc;
+                IndexScanDesc idx_scan_desc;
                 TupleTableSlot *index_slot;
 
                 index_rel = index_open(index_oid, RowExclusiveLock);
@@ -672,10 +668,10 @@ static void process_update_list(CustomScanState *node)
                             GRAPHID_GET_DATUM(id->val.int_value));
 
                 index_slot = table_slot_create(rel, NULL);
-                scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
-                index_rescan(scan_desc, scan_keys, 1, NULL, 0);
+                idx_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+                index_rescan(idx_scan_desc, scan_keys, 1, NULL, 0);
 
-                if (index_getnext_slot(scan_desc, ForwardScanDirection, index_slot))
+                if (index_getnext_slot(idx_scan_desc, ForwardScanDirection, index_slot))
                 {
                     bool shouldFree;
                     
@@ -684,7 +680,35 @@ static void process_update_list(CustomScanState *node)
 
                     if (HeapTupleIsValid(heap_tuple))
                     {
-                        heap_tuple = update_entity_tuple(resultRelInfo, slot, estate, heap_tuple);
+                        bool should_update = true;
+                        
+                        /* Check RLS security quals (USING policy) before update */
+                        if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                        {
+                            RLSCacheEntry *entry;
+
+                            /* Entry was already created earlier when setting up WCOs */
+                            entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
+                            if (!entry)
+                            {
+                                ereport(ERROR,
+                                        (errcode(ERRCODE_INTERNAL_ERROR),
+                                        errmsg("missing RLS cache entry for relation %u",
+                                                relid)));
+                            }
+
+                            ExecStoreHeapTuple(heap_tuple, entry->slot, false);
+                            should_update = check_security_quals(entry->qualExprs,
+                                                                entry->slot,
+                                                                econtext);
+                        }
+
+                        /* Silently skip if USING policy filters out this row */
+                        if (should_update)
+                        {
+                            update_entity_tuple(resultRelInfo, slot, estate,
+                                                            heap_tuple);
+                        }
                     }
 
                     if (shouldFree)
@@ -692,9 +716,11 @@ static void process_update_list(CustomScanState *node)
                 }
 
                 ExecDropSingleTupleTableSlot(index_slot);
-                index_endscan(scan_desc);
+                index_endscan(idx_scan_desc);
                 index_close(index_rel, RowExclusiveLock);
-            } else {
+            } 
+            else 
+            {
                 /*
                 * Setup the scan key to require the id field on-disc to match the
                 * entity's graphid.
@@ -717,7 +743,6 @@ static void process_update_list(CustomScanState *node)
                 if (HeapTupleIsValid(heap_tuple))
                 {
                     bool should_update = true;
-                    Oid relid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 
                     /* Check RLS security quals (USING policy) before update */
                     if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
@@ -763,6 +788,7 @@ static void process_update_list(CustomScanState *node)
 
     /* Clean up the cache */
     hash_destroy(qual_cache);
+    hash_destroy(index_cache);
 
     /* free our lookup array */
     pfree_if_not_null(luindex);
