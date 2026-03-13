@@ -218,35 +218,12 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
     Assert(tupdesc->natts == Natts_ag_label);
 
     /* We look for 'ag_label_graph_oid_index' or any index starting with 'graph' */
-    {
-        List *idx_list = RelationGetIndexList(ag_label);
-        ListCell *lc;
-        foreach(lc, idx_list)
-        {
-            Oid idx = lfirst_oid(lc);
-            Relation idx_rel = index_open(idx, AccessShareLock);
-            
-            /* 
-             * Check if index is valid and the first key column is 'graph' (Anum_ag_label_graph).
-             * This matches 'ag_label_graph_oid_index'.
-             */
-            if (idx_rel->rd_index->indisvalid &&
-                idx_rel->rd_index->indnatts >= 1 &&
-                idx_rel->rd_index->indkey.values[0] == Anum_ag_label_graph)
-            {
-                index_oid = idx;
-                index_close(idx_rel, AccessShareLock);
-                break;
-            }
-            index_close(idx_rel, AccessShareLock);
-        }
-        list_free(idx_list);
-    }
+    index_oid = find_usable_index_for_attr(ag_label, Anum_ag_label_graph);
 
     if (OidIsValid(index_oid))
     {
         Relation index_rel;
-        IndexScanDesc scan_desc;
+        IndexScanDesc idx_scan_desc;
         ScanKeyData key;
         TupleTableSlot *slot;
 
@@ -260,10 +237,10 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         ScanKeyInit(&key, 1, BTEqualStrategyNumber,
                     F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
-        scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
-        index_rescan(scan_desc, &key, 1, NULL, 0);
+        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
+        index_rescan(idx_scan_desc, &key, 1, NULL, 0);
 
-        while (index_getnext_slot(scan_desc, ForwardScanDirection, slot))
+        while (index_getnext_slot(idx_scan_desc, ForwardScanDirection, slot))
         {
             bool shouldFree;
             
@@ -301,9 +278,10 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         }
 
         ExecDropSingleTupleTableSlot(slot);
-        index_endscan(scan_desc);
+        index_endscan(idx_scan_desc);
         index_close(index_rel, AccessShareLock);
-    } else
+    } 
+    else
     {
         /* setup scan keys to get all edges for the given graph oid */
         ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,

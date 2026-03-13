@@ -300,11 +300,10 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     ResultRelInfo *resultRelInfo;
     Oid index_oid;
 
-    index_oid = get_relname_relid("ag_label_graph_oid_index", 
-                                  get_namespace_oid("ag_catalog", false));
-
     /* setup the table to be scanned */
     ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
+
+    index_oid = find_usable_index_for_attr(ag_label, Anum_ag_label_graph);
 
     resultRelInfo = create_entity_result_rel_info(estate, "ag_catalog",
                                                   "ag_label");
@@ -320,7 +319,11 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
         index_rel = index_open(index_oid, RowExclusiveLock);
 
-        ScanKeyInit(&scan_keys[0], Anum_ag_label_name, BTEqualStrategyNumber,
+        /* 
+         * Use 1 as the attribute number because 'graph' is the 1st column 
+         * in the ag_label_graph_oid_index
+         */
+        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                     F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
         index_scan_desc = index_beginscan(ag_label, index_rel, estate->es_snapshot, NULL, 1, 0);
@@ -356,13 +359,14 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
         index_endscan(index_scan_desc);
         index_close(index_rel, RowExclusiveLock);
-    } else
+    } 
+    else
     {
         slot = ExecInitExtraTupleSlot(
             estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
             &TTSOpsHeapTuple);
 
-        // setup scan keys to get all edges for the given graph oid
+        /* setup scan keys to get all edges for the given graph oid */
         ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
                   F_OIDEQ, ObjectIdGetDatum(graph_oid));
         ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
@@ -370,7 +374,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
         scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
 
-        // scan through the results and get all the label names.
+        /* scan through the results and get all the label names. */
         while(true)
         {
             Name label;
@@ -380,7 +384,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
 
             tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
-            // no more labels to process
+            /* no more labels to process */
             if (!HeapTupleIsValid(tuple))
                 break;
 
@@ -398,7 +402,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     }
 
     destroy_entity_result_rel_info(resultRelInfo);
-    table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
+    table_close(resultRelInfo->ri_RelationDesc, AccessShareLock);
 
     return labels;
 }

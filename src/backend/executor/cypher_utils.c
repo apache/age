@@ -241,29 +241,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 
     rel = table_open(label->relation, RowExclusiveLock);
 
-    index_oid = RelationGetPrimaryKeyIndex(rel, false);
-
-    if (!OidIsValid(index_oid))
-    {
-        List *idx_list = RelationGetIndexList(rel);
-        ListCell *lc;
-        foreach(lc, idx_list)
-        {
-            Oid curr = lfirst_oid(lc);
-            Relation idx_rel = index_open(curr, AccessShareLock);
-
-            if (idx_rel->rd_index->indisvalid &&
-                idx_rel->rd_index->indnatts >= 1 &&
-                idx_rel->rd_index->indkey.values[0] == 1)
-            {
-                index_oid = curr;
-                index_close(idx_rel, AccessShareLock);
-                break;
-            }
-            index_close(idx_rel, AccessShareLock);
-        }
-        list_free(idx_list);
-    }
+    index_oid = find_usable_index_for_attr(rel, 1);
 
     if (OidIsValid(index_oid))
     {
@@ -285,7 +263,8 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
         index_endscan(index_scan_desc);
         index_close(index_rel, RowExclusiveLock);
         ExecDropSingleTupleTableSlot(slot);
-    } else
+    } 
+    else
     {        
         scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
         tuple = heap_getnext(scan_desc, ForwardScanDirection);

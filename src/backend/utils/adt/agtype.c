@@ -5652,29 +5652,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
 
-    index_oid = RelationGetPrimaryKeyIndex(graph_vertex_label, false);
-
-    if (!OidIsValid(index_oid))
-    {
-        List *idx_list = RelationGetIndexList(graph_vertex_label);
-        ListCell *lc;
-        foreach(lc, idx_list)
-        {
-            Oid curr = lfirst_oid(lc);
-            Relation idx_rel = index_open(curr, ShareLock);
-
-            if (idx_rel->rd_index->indisvalid &&
-                idx_rel->rd_index->indnatts >= 1 &&
-                idx_rel->rd_index->indkey.values[0] == 1)
-            {
-                index_oid = curr;
-                index_close(idx_rel, ShareLock);
-                break;
-            }
-            index_close(idx_rel, ShareLock);
-        }
-        list_free(idx_list);
-    }
+    index_oid = find_usable_index_for_attr(graph_vertex_label, 1);
 
     if (OidIsValid(index_oid))
     {
@@ -12085,6 +12063,38 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
     /* return the result */
     *is_agnull = false;
     return result;
+}
+
+/*
+ * Helper function to find a valid index for a specific attribute.
+ * Returns the OID of the index, or InvalidOid if none is found.
+ */
+Oid find_usable_index_for_attr(Relation rel, AttrNumber attnum)
+{
+List *index_list = RelationGetIndexList(rel);
+    ListCell *ilc;
+    Oid index_oid = InvalidOid;
+
+    foreach(ilc, index_list)
+    {
+        Oid curr_idx_oid = lfirst_oid(ilc);
+        Relation curr_idx_rel = index_open(curr_idx_oid, AccessShareLock);
+
+        if (curr_idx_rel->rd_index->indisvalid &&
+            curr_idx_rel->rd_index->indnatts >= 1 &&
+            curr_idx_rel->rd_index->indkey.values[0] == attnum) 
+        {
+            index_oid = curr_idx_oid;
+            index_close(curr_idx_rel, AccessShareLock);
+            break; 
+        }
+        
+        index_close(curr_idx_rel, AccessShareLock);
+    }
+    
+    list_free(index_list);
+
+    return index_oid;
 }
 
 PG_FUNCTION_INFO_V1(age_range);
