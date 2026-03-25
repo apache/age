@@ -100,6 +100,81 @@ SELECT * FROM cypher('predicate_functions', $$
 $$) AS (result agtype);
 
 --
+-- NULL list input: all/any/none return null, single returns false
+-- (unnest of NULL produces zero rows; aggregates return NULL over
+-- empty input, but count(*) returns 0)
+--
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN null WHERE x > 0)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN any(x IN null WHERE x > 0)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN none(x IN null WHERE x > 0)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN single(x IN null WHERE x > 0)
+$$) AS (result agtype);
+
+--
+-- NULL predicate results: three-valued logic
+--
+-- Note: In AGE's agtype, null is a first-class value.  The comparison
+-- agtype_null > agtype_integer evaluates to true (not SQL NULL).
+-- Three-valued logic only applies when the predicate itself is a
+-- literal null constant, which becomes SQL NULL after coercion.
+
+-- agtype null in list: null > 0 = true in AGE, so any() = true
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN any(x IN [null] WHERE x > 0)
+$$) AS (result agtype);
+
+-- agtype null + real values: all comparisons are true
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN any(x IN [null, 1, 2] WHERE x > 0)
+$$) AS (result agtype);
+
+-- literal null predicate: pred = SQL NULL -> three-valued logic
+-- all([1] WHERE null) = null (unknown)
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN [1] WHERE null)
+$$) AS (result agtype);
+
+-- agtype null in list: null > 0 = true in AGE, so all() = true
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN [1, null, 2] WHERE x > 0)
+$$) AS (result agtype);
+
+-- -1 > 0 = false, so all() = false
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN [1, null, -1] WHERE x > 0)
+$$) AS (result agtype);
+
+-- agtype null > 0 = true in AGE, so none() = false
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN none(x IN [null] WHERE x > 0)
+$$) AS (result agtype);
+
+-- 5 > 0 = true, so none() = false
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN none(x IN [null, 5] WHERE x > 0)
+$$) AS (result agtype);
+
+-- agtype null > 0 = true AND 5 > 0 = true: 2 matches, single = false
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN single(x IN [null, 5] WHERE x > 0)
+$$) AS (result agtype);
+
+-- single() with null list: count(*) = 0, 0 = 1 -> false
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN single(x IN null WHERE x > 0)
+$$) AS (result agtype);
+
+--
 -- Integration with graph data
 --
 SELECT * FROM cypher('predicate_functions', $$

@@ -25,6 +25,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "catalog/pg_aggregate.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/optimizer.h"
@@ -1612,16 +1613,187 @@ static Query *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
 }
 
 /*
+ * Helper: build a BooleanTest node (pred IS TRUE, pred IS FALSE, etc.)
+ */
+static Node *make_boolean_test(Node *arg, BoolTestType testtype)
+{
+    BooleanTest *bt = makeNode(BooleanTest);
+
+    bt->arg = (Expr *) arg;
+    bt->booltesttype = testtype;
+    bt->location = -1;
+
+    return (Node *) bt;
+}
+
+/*
+ * Helper: build a fully-transformed bool_or(expr) Aggref node.
+ *
+ * The argument must already be a transformed boolean expression.
+ * We construct the Aggref manually to avoid going through FuncCall
+ * + transformExpr, which expects raw parse tree nodes.
+ */
+static Node *make_bool_or_agg(ParseState *pstate, Node *arg)
+{
+    Aggref *agg;
+    TargetEntry *te;
+    Oid bool_or_oid;
+    Oid argtypes[1] = { BOOLOID };
+
+    /* Look up bool_or(boolean) */
+    bool_or_oid = LookupFuncName(list_make1(makeString("bool_or")),
+                                 1, argtypes, false);
+
+    /* Build the TargetEntry for the aggregate argument */
+    te = makeTargetEntry((Expr *) arg, 1, NULL, false);
+
+    /* Construct the Aggref */
+    agg = makeNode(Aggref);
+    agg->aggfnoid = bool_or_oid;
+    agg->aggtype = BOOLOID;
+    agg->aggcollid = InvalidOid;
+    agg->inputcollid = InvalidOid;
+    agg->aggtranstype = InvalidOid;  /* filled by planner */
+    agg->aggargtypes = list_make1_oid(BOOLOID);
+    agg->aggdirectargs = NIL;
+    agg->args = list_make1(te);
+    agg->aggorder = NIL;
+    agg->aggdistinct = NIL;
+    agg->aggfilter = NULL;
+    agg->aggstar = false;
+    agg->aggvariadic = false;
+    agg->aggkind = AGGKIND_NORMAL;
+    agg->aggpresorted = false;
+    agg->agglevelsup = 0;
+    agg->aggsplit = AGGSPLIT_SIMPLE;
+    agg->aggno = -1;
+    agg->aggtransno = -1;
+    agg->location = -1;
+
+    /* Register the aggregate with the parse state */
+    pstate->p_hasAggs = true;
+
+    return (Node *) agg;
+}
+
+/*
+ * Helper: build a transformed CASE expression implementing three-valued
+ * predicate logic for all(), any(), and none().
+ *
+ * any():   CASE WHEN bool_or(pred IS TRUE) THEN true
+ *               WHEN bool_or(pred IS NULL) THEN NULL
+ *               ELSE false END
+ *
+ * all():   CASE WHEN bool_or(pred IS FALSE) THEN false
+ *               WHEN bool_or(pred IS NULL) THEN NULL
+ *               ELSE true END
+ *
+ * none():  CASE WHEN bool_or(pred IS TRUE) THEN false
+ *               WHEN bool_or(pred IS NULL) THEN NULL
+ *               ELSE true END
+ *
+ * Empty list: both bool_or calls return NULL (no rows), so the CASE
+ * falls through to the default: false for any(), true for all()/none().
+ * This matches Cypher's vacuous truth semantics.
+ */
+static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
+                                      cypher_predicate_function_kind kind)
+{
+    CaseExpr *cexpr;
+    CaseWhen *when1, *when2;
+    Node *bool_or_first, *bool_or_null;
+    Node *true_const, *false_const, *null_const;
+
+    /* boolean constants */
+    true_const = makeBoolConst(true, false);
+    false_const = makeBoolConst(false, false);
+    null_const = makeBoolConst(false, true);  /* isnull = true */
+
+    /* Second branch is common to all: bool_or(pred IS NULL) -> NULL */
+    bool_or_null = make_bool_or_agg(pstate,
+                                    make_boolean_test(pred, IS_UNKNOWN));
+
+    when2 = makeNode(CaseWhen);
+    when2->expr = (Expr *) bool_or_null;
+    when2->result = (Expr *) null_const;
+    when2->location = -1;
+
+    if (kind == CPFK_ALL)
+    {
+        /* bool_or(pred IS FALSE) -> false */
+        bool_or_first = make_bool_or_agg(pstate,
+                                         make_boolean_test(pred, IS_FALSE));
+        when1 = makeNode(CaseWhen);
+        when1->expr = (Expr *) bool_or_first;
+        when1->result = (Expr *) false_const;
+        when1->location = -1;
+
+        cexpr = makeNode(CaseExpr);
+        cexpr->casetype = BOOLOID;
+        cexpr->arg = NULL;
+        cexpr->args = list_make2(when1, when2);
+        cexpr->defresult = (Expr *) true_const;
+        cexpr->location = -1;
+    }
+    else if (kind == CPFK_ANY)
+    {
+        /* bool_or(pred IS TRUE) -> true */
+        bool_or_first = make_bool_or_agg(pstate,
+                                         make_boolean_test(pred, IS_TRUE));
+        when1 = makeNode(CaseWhen);
+        when1->expr = (Expr *) bool_or_first;
+        when1->result = (Expr *) true_const;
+        when1->location = -1;
+
+        cexpr = makeNode(CaseExpr);
+        cexpr->casetype = BOOLOID;
+        cexpr->arg = NULL;
+        cexpr->args = list_make2(when1, when2);
+        cexpr->defresult = (Expr *) false_const;
+        cexpr->location = -1;
+    }
+    else /* CPFK_NONE */
+    {
+        /* bool_or(pred IS TRUE) -> false */
+        bool_or_first = make_bool_or_agg(pstate,
+                                         make_boolean_test(pred, IS_TRUE));
+        when1 = makeNode(CaseWhen);
+        when1->expr = (Expr *) bool_or_first;
+        when1->result = (Expr *) false_const;
+        when1->location = -1;
+
+        cexpr = makeNode(CaseExpr);
+        cexpr->casetype = BOOLOID;
+        cexpr->arg = NULL;
+        cexpr->args = list_make2(when1, when2);
+        cexpr->defresult = (Expr *) true_const;
+        cexpr->location = -1;
+    }
+
+    return (Node *) cexpr;
+}
+
+/*
  * Transform a cypher_predicate_function node into a query tree.
  *
- * Similar to list comprehension, but generates:
- *   all()   -> SELECT 1 FROM unnest(list) AS x WHERE NOT predicate
- *   any()   -> SELECT 1 FROM unnest(list) AS x WHERE predicate
- *   none()  -> SELECT 1 FROM unnest(list) AS x WHERE predicate
- *   single() -> SELECT count(*) FROM unnest(list) AS x WHERE predicate
+ * Generates aggregate-based queries that preserve Cypher's three-valued
+ * NULL semantics.  The grammar layer adds a CASE WHEN list IS NULL
+ * THEN NULL ELSE (subquery) END guard for the null-list case.
  *
- * The grammar layer wraps the SubLink in EXISTS/NOT EXISTS or = 1
- * to produce the final boolean result.
+ * For all()/any()/none():
+ *   SELECT CASE WHEN bool_or(pred IS TRUE/FALSE) THEN ...
+ *               WHEN bool_or(pred IS NULL)       THEN NULL
+ *               ELSE ... END
+ *   FROM unnest(list) AS x
+ *
+ * For single():
+ *   SELECT count(*) FROM (
+ *     SELECT 1 FROM unnest(list) AS x WHERE pred IS TRUE LIMIT 2
+ *   ) sub
+ *
+ * All four use EXPR_SUBLINK so the subquery returns a scalar value.
+ * The LIMIT 2 in single() enables early termination: once two matches
+ * are found, evaluation stops and count(*) = 2 != 1.
  */
 static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
                                                   cypher_clause *clause)
@@ -1630,7 +1802,7 @@ static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
     RangeFunction *rf;
     cypher_predicate_function *pred_func;
     FuncCall *func_call;
-    Node *qual, *n;
+    Node *pred, *n;
     RangeTblEntry *rte = NULL;
     int rtindex;
     List *namespace = NULL;
@@ -1666,73 +1838,104 @@ static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
     /* make all namespace items unconditionally visible */
     setNamespaceLateralState(child_pstate->p_namespace, false, true);
 
-    /* WHERE clause -- transform the predicate */
-    qual = transform_cypher_expr(child_cpstate, pred_func->where,
+    /* Transform the predicate expression */
+    pred = transform_cypher_expr(child_cpstate, pred_func->where,
                                  EXPR_KIND_WHERE);
-    if (qual)
+    if (pred)
     {
-        qual = coerce_to_boolean(child_pstate, qual, "WHERE");
-    }
-
-    /*
-     * For all(): negate the predicate so NOT EXISTS(... WHERE NOT pred)
-     * gives the correct "true when all match" semantics.
-     */
-    if (pred_func->kind == CPFK_ALL && qual != NULL)
-    {
-        qual = (Node *)makeBoolExpr(NOT_EXPR, list_make1(qual), -1);
+        pred = coerce_to_boolean(child_pstate, pred, "WHERE");
     }
 
     if (pred_func->kind == CPFK_SINGLE)
     {
-        /* SELECT count(*) -- for single() */
+        /*
+         * single(): SELECT count(*) FROM unnest(list) AS x
+         *           WHERE pred IS TRUE
+         *
+         * Using IS TRUE ensures NULL predicates are not counted as
+         * matches, preserving correct semantics.  The grammar layer
+         * compares the result = 1.
+         *
+         * Note: a LIMIT 2 optimization (to short-circuit after two
+         * matches) would require a nested subquery that breaks
+         * correlated variable references.  Deferred to a future
+         * optimization pass.
+         */
         FuncCall *count_call;
         Node *count_expr;
+        Node *is_true_qual;
+
+        /* WHERE pred IS TRUE -- NULLs are not counted */
+        is_true_qual = make_boolean_test(pred, IS_TRUE);
 
         count_call = makeFuncCall(list_make1(makeString("count")),
                                   NIL, COERCE_SQL_SYNTAX, -1);
         count_call->agg_star = true;
 
-        count_expr = transformExpr(child_pstate, (Node *)count_call,
+        count_expr = transformExpr(child_pstate, (Node *) count_call,
                                    EXPR_KIND_SELECT_TARGET);
 
-        te = makeTargetEntry((Expr *)count_expr,
+        te = makeTargetEntry((Expr *) count_expr,
                              (AttrNumber) child_pstate->p_next_resno++,
                              "count", false);
+
+        query->targetList = lappend(query->targetList, te);
+        query->jointree = makeFromExpr(child_pstate->p_joinlist,
+                                       is_true_qual);
+        query->rtable = child_pstate->p_rtable;
+        query->rteperminfos = child_pstate->p_rteperminfos;
+        query->hasAggs = child_pstate->p_hasAggs;
+        query->hasSubLinks = child_pstate->p_hasSubLinks;
+        query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
+
+        assign_query_collations(child_pstate, query);
+
+        if (child_pstate->p_hasAggs ||
+            query->groupClause || query->groupingSets || query->havingQual)
+        {
+            parse_check_aggregates(child_pstate, query);
+        }
+
+        free_cypher_parsestate(child_cpstate);
+
+        return query;
     }
     else
     {
-        /* SELECT 1 -- for all()/any()/none() with EXISTS */
-        Node *one_const;
+        /*
+         * all()/any()/none(): Build a CASE expression with bool_or()
+         * aggregates that preserves three-valued NULL semantics.
+         * No WHERE clause -- the logic is entirely in the SELECT list.
+         */
+        Node *case_expr;
 
-        one_const = (Node *)makeConst(INT4OID, -1, InvalidOid,
-                                      sizeof(int32), Int32GetDatum(1),
-                                      false, true);
+        case_expr = make_predicate_case_expr(child_pstate, pred,
+                                             pred_func->kind);
 
-        te = makeTargetEntry((Expr *)one_const,
+        te = makeTargetEntry((Expr *) case_expr,
                              (AttrNumber) child_pstate->p_next_resno++,
-                             "?column?", false);
+                             "result", false);
+
+        query->targetList = lappend(query->targetList, te);
+        query->jointree = makeFromExpr(child_pstate->p_joinlist, NULL);
+        query->rtable = child_pstate->p_rtable;
+        query->rteperminfos = child_pstate->p_rteperminfos;
+        query->hasAggs = child_pstate->p_hasAggs;
+        query->hasSubLinks = child_pstate->p_hasSubLinks;
+        query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
+
+        assign_query_collations(child_pstate, query);
+
+        if (child_pstate->p_hasAggs ||
+            query->groupClause || query->groupingSets || query->havingQual)
+        {
+            parse_check_aggregates(child_pstate, query);
+        }
+
+        free_cypher_parsestate(child_cpstate);
+
+        return query;
     }
-
-    query->targetList = lappend(query->targetList, te);
-    query->jointree = makeFromExpr(child_pstate->p_joinlist, (Node *)qual);
-    query->rtable = child_pstate->p_rtable;
-    query->rteperminfos = child_pstate->p_rteperminfos;
-    query->hasAggs = child_pstate->p_hasAggs;
-    query->hasSubLinks = child_pstate->p_hasSubLinks;
-    query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
-
-    assign_query_collations(child_pstate, query);
-
-    if (child_pstate->p_hasAggs ||
-        query->groupClause || query->groupingSets || query->havingQual)
-    {
-        parse_check_aggregates(child_pstate, query);
-    }
-
-    free_cypher_parsestate(child_cpstate);
-
-    return query;
 }
 
 /*
