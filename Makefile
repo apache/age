@@ -175,6 +175,7 @@ REGRESS = scan \
           jsonb_operators \
           list_comprehension \
           predicate_functions \
+          pattern_expression \
           map_projection \
           direct_field_access \
           security
