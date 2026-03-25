@@ -175,9 +175,9 @@ CREATE CAST (agtype AS json)
     WITH FUNCTION ag_catalog.agtype_to_json(agtype);
 
 -- agtype -> jsonb (explicit)
--- Uses text intermediate because agtype extends jsonb's binary format
--- with types (AGTV_INTEGER, AGTV_FLOAT, AGTV_VERTEX, AGTV_EDGE, AGTV_PATH)
--- that jsonb does not recognize.
+-- Uses json intermediate (agtype_to_json -> json::jsonb) because agtype
+-- extends jsonb's binary format with types (AGTV_INTEGER, AGTV_FLOAT,
+-- AGTV_VERTEX, AGTV_EDGE, AGTV_PATH) that jsonb does not recognize.
 CREATE FUNCTION ag_catalog.agtype_to_jsonb(agtype)
     RETURNS jsonb
     LANGUAGE sql
