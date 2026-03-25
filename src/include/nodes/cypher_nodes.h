@@ -224,6 +224,27 @@ typedef struct cypher_map_projection
     Node *mapping_expr;
  } cypher_list_comprehension;
 
+/*
+ * Predicate function kinds for all(), any(), none(), single().
+ * These take the form: func(variable IN list WHERE predicate)
+ */
+typedef enum cypher_predicate_function_kind
+{
+    CPFK_ALL = 0,
+    CPFK_ANY,
+    CPFK_NONE,
+    CPFK_SINGLE
+} cypher_predicate_function_kind;
+
+typedef struct cypher_predicate_function
+{
+    ExtensibleNode extensible;
+    cypher_predicate_function_kind kind;
+    char *varname;
+    Node *expr;     /* the list to iterate over */
+    Node *where;    /* the predicate to test */
+} cypher_predicate_function;
+
 typedef enum cypher_map_projection_element_type
 {
     PROPERTY_SELECTOR = 0,  /* map_var { .key } */

@@ -79,7 +79,7 @@
 %token NOT_EQ LT_EQ GT_EQ DOT_DOT TYPECAST PLUS_EQ
 
 /* keywords in alphabetical order */
-%token <keyword> ALL ANALYZE AND AS ASC ASCENDING
+%token <keyword> ALL ANALYZE AND ANY_P AS ASC ASCENDING
                  BY
                  CALL CASE COALESCE CONTAINS COUNT CREATE
                  DELETE DESC DESCENDING DETACH DISTINCT
@@ -88,10 +88,10 @@
                  IN IS
                  LIMIT
                  MATCH MERGE
-                 NOT NULL_P
+                 NONE NOT NULL_P
                  OPERATOR OPTIONAL OR ORDER
                  REMOVE RETURN
-                 SET SKIP STARTS
+                 SET SINGLE SKIP STARTS
                  THEN TRUE_P
                  UNION UNWIND
                  VERBOSE
@@ -274,10 +274,18 @@ static Node *build_comparison_expression(Node *left_grammar_node,
                                          Node *right_grammar_node,
                                          char *opr_name, int location);
 
+/* shared helper for list iteration constructs */
+static char *extract_iter_variable_name(Node *var);
+
 /* list_comprehension */
 static Node *build_list_comprehension_node(Node *var, Node *expr,
                                            Node *where, Node *mapping_expr,
                                            int location);
+
+/* predicate functions: all(), any(), none(), single() */
+static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
+                                           Node *var, Node *expr,
+                                           Node *where, int location);
 
 /* helper functions */
 static ExplainStmt *make_explain_stmt(List *options);
@@ -1853,6 +1861,22 @@ expr_func_subexpr:
 									  list_make1(makeString("count")), NIL, @1);
             $$ = (Node *)n;
 		}
+    | ALL '(' expr IN expr WHERE expr ')'
+        {
+            $$ = build_predicate_function_node(CPFK_ALL, $3, $5, $7, @1);
+        }
+    | ANY_P '(' expr IN expr WHERE expr ')'
+        {
+            $$ = build_predicate_function_node(CPFK_ANY, $3, $5, $7, @1);
+        }
+    | NONE '(' expr IN expr WHERE expr ')'
+        {
+            $$ = build_predicate_function_node(CPFK_NONE, $3, $5, $7, @1);
+        }
+    | SINGLE '(' expr IN expr WHERE expr ')'
+        {
+            $$ = build_predicate_function_node(CPFK_SINGLE, $3, $5, $7, @1);
+        }
     ;
 
 expr_subquery:
@@ -2372,6 +2396,7 @@ safe_keywords:
     ALL          { $$ = KEYWORD_STRDUP($1); }
     | ANALYZE    { $$ = KEYWORD_STRDUP($1); }
     | AND        { $$ = KEYWORD_STRDUP($1); }
+    | ANY_P      { $$ = KEYWORD_STRDUP($1); }
     | AS         { $$ = KEYWORD_STRDUP($1); }
     | ASC        { $$ = KEYWORD_STRDUP($1); }
     | ASCENDING  { $$ = KEYWORD_STRDUP($1); }
@@ -2396,6 +2421,7 @@ safe_keywords:
     | LIMIT      { $$ = KEYWORD_STRDUP($1); }
     | MATCH      { $$ = KEYWORD_STRDUP($1); }
     | MERGE      { $$ = KEYWORD_STRDUP($1); }
+    | NONE       { $$ = KEYWORD_STRDUP($1); }
     | NOT        { $$ = KEYWORD_STRDUP($1); }
     | OPERATOR   { $$ = KEYWORD_STRDUP($1); }
     | OPTIONAL   { $$ = KEYWORD_STRDUP($1); }
@@ -2404,6 +2430,7 @@ safe_keywords:
     | REMOVE     { $$ = KEYWORD_STRDUP($1); }
     | RETURN     { $$ = KEYWORD_STRDUP($1); }
     | SET        { $$ = KEYWORD_STRDUP($1); }
+    | SINGLE     { $$ = KEYWORD_STRDUP($1); }
     | SKIP       { $$ = KEYWORD_STRDUP($1); }
     | STARTS     { $$ = KEYWORD_STRDUP($1); }
     | THEN       { $$ = KEYWORD_STRDUP($1); }
@@ -3268,6 +3295,35 @@ static cypher_relationship *build_VLE_relation(List *left_arg,
     return cr;
 }
 
+/*
+ * Extract and validate the iterator variable name from a ColumnRef node.
+ * Used by predicate functions (all/any/none/single) which share the
+ * "variable IN list" syntax with list comprehensions.
+ */
+static char *extract_iter_variable_name(Node *var)
+{
+    ColumnRef *cref;
+    String *val;
+
+    if (!IsA(var, ColumnRef))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("syntax error at or near IN")));
+    }
+
+    cref = (ColumnRef *)var;
+    val = linitial(cref->fields);
+    if (!IsA(val, String))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("invalid iterator variable name")));
+    }
+
+    return val->sval;
+}
+
 /* helper function to build a list_comprehension grammar node */
 static Node *build_list_comprehension_node(Node *var, Node *expr,
                                            Node *where, Node *mapping_expr,
@@ -3315,6 +3371,93 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
     sub->location = location;
 
     return (Node *) node_to_agtype((Node *)sub, "agtype[]", location);
+}
+
+/*
+ * Helper function to build a predicate function grammar node.
+ *
+ * Predicate functions follow the openCypher syntax:
+ *   all(x IN list WHERE predicate)
+ *   any(x IN list WHERE predicate)
+ *   none(x IN list WHERE predicate)
+ *   single(x IN list WHERE predicate)
+ *
+ * They are transformed into SQL sublinks:
+ *   all   -> NOT EXISTS (SELECT 1 FROM unnest(list) AS x WHERE NOT predicate)
+ *   any   -> EXISTS (SELECT 1 FROM unnest(list) AS x WHERE predicate)
+ *   none  -> NOT EXISTS (SELECT 1 FROM unnest(list) AS x WHERE predicate)
+ *   single -> (SELECT count(*) FROM unnest(list) AS x WHERE predicate) = 1
+ */
+static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
+                                           Node *var, Node *expr,
+                                           Node *where, int location)
+{
+    SubLink *sub;
+    cypher_predicate_function *pred_func = NULL;
+
+    /* build the predicate function node */
+    pred_func = make_ag_node(cypher_predicate_function);
+    pred_func->kind = kind;
+    pred_func->varname = extract_iter_variable_name(var);
+    pred_func->expr = expr;
+    pred_func->where = where;
+
+    /*
+     * Wrap the predicate function in a SubLink. PostgreSQL's SubLink is
+     * reused here as the carrier for our custom subquery node -- the
+     * predicate function node is stored as the subselect and will be
+     * transformed into a real Query by transform_cypher_predicate_function()
+     * in cypher_clause.c.
+     */
+    sub = makeNode(SubLink);
+    sub->subLinkId = 0;
+    sub->testexpr = NULL;
+    sub->operName = NIL;
+    sub->subselect = (Node *)pred_func;
+    sub->location = location;
+
+    if (kind == CPFK_SINGLE)
+    {
+        /*
+         * single() -> (SELECT count(*) FROM unnest(list) WHERE pred) = 1
+         * Use EXPR_SUBLINK so the subquery returns a scalar value.
+         */
+        Node *eq_expr;
+
+        sub->subLinkType = EXPR_SUBLINK;
+        eq_expr = (Node *)makeSimpleA_Expr(AEXPR_OP, "=",
+                                           (Node *)sub,
+                                           make_int_const(1, location),
+                                           location);
+        return (Node *)node_to_agtype(eq_expr, "boolean", location);
+    }
+    else
+    {
+        /*
+         * all()  -> NOT EXISTS(... WHERE NOT pred)
+         * any()  -> EXISTS(... WHERE pred)
+         * none() -> NOT EXISTS(... WHERE pred)
+         *
+         * For all(), the WHERE predicate is negated during transformation
+         * (in transform_cypher_predicate_function), so NOT EXISTS with a
+         * negated predicate yields "true when all elements match".
+         */
+        sub->subLinkType = EXISTS_SUBLINK;
+
+        if (kind == CPFK_ALL || kind == CPFK_NONE)
+        {
+            Node *not_expr;
+
+            not_expr = (Node *)makeBoolExpr(NOT_EXPR,
+                                            list_make1(sub), location);
+            return (Node *)node_to_agtype(not_expr, "boolean", location);
+        }
+        else
+        {
+            /* CPFK_ANY */
+            return (Node *)node_to_agtype((Node *)sub, "boolean", location);
+        }
+    }
 }
 
 /* Helper function to create an ExplainStmt node */
