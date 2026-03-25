@@ -254,6 +254,10 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
 static Query *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
                                                   cypher_clause *clause);
 
+/* predicate functions */
+static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
+                                                  cypher_clause *clause);
+
 /* merge */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause);
@@ -512,6 +516,10 @@ Query *transform_cypher_clause(cypher_parsestate *cpstate,
     else if (is_ag_node(self, cypher_list_comprehension))
     {
         result = transform_cypher_list_comprehension(cpstate, clause);
+    }
+    else if (is_ag_node(self, cypher_predicate_function))
+    {
+        result = transform_cypher_predicate_function(cpstate, clause);
     }
     else
     {
@@ -1584,6 +1592,130 @@ static Query *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
 
     query->targetList = lappend(query->targetList, te);
     query->jointree = makeFromExpr(child_pstate->p_joinlist, (Node *) qual);
+    query->rtable = child_pstate->p_rtable;
+    query->rteperminfos = child_pstate->p_rteperminfos;
+    query->hasAggs = child_pstate->p_hasAggs;
+    query->hasSubLinks = child_pstate->p_hasSubLinks;
+    query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
+
+    assign_query_collations(child_pstate, query);
+
+    if (child_pstate->p_hasAggs ||
+        query->groupClause || query->groupingSets || query->havingQual)
+    {
+        parse_check_aggregates(child_pstate, query);
+    }
+
+    free_cypher_parsestate(child_cpstate);
+
+    return query;
+}
+
+/*
+ * Transform a cypher_predicate_function node into a query tree.
+ *
+ * Similar to list comprehension, but generates:
+ *   all()   -> SELECT 1 FROM unnest(list) AS x WHERE NOT predicate
+ *   any()   -> SELECT 1 FROM unnest(list) AS x WHERE predicate
+ *   none()  -> SELECT 1 FROM unnest(list) AS x WHERE predicate
+ *   single() -> SELECT count(*) FROM unnest(list) AS x WHERE predicate
+ *
+ * The grammar layer wraps the SubLink in EXISTS/NOT EXISTS or = 1
+ * to produce the final boolean result.
+ */
+static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
+                                                  cypher_clause *clause)
+{
+    Query *query;
+    RangeFunction *rf;
+    cypher_predicate_function *pred_func;
+    FuncCall *func_call;
+    Node *qual, *n;
+    RangeTblEntry *rte = NULL;
+    int rtindex;
+    List *namespace = NULL;
+    TargetEntry *te;
+    cypher_parsestate *child_cpstate = make_cypher_parsestate(cpstate);
+    ParseState *child_pstate = (ParseState *) child_cpstate;
+
+    pred_func = (cypher_predicate_function *) clause->self;
+
+    query = makeNode(Query);
+    query->commandType = CMD_SELECT;
+
+    /* FROM unnest(expr) AS varname */
+    func_call = makeFuncCall(list_make1(makeString("unnest")),
+                             list_make1(pred_func->expr),
+                             COERCE_SQL_SYNTAX, -1);
+
+    rf = makeNode(RangeFunction);
+    rf->lateral = false;
+    rf->ordinality = false;
+    rf->is_rowsfrom = false;
+    rf->functions = list_make1(list_make2((Node *) func_call, NIL));
+    rf->alias = makeAlias(pred_func->varname, NIL);
+    rf->coldeflist = NIL;
+
+    n = transform_from_clause_item(child_cpstate, (Node *) rf,
+                                   &rte, &rtindex, &namespace);
+    checkNameSpaceConflicts(child_pstate, child_pstate->p_namespace, namespace);
+    child_pstate->p_joinlist = lappend(child_pstate->p_joinlist, n);
+    child_pstate->p_namespace = list_concat(child_pstate->p_namespace,
+                                            namespace);
+
+    /* make all namespace items unconditionally visible */
+    setNamespaceLateralState(child_pstate->p_namespace, false, true);
+
+    /* WHERE clause -- transform the predicate */
+    qual = transform_cypher_expr(child_cpstate, pred_func->where,
+                                 EXPR_KIND_WHERE);
+    if (qual)
+    {
+        qual = coerce_to_boolean(child_pstate, qual, "WHERE");
+    }
+
+    /*
+     * For all(): negate the predicate so NOT EXISTS(... WHERE NOT pred)
+     * gives the correct "true when all match" semantics.
+     */
+    if (pred_func->kind == CPFK_ALL && qual != NULL)
+    {
+        qual = (Node *)makeBoolExpr(NOT_EXPR, list_make1(qual), -1);
+    }
+
+    if (pred_func->kind == CPFK_SINGLE)
+    {
+        /* SELECT count(*) -- for single() */
+        FuncCall *count_call;
+        Node *count_expr;
+
+        count_call = makeFuncCall(list_make1(makeString("count")),
+                                  NIL, COERCE_SQL_SYNTAX, -1);
+        count_call->agg_star = true;
+
+        count_expr = transformExpr(child_pstate, (Node *)count_call,
+                                   EXPR_KIND_SELECT_TARGET);
+
+        te = makeTargetEntry((Expr *)count_expr,
+                             (AttrNumber) child_pstate->p_next_resno++,
+                             "count", false);
+    }
+    else
+    {
+        /* SELECT 1 -- for all()/any()/none() with EXISTS */
+        Node *one_const;
+
+        one_const = (Node *)makeConst(INT4OID, -1, InvalidOid,
+                                      sizeof(int32), Int32GetDatum(1),
+                                      false, true);
+
+        te = makeTargetEntry((Expr *)one_const,
+                             (AttrNumber) child_pstate->p_next_resno++,
+                             "?column?", false);
+    }
+
+    query->targetList = lappend(query->targetList, te);
+    query->jointree = makeFromExpr(child_pstate->p_joinlist, (Node *)qual);
     query->rtable = child_pstate->p_rtable;
     query->rteperminfos = child_pstate->p_rteperminfos;
     query->hasAggs = child_pstate->p_hasAggs;

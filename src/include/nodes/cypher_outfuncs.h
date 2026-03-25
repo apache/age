@@ -49,6 +49,7 @@ void out_cypher_map(StringInfo str, const ExtensibleNode *node);
 void out_cypher_map_projection(StringInfo str, const ExtensibleNode *node);
 void out_cypher_list(StringInfo str, const ExtensibleNode *node);
 void out_cypher_list_comprehension(StringInfo str, const ExtensibleNode *node);
+void out_cypher_predicate_function(StringInfo str, const ExtensibleNode *node);
 
 /* comparison expression */
 void out_cypher_comparison_aexpr(StringInfo str, const ExtensibleNode *node);

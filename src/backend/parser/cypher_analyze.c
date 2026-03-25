@@ -843,6 +843,22 @@ bool cypher_raw_expr_tree_walker_impl(Node *node,
                 return true;
             }
         }
+        else if (is_ag_node(node, cypher_predicate_function))
+        {
+            cypher_predicate_function *pf;
+
+            pf = (cypher_predicate_function *)node;
+
+            if (WALK(pf->expr))
+            {
+                return true;
+            }
+
+            if (WALK(pf->where))
+            {
+                return true;
+            }
+        }
         /* Add more node types here as needed */
         else
         {
