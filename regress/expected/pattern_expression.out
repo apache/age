@@ -1,0 +1,231 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('pattern_expr');
+NOTICE:  graph "pattern_expr" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+--
+-- Setup test data
+--
+SELECT * FROM cypher('pattern_expr', $$
+    CREATE (alice:Person {name: 'Alice'})-[:KNOWS]->(bob:Person {name: 'Bob'}),
+           (alice)-[:WORKS_WITH]->(charlie:Person {name: 'Charlie'}),
+           (dave:Person {name: 'Dave'})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+--
+-- Basic pattern expression in WHERE
+--
+-- Bare pattern: (a)-[:REL]->(b)
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE (a)-[:KNOWS]->(b)
+    RETURN a.name, b.name
+    ORDER BY a.name, b.name
+$$) AS (a agtype, b agtype);
+    a    |   b   
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+--
+-- NOT pattern expression
+--
+-- Find people who don't KNOW anyone
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WHERE NOT (a)-[:KNOWS]->(:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (result agtype);
+  result   
+-----------
+ "Bob"
+ "Charlie"
+ "Dave"
+(3 rows)
+
+--
+-- Pattern with labeled first node
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE (a:Person)-[:KNOWS]->(b)
+    RETURN a.name, b.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype);
+    a    |   b   
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+--
+-- Pattern combined with AND
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE (a)-[:KNOWS]->(b) AND a.name = 'Alice'
+    RETURN a.name, b.name
+$$) AS (a agtype, b agtype);
+    a    |   b   
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+--
+-- Pattern combined with OR
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE (a)-[:KNOWS]->(b) OR (a)-[:WORKS_WITH]->(b)
+    RETURN a.name, b.name
+    ORDER BY a.name, b.name
+$$) AS (a agtype, b agtype);
+    a    |     b     
+---------+-----------
+ "Alice" | "Bob"
+ "Alice" | "Charlie"
+(2 rows)
+
+--
+-- Left-directed pattern
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE (a)<-[:KNOWS]-(b)
+    RETURN a.name, b.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype);
+   a   |    b    
+-------+---------
+ "Bob" | "Alice"
+(1 row)
+
+--
+-- Pattern with anonymous nodes
+--
+-- Find anyone who has any outgoing KNOWS relationship
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WHERE (a)-[:KNOWS]->()
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (result agtype);
+ result  
+---------
+ "Alice"
+(1 row)
+
+--
+-- Multiple relationship pattern
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (c:Person)
+    WHERE (a)-[:KNOWS]->()-[:WORKS_WITH]->(c)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+ a | c 
+---+---
+(0 rows)
+
+--
+-- Existing EXISTS() syntax still works (backward compatibility)
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person), (b:Person)
+    WHERE EXISTS((a)-[:KNOWS]->(b))
+    RETURN a.name, b.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype);
+    a    |   b   
+---------+-------
+ "Alice" | "Bob"
+(1 row)
+
+--
+-- Pattern expression produces same results as EXISTS()
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WHERE (a)-[:KNOWS]->(:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (result agtype);
+ result  
+---------
+ "Alice"
+(1 row)
+
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WHERE EXISTS((a)-[:KNOWS]->(:Person))
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (result agtype);
+ result  
+---------
+ "Alice"
+(1 row)
+
+--
+-- Regular expressions still work (no regression)
+--
+SELECT * FROM cypher('pattern_expr', $$
+    RETURN (1 + 2)
+$$) AS (result agtype);
+ result 
+--------
+ 3
+(1 row)
+
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (n:Person)
+    WHERE n.name = 'Alice'
+    RETURN (n.name)
+$$) AS (result agtype);
+ result  
+---------
+ "Alice"
+(1 row)
+
+--
+-- Cleanup
+--
+SELECT * FROM drop_graph('pattern_expr', true);
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to table pattern_expr._ag_label_vertex
+drop cascades to table pattern_expr._ag_label_edge
+drop cascades to table pattern_expr."Person"
+drop cascades to table pattern_expr."KNOWS"
+drop cascades to table pattern_expr."WORKS_WITH"
+NOTICE:  graph "pattern_expr" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
