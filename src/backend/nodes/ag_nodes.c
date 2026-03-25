@@ -134,7 +134,7 @@ const ExtensibleNodeMethods node_methods[] = {
     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_information),
     DEFINE_NODE_METHODS_EXTENDED(cypher_delete_item),
     DEFINE_NODE_METHODS_EXTENDED(cypher_merge_information),
-    DEFINE_NODE_METHODS(cypher_predicate_function)
+    DEFINE_NODE_METHODS_EXTENDED(cypher_predicate_function)
 };
 
 static bool equal_ag_node(const ExtensibleNode *a, const ExtensibleNode *b)

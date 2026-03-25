@@ -3313,6 +3313,15 @@ static char *extract_iter_variable_name(Node *var)
     }
 
     cref = (ColumnRef *)var;
+
+    /* The iterator must be a simple unqualified name (single field) */
+    if (list_length(cref->fields) != 1)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("qualified name not allowed as iterator variable")));
+    }
+
     val = linitial(cref->fields);
     if (!IsA(val, String))
     {
@@ -3382,11 +3391,12 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
  *   none(x IN list WHERE predicate)
  *   single(x IN list WHERE predicate)
  *
- * They are transformed into SQL sublinks:
- *   all   -> NOT EXISTS (SELECT 1 FROM unnest(list) AS x WHERE NOT predicate)
- *   any   -> EXISTS (SELECT 1 FROM unnest(list) AS x WHERE predicate)
- *   none  -> NOT EXISTS (SELECT 1 FROM unnest(list) AS x WHERE predicate)
- *   single -> (SELECT count(*) FROM unnest(list) AS x WHERE predicate) = 1
+ * All four use EXPR_SUBLINK (scalar subquery).  The transform layer
+ * generates aggregate-based queries (using bool_or + CASE) for
+ * all/any/none to preserve three-valued NULL semantics, and
+ * count(*) with IS TRUE filtering for single().
+ *
+ * For single(), the subquery result is compared = 1.
  */
 static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
                                            Node *var, Node *expr,
@@ -3408,55 +3418,40 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
      * predicate function node is stored as the subselect and will be
      * transformed into a real Query by transform_cypher_predicate_function()
      * in cypher_clause.c.
+     *
+     * All predicate functions now use EXPR_SUBLINK: the transform layer
+     * generates aggregate-based queries that return a scalar boolean
+     * (for all/any/none) or integer (for single).
      */
     sub = makeNode(SubLink);
     sub->subLinkId = 0;
     sub->testexpr = NULL;
     sub->operName = NIL;
-    sub->subselect = (Node *)pred_func;
+    sub->subselect = (Node *) pred_func;
     sub->location = location;
+    sub->subLinkType = EXPR_SUBLINK;
 
     if (kind == CPFK_SINGLE)
     {
         /*
-         * single() -> (SELECT count(*) FROM unnest(list) WHERE pred) = 1
-         * Use EXPR_SUBLINK so the subquery returns a scalar value.
+         * single() -> (subquery) = 1
+         * The subquery returns count(*) with IS TRUE filtering.
          */
         Node *eq_expr;
 
-        sub->subLinkType = EXPR_SUBLINK;
-        eq_expr = (Node *)makeSimpleA_Expr(AEXPR_OP, "=",
-                                           (Node *)sub,
-                                           make_int_const(1, location),
-                                           location);
-        return (Node *)node_to_agtype(eq_expr, "boolean", location);
+        eq_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "=",
+                                            (Node *) sub,
+                                            make_int_const(1, location),
+                                            location);
+        return (Node *) node_to_agtype(eq_expr, "boolean", location);
     }
     else
     {
         /*
-         * all()  -> NOT EXISTS(... WHERE NOT pred)
-         * any()  -> EXISTS(... WHERE pred)
-         * none() -> NOT EXISTS(... WHERE pred)
-         *
-         * For all(), the WHERE predicate is negated during transformation
-         * (in transform_cypher_predicate_function), so NOT EXISTS with a
-         * negated predicate yields "true when all elements match".
+         * all()/any()/none(): the subquery returns a boolean directly
+         * from the CASE+bool_or() aggregate expression.
          */
-        sub->subLinkType = EXISTS_SUBLINK;
-
-        if (kind == CPFK_ALL || kind == CPFK_NONE)
-        {
-            Node *not_expr;
-
-            not_expr = (Node *)makeBoolExpr(NOT_EXPR,
-                                            list_make1(sub), location);
-            return (Node *)node_to_agtype(not_expr, "boolean", location);
-        }
-        else
-        {
-            /* CPFK_ANY */
-            return (Node *)node_to_agtype((Node *)sub, "boolean", location);
-        }
+        return (Node *) node_to_agtype((Node *) sub, "boolean", location);
     }
 }
 
