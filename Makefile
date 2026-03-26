@@ -113,6 +113,7 @@ REGRESS = scan \
           list_comprehension \
           map_projection \
           direct_field_access \
+          agtype_jsonb_cast \
           security
 
 ifneq ($(EXTRA_TESTS),)
