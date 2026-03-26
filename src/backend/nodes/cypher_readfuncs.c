@@ -311,3 +311,17 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
 }
+
+/*
+ * Deserialize a string representing the cypher_predicate_function
+ * data structure.
+ */
+void read_cypher_predicate_function(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_predicate_function);
+
+    READ_ENUM_FIELD(kind, cypher_predicate_function_kind);
+    READ_STRING_FIELD(varname);
+    READ_NODE_FIELD(expr);
+    READ_NODE_FIELD(where);
+}
