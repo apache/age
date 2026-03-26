@@ -1777,8 +1777,9 @@ static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
  * Transform a cypher_predicate_function node into a query tree.
  *
  * Generates aggregate-based queries that preserve Cypher's three-valued
- * NULL semantics.  The grammar layer adds a CASE WHEN list IS NULL
- * THEN NULL ELSE (subquery) END guard for the null-list case.
+ * NULL semantics.  The grammar layer wraps the SubLink with a
+ * CASE WHEN list IS NULL THEN NULL ELSE (subquery) END guard so all
+ * four functions return NULL when the input list is NULL.
  *
  * For all()/any()/none():
  *   SELECT CASE WHEN bool_or(pred IS TRUE/FALSE) THEN ...
@@ -1787,13 +1788,11 @@ static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
  *   FROM unnest(list) AS x
  *
  * For single():
- *   SELECT count(*) FROM (
- *     SELECT 1 FROM unnest(list) AS x WHERE pred IS TRUE LIMIT 2
- *   ) sub
+ *   SELECT count(*)
+ *   FROM unnest(list) AS x
+ *   WHERE pred IS TRUE
  *
  * All four use EXPR_SUBLINK so the subquery returns a scalar value.
- * The LIMIT 2 in single() enables early termination: once two matches
- * are found, evaluation stops and count(*) = 2 != 1.
  */
 static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
                                                   cypher_clause *clause)

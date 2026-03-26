@@ -3404,6 +3404,7 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
 {
     SubLink *sub;
     cypher_predicate_function *pred_func = NULL;
+    Node *result;
 
     /* build the predicate function node */
     pred_func = make_ag_node(cypher_predicate_function);
@@ -3422,6 +3423,10 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
      * All predicate functions now use EXPR_SUBLINK: the transform layer
      * generates aggregate-based queries that return a scalar boolean
      * (for all/any/none) or integer (for single).
+     *
+     * The transform layer also wraps the result with a NULL-list guard
+     * (CASE WHEN list IS NULL THEN NULL ELSE <result> END) to ensure
+     * all four functions return NULL when the input list is NULL.
      */
     sub = makeNode(SubLink);
     sub->subLinkId = 0;
@@ -3443,7 +3448,7 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
                                             (Node *) sub,
                                             make_int_const(1, location),
                                             location);
-        return (Node *) node_to_agtype(eq_expr, "boolean", location);
+        result = (Node *) node_to_agtype(eq_expr, "boolean", location);
     }
     else
     {
@@ -3451,7 +3456,42 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
          * all()/any()/none(): the subquery returns a boolean directly
          * from the CASE+bool_or() aggregate expression.
          */
-        return (Node *) node_to_agtype((Node *) sub, "boolean", location);
+        result = (Node *) node_to_agtype((Node *) sub, "boolean", location);
+    }
+
+    /*
+     * NULL-list guard: CASE WHEN expr IS NULL THEN NULL ELSE result END
+     *
+     * Without this, unnest(NULL) produces zero rows, causing all/any/none
+     * to accidentally return NULL (via bool_or over empty input) and
+     * single to return false (count(*) = 0).  Cypher semantics require
+     * all four to return NULL when the input list is NULL.
+     *
+     * The expr pointer is shared with pred_func->expr.  This is safe
+     * because AGE's expression transformer (transform_cypher_expr_recurse)
+     * creates new nodes rather than modifying the parse tree in-place,
+     * so the two references are transformed independently.
+     */
+    {
+        NullTest *null_test = makeNode(NullTest);
+        CaseWhen *case_when = makeNode(CaseWhen);
+        CaseExpr *guard = makeNode(CaseExpr);
+
+        null_test->arg = (Expr *) expr;
+        null_test->nulltesttype = IS_NULL;
+        null_test->argisrow = false;
+        null_test->location = location;
+
+        case_when->expr = (Expr *) null_test;
+        case_when->result = (Expr *) make_null_const(location);
+        case_when->location = location;
+
+        guard->arg = NULL;
+        guard->args = list_make1(case_when);
+        guard->defresult = (Expr *) result;
+        guard->location = location;
+
+        return (Node *) guard;
     }
 }
 
