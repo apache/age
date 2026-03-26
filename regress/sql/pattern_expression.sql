@@ -141,7 +141,7 @@ SELECT * FROM cypher('pattern_expr', $$
 $$) AS (result agtype);
 
 --
--- Regular expressions still work (no regression)
+-- Regular (non-pattern) expressions still work (no regression)
 --
 SELECT * FROM cypher('pattern_expr', $$
     RETURN (1 + 2)
