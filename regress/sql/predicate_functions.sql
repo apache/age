@@ -100,9 +100,9 @@ SELECT * FROM cypher('predicate_functions', $$
 $$) AS (result agtype);
 
 --
--- NULL list input: all/any/none return null, single returns false
--- (unnest of NULL produces zero rows; aggregates return NULL over
--- empty input, but count(*) returns 0)
+-- NULL list input: all four return null
+-- (NULL-list guard in the grammar produces CASE WHEN expr IS NULL
+-- THEN NULL ELSE <subquery> END)
 --
 SELECT * FROM cypher('predicate_functions', $$
     RETURN all(x IN null WHERE x > 0)
@@ -169,7 +169,7 @@ SELECT * FROM cypher('predicate_functions', $$
     RETURN single(x IN [null, 5] WHERE x > 0)
 $$) AS (result agtype);
 
--- single() with null list: count(*) = 0, 0 = 1 -> false
+-- single() with null list: NULL (same as other predicate functions)
 SELECT * FROM cypher('predicate_functions', $$
     RETURN single(x IN null WHERE x > 0)
 $$) AS (result agtype);
