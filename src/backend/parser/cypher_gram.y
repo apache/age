@@ -58,6 +58,19 @@
  * where both paths succeed (bare (a) prefers the expression interpretation).
  */
 %glr-parser
+/*
+ * Conflict budget for the GLR parser.  Update these counts if grammar
+ * rules change.
+ *
+ *   %expect 7 (shift/reduce) -- All arise from the ambiguity between
+ *     path extension ('-' '[' ... ']' '-' '>') and arithmetic operators
+ *     on '-' and '<'.  GLR forks at these points and discards the
+ *     failing alternative.
+ *
+ *   %expect-rr 3 (reduce/reduce) -- From the overlap between expr_var
+ *     and var_name_opt on ')' / '}' / '='.  Resolved by %dprec
+ *     annotations that prefer the expression interpretation.
+ */
 %expect 7
 %expect-rr 3
 
@@ -3560,7 +3573,6 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
     }
 }
 
-/* Helper function to create an ExplainStmt node */
 /*
  * Wrap a graph pattern in an EXISTS SubLink.  Used by both
  * EXISTS(pattern) syntax and bare pattern expressions in WHERE.
@@ -3585,6 +3597,7 @@ static Node *make_exists_pattern_sublink(Node *pattern, int location)
     return (Node *)node_to_agtype((Node *)n, "boolean", location);
 }
 
+/* Helper function to create an ExplainStmt node */
 static ExplainStmt *make_explain_stmt(List *options)
 {
     ExplainStmt *estmt = makeNode(ExplainStmt);
