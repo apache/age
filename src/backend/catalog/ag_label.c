@@ -303,7 +303,7 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     /* setup the table to be scanned */
     ag_label = table_open(ag_label_relation_id(), AccessShareLock);
 
-    index_oid = find_usable_index_for_attr(ag_label, Anum_ag_label_graph);
+    index_oid = find_usable_btree_index_for_attr(ag_label, Anum_ag_label_graph);
 
     resultRelInfo = create_entity_result_rel_info(estate, "ag_catalog",
                                                   "ag_label");

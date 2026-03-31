@@ -559,7 +559,7 @@ static void process_update_list(CustomScanState *node)
         if (!found_idx_entry)
         {
             /*  Check if there is a valid  index on the 'id' column */
-            idx_entry->index_oid = find_usable_index_for_attr(rel, 1);
+            idx_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
         }
         index_oid = idx_entry->index_oid;
 
@@ -681,6 +681,7 @@ static void process_update_list(CustomScanState *node)
                     if (HeapTupleIsValid(heap_tuple))
                     {
                         bool should_update = true;
+                        HeapTuple original_tuple = heap_tuple;
                         
                         /* Check RLS security quals (USING policy) before update */
                         if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
@@ -705,14 +706,12 @@ static void process_update_list(CustomScanState *node)
 
                         /* Silently skip if USING policy filters out this row */
                         if (should_update)
-                        {
-                            update_entity_tuple(resultRelInfo, slot, estate,
-                                                            heap_tuple);
-                        }
-                    }
+                            heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
+                                                            original_tuple);
 
-                    if (shouldFree)
-                        heap_freetuple(heap_tuple);
+                        if (shouldFree)
+                            heap_freetuple(original_tuple);
+                    }
                 }
 
                 ExecDropSingleTupleTableSlot(index_slot);

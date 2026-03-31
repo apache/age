@@ -217,8 +217,11 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
     /* bail if the number of columns differs - this table has 5 */
     Assert(tupdesc->natts == Natts_ag_label);
 
-    /* We look for 'ag_label_graph_oid_index' or any index starting with 'graph' */
-    index_oid = find_usable_index_for_attr(ag_label, Anum_ag_label_graph);
+    /* 
+     * Find a usable index whose first key column is ag_label.graph 
+     * (Anum_ag_label_graph) 
+     */
+    index_oid = find_usable_btree_index_for_attr(ag_label, Anum_ag_label_graph);
 
     if (OidIsValid(index_oid))
     {

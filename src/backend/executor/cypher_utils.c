@@ -241,7 +241,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 
     rel = table_open(label->relation, RowExclusiveLock);
 
-    index_oid = find_usable_index_for_attr(rel, 1);
+    index_oid = find_usable_btree_index_for_attr(rel, 1);
 
     if (OidIsValid(index_oid))
     {
@@ -250,7 +250,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 
         slot = table_slot_create(rel, NULL);
 
-        index_rel = index_open(index_oid, RowExclusiveLock);
+        index_rel = index_open(index_oid, AccessShareLock);
 
         index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
         index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
@@ -261,7 +261,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
         } 
 
         index_endscan(index_scan_desc);
-        index_close(index_rel, RowExclusiveLock);
+        index_close(index_rel, AccessShareLock);
         ExecDropSingleTupleTableSlot(slot);
     } 
     else

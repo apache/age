@@ -464,7 +464,7 @@ static void process_delete_list(CustomScanState *node)
 
         if (!found_idx_entry)
         {
-            idx_entry->index_oid = find_usable_index_for_attr(rel, id_attr_num);
+            idx_entry->index_oid = find_usable_btree_index_for_attr(rel, id_attr_num);
         }
 
         index_oid = idx_entry->index_oid;
@@ -719,8 +719,8 @@ static void check_for_connected_edges(CustomScanState *node)
         }
 
         /* Look for indexes on start_id and end_id columns. */
-        start_index_oid = find_usable_index_for_attr(rel, Anum_ag_label_edge_table_start_id);
-        end_index_oid = find_usable_index_for_attr(rel, Anum_ag_label_edge_table_end_id);
+        start_index_oid = find_usable_btree_index_for_attr(rel, Anum_ag_label_edge_table_start_id);
+        end_index_oid = find_usable_btree_index_for_attr(rel, Anum_ag_label_edge_table_end_id);
 
         if (OidIsValid(start_index_oid) && OidIsValid(end_index_oid))
         {

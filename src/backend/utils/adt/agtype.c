@@ -38,6 +38,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_am_d.h"
 #include "catalog/pg_collation_d.h"
 #include "catalog/pg_operator_d.h"
 #include "funcapi.h"
@@ -5652,7 +5653,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
 
-    index_oid = find_usable_index_for_attr(graph_vertex_label, 1);
+    index_oid = find_usable_btree_index_for_attr(graph_vertex_label, 1);
 
     if (OidIsValid(index_oid))
     {
@@ -5683,8 +5684,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     else
     {
         /* fallback to sequential scan */
-        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_OIDEQ,
-                    Int64GetDatum(graphid));
+        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                    GRAPHID_GET_DATUM(graphid));
 
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
@@ -12069,7 +12070,7 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
  * Helper function to find a valid index for a specific attribute.
  * Returns the OID of the index, or InvalidOid if none is found.
  */
-Oid find_usable_index_for_attr(Relation rel, AttrNumber attnum)
+Oid find_usable_btree_index_for_attr(Relation rel, AttrNumber attnum)
 {
 List *index_list = RelationGetIndexList(rel);
     ListCell *ilc;
@@ -12082,7 +12083,9 @@ List *index_list = RelationGetIndexList(rel);
 
         if (curr_idx_rel->rd_index->indisvalid &&
             curr_idx_rel->rd_index->indnatts >= 1 &&
-            curr_idx_rel->rd_index->indkey.values[0] == attnum) 
+            curr_idx_rel->rd_index->indkey.values[0] == attnum &&
+            curr_idx_rel->rd_rel->relam == BTREE_AM_OID &&
+            RelationGetIndexPredicate(curr_idx_rel) == NIL) 
         {
             index_oid = curr_idx_oid;
             index_close(curr_idx_rel, AccessShareLock);
