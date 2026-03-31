@@ -208,6 +208,8 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     HeapTuple tuple;
     Relation rel;
     bool result = true;
+    TupleTableSlot *slot;
+    Oid index_oid = InvalidOid;
     CommandId saved_curcid;
 
     /*
@@ -238,20 +240,47 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
                                       GetCurrentCommandId(false));
 
     rel = table_open(label->relation, RowExclusiveLock);
-    scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
 
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
+    index_oid = find_usable_btree_index_for_attr(rel, 1);
 
-    /*
-     * If a single tuple was returned, the tuple is still valid, otherwise'
-     * set to false.
-     */
-    if (!HeapTupleIsValid(tuple))
+    if (OidIsValid(index_oid))
     {
-        result = false;
+        IndexScanDesc index_scan_desc;
+        Relation index_rel;
+
+        slot = table_slot_create(rel, NULL);
+
+        index_rel = index_open(index_oid, AccessShareLock);
+
+        index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
+
+        if (!index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        {
+            result = false;
+        } 
+
+        index_endscan(index_scan_desc);
+        index_close(index_rel, AccessShareLock);
+        ExecDropSingleTupleTableSlot(slot);
+    } 
+    else
+    {        
+        scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
+        tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+        /*
+        * If a single tuple was returned, the tuple is still valid, otherwise'
+        * set to false.
+        */
+        if (!HeapTupleIsValid(tuple))
+        {
+            result = false;
+        }
+
+        table_endscan(scan_desc);
     }
 
-    table_endscan(scan_desc);
     table_close(rel, RowExclusiveLock);
 
     /* Restore the original curcid */

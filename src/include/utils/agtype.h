@@ -593,6 +593,7 @@ bool is_numeric_result(agtype_value *lhs, agtype_value *rhs);
 void copy_agtype_value(agtype_parse_state* pstate,
                        agtype_value* original_agtype_value,
                        agtype_value **copied_agtype_value, bool is_top_level);
+Oid find_usable_btree_index_for_attr(Relation rel, AttrNumber attnum);
 
 /* agtype.c support functions */
 /*
