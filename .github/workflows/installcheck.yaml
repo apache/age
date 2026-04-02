@@ -42,6 +42,8 @@ jobs:
           make PG_CONFIG=$HOME/pg18/bin/pg_config install -j$(nproc) > /dev/null
 
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 75
 
       - name: Build AGE
         id: build
