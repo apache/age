@@ -14,7 +14,7 @@
 # under the License.
 import json
 
-from age.models import Vertex
+from age.models import Vertex, Edge, Path
 import unittest
 import decimal
 import age
@@ -26,6 +26,78 @@ TEST_DB = "postgres"
 TEST_USER = "postgres"
 TEST_PASSWORD = "agens"
 TEST_GRAPH_NAME = "test_graph"
+
+
+class TestModelToDict(unittest.TestCase):
+    """Unit tests for Vertex/Edge/Path to_dict() — no DB required."""
+
+    def test_vertex_to_dict(self):
+        v = Vertex(id=123, label="Person", properties={"name": "Alice", "age": 30})
+        d = v.to_dict()
+        self.assertEqual(d["id"], 123)
+        self.assertEqual(d["label"], "Person")
+        self.assertEqual(d["properties"], {"name": "Alice", "age": 30})
+        # Verify it's a plain dict (JSON-serializable)
+        json_str = json.dumps(d)
+        self.assertIn("Alice", json_str)
+
+    def test_vertex_to_dict_empty_properties(self):
+        v = Vertex(id=1, label="Empty", properties=None)
+        d = v.to_dict()
+        self.assertEqual(d["properties"], {})
+
+    def test_edge_to_dict(self):
+        e = Edge(id=456, label="KNOWS", properties={"since": 2020})
+        e.start_id = 123
+        e.end_id = 789
+        d = e.to_dict()
+        self.assertEqual(d["id"], 456)
+        self.assertEqual(d["label"], "KNOWS")
+        self.assertEqual(d["start_id"], 123)
+        self.assertEqual(d["end_id"], 789)
+        self.assertEqual(d["properties"], {"since": 2020})
+        json_str = json.dumps(d)
+        self.assertIn("KNOWS", json_str)
+
+    def test_path_to_dict(self):
+        v1 = Vertex(id=1, label="A", properties={"name": "start"})
+        e = Edge(id=10, label="r", properties={"w": 1})
+        e.start_id = 1
+        e.end_id = 2
+        v2 = Vertex(id=2, label="B", properties={"name": "end"})
+        p = Path([v1, e, v2])
+        d = p.to_dict()
+        self.assertEqual(len(d), 3)
+        self.assertEqual(d[0]["label"], "A")
+        self.assertEqual(d[1]["label"], "r")
+        self.assertEqual(d[1]["start_id"], 1)
+        self.assertEqual(d[2]["label"], "B")
+        # Verify the whole path is JSON-serializable
+        json_str = json.dumps(d)
+        self.assertIn("start", json_str)
+
+    def test_vertex_to_dict_is_plain_dict(self):
+        """to_dict() returns standard dict, not a model object."""
+        v = Vertex(id=1, label="X", properties={"k": "v"})
+        d = v.to_dict()
+        self.assertIsInstance(d, dict)
+        self.assertIsInstance(d["properties"], dict)
+
+
+class TestPublicImports(unittest.TestCase):
+    """Verify that public API symbols are importable without type: ignore."""
+
+    def test_import_configure_connection(self):
+        from age import configure_connection
+        self.assertTrue(callable(configure_connection))
+
+    def test_import_age_loader(self):
+        from age import AgeLoader
+        self.assertIsNotNone(AgeLoader)
+
+    def test_import_client_cursor(self):
+        from age import ClientCursor
+        self.assertIsNotNone(ClientCursor)
 
 
 class TestAgeBasic(unittest.TestCase):
