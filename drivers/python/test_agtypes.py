@@ -233,8 +233,10 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(result[4], [1, 2, 3])
         self.assertEqual(result[5], {"key": "val"})
 
-    def test_malformed_vertex_does_not_raise_attribute_error(self):
-        """Issue #2367: Malformed agtype must never raise AttributeError."""
+    def test_malformed_vertex_raises_agtypeerror_or_recovers(self):
+        """Issue #2367: Malformed agtype must raise AGTypeError or recover gracefully."""
+        from age.exceptions import AGTypeError
+
         malformed_inputs = [
             '{"id": 1, "label":}::vertex',
             '{"id": 1, "label": "X", "properties": {}::vertex',
@@ -243,14 +245,22 @@ class TestAgtype(unittest.TestCase):
         ]
         for inp in malformed_inputs:
             try:
-                self.parse(inp)
+                result = self.parse(inp)
+                # If the parser recovered, the result should be a usable
+                # value (None, dict, Vertex, etc.) — not a crash.
+                self.assertNotIsInstance(result, type(NotImplemented))
+            except AGTypeError:
+                pass  # expected
             except AttributeError:
-                self.fail(f"Malformed input raised AttributeError (should be AGTypeError or recover): {inp}")
-            except Exception:
-                pass
+                self.fail(
+                    f"Malformed input raised AttributeError instead of "
+                    f"AGTypeError: {inp}"
+                )
 
-    def test_truncated_agtype_does_not_crash(self):
-        """Issue #2367: Truncated agtype must not raise AttributeError."""
+    def test_truncated_agtype_raises_agtypeerror(self):
+        """Issue #2367: Truncated agtype must raise AGTypeError, never AttributeError."""
+        from age.exceptions import AGTypeError
+
         truncated_inputs = [
             '{"id": 1, "label": "X", "properties": {"name": "te',
             '{"id": 1, "label": "X"',
@@ -258,11 +268,16 @@ class TestAgtype(unittest.TestCase):
         ]
         for inp in truncated_inputs:
             try:
-                self.parse(inp)
+                result = self.parse(inp)
+                # Recovery is acceptable for truncated input
+                self.assertIsNotNone(result)
+            except AGTypeError:
+                pass  # expected
             except AttributeError:
-                self.fail(f"Truncated input raised AttributeError (should be AGTypeError): {inp}")
-            except Exception:
-                pass
+                self.fail(
+                    f"Truncated input raised AttributeError instead of "
+                    f"AGTypeError: {inp}"
+                )
 
 
 if __name__ == '__main__':

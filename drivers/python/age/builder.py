@@ -119,11 +119,10 @@ class ResultVisitor(AgtypeVisitor):
         text = ctx.getText()
         c = ctx.getChild(0)
         if c is None or not hasattr(c, 'symbol') or c.symbol is None:
-            # Fallback: try to parse the text directly
-            try:
-                return float(text)
-            except (ValueError, TypeError):
-                raise ValueError("Unknown float expression: " + str(text))
+            raise AGTypeError(
+                str(text),
+                "Malformed float literal: missing or invalid child node"
+            )
         tp = c.symbol.type
         if tp == AgtypeParser.RegularFloat:
             return float(text)
@@ -163,6 +162,9 @@ class ResultVisitor(AgtypeVisitor):
                 namVal = self.visitPair(c)
                 name = namVal[0]
                 valCtx = namVal[1]
+                # visitPair() raises AGTypeError when the value node is
+                # missing, so valCtx should never be None here.  The
+                # guard is kept as a defensive fallback only.
                 if valCtx is not None:
                     val = valCtx.accept(self) 
                     obj[name] = val
@@ -193,6 +195,11 @@ class ResultVisitor(AgtypeVisitor):
         return li
 
     def handleAnnotatedValue(self, anno:str, ctx:ParserRuleContext):
+        # Each branch below constructs a model object (Vertex, Edge, Path)
+        # and populates it from the parsed dict/list.  If a type check
+        # fails (e.g. the parsed value is not a dict), AGTypeError is
+        # raised and the partially-constructed object is discarded — no
+        # cleanup is needed because the caller propagates the exception.
         if anno == "numeric":
             return Decimal(ctx.getText())
         elif anno == "vertex":

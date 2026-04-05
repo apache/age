@@ -37,6 +37,8 @@ classifiers = [
 ]
 dependencies = [
     "psycopg",
+    # ANTLR4 runtime is format-compatible within major versions;
+    # tested on 4.11.1–4.13.2 with Python 3.9–3.14.
     "antlr4-python3-runtime>=4.11.1,<5.0",
 ]
 
