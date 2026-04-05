@@ -16,6 +16,7 @@ import json
 
 from age.models import Vertex, Edge, Path
 import unittest
+import unittest.mock
 import decimal
 import age
 import argparse
@@ -98,6 +99,78 @@ class TestPublicImports(unittest.TestCase):
     def test_import_client_cursor(self):
         from age import ClientCursor
         self.assertIsNotNone(ClientCursor)
+
+
+class TestConfigureConnection(unittest.TestCase):
+    """Unit tests for configure_connection() — no DB required."""
+
+    def _make_mock_conn(self):
+        mock_conn = unittest.mock.MagicMock()
+        mock_cursor = unittest.mock.MagicMock()
+        mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
+        mock_conn.adapters = unittest.mock.MagicMock()
+        mock_type_info = unittest.mock.MagicMock()
+        mock_type_info.oid = 1
+        mock_type_info.array_oid = 2
+        return mock_conn, mock_cursor, mock_type_info
+
+    def test_default_does_not_load(self):
+        """By default, configure_connection should NOT execute LOAD."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        executed = [str(c) for c in mock_cursor.execute.call_args_list]
+        for stmt in executed:
+            self.assertNotIn("LOAD", stmt, f"LOAD should not be called by default, got: {stmt}")
+
+    def test_load_true_executes_load(self):
+        """When load=True, LOAD 'age' must be executed."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn, load=True)
+        executed = [str(c) for c in mock_cursor.execute.call_args_list]
+        load_calls = [s for s in executed if "LOAD" in s and "age" in s]
+        self.assertTrue(len(load_calls) > 0, "LOAD should be called when load=True")
+
+    def test_load_from_plugins(self):
+        """When load=True and load_from_plugins=True, use plugins path."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn, load=True, load_from_plugins=True)
+        executed = [str(c) for c in mock_cursor.execute.call_args_list]
+        plugins_calls = [s for s in executed if "plugins" in s]
+        self.assertTrue(len(plugins_calls) > 0, "LOAD from plugins path should be called")
+
+    def test_always_sets_search_path(self):
+        """search_path must always be set regardless of load parameter."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        executed = [str(c) for c in mock_cursor.execute.call_args_list]
+        search_path_calls = [s for s in executed if "search_path" in s]
+        self.assertTrue(len(search_path_calls) > 0, "search_path should always be set")
+
+    def test_registers_agtype_adapters(self):
+        """AgeLoader must be registered for agtype OIDs."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        mock_conn.adapters.register_loader.assert_any_call(1, age.age.AgeLoader)
+        mock_conn.adapters.register_loader.assert_any_call(2, age.age.AgeLoader)
+
+    def test_graph_name_triggers_check(self):
+        """When graph_name is provided, checkGraphCreated must be called."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated") as mock_check:
+            age.age.configure_connection(mock_conn, graph_name="my_graph")
+        mock_check.assert_called_once_with(mock_conn, "my_graph")
 
 
 class TestAgeBasic(unittest.TestCase):
