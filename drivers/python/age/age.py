@@ -138,6 +138,13 @@ class AgeLoader(psycopg.adapt.Loader):
 
 
 def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=False, skip_load:bool=False):
+    if skip_load and load_from_plugins:
+        raise ValueError(
+            "skip_load=True and load_from_plugins=True are contradictory. "
+            "Set skip_load=False to load the extension from the plugins path, "
+            "or remove load_from_plugins to skip loading entirely."
+        )
+
     with conn.cursor() as cursor:
         if not skip_load:
             if load_from_plugins:

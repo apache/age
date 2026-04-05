@@ -32,85 +32,71 @@ TEST_GRAPH_NAME = "test_graph"
 class TestSetUpAge(unittest.TestCase):
     """Unit tests for setUpAge() skip_load parameter — no DB required."""
 
-    def test_skip_load_true_does_not_execute_load(self):
-        """When skip_load=True, LOAD 'age' must not be executed."""
+    def _make_mock_conn(self):
         mock_conn = unittest.mock.MagicMock()
         mock_cursor = unittest.mock.MagicMock()
         mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
         mock_conn.adapters = unittest.mock.MagicMock()
-
         mock_type_info = unittest.mock.MagicMock()
         mock_type_info.oid = 1
         mock_type_info.array_oid = 2
+        return mock_conn, mock_cursor, mock_type_info
 
+    def test_skip_load_true_does_not_execute_load(self):
+        """When skip_load=True, LOAD 'age' must not be executed."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", skip_load=True)
-
-        executed_stmts = [str(call) for call in mock_cursor.execute.call_args_list]
-        for stmt in executed_stmts:
-            self.assertNotIn("LOAD", stmt, f"LOAD should not be called when skip_load=True, got: {stmt}")
+        mock_cursor.execute.assert_called_once_with(
+            "SET search_path = ag_catalog, '$user', public;"
+        )
 
     def test_skip_load_false_executes_load(self):
         """When skip_load=False (default), LOAD 'age' must be executed."""
-        mock_conn = unittest.mock.MagicMock()
-        mock_cursor = unittest.mock.MagicMock()
-        mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
-        mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
-        mock_conn.adapters = unittest.mock.MagicMock()
-
-        mock_type_info = unittest.mock.MagicMock()
-        mock_type_info.oid = 1
-        mock_type_info.array_oid = 2
-
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", skip_load=False)
-
-        executed_stmts = [str(call) for call in mock_cursor.execute.call_args_list]
-        load_calls = [s for s in executed_stmts if "LOAD" in s]
-        self.assertTrue(len(load_calls) > 0, "LOAD should be called when skip_load=False")
+        mock_cursor.execute.assert_any_call("LOAD 'age';")
 
     def test_skip_load_with_load_from_plugins(self):
         """When skip_load=False and load_from_plugins=True, LOAD from plugins path."""
-        mock_conn = unittest.mock.MagicMock()
-        mock_cursor = unittest.mock.MagicMock()
-        mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
-        mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
-        mock_conn.adapters = unittest.mock.MagicMock()
-
-        mock_type_info = unittest.mock.MagicMock()
-        mock_type_info.oid = 1
-        mock_type_info.array_oid = 2
-
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", load_from_plugins=True, skip_load=False)
-
-        executed_stmts = [str(call) for call in mock_cursor.execute.call_args_list]
-        plugins_calls = [s for s in executed_stmts if "plugins" in s]
-        self.assertTrue(len(plugins_calls) > 0, "LOAD from plugins path should be called")
+        mock_cursor.execute.assert_any_call("LOAD '$libdir/plugins/age';")
 
     def test_skip_load_true_still_sets_search_path(self):
         """When skip_load=True, search_path must still be set."""
-        mock_conn = unittest.mock.MagicMock()
-        mock_cursor = unittest.mock.MagicMock()
-        mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
-        mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
-        mock_conn.adapters = unittest.mock.MagicMock()
-
-        mock_type_info = unittest.mock.MagicMock()
-        mock_type_info.oid = 1
-        mock_type_info.array_oid = 2
-
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", skip_load=True)
+        mock_cursor.execute.assert_any_call(
+            "SET search_path = ag_catalog, '$user', public;"
+        )
 
-        executed_stmts = [str(call) for call in mock_cursor.execute.call_args_list]
-        search_path_calls = [s for s in executed_stmts if "search_path" in s]
-        self.assertTrue(len(search_path_calls) > 0, "search_path should be set even when skip_load=True")
+    def test_contradictory_skip_load_and_load_from_plugins_raises(self):
+        """skip_load=True + load_from_plugins=True must raise ValueError."""
+        mock_conn, _, _ = self._make_mock_conn()
+        with self.assertRaises(ValueError):
+            age.age.setUpAge(mock_conn, "test_graph", load_from_plugins=True, skip_load=True)
+
+    def test_connect_forwards_skip_load_to_setup(self):
+        """age.connect(skip_load=True) must forward skip_load through the full call chain."""
+        with unittest.mock.patch("age.age.psycopg.connect") as mock_psycopg, \
+             unittest.mock.patch("age.age.setUpAge") as mock_setup:
+            mock_psycopg.return_value = unittest.mock.MagicMock()
+            age.connect(dsn="host=localhost", graph="test_graph", skip_load=True)
+        mock_setup.assert_called_once()
+        _, kwargs = mock_setup.call_args
+        self.assertTrue(
+            kwargs.get("skip_load", False),
+            "skip_load must be forwarded from age.connect() to setUpAge()"
+        )
 
 
 class TestAgeBasic(unittest.TestCase):

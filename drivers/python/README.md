@@ -103,6 +103,13 @@ SET search_path = ag_catalog, "$user", public;
                    user='dbuser', password='strong_password',
                    dbname='postgres', skip_load=True, graph='graph_name')
   ```
+* **Connection pools:** If you manage connections externally (e.g. via ```psycopg_pool.ConnectionPool```),
+  use ```configure_connection()``` instead, which skips ```LOAD 'age'``` by default and is designed for
+  per-connection setup callbacks:
+  ```python
+  from age import configure_connection
+  configure_connection(conn, graph_name='graph_name')
+  ```
 
 ### License
 Apache-2.0 License
