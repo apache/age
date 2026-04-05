@@ -127,6 +127,112 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(vertexEnd.label,  "Person")
         self.assertEqual(vertexEnd["name"],  "Joe")
 
+    def test_vertex_large_array_properties(self):
+        """Issue #2367: Parser should handle vertices with large array properties."""
+        vertexExp = (
+            '{"id": 1125899906842625, "label": "TestNode", '
+            '"properties": {"name": "test", '
+            '"tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", '
+            '"tag8", "tag9", "tag10", "tag11", "tag12"]}}::vertex'
+        )
+        vertex = self.parse(vertexExp)
+        self.assertEqual(vertex.id, 1125899906842625)
+        self.assertEqual(vertex.label, "TestNode")
+        self.assertEqual(vertex["name"], "test")
+        self.assertEqual(len(vertex["tags"]), 12)
+        self.assertEqual(vertex["tags"][0], "tag1")
+        self.assertEqual(vertex["tags"][11], "tag12")
+
+    def test_vertex_special_characters_in_properties(self):
+        """Issue #2367: Parser should handle properties with special characters."""
+        vertexExp = (
+            '{"id": 1125899906842626, "label": "TestNode", '
+            '"properties": {"name": "test", '
+            '"description": "A long description with unicode chars"}}::vertex'
+        )
+        vertex = self.parse(vertexExp)
+        self.assertEqual(vertex.id, 1125899906842626)
+        self.assertEqual(vertex["name"], "test")
+        self.assertIn("unicode", vertex["description"])
+
+    def test_vertex_nested_properties(self):
+        """Issue #2367: Parser should handle deeply nested property structures."""
+        vertexExp = (
+            '{"id": 1125899906842627, "label": "TestNode", '
+            '"properties": {"name": "test", '
+            '"metadata": {"level1": {"level2": {"level3": "deep_value"}}}}}::vertex'
+        )
+        vertex = self.parse(vertexExp)
+        self.assertEqual(vertex.id, 1125899906842627)
+        self.assertEqual(vertex["name"], "test")
+        self.assertEqual(vertex["metadata"]["level1"]["level2"]["level3"], "deep_value")
+
+    def test_vertex_empty_properties(self):
+        """Parser should handle vertices with empty properties dict."""
+        vertexExp = '{"id": 1125899906842628, "label": "EmptyNode", "properties": {}}::vertex'
+        vertex = self.parse(vertexExp)
+        self.assertEqual(vertex.id, 1125899906842628)
+        self.assertEqual(vertex.label, "EmptyNode")
+        self.assertEqual(vertex.properties, {})
+
+    def test_vertex_null_property_values(self):
+        """Parser should handle vertices with null property values."""
+        vertexExp = (
+            '{"id": 1125899906842629, "label": "TestNode", '
+            '"properties": {"name": "test", "optional": null, "also_null": null}}::vertex'
+        )
+        vertex = self.parse(vertexExp)
+        self.assertEqual(vertex["name"], "test")
+        self.assertIsNone(vertex["optional"])
+        self.assertIsNone(vertex["also_null"])
+
+    def test_edge_with_complex_properties(self):
+        """Parser should handle edges with complex property structures."""
+        edgeExp = (
+            '{"id": 2533274790396577, "label": "HAS_RELATION", '
+            '"end_id": 1125899906842625, "start_id": 1125899906842626, '
+            '"properties": {"weight": 3, "tags": ["a", "b", "c"], "active": true}}::edge'
+        )
+        edge = self.parse(edgeExp)
+        self.assertEqual(edge.id, 2533274790396577)
+        self.assertEqual(edge.label, "HAS_RELATION")
+        self.assertEqual(edge.start_id, 1125899906842626)
+        self.assertEqual(edge.end_id, 1125899906842625)
+        self.assertEqual(edge["weight"], 3)
+        self.assertEqual(edge["tags"], ["a", "b", "c"])
+        self.assertEqual(edge["active"], True)
+
+    def test_path_with_multiple_edges(self):
+        """Parser should handle paths with multiple edges and complex properties."""
+        pathExp = (
+            '[{"id": 1, "label": "A", "properties": {"name": "start"}}::vertex, '
+            '{"id": 10, "label": "r1", "end_id": 2, "start_id": 1, "properties": {"w": 1}}::edge, '
+            '{"id": 2, "label": "B", "properties": {"name": "middle"}}::vertex, '
+            '{"id": 11, "label": "r2", "end_id": 3, "start_id": 2, "properties": {"w": 2}}::edge, '
+            '{"id": 3, "label": "C", "properties": {"name": "end"}}::vertex]::path'
+        )
+        path = self.parse(pathExp)
+        self.assertEqual(len(path), 5)
+        self.assertEqual(path[0]["name"], "start")
+        self.assertEqual(path[2]["name"], "middle")
+        self.assertEqual(path[4]["name"], "end")
+
+    def test_empty_input(self):
+        """Parser should handle empty/null input gracefully."""
+        self.assertIsNone(self.parse(''))
+        self.assertIsNone(self.parse(None))
+
+    def test_array_of_mixed_types(self):
+        """Parser should handle arrays with mixed types including nested arrays."""
+        arrStr = '["str", 42, true, null, [1, 2, 3], {"key": "val"}]'
+        result = self.parse(arrStr)
+        self.assertEqual(result[0], "str")
+        self.assertEqual(result[1], 42)
+        self.assertEqual(result[2], True)
+        self.assertIsNone(result[3])
+        self.assertEqual(result[4], [1, 2, 3])
+        self.assertEqual(result[5], {"key": "val"})
+
 
 if __name__ == '__main__':
     unittest.main()
