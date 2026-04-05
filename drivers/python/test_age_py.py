@@ -263,9 +263,9 @@ class TestConfigureConnection(unittest.TestCase):
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn)
-        executed = [str(c) for c in mock_cursor.execute.call_args_list]
-        for stmt in executed:
-            self.assertNotIn("LOAD", stmt, f"LOAD should not be called by default, got: {stmt}")
+        mock_cursor.execute.assert_called_once_with(
+            "SET search_path = ag_catalog, '$user', public;"
+        )
 
     def test_load_true_executes_load(self):
         """When load=True, LOAD 'age' must be executed."""
@@ -273,9 +273,7 @@ class TestConfigureConnection(unittest.TestCase):
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn, load=True)
-        executed = [str(c) for c in mock_cursor.execute.call_args_list]
-        load_calls = [s for s in executed if "LOAD" in s and "age" in s]
-        self.assertTrue(len(load_calls) > 0, "LOAD should be called when load=True")
+        mock_cursor.execute.assert_any_call("LOAD 'age';")
 
     def test_load_from_plugins(self):
         """When load=True and load_from_plugins=True, use plugins path."""
@@ -283,9 +281,13 @@ class TestConfigureConnection(unittest.TestCase):
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn, load=True, load_from_plugins=True)
-        executed = [str(c) for c in mock_cursor.execute.call_args_list]
-        plugins_calls = [s for s in executed if "plugins" in s]
-        self.assertTrue(len(plugins_calls) > 0, "LOAD from plugins path should be called")
+        mock_cursor.execute.assert_any_call("LOAD '$libdir/plugins/age';")
+
+    def test_load_from_plugins_without_load_raises(self):
+        """load_from_plugins=True without load=True must raise ValueError."""
+        mock_conn, _, _ = self._make_mock_conn()
+        with self.assertRaises(ValueError):
+            age.age.configure_connection(mock_conn, load_from_plugins=True)
 
     def test_always_sets_search_path(self):
         """search_path must always be set regardless of load parameter."""
@@ -293,9 +295,9 @@ class TestConfigureConnection(unittest.TestCase):
         with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn)
-        executed = [str(c) for c in mock_cursor.execute.call_args_list]
-        search_path_calls = [s for s in executed if "search_path" in s]
-        self.assertTrue(len(search_path_calls) > 0, "search_path should always be set")
+        mock_cursor.execute.assert_any_call(
+            "SET search_path = ag_catalog, '$user', public;"
+        )
 
     def test_registers_agtype_adapters(self):
         """AgeLoader must be registered for agtype OIDs."""
@@ -313,6 +315,14 @@ class TestConfigureConnection(unittest.TestCase):
              unittest.mock.patch("age.age.checkGraphCreated") as mock_check:
             age.age.configure_connection(mock_conn, graph_name="my_graph")
         mock_check.assert_called_once_with(mock_conn, "my_graph")
+
+    def test_age_not_set_when_type_info_is_none(self):
+        """AgeNotSet must be raised when TypeInfo.fetch returns None."""
+        from age.exceptions import AgeNotSet
+        mock_conn, _, _ = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=None):
+            with self.assertRaises(AgeNotSet):
+                age.age.configure_connection(mock_conn)
 
 
 class TestAgeBasic(unittest.TestCase):

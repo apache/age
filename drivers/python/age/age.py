@@ -171,7 +171,12 @@ def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=Fals
             checkGraphCreated(conn, graphName)
 
 
-def configure_connection(conn, graph_name=None, load=False, load_from_plugins=False):
+def configure_connection(
+    conn: psycopg.connection,
+    graph_name: str | None = None,
+    load: bool = False,
+    load_from_plugins: bool = False,
+) -> None:
     """Register AGE agtype adapters on an existing connection.
 
     This enables use of AGE with externally-managed connections, such as
@@ -194,7 +199,17 @@ def configure_connection(conn, graph_name=None, load=False, load_from_plugins=Fa
             already loaded.
         load_from_plugins: If True (and ``load=True``), use
             ``LOAD '$libdir/plugins/age'`` instead of ``LOAD 'age'``.
+
+    Raises:
+        ValueError: If ``load_from_plugins=True`` but ``load=False``.
+        AgeNotSet: If the agtype type is not found in the database.
     """
+    if load_from_plugins and not load:
+        raise ValueError(
+            "load_from_plugins=True requires load=True. "
+            "Set load=True to enable extension loading."
+        )
+
     with conn.cursor() as cursor:
         if load:
             if load_from_plugins:
@@ -204,7 +219,7 @@ def configure_connection(conn, graph_name=None, load=False, load_from_plugins=Fa
 
         cursor.execute("SET search_path = ag_catalog, '$user', public;")
 
-    ag_info = TypeInfo.fetch(conn, 'agtype')
+        ag_info = TypeInfo.fetch(conn, 'agtype')
 
     if not ag_info:
         raise AgeNotSet(

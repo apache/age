@@ -119,8 +119,10 @@ class Path(AGObj):
         return buf.getvalue()
 
     def to_dict(self) -> list:
+        # Non-AGObj elements (e.g. raw dicts/strings from malformed paths)
+        # are included as-is via str() to guarantee JSON-serializable output.
         return [
-            e.to_dict() if isinstance(e, AGObj) else e
+            e.to_dict() if isinstance(e, AGObj) else str(e)
             for e in self.entities
         ]
 
@@ -153,6 +155,11 @@ class Vertex(AGObj):
         return self.toString()
 
     def to_dict(self) -> dict:
+        """Return a plain dict suitable for JSON serialization.
+
+        Properties are shallow-copied; nested mutable values will share
+        references with the original Vertex.
+        """
         return {
             "id": self.id,
             "label": self.label,
@@ -200,6 +207,11 @@ class Edge(AGObj):
         return self.toString()
 
     def to_dict(self) -> dict:
+        """Return a plain dict suitable for JSON serialization.
+
+        Properties are shallow-copied; nested mutable values will share
+        references with the original Edge.
+        """
         return {
             "id": self.id,
             "label": self.label,
