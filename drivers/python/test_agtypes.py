@@ -233,6 +233,37 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(result[4], [1, 2, 3])
         self.assertEqual(result[5], {"key": "val"})
 
+    def test_malformed_vertex_does_not_raise_attribute_error(self):
+        """Issue #2367: Malformed agtype must never raise AttributeError."""
+        malformed_inputs = [
+            '{"id": 1, "label":}::vertex',
+            '{"id": 1, "label": "X", "properties": {}::vertex',
+            '{::vertex',
+            '{"id": 1, "label": "X", "properties": {"key":}}::vertex',
+        ]
+        for inp in malformed_inputs:
+            try:
+                self.parse(inp)
+            except AttributeError:
+                self.fail(f"Malformed input raised AttributeError (should be AGTypeError or recover): {inp}")
+            except Exception:
+                pass
+
+    def test_truncated_agtype_does_not_crash(self):
+        """Issue #2367: Truncated agtype must not raise AttributeError."""
+        truncated_inputs = [
+            '{"id": 1, "label": "X", "properties": {"name": "te',
+            '{"id": 1, "label": "X"',
+            '[{"id": 1}::vertex, {"id": 2',
+        ]
+        for inp in truncated_inputs:
+            try:
+                self.parse(inp)
+            except AttributeError:
+                self.fail(f"Truncated input raised AttributeError (should be AGTypeError): {inp}")
+            except Exception:
+                pass
+
 
 if __name__ == '__main__':
     unittest.main()
