@@ -25,13 +25,13 @@ def version():
 
 
 def connect(dsn=None, graph=None, connection_factory=None, cursor_factory=ClientCursor, load_from_plugins=False,
-            **kwargs):
+            skip_load=False, **kwargs):
 
     dsn = conninfo.make_conninfo('' if dsn is None else dsn, **kwargs)
 
     ag = Age()
     ag.connect(dsn=dsn, graph=graph, connection_factory=connection_factory, cursor_factory=cursor_factory,
-               load_from_plugins=load_from_plugins, **kwargs)
+               load_from_plugins=load_from_plugins, skip_load=skip_load, **kwargs)
     return ag
 
 # Dummy ResultHandler
