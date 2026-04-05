@@ -16,6 +16,7 @@
 import psycopg.conninfo as conninfo
 from . import age
 from .age import *
+from .age import AgeLoader, ClientCursor, configure_connection
 from .models import *
 from .builder import ResultHandler, DummyResultHandler, parseAgeValue, newResultHandler
 from . import VERSION 

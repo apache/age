@@ -162,6 +162,56 @@ def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=Fals
         if graphName != None:
             checkGraphCreated(conn, graphName)
 
+
+def configure_connection(conn, graph_name=None, load=False, load_from_plugins=False):
+    """Register AGE agtype adapters on an existing connection.
+
+    This enables use of AGE with externally-managed connections, such as
+    those from psycopg_pool.ConnectionPool.  By default the function does
+    **not** execute ``LOAD 'age'``, making it safe for managed PostgreSQL
+    services (Azure, AWS RDS) where the extension is pre-loaded via
+    ``shared_preload_libraries``.
+
+    Performs:
+    - ``SET search_path`` to include ``ag_catalog``
+    - Fetches agtype OIDs and registers ``AgeLoader``
+    - Optionally loads the AGE extension (``load=True``)
+    - Optionally checks/creates the graph
+
+    Args:
+        conn: An existing psycopg connection.
+        graph_name: Optional graph name to check/create.
+        load: If True, execute ``LOAD 'age'`` (or the plugins path).
+            Default False — suitable for environments where AGE is
+            already loaded.
+        load_from_plugins: If True (and ``load=True``), use
+            ``LOAD '$libdir/plugins/age'`` instead of ``LOAD 'age'``.
+    """
+    with conn.cursor() as cursor:
+        if load:
+            if load_from_plugins:
+                cursor.execute("LOAD '$libdir/plugins/age';")
+            else:
+                cursor.execute("LOAD 'age';")
+
+        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+
+    ag_info = TypeInfo.fetch(conn, 'agtype')
+
+    if not ag_info:
+        raise AgeNotSet(
+            "AGE agtype type not found. Ensure the AGE extension is "
+            "installed and loaded in the current database. "
+            "Run CREATE EXTENSION age; first."
+        )
+
+    conn.adapters.register_loader(ag_info.oid, AgeLoader)
+    conn.adapters.register_loader(ag_info.array_oid, AgeLoader)
+
+    if graph_name is not None:
+        checkGraphCreated(conn, graph_name)
+
+
 # Create the graph, if it does not exist
 def checkGraphCreated(conn:psycopg.connection, graphName:str):
     validate_graph_name(graphName)
