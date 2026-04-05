@@ -170,6 +170,43 @@ def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=Fals
         if graphName != None:
             checkGraphCreated(conn, graphName)
 
+
+def configure_connection(conn, graph_name=None, skip_load=False):
+    """Register AGE agtype adapters on an existing connection.
+
+    This enables use of AGE with externally-managed connections, such as
+    those from psycopg_pool.ConnectionPool. Unlike setUpAge(), this
+    function does not call LOAD 'age' by default, making it suitable for
+    managed PostgreSQL services where LOAD is restricted.
+
+    Args:
+        conn: An existing psycopg connection.
+        graph_name: Optional graph name to check/create.
+        skip_load: If False (default), skip LOAD 'age'. Set to True to
+            include the LOAD command (equivalent to setUpAge behavior).
+    """
+    with conn.cursor() as cursor:
+        if not skip_load:
+            cursor.execute("LOAD 'age';")
+
+        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+
+    ag_info = TypeInfo.fetch(conn, 'agtype')
+
+    if not ag_info:
+        raise AgeNotSet(
+            "AGE agtype type not found. Ensure the AGE extension is "
+            "installed and loaded in the current database. "
+            "Run CREATE EXTENSION age; first."
+        )
+
+    conn.adapters.register_loader(ag_info.oid, AgeLoader)
+    conn.adapters.register_loader(ag_info.array_oid, AgeLoader)
+
+    if graph_name is not None:
+        checkGraphCreated(conn, graph_name)
+
+
 # Create the graph, if it does not exist
 def checkGraphCreated(conn:psycopg.connection, graphName:str):
     validate_graph_name(graphName)

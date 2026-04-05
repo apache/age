@@ -118,6 +118,12 @@ class Path(AGObj):
 
         return buf.getvalue()
 
+    def to_dict(self) -> list:
+        return [
+            e.to_dict() if isinstance(e, AGObj) else e
+            for e in self.entities
+        ]
+
 
     
 
@@ -145,6 +151,13 @@ class Vertex(AGObj):
 
     def __repr__(self) -> str:
         return self.toString()
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "properties": dict(self.properties) if self.properties else {},
+        }
 
     def toString(self) -> str: 
         return nodeToString(self)
@@ -185,6 +198,15 @@ class Edge(AGObj):
 
     def __repr__(self) -> str:
         return self.toString()
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "start_id": self.start_id,
+            "end_id": self.end_id,
+            "properties": dict(self.properties) if self.properties else {},
+        }
 
     def extraStrFormat(node, buf):
         if node.start_id != None:
