@@ -217,9 +217,10 @@ def _validate_column(col: str) -> str:
         validate_identifier(name, "Column name")
         validate_identifier(type_name, "Column type")
         # Only the column name is double-quoted.  The type name is left
-        # unquoted because PostgreSQL type names in column definitions
-        # are case-insensitive identifiers; double-quoting them would
-        # force exact-case matching and break user-defined type lookup.
+        # unquoted so PostgreSQL applies its default identifier folding
+        # for type names in column definitions.  Double-quoting would
+        # make the type name case-sensitive and could change type
+        # resolution in surprising ways for user-defined types.
         return f'"{name}" {type_name}'
     else:
         validate_identifier(col, "Column name")

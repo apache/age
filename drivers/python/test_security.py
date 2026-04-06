@@ -167,10 +167,10 @@ class TestColumnValidation(unittest.TestCase):
     """Test _validate_column prevents injection through column specs."""
 
     def test_plain_column_name(self):
-        self.assertEqual(_validate_column('v'), 'v agtype')
+        self.assertEqual(_validate_column('v'), '"v" agtype')
 
     def test_column_with_type(self):
-        self.assertEqual(_validate_column('n agtype'), 'n agtype')
+        self.assertEqual(_validate_column('n agtype'), '"n" agtype')
 
     def test_empty_column(self):
         self.assertEqual(_validate_column(''), '')
@@ -198,20 +198,20 @@ class TestBuildCypher(unittest.TestCase):
 
     def test_default_column(self):
         result = buildCypher('test_graph', 'MATCH (n) RETURN n', None)
-        self.assertIn('v agtype', result)
+        self.assertIn('"v" agtype', result)
 
     def test_single_column(self):
         result = buildCypher('test_graph', 'MATCH (n) RETURN n', ['n'])
-        self.assertIn('n agtype', result)
+        self.assertIn('"n" agtype', result)
 
     def test_typed_column(self):
         result = buildCypher('test_graph', 'MATCH (n) RETURN n', ['n agtype'])
-        self.assertIn('n agtype', result)
+        self.assertIn('"n" agtype', result)
 
     def test_multiple_columns(self):
         result = buildCypher('test_graph', 'MATCH (n) RETURN n', ['a', 'b'])
-        self.assertIn('a agtype', result)
-        self.assertIn('b agtype', result)
+        self.assertIn('"a" agtype', result)
+        self.assertIn('"b" agtype', result)
 
     def test_rejects_injection_in_column(self):
         with self.assertRaises(InvalidIdentifier):
