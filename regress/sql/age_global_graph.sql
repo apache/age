@@ -16,13 +16,13 @@ SELECT * FROM create_graph('ag_graph_3');
 SELECT * FROM cypher('ag_graph_3', $$ CREATE (v:vertex3) RETURN v  $$) AS (v agtype);
 
 -- load contexts using the vertex_stats command
-SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 
 --- loading undefined contexts
 --- should throw exception - graph "ag_graph_4" does not exist
-SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 
 --- delete with invalid parameter
 ---should return false
@@ -55,9 +55,9 @@ SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_graphs('ag_graph_4') 
 --
 
 -- load contexts again
-SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 
 -- delete all graph contexts
 -- should return true
@@ -81,14 +81,14 @@ SELECT * FROM cypher('ag_graph_1', $$ CREATE (n), (m) $$) as (v agtype);
 SELECT * FROM cypher('ag_graph_2', $$ CREATE (:Person) $$) as (v agtype);
 
 ---adding edges between nodes
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (a:Person), (b:Person) WHERE a.name = 'A' AND b.name = 'B' CREATE (a)-[e:RELTYPE]->(b) RETURN e $$) as (e agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (a:Person), (b:Person) WHERE a.name = 'A' AND b.name = 'B' CREATE (a)-[e:RELTYPE]->(b) RETURN e ORDER BY id(e) $$) as (e agtype);
 
 --checking if vertex stats have been updated along with the new label
 --should return 3 vertices
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) ORDER BY id(n) $$) AS (result agtype);
 
 --should return 1 vertice and 1 label
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (a) RETURN vertex_stats(a) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (a) RETURN vertex_stats(a) ORDER BY id(a) $$) AS (result agtype);
 
 --
 -- graph_stats command
@@ -109,9 +109,9 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[]->(v) SET u.id = id(u)
                                                         SET v.id = id(v)
                                                         SET u.name = 'u'
                                                         SET v.name = 'v'
-                                      RETURN u,v $$) AS (u agtype, v agtype);
+                                      RETURN u,v ORDER BY id(u), id(v) $$) AS (u agtype, v agtype);
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[]->(v) MERGE (v)-[:stalks]->(u) $$) AS (result agtype);
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v ORDER BY id(e) $$) AS (u agtype, e agtype, v agtype);
 -- what is there now?
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);
 -- remove some vertices
@@ -121,8 +121,25 @@ DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710662';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710664';
 SELECT * FROM ag_graph_1._ag_label_vertex;
 SELECT * FROM ag_graph_1._ag_label_edge;
--- there should be warning messages
+-- The graph_stats query below will produce warnings for the dangling edges
+-- created by the DELETE commands above. The warnings appear in nondeterministic
+-- order because they come from iterating edge label tables (knows, stalks),
+-- so we suppress them with client_min_messages. Without suppression, the
+-- output would include these warnings (in some order):
+--
+-- WARNING:  edge: [id: 1125899906842626, start: 281474976710661, end: 281474976710662, label: knows] start and end vertices not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1125899906842627, start: 281474976710663, end: 281474976710664, label: knows] end vertex not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1407374883553282, start: 281474976710662, end: 281474976710661, label: stalks] start and end vertices not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1407374883553283, start: 281474976710664, end: 281474976710663, label: stalks] start vertex not found
+-- WARNING:  ignored malformed or dangling edge
+--
+-- The result row validates that graph_stats handled the dangling edges correctly.
+SET client_min_messages = error;
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);
+RESET client_min_messages;
 
 --drop graphs
 

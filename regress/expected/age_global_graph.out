@@ -44,19 +44,19 @@ SELECT * FROM cypher('ag_graph_3', $$ CREATE (v:vertex3) RETURN v  $$) AS (v agt
 (1 row)
 
 -- load contexts using the vertex_stats command
-SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex3", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex2", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
@@ -64,7 +64,7 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (r
 
 --- loading undefined contexts
 --- should throw exception - graph "ag_graph_4" does not exist
-SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 ERROR:  graph "ag_graph_4" does not exist
 LINE 1: SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN verte...
                              ^
@@ -130,19 +130,19 @@ LINE 1: SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_g...
 -- delete_GRAPH_global_contexts
 --
 -- load contexts again
-SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex3", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex2", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
@@ -193,14 +193,14 @@ SELECT * FROM cypher('ag_graph_2', $$ CREATE (:Person) $$) as (v agtype);
 (0 rows)
 
 ---adding edges between nodes
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (a:Person), (b:Person) WHERE a.name = 'A' AND b.name = 'B' CREATE (a)-[e:RELTYPE]->(b) RETURN e $$) as (e agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (a:Person), (b:Person) WHERE a.name = 'A' AND b.name = 'B' CREATE (a)-[e:RELTYPE]->(b) RETURN e ORDER BY id(e) $$) as (e agtype);
  e 
 ---
 (0 rows)
 
 --checking if vertex stats have been updated along with the new label
 --should return 3 vertices
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) ORDER BY id(n) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 281474976710657, "label": "", "in_degree": 0, "out_degree": 0, "self_loops": 0}
@@ -209,7 +209,7 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (n) RETURN vertex_stats(n) $$) AS (r
 (3 rows)
 
 --should return 1 vertice and 1 label
-SELECT * FROM cypher('ag_graph_2', $$ MATCH (a) RETURN vertex_stats(a) $$) AS (result agtype);
+SELECT * FROM cypher('ag_graph_2', $$ MATCH (a) RETURN vertex_stats(a) ORDER BY id(a) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
  {"id": 844424930131969, "label": "vertex2", "in_degree": 0, "out_degree": 0, "self_loops": 0}
@@ -271,7 +271,7 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[]->(v) SET u.id = id(u)
                                                         SET v.id = id(v)
                                                         SET u.name = 'u'
                                                         SET v.name = 'v'
-                                      RETURN u,v $$) AS (u agtype, v agtype);
+                                      RETURN u,v ORDER BY id(u), id(v) $$) AS (u agtype, v agtype);
                                                 u                                                 |                                                v                                                 
 --------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------
  {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex | {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex
@@ -285,17 +285,17 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[]->(v) MERGE (v)-[:stalks]->(u)
 --------
 (0 rows)
 
-SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v ORDER BY id(e) $$) AS (u agtype, e agtype, v agtype);
                                                 u                                                 |                                                              e                                                              |                                                v                                                 
 --------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------
- {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex | {"id": 1407374883553281, "label": "stalks", "end_id": 281474976710659, "start_id": 281474976710660, "properties": {}}::edge | {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex
  {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex | {"id": 1125899906842625, "label": "knows", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge  | {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex
- {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex | {"id": 1407374883553282, "label": "stalks", "end_id": 281474976710661, "start_id": 281474976710662, "properties": {}}::edge | {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex
  {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex | {"id": 1125899906842626, "label": "knows", "end_id": 281474976710662, "start_id": 281474976710661, "properties": {}}::edge  | {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex
- {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex | {"id": 1407374883553283, "label": "stalks", "end_id": 281474976710663, "start_id": 281474976710664, "properties": {}}::edge | {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex
  {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex | {"id": 1125899906842627, "label": "knows", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge  | {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex
- {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex | {"id": 1407374883553284, "label": "stalks", "end_id": 281474976710665, "start_id": 281474976710666, "properties": {}}::edge | {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex
  {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex | {"id": 1125899906842628, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge  | {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex
+ {"id": 281474976710660, "label": "", "properties": {"id": 281474976710660, "name": "v"}}::vertex | {"id": 1407374883553281, "label": "stalks", "end_id": 281474976710659, "start_id": 281474976710660, "properties": {}}::edge | {"id": 281474976710659, "label": "", "properties": {"id": 281474976710659, "name": "u"}}::vertex
+ {"id": 281474976710662, "label": "", "properties": {"id": 281474976710662, "name": "v"}}::vertex | {"id": 1407374883553282, "label": "stalks", "end_id": 281474976710661, "start_id": 281474976710662, "properties": {}}::edge | {"id": 281474976710661, "label": "", "properties": {"id": 281474976710661, "name": "u"}}::vertex
+ {"id": 281474976710664, "label": "", "properties": {"id": 281474976710664, "name": "v"}}::vertex | {"id": 1407374883553283, "label": "stalks", "end_id": 281474976710663, "start_id": 281474976710664, "properties": {}}::edge | {"id": 281474976710663, "label": "", "properties": {"id": 281474976710663, "name": "u"}}::vertex
+ {"id": 281474976710666, "label": "", "properties": {"id": 281474976710666, "name": "v"}}::vertex | {"id": 1407374883553284, "label": "stalks", "end_id": 281474976710665, "start_id": 281474976710666, "properties": {}}::edge | {"id": 281474976710665, "label": "", "properties": {"id": 281474976710665, "name": "u"}}::vertex
 (8 rows)
 
 -- what is there now?
@@ -351,21 +351,30 @@ SELECT * FROM ag_graph_1._ag_label_edge;
  1407374883553284 | 281474976710666 | 281474976710665 | {}
 (8 rows)
 
--- there should be warning messages
+-- The graph_stats query below will produce warnings for the dangling edges
+-- created by the DELETE commands above. The warnings appear in nondeterministic
+-- order because they come from iterating edge label tables (knows, stalks),
+-- so we suppress them with client_min_messages. Without suppression, the
+-- output would include these warnings (in some order):
+--
+-- WARNING:  edge: [id: 1125899906842626, start: 281474976710661, end: 281474976710662, label: knows] start and end vertices not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1125899906842627, start: 281474976710663, end: 281474976710664, label: knows] end vertex not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1407374883553282, start: 281474976710662, end: 281474976710661, label: stalks] start and end vertices not found
+-- WARNING:  ignored malformed or dangling edge
+-- WARNING:  edge: [id: 1407374883553283, start: 281474976710664, end: 281474976710663, label: stalks] start vertex not found
+-- WARNING:  ignored malformed or dangling edge
+--
+-- The result row validates that graph_stats handled the dangling edges correctly.
+SET client_min_messages = error;
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);
-WARNING:  edge: [id: 1125899906842626, start: 281474976710661, end: 281474976710662, label: knows] start and end vertices not found
-WARNING:  ignored malformed or dangling edge
-WARNING:  edge: [id: 1125899906842627, start: 281474976710663, end: 281474976710664, label: knows] end vertex not found
-WARNING:  ignored malformed or dangling edge
-WARNING:  edge: [id: 1407374883553282, start: 281474976710662, end: 281474976710661, label: stalks] start and end vertices not found
-WARNING:  ignored malformed or dangling edge
-WARNING:  edge: [id: 1407374883553283, start: 281474976710664, end: 281474976710663, label: stalks] start vertex not found
-WARNING:  ignored malformed or dangling edge
                                   result                                  
 --------------------------------------------------------------------------
  {"graph": "ag_graph_1", "num_loaded_edges": 8, "num_loaded_vertices": 8}
 (1 row)
 
+RESET client_min_messages;
 --drop graphs
 SELECT * FROM drop_graph('ag_graph_1', true);
 NOTICE:  drop cascades to 5 other objects
