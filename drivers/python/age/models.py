@@ -119,12 +119,18 @@ class Path(AGObj):
         return buf.getvalue()
 
     def to_dict(self) -> list:
-        # Non-AGObj elements (e.g. raw dicts/strings from malformed paths)
-        # are included as-is via str() to guarantee JSON-serializable output.
-        return [
-            e.to_dict() if isinstance(e, AGObj) else str(e)
-            for e in self.entities
-        ]
+        # AGObj elements are recursively converted; JSON-native types
+        # (dict, list, str, int, float, bool, None) pass through unchanged.
+        # Non-serializable objects fall back to str() as a safety net.
+        result = []
+        for e in (self.entities or []):
+            if isinstance(e, AGObj):
+                result.append(e.to_dict())
+            elif isinstance(e, (dict, list, str, int, float, bool, type(None))):
+                result.append(e)
+            else:
+                result.append(str(e))
+        return result
 
 
     
