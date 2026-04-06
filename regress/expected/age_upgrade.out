@@ -1,0 +1,443 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+--
+-- Extension upgrade regression test
+--
+-- This test validates the upgrade template (age--<VER>--y.y.y.sql) by:
+--   1. Installing AGE at the current version (built from the initial
+--      version-bump commit's SQL — the "day-one release" state)
+--   2. Creating three graphs with multiple labels, edges, GIN indexes,
+--      and numeric properties that serve as integrity checksums
+--   3. Upgrading to a synthetic "next" version via the stamped template
+--   4. Verifying all data, structure, and checksums survived the upgrade
+--
+-- The Makefile builds:
+--   age--<CURR>.sql        from the initial version-bump commit (git history)
+--   age--<NEXT>.sql        from current HEAD's sql/sql_files
+--   age--<CURR>--<NEXT>.sql stamped from the upgrade template
+--
+-- All version discovery is dynamic — no hardcoded versions anywhere.
+-- This test is version-agnostic and works on any branch for any version.
+--
+LOAD 'age';
+SET search_path TO ag_catalog;
+-- Step 1: Clean up any state left by prior tests, then drop AGE entirely.
+-- The --load-extension=age flag installed AGE at the current (default) version.
+-- We need to remove it so we can cleanly re-create for this test.
+SELECT drop_graph(name, true) FROM ag_graph ORDER BY name;
+ drop_graph 
+------------
+(0 rows)
+
+DROP EXTENSION age;
+-- Step 2: Verify we have multiple installable versions.
+SELECT count(*) > 1 AS has_upgrade_path
+FROM pg_available_extension_versions WHERE name = 'age';
+ has_upgrade_path 
+------------------
+ t
+(1 row)
+
+-- Step 3: Install AGE at the default version (the initial release SQL).
+CREATE EXTENSION age;
+SELECT extversion IS NOT NULL AS version_installed FROM pg_extension WHERE extname = 'age';
+ version_installed 
+-------------------
+ t
+(1 row)
+
+-- Step 4: Create three test graphs with diverse labels, edges, and data.
+LOAD 'age';
+SET search_path TO ag_catalog, "$user", public;
+--
+-- Graph 1: "company" — organization hierarchy with numeric checksums.
+-- Labels: Employee, Department, Project
+-- Edges: WORKS_IN, MANAGES, ASSIGNED_TO
+-- Each vertex has a "val" property (float) for checksum validation.
+--
+SELECT create_graph('company');
+NOTICE:  graph "company" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('company', $$
+    CREATE (e1:Employee {name: 'Alice',   role: 'VP',        val: 3.14159})
+    CREATE (e2:Employee {name: 'Bob',     role: 'Manager',   val: 2.71828})
+    CREATE (e3:Employee {name: 'Charlie', role: 'Engineer',  val: 1.41421})
+    CREATE (e4:Employee {name: 'Diana',   role: 'Engineer',  val: 1.73205})
+    CREATE (d1:Department {name: 'Engineering', budget: 500000, val: 42.0})
+    CREATE (d2:Department {name: 'Research',    budget: 300000, val: 17.5})
+    CREATE (p1:Project {name: 'Atlas',   priority: 1, val: 99.99})
+    CREATE (p2:Project {name: 'Beacon',  priority: 2, val: 88.88})
+    CREATE (p3:Project {name: 'Cipher',  priority: 3, val: 77.77})
+    CREATE (e1)-[:WORKS_IN {since: 2019}]->(d1)
+    CREATE (e2)-[:WORKS_IN {since: 2020}]->(d1)
+    CREATE (e3)-[:WORKS_IN {since: 2021}]->(d1)
+    CREATE (e4)-[:WORKS_IN {since: 2022}]->(d2)
+    CREATE (e1)-[:MANAGES {level: 1}]->(e2)
+    CREATE (e2)-[:MANAGES {level: 2}]->(e3)
+    CREATE (e3)-[:ASSIGNED_TO {hours: 40}]->(p1)
+    CREATE (e3)-[:ASSIGNED_TO {hours: 20}]->(p2)
+    CREATE (e4)-[:ASSIGNED_TO {hours: 30}]->(p2)
+    CREATE (e4)-[:ASSIGNED_TO {hours: 10}]->(p3)
+    RETURN 'company graph created'
+$$) AS (result agtype);
+         result          
+-------------------------
+ "company graph created"
+(1 row)
+
+-- GIN index on Employee properties in company graph
+CREATE INDEX company_employee_gin ON company."Employee" USING GIN (properties);
+--
+-- Graph 2: "network" — social network with weighted edges.
+-- Labels: User, Post
+-- Edges: FOLLOWS, AUTHORED, LIKES
+--
+SELECT create_graph('network');
+NOTICE:  graph "network" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('network', $$
+    CREATE (u1:User {handle: '@alpha',   score: 1000.01})
+    CREATE (u2:User {handle: '@beta',    score: 2000.02})
+    CREATE (u3:User {handle: '@gamma',   score: 3000.03})
+    CREATE (u4:User {handle: '@delta',   score: 4000.04})
+    CREATE (u5:User {handle: '@epsilon', score: 5000.05})
+    CREATE (p1:Post {title: 'Hello World',        views: 150})
+    CREATE (p2:Post {title: 'Graph Databases 101', views: 890})
+    CREATE (p3:Post {title: 'AGE is awesome',      views: 2200})
+    CREATE (u1)-[:FOLLOWS {weight: 0.9}]->(u2)
+    CREATE (u2)-[:FOLLOWS {weight: 0.8}]->(u3)
+    CREATE (u3)-[:FOLLOWS {weight: 0.7}]->(u4)
+    CREATE (u4)-[:FOLLOWS {weight: 0.6}]->(u5)
+    CREATE (u5)-[:FOLLOWS {weight: 0.5}]->(u1)
+    CREATE (u1)-[:AUTHORED]->(p1)
+    CREATE (u2)-[:AUTHORED]->(p2)
+    CREATE (u3)-[:AUTHORED]->(p3)
+    CREATE (u4)-[:LIKES]->(p1)
+    CREATE (u5)-[:LIKES]->(p2)
+    CREATE (u1)-[:LIKES]->(p3)
+    CREATE (u2)-[:LIKES]->(p3)
+    RETURN 'network graph created'
+$$) AS (result agtype);
+         result          
+-------------------------
+ "network graph created"
+(1 row)
+
+-- GIN indexes on network graph
+CREATE INDEX network_user_gin ON network."User" USING GIN (properties);
+CREATE INDEX network_post_gin ON network."Post" USING GIN (properties);
+--
+-- Graph 3: "routes" — geographic routing with precise coordinates.
+-- Labels: City, Airport
+-- Edges: ROAD, FLIGHT
+-- Coordinates use precise decimals that are easy to checksum.
+--
+SELECT create_graph('routes');
+NOTICE:  graph "routes" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('routes', $$
+    CREATE (c1:City    {name: 'Portland',   lat: 45.5152, lon: -122.6784, pop: 652503})
+    CREATE (c2:City    {name: 'Seattle',    lat: 47.6062, lon: -122.3321, pop: 749256})
+    CREATE (c3:City    {name: 'Vancouver',  lat: 49.2827, lon: -123.1207, pop: 631486})
+    CREATE (a1:Airport {code: 'PDX', elev: 30.5})
+    CREATE (a2:Airport {code: 'SEA', elev: 131.7})
+    CREATE (a3:Airport {code: 'YVR', elev: 4.3})
+    CREATE (c1)-[:ROAD    {distance_km: 279.5,  toll: 0.0}]->(c2)
+    CREATE (c2)-[:ROAD    {distance_km: 225.3,  toll: 5.0}]->(c3)
+    CREATE (c1)-[:ROAD    {distance_km: 502.1,  toll: 5.0}]->(c3)
+    CREATE (a1)-[:FLIGHT  {distance_km: 229.0, duration_min: 55}]->(a2)
+    CREATE (a2)-[:FLIGHT  {distance_km: 198.0, duration_min: 50}]->(a3)
+    CREATE (a1)-[:FLIGHT  {distance_km: 426.0, duration_min: 75}]->(a3)
+    RETURN 'routes graph created'
+$$) AS (result agtype);
+         result         
+------------------------
+ "routes graph created"
+(1 row)
+
+-- GIN index on routes graph
+CREATE INDEX routes_city_gin ON routes."City" USING GIN (properties);
+-- Step 5: Record pre-upgrade integrity checksums.
+-- These sums use the "val" / "score" / coordinate properties as fingerprints.
+-- company: sum of all val properties (should be a precise known value)
+SELECT * FROM cypher('company', $$
+    MATCH (n) WHERE n.val IS NOT NULL RETURN sum(n.val)
+$$) AS (company_val_sum_before agtype);
+ company_val_sum_before 
+------------------------
+ 335.14612999999997
+(1 row)
+
+-- network: sum of all score properties
+SELECT * FROM cypher('network', $$
+    MATCH (n:User) RETURN sum(n.score)
+$$) AS (network_score_sum_before agtype);
+ network_score_sum_before 
+--------------------------
+ 15000.149999999998
+(1 row)
+
+-- routes: sum of all latitude values
+SELECT * FROM cypher('routes', $$
+    MATCH (c:City) RETURN sum(c.lat)
+$$) AS (routes_lat_sum_before agtype);
+ routes_lat_sum_before 
+-----------------------
+ 142.4041
+(1 row)
+
+-- Total vertex and edge counts across all three graphs
+SELECT sum(cnt)::int AS total_vertices_before FROM (
+    SELECT count(*) AS cnt FROM cypher('company', $$ MATCH (n) RETURN n $$) AS (n agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('network', $$ MATCH (n) RETURN n $$) AS (n agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('routes', $$ MATCH (n) RETURN n $$) AS (n agtype)
+) sub;
+ total_vertices_before 
+-----------------------
+                    23
+(1 row)
+
+SELECT sum(cnt)::int AS total_edges_before FROM (
+    SELECT count(*) AS cnt FROM cypher('company', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('network', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('routes', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+) sub;
+ total_edges_before 
+--------------------
+                 28
+(1 row)
+
+-- Count of distinct labels (ag_label entries) across all graphs
+SELECT count(*)::int AS total_labels_before
+FROM ag_label al JOIN ag_graph ag ON al.graph = ag.graphid
+WHERE ag.name <> '_ag_catalog';
+ total_labels_before 
+---------------------
+                  21
+(1 row)
+
+-- Step 6: Upgrade AGE to the synthetic next version via the stamped template.
+DO $$
+DECLARE next_ver text;
+BEGIN
+    SELECT version INTO next_ver
+    FROM pg_available_extension_versions
+    WHERE name = 'age' AND version <> (
+        SELECT default_version FROM pg_available_extensions WHERE name = 'age'
+    )
+    ORDER BY string_to_array(version, '.')::int[] DESC
+    LIMIT 1;
+
+    IF next_ver IS NULL THEN
+        RAISE EXCEPTION 'No next version available for upgrade test';
+    END IF;
+
+    EXECUTE format('ALTER EXTENSION age UPDATE TO %L', next_ver);
+END;
+$$;
+-- Step 7: Confirm version changed.
+SELECT installed_version <> default_version AS upgraded_past_default
+FROM pg_available_extensions WHERE name = 'age';
+ upgraded_past_default 
+-----------------------
+ t
+(1 row)
+
+-- Step 8: Verify all data survived — reload and recheck.
+LOAD 'age';
+SET search_path TO ag_catalog, "$user", public;
+-- Repeat integrity checksums — must match pre-upgrade values exactly.
+SELECT * FROM cypher('company', $$
+    MATCH (n) WHERE n.val IS NOT NULL RETURN sum(n.val)
+$$) AS (company_val_sum_after agtype);
+ company_val_sum_after 
+-----------------------
+ 335.14612999999997
+(1 row)
+
+SELECT * FROM cypher('network', $$
+    MATCH (n:User) RETURN sum(n.score)
+$$) AS (network_score_sum_after agtype);
+ network_score_sum_after 
+-------------------------
+ 15000.149999999998
+(1 row)
+
+SELECT * FROM cypher('routes', $$
+    MATCH (c:City) RETURN sum(c.lat)
+$$) AS (routes_lat_sum_after agtype);
+ routes_lat_sum_after 
+----------------------
+ 142.4041
+(1 row)
+
+SELECT sum(cnt)::int AS total_vertices_after FROM (
+    SELECT count(*) AS cnt FROM cypher('company', $$ MATCH (n) RETURN n $$) AS (n agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('network', $$ MATCH (n) RETURN n $$) AS (n agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('routes', $$ MATCH (n) RETURN n $$) AS (n agtype)
+) sub;
+ total_vertices_after 
+----------------------
+                   23
+(1 row)
+
+SELECT sum(cnt)::int AS total_edges_after FROM (
+    SELECT count(*) AS cnt FROM cypher('company', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('network', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+    UNION ALL
+    SELECT count(*) FROM cypher('routes', $$ MATCH ()-[e]->() RETURN e $$) AS (e agtype)
+) sub;
+ total_edges_after 
+-------------------
+                28
+(1 row)
+
+SELECT count(*)::int AS total_labels_after
+FROM ag_label al JOIN ag_graph ag ON al.graph = ag.graphid
+WHERE ag.name <> '_ag_catalog';
+ total_labels_after 
+--------------------
+                 21
+(1 row)
+
+-- Step 9: Verify specific structural queries across all three graphs.
+-- company: management chain
+SELECT * FROM cypher('company', $$
+    MATCH (boss:Employee)-[:MANAGES*]->(report:Employee)
+    RETURN boss.name, report.name
+    ORDER BY boss.name, report.name
+$$) AS (boss agtype, report agtype);
+  boss   |  report   
+---------+-----------
+ "Alice" | "Bob"
+ "Alice" | "Charlie"
+ "Bob"   | "Charlie"
+(3 rows)
+
+-- network: circular follow chain (proves full cycle survived)
+SELECT * FROM cypher('network', $$
+    MATCH (a:User)-[:FOLLOWS]->(b:User)
+    RETURN a.handle, b.handle
+    ORDER BY a.handle
+$$) AS (follower agtype, followed agtype);
+  follower  |  followed  
+------------+------------
+ "@alpha"   | "@beta"
+ "@beta"    | "@gamma"
+ "@delta"   | "@epsilon"
+ "@epsilon" | "@alpha"
+ "@gamma"   | "@delta"
+(5 rows)
+
+-- routes: all flights with distances (proves edge properties intact)
+SELECT * FROM cypher('routes', $$
+    MATCH (a:Airport)-[f:FLIGHT]->(b:Airport)
+    RETURN a.code, b.code, f.distance_km
+    ORDER BY a.code, b.code
+$$) AS (origin agtype, dest agtype, dist agtype);
+ origin | dest  | dist  
+--------+-------+-------
+ "PDX"  | "SEA" | 229.0
+ "PDX"  | "YVR" | 426.0
+ "SEA"  | "YVR" | 198.0
+(3 rows)
+
+-- Step 10: Verify GIN indexes still exist after upgrade.
+SELECT indexname FROM pg_indexes
+WHERE schemaname IN ('company', 'network', 'routes')
+  AND tablename IN ('Employee', 'User', 'Post', 'City')
+  AND indexdef LIKE '%gin%'
+ORDER BY indexname;
+      indexname       
+----------------------
+ company_employee_gin
+ network_post_gin
+ network_user_gin
+ routes_city_gin
+(4 rows)
+
+-- Step 11: Cleanup and restore AGE at the default version for subsequent tests.
+SELECT drop_graph('routes', true);
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to table routes._ag_label_vertex
+drop cascades to table routes._ag_label_edge
+drop cascades to table routes."City"
+drop cascades to table routes."Airport"
+drop cascades to table routes."ROAD"
+drop cascades to table routes."FLIGHT"
+NOTICE:  graph "routes" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('network', true);
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to table network._ag_label_vertex
+drop cascades to table network._ag_label_edge
+drop cascades to table network."User"
+drop cascades to table network."Post"
+drop cascades to table network."FOLLOWS"
+drop cascades to table network."AUTHORED"
+drop cascades to table network."LIKES"
+NOTICE:  graph "network" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('company', true);
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to table company._ag_label_vertex
+drop cascades to table company._ag_label_edge
+drop cascades to table company."Employee"
+drop cascades to table company."Department"
+drop cascades to table company."Project"
+drop cascades to table company."WORKS_IN"
+drop cascades to table company."MANAGES"
+drop cascades to table company."ASSIGNED_TO"
+NOTICE:  graph "company" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+DROP EXTENSION age;
+CREATE EXTENSION age;
+-- Step 12: Remove synthetic upgrade test files from the extension directory.
+\! sh ./regress/age_upgrade_cleanup.sh
