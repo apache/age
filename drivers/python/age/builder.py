@@ -214,7 +214,7 @@ class ResultVisitor(AgtypeVisitor):
                 vertex = Vertex()
                 vertex.id = d.get("id")
                 vertex.label = d.get("label")
-                vertex.properties = d.get("properties")
+                vertex.properties = d.get("properties") or {}
             
             if self.vertexCache is not None:
                 self.vertexCache[vid] = vertex
@@ -230,7 +230,7 @@ class ResultVisitor(AgtypeVisitor):
             edge.label = d.get("label")
             edge.end_id = d.get("end_id")
             edge.start_id = d.get("start_id")
-            edge.properties = d.get("properties")
+            edge.properties = d.get("properties") or {}
             
             return edge
 

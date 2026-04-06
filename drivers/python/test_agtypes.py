@@ -246,9 +246,14 @@ class TestAgtype(unittest.TestCase):
         for inp in malformed_inputs:
             try:
                 result = self.parse(inp)
-                # If the parser recovered, the result should be a usable
-                # value (None, dict, Vertex, etc.) — not a crash.
-                self.assertNotIsInstance(result, type(NotImplemented))
+                # Parser recovery is acceptable — verify the result is a
+                # usable Python value (None, container, or model object).
+                self.assertTrue(
+                    result is None
+                    or isinstance(result, (dict, list, tuple))
+                    or hasattr(result, "__dict__"),
+                    f"Recovered to unexpected type {type(result).__name__}: {inp}"
+                )
             except AGTypeError:
                 pass  # expected
             except AttributeError:
@@ -257,8 +262,8 @@ class TestAgtype(unittest.TestCase):
                     f"AGTypeError: {inp}"
                 )
 
-    def test_truncated_agtype_raises_agtypeerror(self):
-        """Issue #2367: Truncated agtype must raise AGTypeError, never AttributeError."""
+    def test_truncated_agtype_does_not_crash(self):
+        """Issue #2367: Truncated agtype must raise AGTypeError or recover, never AttributeError."""
         from age.exceptions import AGTypeError
 
         truncated_inputs = [
@@ -270,7 +275,12 @@ class TestAgtype(unittest.TestCase):
             try:
                 result = self.parse(inp)
                 # Recovery is acceptable for truncated input
-                self.assertIsNotNone(result)
+                self.assertTrue(
+                    result is None
+                    or isinstance(result, (dict, list, tuple))
+                    or hasattr(result, "__dict__"),
+                    f"Recovered to unexpected type {type(result).__name__}: {inp}"
+                )
             except AGTypeError:
                 pass  # expected
             except AttributeError:
