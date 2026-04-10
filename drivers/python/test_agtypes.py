@@ -13,9 +13,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import json
+import math
 import unittest
 from decimal import Decimal
-import math
+
 import age
 
 
@@ -144,16 +146,17 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(vertex["tags"][11], "tag12")
 
     def test_vertex_special_characters_in_properties(self):
-        """Issue #2367: Parser should handle properties with special characters."""
+        """Issue #2367: Parser should handle escaped quotes, paths, newlines, and Unicode."""
+        expected_description = 'Quoted "text", path C:\\tmp\\file, line1\nline2, café 雪'
+        props = json.dumps({"name": "test", "description": expected_description})
         vertexExp = (
             '{"id": 1125899906842626, "label": "TestNode", '
-            '"properties": {"name": "test", '
-            '"description": "A long description with unicode chars"}}::vertex'
+            f'"properties": {props}}::vertex'
         )
         vertex = self.parse(vertexExp)
         self.assertEqual(vertex.id, 1125899906842626)
         self.assertEqual(vertex["name"], "test")
-        self.assertIn("unicode", vertex["description"])
+        self.assertEqual(vertex["description"], expected_description)
 
     def test_vertex_nested_properties(self):
         """Issue #2367: Parser should handle deeply nested property structures."""
