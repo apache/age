@@ -254,12 +254,9 @@ DECLARE next_ver text;
 BEGIN
     SELECT version INTO next_ver
     FROM pg_available_extension_versions
-    WHERE name = 'age' AND version <> (
-        SELECT default_version FROM pg_available_extensions WHERE name = 'age'
-    )
-    ORDER BY string_to_array(version, '.')::int[] DESC
+    WHERE name = 'age' AND version LIKE '%_upgrade_test'
+    ORDER BY version DESC
     LIMIT 1;
-
     IF next_ver IS NULL THEN
         RAISE EXCEPTION 'No next version available for upgrade test';
     END IF;
