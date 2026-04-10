@@ -152,7 +152,7 @@ def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=Fals
             else:
                 cursor.execute("LOAD 'age';")
 
-        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+        cursor.execute('SET search_path = ag_catalog, "$user", public;')
 
         ag_info = TypeInfo.fetch(conn, 'agtype')
 

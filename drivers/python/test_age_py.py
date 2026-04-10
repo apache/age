@@ -50,7 +50,7 @@ class TestSetUpAge(unittest.TestCase):
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", skip_load=True)
         mock_cursor.execute.assert_called_once_with(
-            "SET search_path = ag_catalog, '$user', public;"
+            'SET search_path = ag_catalog, "$user", public;'
         )
 
     def test_skip_load_false_executes_load(self):
@@ -76,7 +76,7 @@ class TestSetUpAge(unittest.TestCase):
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.setUpAge(mock_conn, "test_graph", skip_load=True)
         mock_cursor.execute.assert_any_call(
-            "SET search_path = ag_catalog, '$user', public;"
+            'SET search_path = ag_catalog, "$user", public;'
         )
 
     def test_contradictory_skip_load_and_load_from_plugins_raises(self):
@@ -556,6 +556,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     suite = unittest.TestSuite()
+    loader = unittest.TestLoader()
+    suite.addTests(loader.loadTestsFromTestCase(TestSetUpAge))
     suite.addTest(TestAgeBasic("testExec"))
     suite.addTest(TestAgeBasic("testQuery"))
     suite.addTest(TestAgeBasic("testChangeData"))
