@@ -264,7 +264,7 @@ class TestConfigureConnection(unittest.TestCase):
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn)
         mock_cursor.execute.assert_called_once_with(
-            "SET search_path = ag_catalog, '$user', public;"
+            'SET search_path = ag_catalog, "$user", public;'
         )
 
     def test_load_true_executes_load(self):
@@ -296,7 +296,7 @@ class TestConfigureConnection(unittest.TestCase):
              unittest.mock.patch("age.age.checkGraphCreated"):
             age.age.configure_connection(mock_conn)
         mock_cursor.execute.assert_any_call(
-            "SET search_path = ag_catalog, '$user', public;"
+            'SET search_path = ag_catalog, "$user", public;'
         )
 
     def test_registers_agtype_adapters(self):

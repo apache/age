@@ -14,6 +14,8 @@
 # under the License.
 
 import re
+from typing import Any, Optional
+
 import psycopg
 from psycopg.types import TypeInfo
 from psycopg import sql
@@ -173,7 +175,7 @@ def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=Fals
 
 def configure_connection(
     conn: psycopg.connection,
-    graph_name: str | None = None,
+    graph_name: Optional[str] = None,
     load: bool = False,
     load_from_plugins: bool = False,
 ) -> None:
@@ -217,7 +219,7 @@ def configure_connection(
             else:
                 cursor.execute("LOAD 'age';")
 
-        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+        cursor.execute('SET search_path = ag_catalog, "$user", public;')
 
         ag_info = TypeInfo.fetch(conn, 'agtype')
 
