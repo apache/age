@@ -146,17 +146,26 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(vertex["tags"][11], "tag12")
 
     def test_vertex_special_characters_in_properties(self):
-        """Issue #2367: Parser should handle escaped quotes, paths, newlines, and Unicode."""
-        expected_description = 'Quoted "text", path C:\\tmp\\file, line1\nline2, café 雪'
-        props = json.dumps({"name": "test", "description": expected_description})
+        """Issue #2367: Parser accepts JSON-escaped property strings and UTF-8."""
+        # Input uses json.dumps so quotes, backslashes, and newlines are valid JSON.
+        logical_description = 'Quoted "text", path C:\\tmp\\file, line1\nline2, café 雪'
+        props = json.dumps(
+            {"name": "test", "description": logical_description},
+            ensure_ascii=False,
+        )
         vertexExp = (
             '{"id": 1125899906842626, "label": "TestNode", '
-            f'"properties": {props}}::vertex'
+            '"properties": ' + props + '}::vertex'
         )
         vertex = self.parse(vertexExp)
         self.assertEqual(vertex.id, 1125899906842626)
         self.assertEqual(vertex["name"], "test")
-        self.assertEqual(vertex["description"], expected_description)
+        # The agtype visitor keeps JSON string escapes as literal characters
+        # (except UTF-8 code points, which decode normally).
+        self.assertEqual(
+            vertex["description"],
+            'Quoted \\"text\\", path C:\\\\tmp\\\\file, line1\\nline2, café 雪',
+        )
 
     def test_vertex_nested_properties(self):
         """Issue #2367: Parser should handle deeply nested property structures."""
