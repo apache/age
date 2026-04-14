@@ -21,6 +21,7 @@
 
 #include "access/genam.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "executor/executor.h"
 #include "nodes/makefuncs.h"
 #include "utils/builtins.h"
@@ -297,49 +298,115 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
     HeapTuple tuple;
     TupleTableSlot *slot;
     ResultRelInfo *resultRelInfo;
-
-    /* setup scan keys to get all edges for the given graph oid */
-    ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
-    ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
-                F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
+    Oid index_oid;
 
     /* setup the table to be scanned */
-    ag_label = table_open(ag_label_relation_id(), RowExclusiveLock);
-    scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
+    ag_label = table_open(ag_label_relation_id(), AccessShareLock);
+
+    index_oid = find_usable_btree_index_for_attr(ag_label, Anum_ag_label_graph);
 
     resultRelInfo = create_entity_result_rel_info(estate, "ag_catalog",
                                                   "ag_label");
 
-    slot = ExecInitExtraTupleSlot(
-        estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-        &TTSOpsHeapTuple);
-
-    /* scan through the results and get all the label names. */
-    while(true)
+    if (OidIsValid(index_oid))
     {
-        Name label;
-        bool isNull;
-        Datum datum;
+        Relation index_rel;
+        IndexScanDesc index_scan_desc;
 
-        tuple = heap_getnext(scan_desc, ForwardScanDirection);
+        slot = ExecInitExtraTupleSlot(
+            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+            &TTSOpsBufferHeapTuple);
 
-        /* no more labels to process */
-        if (!HeapTupleIsValid(tuple))
-            break;
+        index_rel = index_open(index_oid, AccessShareLock);
 
-        ExecStoreHeapTuple(tuple, slot, false);
+        /* 
+         * Use 1 as the attribute number because 'graph' is the 1st column 
+         * in the ag_label_graph_oid_index
+         */
+        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
+                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
-        datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
-        label = DatumGetName(datum);
+        index_scan_desc = index_beginscan(ag_label, index_rel, estate->es_snapshot, NULL, 1, 0);
+        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
-        labels = lappend(labels, label);
+        while (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        {
+            Name label;
+            Name lval;
+            bool isNull;
+            Datum datum;
+            char kind;
+
+            /*There isn't field kind in index. So we should check it by hands*/
+            datum = slot_getattr(slot, Anum_ag_label_kind, &isNull);
+            if (isNull)
+            {
+                continue;
+            }
+
+            kind = DatumGetChar(datum);
+            
+            if (kind != LABEL_TYPE_EDGE)
+            {
+                continue;
+            }
+
+            datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
+            if (!isNull)
+            {
+                label = DatumGetName(datum);
+                lval = (Name) palloc(NAMEDATALEN);
+                namestrcpy(lval, NameStr(*label));
+                labels = lappend(labels, lval);
+            }
+        }
+
+        index_endscan(index_scan_desc);
+        index_close(index_rel, AccessShareLock);
+    } 
+    else
+    {
+        slot = ExecInitExtraTupleSlot(
+            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+            &TTSOpsHeapTuple);
+
+        /* setup scan keys to get all edges for the given graph oid */
+        ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
+                  F_OIDEQ, ObjectIdGetDatum(graph_oid));
+        ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
+                  F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
+
+        scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
+
+        /* scan through the results and get all the label names. */
+        while(true)
+        {
+            Name label;
+            Name lval;
+            bool isNull;
+            Datum datum;
+
+            tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+            /* no more labels to process */
+            if (!HeapTupleIsValid(tuple))
+                break;
+
+            ExecStoreHeapTuple(tuple, slot, false);
+
+            datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
+            label = DatumGetName(datum);
+
+            lval = (Name) palloc(NAMEDATALEN);
+            namestrcpy(lval, NameStr(*label));
+            labels = lappend(labels, lval);
+        }
+
+        table_endscan(scan_desc);
     }
 
-    table_endscan(scan_desc);
-
     destroy_entity_result_rel_info(resultRelInfo);
-    table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
+    table_close(resultRelInfo->ri_RelationDesc, AccessShareLock);
 
     return labels;
 }
