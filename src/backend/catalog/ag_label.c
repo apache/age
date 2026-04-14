@@ -340,12 +340,16 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
             /*There isn't field kind in index. So we should check it by hands*/
             datum = slot_getattr(slot, Anum_ag_label_kind, &isNull);
             if (isNull)
+            {
                 continue;
+            }
 
             kind = DatumGetChar(datum);
             
             if (kind != LABEL_TYPE_EDGE)
+            {
                 continue;
+            }
 
             datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
             if (!isNull)

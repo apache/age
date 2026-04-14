@@ -539,7 +539,9 @@ static void process_delete_list(CustomScanState *node)
             }
 
             if (shouldFree)
+            {
                 heap_freetuple(heap_tuple);
+            }
         }
 
         if (OidIsValid(index_oid))
@@ -649,7 +651,9 @@ static void process_edges_by_index(Oid index_oid,
                 delete_entity(estate, resultRelInfo, tuple);
                 
                 if (shouldFree) 
+                {
                     heap_freetuple(tuple);
+                }
             }
             else
             {

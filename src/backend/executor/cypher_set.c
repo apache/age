@@ -706,11 +706,15 @@ static void process_update_list(CustomScanState *node)
 
                         /* Silently skip if USING policy filters out this row */
                         if (should_update)
+                        {
                             heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
                                                             original_tuple);
+                        }
 
                         if (shouldFree)
+                        {
                             heap_freetuple(original_tuple);
+                        }
                     }
                 }
 

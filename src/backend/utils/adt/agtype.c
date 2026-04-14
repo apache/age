@@ -5695,7 +5695,9 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     if (!HeapTupleIsValid(tuple))
     {
         if (scan_desc)
+        {
             table_endscan(scan_desc);
+        }
         table_close(graph_vertex_label, ShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
@@ -5706,9 +5708,13 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     if (!check_rls_for_tuple(graph_vertex_label, tuple, CMD_SELECT))
     {
         if (scan_desc)
+        {
             table_endscan(scan_desc);
+        }
         if (should_free_tuple && tuple != NULL)
+        {
             heap_freetuple(tuple);
+        }
 
         table_close(graph_vertex_label, ShareLock);
         ereport(ERROR,
@@ -5737,9 +5743,13 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
 
     /* end the scan and close the relation with new cleanup logic */
     if (scan_desc)
+    {
         table_endscan(scan_desc);
+    }
     if (should_free_tuple && tuple != NULL)
+    {
         heap_freetuple(tuple);
+    }
 
     table_close(graph_vertex_label, ShareLock);
     /* return the vertex datum */

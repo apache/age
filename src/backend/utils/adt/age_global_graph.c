@@ -276,7 +276,10 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                 }
             }
 
-            if (shouldFree) heap_freetuple(tuple);
+            if (shouldFree)
+            {
+                heap_freetuple(tuple);
+            }
             ExecClearTuple(slot);
         }
 
