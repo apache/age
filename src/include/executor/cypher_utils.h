@@ -152,4 +152,10 @@ typedef struct RLSCacheEntry
     List *withCheckOptionExprs;
 } RLSCacheEntry;
 
+/* Hash table entry for caching index OIDs per label */
+typedef struct IndexCacheEntry {
+    Oid relid;      /* hash key */
+    Oid index_oid;
+} IndexCacheEntry;
+
 #endif
