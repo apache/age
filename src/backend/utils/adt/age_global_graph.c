@@ -27,6 +27,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
+#include "utils/builtins.h"
 
 #include "utils/age_global_graph.h"
 #include "catalog/ag_graph.h"
