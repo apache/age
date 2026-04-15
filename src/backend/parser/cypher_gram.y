@@ -3339,29 +3339,22 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
                                            int location)
 {
     SubLink *sub;
-    String *val;
-    ColumnRef *cref = NULL;
+    ColumnRef *cref;
+    char *varname;
     cypher_list_comprehension *list_comp = NULL;
 
-    if (!IsA(var, ColumnRef))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_SYNTAX_ERROR),
-                 errmsg("Syntax error at or near IN")));
-    }
-
-    cref = (ColumnRef *)var;
-    val = linitial(cref->fields);
-    if (!IsA(val, String))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_SYNTAX_ERROR),
-                 errmsg("Invalid list comprehension variable name")));
-    }
+    /*
+     * Reuse the shared iterator-name helper so list comprehensions and
+     * predicate functions (all/any/none/single) validate `var IN list`
+     * the same way — in particular, qualified ColumnRefs like `x.y` are
+     * rejected rather than silently treated as iterator `x`.
+     */
+    varname = extract_iter_variable_name(var);
+    cref = (ColumnRef *) var;
 
     /* build the list comprehension node */
     list_comp = make_ag_node(cypher_list_comprehension);
-    list_comp->varname = val->sval;
+    list_comp->varname = varname;
     list_comp->expr = expr;
     list_comp->where = where;
     list_comp->mapping_expr = (mapping_expr != NULL) ? mapping_expr :

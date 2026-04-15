@@ -577,11 +577,11 @@ LINE 1: ...$$ RETURN [i IN range(0, 10, 2) WHERE i>5 | i^2], i $$) AS (...
 HINT:  variable i does not exist within scope of usage
 -- Invalid list comprehension
 SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) WHERE 2>5] $$) AS (result agtype);
-ERROR:  Syntax error at or near IN
+ERROR:  syntax error at or near IN
 LINE 1: SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN r...
                                                     ^
 SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN range(0, 10, 2) | 1] $$) AS (result agtype);
-ERROR:  Syntax error at or near IN
+ERROR:  syntax error at or near IN
 LINE 1: SELECT * FROM cypher('list_comprehension', $$ RETURN [1 IN r...
                                                     ^
 -- Issue - error using list comprehension with WITH *
