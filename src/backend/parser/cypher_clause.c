@@ -2640,6 +2640,7 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
     cypher_match *match_self = (cypher_match*) clause->self;
     Node *where = match_self->where;
 
+
     /*
      * Check label validity early unless the predecessor clause chain
      * contains a data-modifying operation (CREATE, SET, DELETE, MERGE).
@@ -2655,7 +2656,23 @@ static Query *transform_cypher_match(cypher_parsestate *cpstate,
         match_self->where = make_false_where_clause(false);
     }
 
-    if (has_list_comp_or_subquery((Node *)match_self->where, NULL))
+    /*
+     * For a non-optional MATCH with a list comprehension or subquery in
+     * its WHERE clause, transform the match pattern as a subquery and
+     * then apply the WHERE as an outer filter.  This keeps the parent's
+     * namespace available to the subquery-bearing predicate.
+     *
+     * This rewrite is NOT safe for OPTIONAL MATCH: wrapping the WHERE
+     * around the transformed clause turns it into a post-filter on the
+     * LATERAL LEFT JOIN produced by transform_cypher_optional_match_clause,
+     * which incorrectly drops the null-preserving outer rows that the
+     * LEFT JOIN generates when no right-hand match exists.  For the
+     * optional case we fall through to the normal transform, which
+     * places the WHERE inside the right-hand subquery of the LEFT JOIN
+     * where it correctly scopes to the optional binding (issue #2378).
+     */
+    if (!match_self->optional &&
+        has_list_comp_or_subquery((Node *)match_self->where, NULL))
     {
         match_self->where = NULL;
         return transform_cypher_clause_with_where(cpstate,
@@ -2794,9 +2811,27 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
     List *res_colnames = NIL, *res_colvars = NIL;
     Alias *l_alias, *r_alias;
     ParseNamespaceItem *jnsitem;
+    cypher_match *match_self = (cypher_match *) clause->self;
+    Node *saved_where = match_self->where;
     int i = 0;
 
     j->jointype = JOIN_LEFT;
+
+    /*
+     * If the OPTIONAL MATCH carries a WHERE clause, temporarily detach
+     * it so that the recursive right-hand transform does NOT try to
+     * apply it inside the inner subquery.  We re-apply the predicate
+     * below as a LEFT JOIN ON condition, which is the only placement
+     * that both (a) scopes the predicate to the optional binding and
+     * (b) preserves null-filled outer rows when the predicate fails.
+     * Without this, a WHERE that contains a sub-pattern predicate
+     * (e.g. EXISTS {...} referencing the optional variable) either
+     * gets silently dropped during the inner transform (namespace
+     * mismatch re-binds the variable in a fresh scope) or gets pulled
+     * up by the containing wrapper and filters out the null-preserving
+     * rows.  See issue #2378.
+     */
+    match_self->where = NULL;
 
     l_alias = makeAlias(PREV_CYPHER_CLAUSE_ALIAS, NIL);
     r_alias = makeAlias(CYPHER_OPT_RIGHT_ALIAS, NIL);
@@ -2818,6 +2853,32 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
 
     j->rarg = transform_clause_for_join(cpstate, clause, &r_rte,
                                         &r_nsitem, r_alias);
+
+    /* add right-side nsitem so the re-attached WHERE below can resolve
+     * newly-bound variables from the optional pattern */
+    pstate->p_namespace = lappend(pstate->p_namespace, r_nsitem);
+
+    /*
+     * Now that both sides are visible in the namespace, re-attach the
+     * OPTIONAL MATCH's WHERE predicate as the LEFT JOIN's ON clause.
+     * PostgreSQL correctly preserves left rows whose right side fails
+     * an ON condition (LEFT JOIN semantics), which is exactly what
+     * Cypher OPTIONAL MATCH ... WHERE requires: if the WHERE filters
+     * out all matches for a given outer row, that outer row is still
+     * emitted with nulls in the optional columns.
+     */
+    if (saved_where != NULL)
+    {
+        Node *where_qual;
+
+        where_qual = transform_cypher_expr(cpstate, saved_where,
+                                           EXPR_KIND_JOIN_ON);
+        where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
+        j->quals = where_qual;
+    }
+
+    /* restore the WHERE on the node so we don't mutate caller state */
+    match_self->where = saved_where;
 
     /*
      * Since this is a left join, we need to mark j->rarg as it may potentially

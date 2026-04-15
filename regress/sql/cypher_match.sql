@@ -1617,6 +1617,79 @@ $$) AS (result agtype);
 SELECT drop_graph('issue_2193', true);
 
 --
+-- Issue 2378: OPTIONAL MATCH may incorrectly drop null-preserving outer
+-- rows when its WHERE clause contains a correlated sub-pattern predicate.
+--
+-- Cypher OPTIONAL MATCH semantics: the WHERE applies to the optional
+-- binding; when no right-hand row survives the predicate, the outer row
+-- is still emitted with NULLs in the optional columns.  Before the fix,
+-- a WHERE containing EXISTS { ... } or COUNT { ... } was attached as an
+-- outer filter on the transformed subquery, so it ran after the LATERAL
+-- LEFT JOIN produced null-preserving rows and then incorrectly dropped
+-- them when the predicate evaluated NULL/false on the nulled side.
+--
+SELECT create_graph('issue_2378');
+SELECT * FROM cypher('issue_2378', $$
+    CREATE (a:Person {name: 'Alice'}),
+           (b:Person {name: 'Bob'}),
+           (c:Person {name: 'Charlie'}),
+           (a)-[:KNOWS]->(b),
+           (a)-[:KNOWS]->(c)
+$$) AS (v agtype);
+
+-- Correlated EXISTS referencing the optional variable (friend).
+-- Neither Bob nor Charlie knows anyone, so for every outer p the
+-- predicate fails on all optional matches; expect one row per person
+-- with friend = NULL.
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { (friend)-[:KNOWS]->(:Person) }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+-- Correlated EXISTS referencing the outer variable (p).
+-- Alice knows someone so her optional matches pass; Bob and Charlie
+-- don't, so they are emitted with NULL friend.
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { (p)-[:KNOWS]->(:Person) }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name, friend
+$$) AS (name agtype, friend agtype);
+
+-- Non-correlated EXISTS (was already working; kept as a regression guard).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { MATCH (x:Person) RETURN x }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name, friend
+$$) AS (name agtype, friend agtype);
+
+-- Plain scalar predicate on the optional variable (was already working).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE friend.name = 'Bob'
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+-- Constant-false WHERE on the optional side (was already working).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE false
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+SELECT drop_graph('issue_2378', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
