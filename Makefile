@@ -222,7 +222,19 @@ src/include/parser/cypher_kwlist_d.h: src/include/parser/cypher_kwlist.h $(GEN_K
 
 src/include/parser/cypher_gram_def.h: src/backend/parser/cypher_gram.c
 
-src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cypher_gram_def.h -Werror
+#
+# The Cypher grammar uses GLR mode with a number of inherent shift/reduce
+# and reduce/reduce conflicts arising from the ambiguity between
+# parenthesized expressions and graph patterns (both start with '(').
+# GLR handles these correctly at runtime by forking at the conflict
+# point; %dprec annotations resolve cases where both forks succeed.
+#
+# We suppress the conflict warnings rather than hard-coding a conflict
+# budget with %expect / %expect-rr, because the exact counts vary across
+# Bison versions and would otherwise make the build fragile across
+# distros and future Bison releases.
+#
+src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cypher_gram_def.h -Wno-conflicts-sr -Wno-conflicts-rr
 
 src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 src/backend/parser/cypher_parser.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h

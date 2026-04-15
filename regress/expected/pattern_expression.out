@@ -214,6 +214,106 @@ $$) AS (result agtype);
 (1 row)
 
 --
+-- Pattern expressions in RETURN (boolean projection)
+--
+-- Each person gets a column showing whether they know someone
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, (a)-[:KNOWS]->(:Person) AS knows_someone
+    ORDER BY a.name
+$$) AS (name agtype, knows_someone agtype);
+   name    | knows_someone 
+-----------+---------------
+ "Alice"   | true
+ "Bob"     | false
+ "Charlie" | false
+ "Dave"    | false
+(4 rows)
+
+-- Mix pattern expression with other projections
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, (a)-[:KNOWS]->(:Person), (a)-[:WORKS_WITH]->(:Person)
+    ORDER BY a.name
+$$) AS (name agtype, knows agtype, works_with agtype);
+   name    | knows | works_with 
+-----------+-------+------------
+ "Alice"   | true  | true
+ "Bob"     | false | false
+ "Charlie" | false | false
+ "Dave"    | false | false
+(4 rows)
+
+--
+-- Pattern expressions in CASE WHEN
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name,
+           CASE WHEN (a)-[:KNOWS]->(:Person) THEN 'social'
+                ELSE 'loner'
+           END
+    ORDER BY a.name
+$$) AS (name agtype, kind agtype);
+   name    |   kind   
+-----------+----------
+ "Alice"   | "social"
+ "Bob"     | "loner"
+ "Charlie" | "loner"
+ "Dave"    | "loner"
+(4 rows)
+
+--
+-- Pattern expressions combined with boolean operators in RETURN
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name,
+           (a)-[:KNOWS]->(:Person) AND (a)-[:WORKS_WITH]->(:Person) AS has_both,
+           (a)-[:KNOWS]->(:Person) OR (a)-[:WORKS_WITH]->(:Person) AS has_either
+    ORDER BY a.name
+$$) AS (name agtype, has_both agtype, has_either agtype);
+   name    | has_both | has_either 
+-----------+----------+------------
+ "Alice"   | true     | true
+ "Bob"     | false    | false
+ "Charlie" | false    | false
+ "Dave"    | false    | false
+(4 rows)
+
+--
+-- Pattern expression in SET (store boolean as property)
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    SET a.is_social = (a)-[:KNOWS]->(:Person)
+    RETURN a.name, a.is_social
+    ORDER BY a.name
+$$) AS (name agtype, is_social agtype);
+   name    | is_social 
+-----------+-----------
+ "Alice"   | true
+ "Bob"     | false
+ "Charlie" | false
+ "Dave"    | false
+(4 rows)
+
+--
+-- Pattern expression in WITH (carry boolean through pipeline)
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WITH a.name AS name, (a)-[:KNOWS]->(:Person) AS knows
+    WHERE knows
+    RETURN name
+    ORDER BY name
+$$) AS (result agtype);
+ result  
+---------
+ "Alice"
+(1 row)
+
+--
 -- Cleanup
 --
 SELECT * FROM drop_graph('pattern_expr', true);
