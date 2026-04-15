@@ -27,7 +27,7 @@ age_sql = age--1.7.0.sql
 #   1. Builds the install SQL from the INITIAL version-bump commit (the "from"
 #      version). This is the age--<CURR>.sql used by CREATE EXTENSION age.
 #   2. Builds the install SQL from current HEAD as a synthetic "next" version
-#      (the "to" version). This is age--<NEXT>.sql where NEXT = CURR.minor+1.
+#      (the "to" version). This is age--<NEXT>.sql where NEXT = CURR_upgrade_test.
 #   3. Stamps the upgrade template with the synthetic version, producing the
 #      upgrade script age--<CURR>--<NEXT>.sql.
 #   4. Temporarily installs both synthetic files into the PG extension directory
@@ -53,8 +53,8 @@ age_sql = age--1.7.0.sql
 AGE_CURR_VER := $(shell awk -F"'" '/default_version/ {print $$2}' age.control 2>/dev/null)
 # Git commit that last changed age.control — the "initial release" commit
 AGE_VER_COMMIT := $(shell git log -1 --format=%H -- age.control 2>/dev/null)
-# Synthetic next version: current minor + 1 (e.g., 1.7.0 -> 1.8.0)
-AGE_NEXT_VER := $(shell echo $(AGE_CURR_VER) | awk -F. '{printf "%s.%s.%s", $$1, $$2+1, $$3}')
+# Synthetic next version: current version with _upgrade_test suffix (e.g., 1.7.0 -> 1.7.0_upgrade_test)
+AGE_NEXT_VER := $(AGE_CURR_VER)_upgrade_test
 # The upgrade template file (e.g., age--1.7.0--y.y.y.sql); empty if not present
 AGE_UPGRADE_TEMPLATE := $(wildcard age--$(AGE_CURR_VER)--y.y.y.sql)
 
@@ -296,7 +296,7 @@ ifneq ($(AGE_HAS_UPGRADE_TEST),)
 _install_upgrade_test_files: $(age_next_sql) $(age_upgrade_test_sql)  ## Build, install synthetic files, generate cleanup script
 	@echo "Installing upgrade test files to $(SHAREDIR)/extension/"
 	@$(INSTALL_DATA) $(age_next_sql) $(age_upgrade_test_sql) '$(SHAREDIR)/extension/'
-	@printf '#!/bin/sh\nrm -f "$(SHAREDIR)/extension/$(age_next_sql)" "$(SHAREDIR)/extension/$(age_upgrade_test_sql)"\n' > $(ag_regress_dir)/age_upgrade_cleanup.sh
+	@printf '#!/bin/sh\nrm -f "$(SHAREDIR)/extension/$(age_next_sql)" "$(SHAREDIR)/extension/$(age_upgrade_test_sql)"\nrm -f "$(age_next_sql)" "$(age_upgrade_test_sql)" "$(ag_regress_dir)/age_upgrade_cleanup.sh"\n' > $(ag_regress_dir)/age_upgrade_cleanup.sh
 	@chmod +x $(ag_regress_dir)/age_upgrade_cleanup.sh
 
 installcheck: _install_upgrade_test_files
