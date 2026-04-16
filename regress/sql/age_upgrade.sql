@@ -21,17 +21,17 @@
 -- Extension upgrade regression test
 --
 -- This test validates the upgrade template (age--<VER>--y.y.y.sql) by:
---   1. Installing AGE at the current version (built from the initial
---      version-bump commit's SQL — the "day-one release" state)
+--   1. Dropping AGE and reinstalling at the synthetic "initial" version
+--      (built from the version-bump commit's SQL — the "day-one" state)
 --   2. Creating three graphs with multiple labels, edges, GIN indexes,
 --      and numeric properties that serve as integrity checksums
---   3. Upgrading to a synthetic "next" version via the stamped template
+--   3. Upgrading to the current (default) version via the stamped template
 --   4. Verifying all data, structure, and checksums survived the upgrade
 --
 -- The Makefile builds:
---   age--<CURR>.sql        from the initial version-bump commit (git history)
---   age--<NEXT>.sql        from current HEAD's sql/sql_files
---   age--<CURR>--<NEXT>.sql stamped from the upgrade template
+--   age--<CURR>.sql            from current HEAD's sql/sql_files (default)
+--   age--<CURR>_initial.sql    from the version-bump commit (synthetic)
+--   age--<CURR>_initial--<CURR>.sql  stamped from the upgrade template
 --
 -- All version discovery is dynamic — no hardcoded versions anywhere.
 -- This test is version-agnostic and works on any branch for any version.
@@ -42,7 +42,7 @@ SET search_path TO ag_catalog;
 
 -- Step 1: Clean up any state left by prior tests, then drop AGE entirely.
 -- The --load-extension=age flag installed AGE at the current (default) version.
--- We need to remove it so we can cleanly re-create for this test.
+-- We need to remove it so we can reinstall at the synthetic initial version.
 SELECT drop_graph(name, true) FROM ag_graph ORDER BY name;
 DROP EXTENSION age;
 
@@ -50,8 +50,22 @@ DROP EXTENSION age;
 SELECT count(*) > 1 AS has_upgrade_path
 FROM pg_available_extension_versions WHERE name = 'age';
 
--- Step 3: Install AGE at the default version (the initial release SQL).
-CREATE EXTENSION age;
+-- Step 3: Install AGE at the synthetic initial version (pre-upgrade state).
+DO $$
+DECLARE init_ver text;
+BEGIN
+    SELECT version INTO init_ver
+    FROM pg_available_extension_versions
+    WHERE name = 'age' AND version LIKE '%_initial'
+    ORDER BY version DESC
+    LIMIT 1;
+    IF init_ver IS NULL THEN
+        RAISE EXCEPTION 'No initial version available for upgrade test';
+    END IF;
+
+    EXECUTE format('CREATE EXTENSION age VERSION %L', init_ver);
+END;
+$$;
 SELECT extversion IS NOT NULL AS version_installed FROM pg_extension WHERE extname = 'age';
 
 -- Step 4: Create three test graphs with diverse labels, edges, and data.
@@ -194,25 +208,24 @@ SELECT count(*)::int AS total_labels_before
 FROM ag_label al JOIN ag_graph ag ON al.graph = ag.graphid
 WHERE ag.name <> '_ag_catalog';
 
--- Step 6: Upgrade AGE to the synthetic next version via the stamped template.
+-- Step 6: Upgrade AGE from the initial version to the current (default) version
+-- via the stamped upgrade template.
 DO $$
-DECLARE next_ver text;
+DECLARE curr_ver text;
 BEGIN
-    SELECT version INTO next_ver
-    FROM pg_available_extension_versions
-    WHERE name = 'age' AND version LIKE '%_upgrade_test'
-    ORDER BY version DESC
-    LIMIT 1;
-    IF next_ver IS NULL THEN
-        RAISE EXCEPTION 'No next version available for upgrade test';
+    SELECT default_version INTO curr_ver
+    FROM pg_available_extensions
+    WHERE name = 'age';
+    IF curr_ver IS NULL THEN
+        RAISE EXCEPTION 'No default version found for upgrade test';
     END IF;
 
-    EXECUTE format('ALTER EXTENSION age UPDATE TO %L', next_ver);
+    EXECUTE format('ALTER EXTENSION age UPDATE TO %L', curr_ver);
 END;
 $$;
 
--- Step 7: Confirm version changed.
-SELECT installed_version <> default_version AS upgraded_past_default
+-- Step 7: Confirm version is now the default (current HEAD) version.
+SELECT installed_version = default_version AS upgraded_to_current
 FROM pg_available_extensions WHERE name = 'age';
 
 -- Step 8: Verify all data survived — reload and recheck.
