@@ -6556,7 +6556,7 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     int i;
     bool is_valid = false;
     float8 float_num;
-    char buffer[64];
+    char buffer[400];
 
     /* check for null */
     if (PG_ARGISNULL(0))
@@ -6618,7 +6618,7 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
 
             float_elem.type = AGTV_FLOAT;
             float_num = elem->val.float_value;
-            sprintf(buffer, "%f", float_num);
+            snprintf(buffer, sizeof(buffer), "%f", float_num);
             string = buffer;
             float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision", string, &is_valid);
             agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
@@ -7574,7 +7574,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_FLOAT:
 
-            sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
+            snprintf(buffer, sizeof(buffer), "%.*g", DBL_DIG, elem->val.float_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
 
@@ -7585,7 +7585,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_INTEGER:
 
-            sprintf(buffer, "%ld", elem->val.int_value);
+            snprintf(buffer, sizeof(buffer), "%ld", elem->val.int_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
 
