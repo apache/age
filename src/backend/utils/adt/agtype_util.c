@@ -1023,6 +1023,8 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
         {
             (*pstate)->size = 4;
         }
+        if ((*pstate)->size > SIZE_MAX / sizeof(agtype_value))
+            ereport(ERROR, "allocation request exceeds size limits");
         (*pstate)->cont_val.val.array.elems =
             palloc(sizeof(agtype_value) * (*pstate)->size);
         (*pstate)->last_updated_value = NULL;
@@ -1034,6 +1036,8 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
         (*pstate)->cont_val.type = AGTV_OBJECT;
         (*pstate)->cont_val.val.object.num_pairs = 0;
         (*pstate)->size = 4;
+        if ((*pstate)->size > SIZE_MAX / sizeof(agtype_pair))
+            ereport(ERROR, "allocation request exceeds size limits");
         (*pstate)->cont_val.val.object.pairs =
             palloc(sizeof(agtype_pair) * (*pstate)->size);
         (*pstate)->last_updated_value = NULL;
@@ -1120,6 +1124,8 @@ static void append_key(agtype_parse_state *pstate, agtype_value *string)
     if (object->val.object.num_pairs >= pstate->size)
     {
         pstate->size *= 2;
+        if ((*pstate)->size > SIZE_MAX / sizeof(agtype_pair))
+            ereport(ERROR, "allocation request exceeds size limits");
         object->val.object.pairs = repalloc(
             object->val.object.pairs, sizeof(agtype_pair) * pstate->size);
     }
@@ -1167,6 +1173,8 @@ static void append_element(agtype_parse_state *pstate,
     if (array->val.array.num_elems >= pstate->size)
     {
         pstate->size *= 2;
+        if ((*pstate)->size > SIZE_MAX / sizeof(agtype_value))
+            ereport(ERROR, "allocation request exceeds size limits");
         array->val.array.elems = repalloc(array->val.array.elems,
                                           sizeof(agtype_value) * pstate->size);
     }
@@ -1631,6 +1639,8 @@ bool agtype_deep_contains(agtype_iterator **val,
                     uint32 j = 0;
 
                     /* Make room for all possible values */
+                    if (num_lhs_elems > SIZE_MAX / sizeof(agtype_value))
+                        ereport(ERROR, "allocation request exceeds size limits");
                     lhs_conts = palloc(sizeof(agtype_value) * num_lhs_elems);
 
                     for (i = 0; i < num_lhs_elems; i++)
