@@ -18,6 +18,7 @@
  */
 
 #include "postgres.h"
+#include "miscadmin.h"
 
 #include "common/hashfn.h"
 #include "funcapi.h"
@@ -25,6 +26,7 @@
 #include "utils/lsyscache.h"
 
 #include "utils/age_vle.h"
+#include "utils/ag_guc.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "nodes/cypher_nodes.h"
@@ -937,6 +939,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
     ListGraphId *edge_stack = NULL;
     ListGraphId *path_stack = NULL;
     graphid end_vertex_id;
+    int max_vle_depth;
 
     Assert(vlelctx != NULL);
 
@@ -946,14 +949,18 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
     path_stack = vlelctx->dfs_path_stack;
     end_vertex_id = vlelctx->veid;
 
+    max_vle_depth = age_max_vle_depth;
+
     /* while we have edges to process */
-    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)))
+    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)) && (--max_vle_depth > 0))
     {
         graphid edge_id;
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+
+        CHECK_FOR_INTERRUPTS();
 
         /* get an edge, but leave it on the stack for now */
         edge_id = PEEK_GRAPHID_STACK(edge_stack);
@@ -1066,6 +1073,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
     ListGraphId *vertex_stack = NULL;
     ListGraphId *edge_stack = NULL;
     ListGraphId *path_stack = NULL;
+    int max_vle_depth;
 
     Assert(vlelctx != NULL);
 
@@ -1074,14 +1082,18 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
     edge_stack = vlelctx->dfs_edge_stack;
     path_stack = vlelctx->dfs_path_stack;
 
+    max_vle_depth = age_max_vle_depth;
+
     /* while we have edges to process */
-    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)))
+    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)) && (--max_vle_depth > 0))
     {
         graphid edge_id;
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+
+        CHECK_FOR_INTERRUPTS();
 
         /* get an edge, but leave it on the stack for now */
         edge_id = PEEK_GRAPHID_STACK(edge_stack);

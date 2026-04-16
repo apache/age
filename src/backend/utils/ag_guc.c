@@ -19,10 +19,13 @@
 
 #include "postgres.h"
 
+#include <limits.h>
+
 #include "utils/guc.h"
 #include "utils/ag_guc.h"
 
 bool age_enable_containment = true;
+int  age_max_vle_depth = 1000;
 
 /*
  * Defines AGE's custom configuration parameters.
@@ -42,5 +45,19 @@ void define_config_params(void)
                              NULL,
                              NULL,
                              NULL);
+
+    DefineCustomIntVariable("age.max_vle_depth",
+                            "Limit recursion in vle detection to the given number of iterations.",
+                            NULL,
+                            &age_max_vle_depth,
+                            1000,
+                            1,
+                            INT_MAX,
+                            PGC_SUSET,
+                            0,
+                            NULL,
+                            NULL,
+                            NULL);
+
     EmitWarningsOnPlaceholders("age");
 }

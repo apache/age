@@ -39,6 +39,11 @@
  */
 extern bool age_enable_containment;
 
+/*
+ * Set the maximum recursion depth for vle graph traversal.
+ */
+extern int age_max_vle_depth;
+
 void define_config_params(void);
 
 #endif
