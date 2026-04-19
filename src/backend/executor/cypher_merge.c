@@ -80,6 +80,7 @@ static bool check_path(cypher_merge_custom_scan_state *css,
 static void process_path(cypher_merge_custom_scan_state *css,
                          path_entry **path_array, bool should_insert);
 static void mark_tts_isnull(TupleTableSlot *slot);
+static void mark_scan_slot_valid(TupleTableSlot *slot);
 
 const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      begin_cypher_merge,
@@ -357,7 +358,7 @@ static void process_simple_merge(CustomScanState *node)
         /* ON CREATE SET: path was just created */
         if (css->on_create_set_info)
         {
-            ExecStoreVirtualTuple(econtext->ecxt_scantuple);
+            mark_scan_slot_valid(econtext->ecxt_scantuple);
             apply_update_list(&css->css, css->on_create_set_info);
         }
     }
@@ -374,6 +375,23 @@ static void process_simple_merge(CustomScanState *node)
             apply_update_list(&css->css, css->on_match_set_info);
         }
     }
+}
+
+/*
+ * mark_scan_slot_valid - mark a scan slot as populated after direct writes
+ * to tts_values[] by process_path.
+ *
+ * This does the same bookkeeping as ExecStoreVirtualTuple (clear TTS_EMPTY,
+ * set tts_nvalid = natts) but without the TTS_EMPTY precondition assertion.
+ * We cannot use ExecStoreVirtualTuple here because process_path writes into
+ * a scan slot that already holds the subquery's output tuple -- the slot is
+ * NOT empty, and asserting it is would fire under --enable-cassert while
+ * silently clearing the flag on release builds.
+ */
+static void mark_scan_slot_valid(TupleTableSlot *slot)
+{
+    slot->tts_flags &= ~TTS_FLAG_EMPTY;
+    slot->tts_nvalid = slot->tts_tupleDescriptor->natts;
 }
 
 /*
@@ -723,7 +741,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                         css->created_paths_list = new_path;
 
                         process_path(css, prebuilt_path_array, true);
-                        ExecStoreVirtualTuple(econtext->ecxt_scantuple);
+                        mark_scan_slot_valid(econtext->ecxt_scantuple);
 
                         /* ON CREATE SET: path was just created */
                         if (css->on_create_set_info)
@@ -823,7 +841,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                     css->created_paths_list = new_path;
 
                     process_path(css, prebuilt_path_array, true);
-                    ExecStoreVirtualTuple(econtext->ecxt_scantuple);
+                    mark_scan_slot_valid(econtext->ecxt_scantuple);
 
                     /* ON CREATE SET: path was just created */
                     if (css->on_create_set_info)
@@ -987,7 +1005,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             process_path(css, NULL, true);
 
             /* mark the slot as valid so tts_nvalid reflects natts */
-            ExecStoreVirtualTuple(econtext->ecxt_scantuple);
+            mark_scan_slot_valid(econtext->ecxt_scantuple);
 
             /* ON CREATE SET: path was just created */
             if (css->on_create_set_info)
