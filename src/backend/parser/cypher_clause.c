@@ -2872,7 +2872,7 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
         Node *where_qual;
 
         where_qual = transform_cypher_expr(cpstate, saved_where,
-                                           EXPR_KIND_JOIN_ON);
+                                           EXPR_KIND_WHERE);
         where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
         j->quals = where_qual;
     }
