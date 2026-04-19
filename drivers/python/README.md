@@ -89,9 +89,25 @@ SET search_path = ag_catalog, "$user", public;
 * Make sure to give your non-superuser db account proper permissions to the graph schemas and corresponding objects
 * Make sure to initiate the Apache Age python driver with the ```load_from_plugins``` parameter. This parameter tries to
   load the Apache Age extension from the PostgreSQL plugins directory located at ```$libdir/plugins/age```. Example:
-  ```python.
+  ```python
   ag = age.connect(host='localhost', port=5432, user='dbuser', password='strong_password', 
-                   dbname=postgres, load_from_plugins=True, graph='graph_name)
+                   dbname='postgres', load_from_plugins=True, graph='graph_name')
+  ```
+
+### Managed PostgreSQL Usage (Azure, AWS RDS, etc.)
+* On managed PostgreSQL services where the AGE extension is loaded server-side via ```shared_preload_libraries```,
+  the ```LOAD 'age'``` command may fail because the binary is not at the expected file path. Use the ```skip_load```
+  parameter to skip the ```LOAD``` statement while still performing all other setup:
+  ```python
+  ag = age.connect(host='myserver.postgres.database.azure.com', port=5432,
+                   user='dbuser', password='strong_password',
+                   dbname='postgres', skip_load=True, graph='graph_name')
+  ```
+* **Connection pools:** If you manage connections externally (e.g. via ```psycopg_pool.ConnectionPool```),
+  you can call ```setUpAge()``` with ```skip_load=True``` on each pooled connection:
+  ```python
+  from age.age import setUpAge
+  setUpAge(conn, 'graph_name', skip_load=True)
   ```
 
 ### License
