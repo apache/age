@@ -189,6 +189,17 @@ void out_cypher_list_comprehension(StringInfo str, const ExtensibleNode *node)
 }
 
 
+/* serialization function for the cypher_predicate_function ExtensibleNode. */
+void out_cypher_predicate_function(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_predicate_function);
+
+    WRITE_ENUM_FIELD(kind, cypher_predicate_function_kind);
+    WRITE_STRING_FIELD(varname);
+    WRITE_NODE_FIELD(expr);
+    WRITE_NODE_FIELD(where);
+}
+
 /* serialization function for the cypher_delete ExtensibleNode. */
 void out_cypher_merge(StringInfo str, const ExtensibleNode *node)
 {

@@ -169,3 +169,15 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_SCALAR_FIELD(merge_function_attr);
     COPY_NODE_FIELD(path);
 }
+
+/* copy function for cypher_predicate_function */
+void copy_cypher_predicate_function(ExtensibleNode *newnode,
+                                    const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_predicate_function);
+
+    COPY_SCALAR_FIELD(kind);
+    COPY_STRING_FIELD(varname);
+    COPY_NODE_FIELD(expr);
+    COPY_NODE_FIELD(where);
+}
