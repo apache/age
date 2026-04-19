@@ -137,14 +137,22 @@ class AgeLoader(psycopg.adapt.Loader):
         return parseAgeValue(data_bytes.decode('utf-8'))
 
 
-def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=False):
-    with conn.cursor() as cursor:
-        if load_from_plugins:
-            cursor.execute("LOAD '$libdir/plugins/age';")
-        else:
-            cursor.execute("LOAD 'age';")
+def setUpAge(conn:psycopg.connection, graphName:str, load_from_plugins:bool=False, skip_load:bool=False):
+    if skip_load and load_from_plugins:
+        raise ValueError(
+            "skip_load=True and load_from_plugins=True are contradictory. "
+            "Set skip_load=False to load the extension from the plugins path, "
+            "or remove load_from_plugins to skip loading entirely."
+        )
 
-        cursor.execute("SET search_path = ag_catalog, '$user', public;")
+    with conn.cursor() as cursor:
+        if not skip_load:
+            if load_from_plugins:
+                cursor.execute("LOAD '$libdir/plugins/age';")
+            else:
+                cursor.execute("LOAD 'age';")
+
+        cursor.execute('SET search_path = ag_catalog, "$user", public;')
 
         ag_info = TypeInfo.fetch(conn, 'agtype')
 
@@ -333,9 +341,9 @@ class Age:
 
     # Connect to PostgreSQL Server and establish session and type extension environment.
     def connect(self, graph:str=None, dsn:str=None, connection_factory=None, cursor_factory=ClientCursor,
-                load_from_plugins:bool=False, **kwargs):
+                load_from_plugins:bool=False, skip_load:bool=False, **kwargs):
         conn = psycopg.connect(dsn, cursor_factory=cursor_factory, **kwargs)
-        setUpAge(conn, graph, load_from_plugins)
+        setUpAge(conn, graph, load_from_plugins, skip_load=skip_load)
         self.connection = conn
         self.graphName = graph
         return self
