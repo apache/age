@@ -92,9 +92,16 @@ class ResultVisitor(AgtypeVisitor):
 
         if annoCtx is not None:
             annoCtx.accept(self)
-            anno = annoCtx.IDENT().getText()
+            identNode = annoCtx.IDENT()
+            if identNode is None:
+                raise AGTypeError(ctx.getText(), "Missing type annotation identifier")
+            anno = identNode.getText()
+            if valueCtx is None:
+                raise AGTypeError(ctx.getText(), "Missing value for annotated type")
             return self.handleAnnotatedValue(anno, valueCtx)
         else:
+            if valueCtx is None:
+                return None
             return valueCtx.accept(self)
 
 
@@ -109,9 +116,14 @@ class ResultVisitor(AgtypeVisitor):
 
     # Visit a parse tree produced by AgtypeParser#floatLiteral.
     def visitFloatLiteral(self, ctx:AgtypeParser.FloatLiteralContext):
-        c = ctx.getChild(0)
-        tp = c.symbol.type
         text = ctx.getText()
+        c = ctx.getChild(0)
+        if c is None or not hasattr(c, 'symbol') or c.symbol is None:
+            raise AGTypeError(
+                str(text),
+                "Malformed float literal: missing or invalid child node"
+            )
+        tp = c.symbol.type
         if tp == AgtypeParser.RegularFloat:
             return float(text)
         elif tp == AgtypeParser.ExponentFloat:
@@ -150,15 +162,27 @@ class ResultVisitor(AgtypeVisitor):
                 namVal = self.visitPair(c)
                 name = namVal[0]
                 valCtx = namVal[1]
-                val = valCtx.accept(self) 
-                obj[name] = val
+                # visitPair() raises AGTypeError when the value node is
+                # missing, so valCtx should never be None here.  The
+                # guard is kept as a defensive fallback only.
+                if valCtx is not None:
+                    val = valCtx.accept(self) 
+                    obj[name] = val
+                else:
+                    obj[name] = None
         return obj
 
 
     # Visit a parse tree produced by AgtypeParser#pair.
     def visitPair(self, ctx:AgtypeParser.PairContext):
         self.visitChildren(ctx)
-        return (ctx.STRING().getText().strip('"') , ctx.agValue())
+        strNode = ctx.STRING()
+        agValNode = ctx.agValue()
+        if strNode is None:
+            raise AGTypeError(ctx.getText(), "Missing key in object pair")
+        if agValNode is None:
+            raise AGTypeError(ctx.getText(), "Missing value in object pair")
+        return (strNode.getText().strip('"') , agValNode)
 
 
     # Visit a parse tree produced by AgtypeParser#array.
@@ -171,38 +195,49 @@ class ResultVisitor(AgtypeVisitor):
         return li
 
     def handleAnnotatedValue(self, anno:str, ctx:ParserRuleContext):
+        # Each branch below constructs a model object (Vertex, Edge, Path)
+        # and populates it from the parsed dict/list.  If a type check
+        # fails (e.g. the parsed value is not a dict), AGTypeError is
+        # raised and the partially-constructed object is discarded — no
+        # cleanup is needed because the caller propagates the exception.
         if anno == "numeric":
             return Decimal(ctx.getText())
         elif anno == "vertex":
-            dict = ctx.accept(self)
-            vid = dict["id"]
+            d = ctx.accept(self)
+            if not isinstance(d, dict):
+                raise AGTypeError(str(ctx.getText()), "Expected dict for vertex, got " + type(d).__name__)
+            vid = d.get("id")
             vertex = None
-            if self.vertexCache != None and vid in self.vertexCache :
+            if self.vertexCache is not None and vid in self.vertexCache:
                 vertex = self.vertexCache[vid]
             else:
                 vertex = Vertex()
-                vertex.id = dict["id"]
-                vertex.label = dict["label"]
-                vertex.properties = dict["properties"]
+                vertex.id = d.get("id")
+                vertex.label = d.get("label")
+                vertex.properties = d.get("properties") or {}
             
-            if self.vertexCache != None:
+            if self.vertexCache is not None:
                 self.vertexCache[vid] = vertex
 
             return vertex
         
         elif anno == "edge":
             edge = Edge()
-            dict = ctx.accept(self)
-            edge.id = dict["id"]
-            edge.label = dict["label"]
-            edge.end_id = dict["end_id"]
-            edge.start_id = dict["start_id"]
-            edge.properties = dict["properties"]
+            d = ctx.accept(self)
+            if not isinstance(d, dict):
+                raise AGTypeError(str(ctx.getText()), "Expected dict for edge, got " + type(d).__name__)
+            edge.id = d.get("id")
+            edge.label = d.get("label")
+            edge.end_id = d.get("end_id")
+            edge.start_id = d.get("start_id")
+            edge.properties = d.get("properties") or {}
             
             return edge
 
         elif anno == "path":
             arr = ctx.accept(self)
+            if not isinstance(arr, list):
+                raise AGTypeError(str(ctx.getText()), "Expected list for path, got " + type(arr).__name__)
             path = Path(arr)
             
             return path
