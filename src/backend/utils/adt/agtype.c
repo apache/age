@@ -4324,11 +4324,14 @@ Datum agtype_access_slice(PG_FUNCTION_ARGS)
     {
         agt_lidx = AG_GET_ARG_AGTYPE_P(1);
         lidx_value = get_ith_agtype_value_from_container(&agt_lidx->root, 0);
-        /* adjust for AGTV_NULL */
+        /*
+         * Under Cypher null-propagation semantics, list[a..b] is null when
+         * either bound is null. Return null directly instead of silently
+         * treating AGTV_NULL as an omitted bound.
+         */
         if (lidx_value->type == AGTV_NULL)
         {
-            lower_index = 0;
-            lidx_value = NULL;
+            PG_RETURN_NULL();
         }
     }
 
@@ -4341,11 +4344,10 @@ Datum agtype_access_slice(PG_FUNCTION_ARGS)
     {
         agt_uidx = AG_GET_ARG_AGTYPE_P(2);
         uidx_value = get_ith_agtype_value_from_container(&agt_uidx->root, 0);
-        /* adjust for AGTV_NULL */
+        /* Symmetric to the lower bound: null propagates to a null result. */
         if (uidx_value->type == AGTV_NULL)
         {
-            upper_index = array_size;
-            uidx_value = NULL;
+            PG_RETURN_NULL();
         }
     }
 

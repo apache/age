@@ -216,6 +216,11 @@ SELECT * FROM cypher('expr',
 $$RETURN [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10][-1..10]$$) AS r(c agtype);
 SELECT agtype_access_slice('[0]'::agtype, 'null'::agtype, '1'::agtype);
 SELECT agtype_access_slice('[0]'::agtype, '0'::agtype, 'null'::agtype);
+-- null bounds propagate through bracket-style slicing too
+SELECT * FROM cypher('expr',
+$$RETURN [1, 2, 3][1..null]$$) AS r(c agtype);
+SELECT * FROM cypher('expr',
+$$RETURN [1, 2, 3][null..2]$$) AS r(c agtype);
 -- should error - ERROR:  slice must access a list
 SELECT * from cypher('expr',
 $$RETURN 0[0..1]$$) as r(a agtype);
