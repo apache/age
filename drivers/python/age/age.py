@@ -216,14 +216,19 @@ def _validate_column(col: str) -> str:
         name, type_name = parts
         validate_identifier(name, "Column name")
         validate_identifier(type_name, "Column type")
-        return f"{name} {type_name}"
+        # Only the column name is double-quoted.  The type name is left
+        # unquoted so PostgreSQL applies its default identifier folding
+        # for type names in column definitions.  Double-quoting would
+        # make the type name case-sensitive and could change type
+        # resolution in surprising ways for user-defined types.
+        return f'"{name}" {type_name}'
     else:
         validate_identifier(col, "Column name")
-        return f"{col} agtype"
+        return f'"{col}" agtype'
 
 
 def buildCypher(graphName:str, cypherStmt:str, columns:list) ->str:
-    if graphName == None:
+    if graphName is None:
         raise _EXCEPTION_GraphNotSet
 
     columnExp=[]
@@ -233,16 +238,18 @@ def buildCypher(graphName:str, cypherStmt:str, columns:list) ->str:
             if validated:
                 columnExp.append(validated)
     else:
-        columnExp.append('v agtype')
+        columnExp.append('"v" agtype')
 
     # Design note: String concatenation is used here instead of
     # psycopg.sql.Identifier() because column specifications are
-    # "name type" pairs (e.g. "v agtype") that don't map directly to
+    # "name type" pairs (e.g. '"v" agtype') that don't map directly to
     # sql.Identifier(). Each component has already been validated by
     # _validate_column() → validate_identifier(), which restricts
-    # names to ^[A-Za-z_][A-Za-z0-9_]*$ and max 63 chars. The
-    # graphName and cypherStmt are NOT embedded here — this template
-    # only contains the validated column list and static SQL keywords.
+    # names to ^[A-Za-z_][A-Za-z0-9_]*$ and max 63 chars. Column names
+    # are always double-quoted to avoid conflicts with PostgreSQL
+    # reserved words (e.g. "count", "order", "type"). The graphName
+    # and cypherStmt are NOT embedded here — this template only
+    # contains the validated column list and static SQL keywords.
     stmtArr = []
     stmtArr.append("SELECT * from cypher(NULL,NULL) as (")
     stmtArr.append(','.join(columnExp))
