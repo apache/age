@@ -3269,7 +3269,7 @@ SELECT * from cypher('list', $$RETURN range(0, -10.0, -3.0)$$) as (range agtype)
 -- should return the last elements of the list
 SELECT * FROM cypher('list', $$ RETURN tail([1,2,3,4,5]) $$) AS (tail agtype);
 SELECT * FROM cypher('list', $$ RETURN tail(["a","b","c","d","e"]) $$) AS (tail agtype);
--- should return null
+-- should return an empty list
 SELECT * FROM cypher('list', $$ RETURN tail([1]) $$) AS (tail agtype);
 SELECT * FROM cypher('list', $$ RETURN tail([]) $$) AS (tail agtype);
 -- should throw errors

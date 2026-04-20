@@ -8039,17 +8039,17 @@ SELECT * FROM cypher('list', $$ RETURN tail(["a","b","c","d","e"]) $$) AS (tail 
  ["b", "c", "d", "e"]
 (1 row)
 
--- should return null
+-- should return an empty list
 SELECT * FROM cypher('list', $$ RETURN tail([1]) $$) AS (tail agtype);
  tail 
 ------
- 
+ []
 (1 row)
 
 SELECT * FROM cypher('list', $$ RETURN tail([]) $$) AS (tail agtype);
  tail 
 ------
- 
+ []
 (1 row)
 
 -- should throw errors
