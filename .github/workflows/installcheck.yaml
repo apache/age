@@ -47,8 +47,8 @@ jobs:
       - name: Build AGE
         id: build
         run: |
-          make PG_CONFIG=$HOME/pg15/bin/pg_config install -j$(nproc)
-        
+          make PG_CONFIG=$HOME/pg15/bin/pg_config COPT=-Werror install -j$(nproc)
+
       - name: Pull and build pgvector
         id: pgvector
         run: |
