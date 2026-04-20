@@ -1326,21 +1326,14 @@ static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
     }
 
     /* find the properties column of the NSI and return a var for it */
-    node = scanNSItemForColumn(pstate, pnsi, levels_up, "properties", 
+    node = scanNSItemForColumn(pstate, pnsi, levels_up, "properties",
                                cr->location);
 
     /*
-     * Error out if we couldn't find it.
-     *
-     * TODO: Should we error out or return NULL for further processing?
-     *       For now, just error out.
+     * If there's no "properties" column, continue transforming the
+     * ColumnRef as an agtype value and try to apply the indirection via
+     * agtype_access_operator.
      */
-    if (!node)
-    {
-        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
-                        errmsg("could not find properties for %s", relname)));
-    }
-
     return node;
 }
 
