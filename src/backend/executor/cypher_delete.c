@@ -28,6 +28,7 @@
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
+#include "utils/age_global_graph.h"
 #include "executor/cypher_utils.h"
 
 static void begin_cypher_delete(CustomScanState *node, EState *estate,
@@ -193,7 +194,13 @@ static TupleTableSlot *exec_cypher_delete(CustomScanState *node)
  */
 static void end_cypher_delete(CustomScanState *node)
 {
+    cypher_delete_custom_scan_state *css =
+        (cypher_delete_custom_scan_state *)node;
+
     check_for_connected_edges(node);
+
+    /* invalidate VLE cache — graph was mutated */
+    increment_graph_version(css->delete_data->graph_oid);
 
     hash_destroy(((cypher_delete_custom_scan_state *)node)->vertex_id_htab);
 

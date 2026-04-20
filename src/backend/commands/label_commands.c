@@ -25,9 +25,11 @@
 #include "commands/defrem.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
+#include "catalog/pg_trigger.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parser.h"
+#include "parser/parse_func.h"
 #include "tcop/utility.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
@@ -431,6 +433,64 @@ static void create_table_for_label(char *graph_name, char *label_name,
     {
         create_index_on_column(schema_name, rel_name, "start_id", false);
         create_index_on_column(schema_name, rel_name, "end_id", false);
+    }
+
+    /*
+     * Install a cache invalidation trigger on the new label table, if the
+     * trigger function exists. The function is registered in the extension
+     * SQL (age_main.sql). It may not exist if running against an older
+     * version of the extension SQL that hasn't been upgraded yet.
+     *
+     * When installed, the trigger fires AFTER INSERT/UPDATE/DELETE/TRUNCATE
+     * (FOR EACH STATEMENT) and increments the graph's version counter so
+     * VLE caches are properly invalidated when the table is modified via SQL.
+     */
+    {
+        Oid func_oid;
+
+        /* check if the trigger function is registered in the catalog */
+        func_oid = LookupFuncName(
+            list_make2(makeString("ag_catalog"),
+                       makeString("age_invalidate_graph_cache")),
+            0, NULL, true);
+
+        if (OidIsValid(func_oid))
+        {
+            CreateTrigStmt *trigger_stmt = makeNode(CreateTrigStmt);
+            PlannedStmt *trigger_wrapper;
+
+            trigger_stmt->replace = false;
+            trigger_stmt->isconstraint = false;
+            trigger_stmt->trigname = "_age_cache_invalidate";
+            trigger_stmt->relation = makeRangeVar(schema_name, rel_name, -1);
+            trigger_stmt->funcname = list_make2(makeString("ag_catalog"),
+                                                makeString("age_invalidate_graph_cache"));
+            trigger_stmt->args = NIL;
+            trigger_stmt->row = false;
+            trigger_stmt->timing = TRIGGER_TYPE_AFTER;
+            trigger_stmt->events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE |
+                                   TRIGGER_TYPE_DELETE | TRIGGER_TYPE_TRUNCATE;
+            trigger_stmt->columns = NIL;
+            trigger_stmt->whenClause = NULL;
+            trigger_stmt->transitionRels = NIL;
+            trigger_stmt->deferrable = false;
+            trigger_stmt->initdeferred = false;
+            trigger_stmt->constrrel = NULL;
+
+            trigger_wrapper = makeNode(PlannedStmt);
+            trigger_wrapper->commandType = CMD_UTILITY;
+            trigger_wrapper->canSetTag = false;
+            trigger_wrapper->utilityStmt = (Node *) trigger_stmt;
+            trigger_wrapper->stmt_location = -1;
+            trigger_wrapper->stmt_len = 0;
+
+            ProcessUtility(trigger_wrapper,
+                           "(generated CREATE TRIGGER command)",
+                           false, PROCESS_UTILITY_SUBCOMMAND,
+                           NULL, NULL, None_Receiver, NULL);
+
+            CommandCounterIncrement();
+        }
     }
 }
 

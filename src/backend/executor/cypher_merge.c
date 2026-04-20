@@ -26,6 +26,7 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/age_global_graph.h"
 
 /*
  * The following structure is used to hold a single vertex or edge component
@@ -935,6 +936,12 @@ static void end_cypher_merge(CustomScanState *node)
 
     /* increment the command counter */
     CommandCounterIncrement();
+
+    /* invalidate VLE cache if merge created anything */
+    if (css->created_new_path)
+    {
+        increment_graph_version(css->graph_oid);
+    }
 
     ExecEndNode(node->ss.ps.lefttree);
 

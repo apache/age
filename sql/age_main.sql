@@ -381,3 +381,14 @@ CREATE FUNCTION ag_catalog._extract_label_id(graphid)
     STABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
+
+--
+-- VLE cache invalidation trigger function.
+-- Installed on graph label tables to catch SQL-level mutations
+-- (INSERT/UPDATE/DELETE/TRUNCATE) and increment the graph's
+-- version counter so VLE caches are properly invalidated.
+--
+CREATE FUNCTION ag_catalog.age_invalidate_graph_cache()
+    RETURNS trigger
+    LANGUAGE c
+AS 'MODULE_PATHNAME';

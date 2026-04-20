@@ -22,6 +22,33 @@
 #include "optimizer/cypher_paths.h"
 #include "parser/cypher_analyze.h"
 #include "utils/ag_guc.h"
+#include "utils/age_global_graph.h"
+
+#if PG_VERSION_NUM < 170000
+#include "miscadmin.h"
+
+/* saved hook pointers for PG < 17 shmem path */
+static shmem_request_hook_type prev_shmem_request_hook = NULL;
+static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+
+static void age_shmem_request_hook(void)
+{
+    if (prev_shmem_request_hook)
+    {
+        prev_shmem_request_hook();
+    }
+    age_graph_version_shmem_request();
+}
+
+static void age_shmem_startup_hook(void)
+{
+    if (prev_shmem_startup_hook)
+    {
+        prev_shmem_startup_hook();
+    }
+    age_graph_version_shmem_startup();
+}
+#endif /* PG_VERSION_NUM < 170000 */
 
 PG_MODULE_MAGIC;
 
@@ -35,6 +62,15 @@ void _PG_init(void)
     process_utility_hook_init();
     post_parse_analyze_init();
     define_config_params();
+
+#if PG_VERSION_NUM < 170000
+    /* Register shared memory hooks for graph version tracking.
+     * On PG 17+, DSM is used instead (no hooks needed). */
+    prev_shmem_request_hook = shmem_request_hook;
+    shmem_request_hook = age_shmem_request_hook;
+    prev_shmem_startup_hook = shmem_startup_hook;
+    shmem_startup_hook = age_shmem_startup_hook;
+#endif
 }
 
 void _PG_fini(void);

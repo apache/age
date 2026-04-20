@@ -25,6 +25,7 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/age_global_graph.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -248,6 +249,9 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
 
     /* update the current command Id */
     CommandCounterIncrement();
+
+    /* invalidate VLE cache — graph was mutated */
+    increment_graph_version(css->graph_oid);
 
     /* if this was a terminal CREATE just return NULL */
     if (terminal)
