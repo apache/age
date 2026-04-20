@@ -745,6 +745,78 @@ class TestAgeBasic(unittest.TestCase):
             self.assertFalse(as_str.endswith(", }}::VERTEX"))
         print("Vertex.toString() 'properties' field is formatted properly.")
 
+    def testConfigureConnection(self):
+        """Integration: configure_connection() on an externally-opened
+        connection must register agtype adapters so cypher queries return
+        real Vertex/Edge/Path objects, and to_dict() must round-trip those
+        parser-produced objects through json.dumps()."""
+        print("\n-------------------------------------------------------")
+        print("Test 8: configure_connection + to_dict end-to-end.....")
+        print("-------------------------------------------------------\n")
+
+        import psycopg
+
+        from age import configure_connection
+
+        dsn = "host={host} port={port} dbname={database} user={user} password={password}".format(
+            **vars(self.args)
+        )
+        # Deliberately bypass age.connect(): the whole point of
+        # configure_connection() is to enable AGE on a caller-managed
+        # connection (e.g. one obtained from psycopg_pool.ConnectionPool).
+        raw = psycopg.connect(dsn)
+        try:
+            configure_connection(raw, graph_name=self.args.graphName, load=True)
+
+            graph = self.args.graphName
+            with raw.cursor() as cur:
+                cur.execute(
+                    f"SELECT * FROM cypher('{graph}', $$ "
+                    "CREATE (a:Person {name: 'Alice'})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob'}) "
+                    "RETURN a, r, b "
+                    "$$) AS (a agtype, r agtype, b agtype);"
+                )
+                row = cur.fetchone()
+                raw.commit()
+
+            v_a, e, v_b = row
+            self.assertIsInstance(v_a, Vertex)
+            self.assertIsInstance(e, Edge)
+            self.assertIsInstance(v_b, Vertex)
+            self.assertEqual(v_a["name"], "Alice")
+            self.assertEqual(v_b["name"], "Bob")
+            self.assertEqual(e["since"], 2020)
+
+            payload = {
+                "start": v_a.to_dict(),
+                "edge": e.to_dict(),
+                "end": v_b.to_dict(),
+            }
+            serialised = json.loads(json.dumps(payload))
+            self.assertEqual(serialised["start"]["label"], "Person")
+            self.assertEqual(serialised["edge"]["label"], "KNOWS")
+            self.assertEqual(serialised["edge"]["start_id"], v_a.id)
+            self.assertEqual(serialised["edge"]["end_id"], v_b.id)
+            self.assertEqual(serialised["start"]["properties"]["name"], "Alice")
+
+            with raw.cursor() as cur:
+                cur.execute(
+                    f"SELECT * FROM cypher('{graph}', $$ "
+                    "MATCH p=(:Person)-[:KNOWS]->(:Person) RETURN p "
+                    "$$) AS (p agtype);"
+                )
+                path = cur.fetchone()[0]
+
+            self.assertIsInstance(path, Path)
+            path_dict = json.loads(json.dumps(path.to_dict()))
+            self.assertEqual(len(path_dict), 3)
+            self.assertEqual(path_dict[0]["label"], "Person")
+            self.assertEqual(path_dict[1]["label"], "KNOWS")
+            self.assertEqual(path_dict[2]["label"], "Person")
+            print("\nTest 8 Successful....")
+        finally:
+            raw.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -797,5 +869,6 @@ if __name__ == "__main__":
     suite.addTest(TestAgeBasic("testMultipleEdges"))
     suite.addTest(TestAgeBasic("testCollect"))
     suite.addTest(TestAgeBasic("testSerialization"))
+    suite.addTest(TestAgeBasic("testConfigureConnection"))
     TestAgeBasic.args = args
     unittest.TextTestRunner().run(suite)
