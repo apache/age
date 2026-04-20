@@ -8639,8 +8639,15 @@ Datum age_substring(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    /* neither offset or length can be null if there is a valid string */
-    if ((nargs == 2 && nulls[1]) ||
+    /*
+     * neither offset nor length may be null when there is a valid string.
+     * Both arg positions must be checked whenever they are supplied; the
+     * previous condition missed the `start is null, length is provided`
+     * case (nargs == 3 && nulls[1]), which fell through to the numeric
+     * parser below and dereferenced an undefined Datum - crashing the
+     * backend (#2386).
+     */
+    if ((nargs >= 2 && nulls[1]) ||
         (nargs == 3 && nulls[2]))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
