@@ -13,12 +13,18 @@
 # specific language governing permissions and limitations
 # under the License.
 import json
+import re
 
 from age.models import Vertex
 import unittest
 import unittest.mock
 import decimal
 import age
+# _validate_column is private but tested directly because its quoting
+# behavior is security-relevant and the public surface (buildCypher)
+# makes it difficult to isolate quoting assertions.
+from age.age import buildCypher, _validate_column
+from age.exceptions import InvalidIdentifier
 import argparse
 
 TEST_HOST = "localhost"
@@ -97,6 +103,72 @@ class TestSetUpAge(unittest.TestCase):
             kwargs.get("skip_load", False),
             "skip_load must be forwarded from age.connect() to setUpAge()"
         )
+
+
+class TestBuildCypher(unittest.TestCase):
+    """Unit tests for buildCypher() and _validate_column() — no DB required."""
+
+    def test_simple_column(self):
+        result = buildCypher("g", "MATCH (n) RETURN n", ["n"])
+        self.assertIn('"n" agtype', result)
+
+    def test_column_with_type(self):
+        result = buildCypher("g", "MATCH (n) RETURN n", ["n agtype"])
+        self.assertIn('"n" agtype', result)
+
+    def test_reserved_word_count(self):
+        """Issue #2370: 'count' is a PostgreSQL reserved word."""
+        result = buildCypher("g", "MATCH (n) RETURN count(n)", ["count"])
+        self.assertIn('"count" agtype', result)
+        # Verify 'count' never appears unquoted as a column name
+        self.assertIsNone(
+            re.search(r'(?<!")\bcount\s+agtype\b', result),
+            f"'count' must be quoted in: {result}"
+        )
+
+    def test_reserved_word_order(self):
+        """Issue #2370: 'order' is a PostgreSQL reserved word."""
+        result = buildCypher("g", "MATCH (n) RETURN n.order", ["order"])
+        self.assertIn('"order" agtype', result)
+
+    def test_reserved_word_type(self):
+        """Issue #2370: 'type' is a PostgreSQL reserved word."""
+        result = buildCypher("g", "MATCH ()-[r]->() RETURN type(r)", ["type"])
+        self.assertIn('"type" agtype', result)
+
+    def test_reserved_word_select(self):
+        """Issue #2370: 'select' is a PostgreSQL reserved word."""
+        result = buildCypher("g", "MATCH (n) RETURN n", ["select"])
+        self.assertIn('"select" agtype', result)
+
+    def test_reserved_word_group(self):
+        """Issue #2370: 'group' is a PostgreSQL reserved word."""
+        result = buildCypher("g", "MATCH (n) RETURN n", ["group"])
+        self.assertIn('"group" agtype', result)
+
+    def test_multiple_columns(self):
+        result = buildCypher("g", "MATCH (n) RETURN n.name, count(n)", ["name", "count"])
+        self.assertIn('"name" agtype', result)
+        self.assertIn('"count" agtype', result)
+
+    def test_default_column(self):
+        result = buildCypher("g", "MATCH (n) RETURN n", None)
+        self.assertIn('"v" agtype', result)
+
+    def test_invalid_column_rejected(self):
+        with self.assertRaises(InvalidIdentifier):
+            buildCypher("g", "MATCH (n) RETURN n", ["invalid;col"])
+
+    def test_reserved_word_in_name_type_pair(self):
+        """Quoting applies even when the column is specified as 'name type'."""
+        result = buildCypher("g", "MATCH (n) RETURN n.order", ["order agtype"])
+        self.assertIn('"order" agtype', result)
+
+    def test_validate_column_quoting(self):
+        self.assertEqual(_validate_column("v"), '"v" agtype')
+        self.assertEqual(_validate_column("v agtype"), '"v" agtype')
+        self.assertEqual(_validate_column("count"), '"count" agtype')
+        self.assertEqual(_validate_column("my_col"), '"my_col" agtype')
 
 
 class TestAgeBasic(unittest.TestCase):
@@ -558,6 +630,7 @@ if __name__ == "__main__":
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
     suite.addTests(loader.loadTestsFromTestCase(TestSetUpAge))
+    suite.addTests(loader.loadTestsFromTestCase(TestBuildCypher))
     suite.addTest(TestAgeBasic("testExec"))
     suite.addTest(TestAgeBasic("testQuery"))
     suite.addTest(TestAgeBasic("testChangeData"))
