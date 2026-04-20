@@ -221,7 +221,7 @@ src/include/parser/cypher_kwlist_d.h: src/include/parser/cypher_kwlist.h $(GEN_K
 
 src/include/parser/cypher_gram_def.h: src/backend/parser/cypher_gram.c
 
-src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cypher_gram_def.h
+src/backend/parser/cypher_gram.c: BISONFLAGS += --defines=src/include/parser/cypher_gram_def.h -Werror
 
 src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 src/backend/parser/cypher_parser.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
