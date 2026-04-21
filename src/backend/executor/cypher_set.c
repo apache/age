@@ -28,6 +28,8 @@
 
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/age_global_graph.h"
+#include "catalog/ag_graph.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -830,6 +832,9 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
         /* increment the command counter to reflect the updates */
         CommandCounterIncrement();
 
+        /* invalidate VLE cache — graph was mutated */
+        increment_graph_version(get_graph_oid(css->set_list->graph_name));
+
         return NULL;
     }
 
@@ -837,6 +842,9 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 
     /* increment the command counter to reflect the updates */
     CommandCounterIncrement();
+
+    /* invalidate VLE cache — graph was mutated */
+    increment_graph_version(get_graph_oid(css->set_list->graph_name));
 
     estate->es_result_relations = saved_resultRels;
 

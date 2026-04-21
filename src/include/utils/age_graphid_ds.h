@@ -40,6 +40,21 @@ typedef struct GraphIdNode GraphIdNode;
 /* declare the ListGraphId container */
 typedef struct ListGraphId ListGraphId;
 
+/*
+ * Array-based stack for graphid values. Used by VLE DFS traversal
+ * for the vertex, edge, and path stacks. Provides O(1) push/pop
+ * with sequential memory access (no linked-list pointer chasing).
+ *
+ * This is intentionally separate from ListGraphId, which is used
+ * for vertex adjacency lists in the global graph context.
+ */
+typedef struct GraphIdStack
+{
+    graphid *array;    /* contiguous graphid array */
+    int64 size;        /* current number of elements */
+    int64 capacity;    /* allocated capacity */
+} GraphIdStack;
+
 /* GraphIdNode access functions */
 GraphIdNode *next_GraphIdNode(GraphIdNode *node);
 graphid get_graphid(GraphIdNode *node);
@@ -72,5 +87,15 @@ void free_ListGraphId(ListGraphId *container);
 GraphIdNode *get_list_head(ListGraphId *list);
 /* get the size of the passed list */
 int64 get_list_size(ListGraphId *list);
+
+/* GraphIdStack functions — array-based stack for VLE DFS */
+GraphIdStack *new_gid_stack(void);
+void free_gid_stack(GraphIdStack *stack);
+void gid_stack_push(GraphIdStack *s, graphid id);
+graphid gid_stack_pop(GraphIdStack *s);
+graphid gid_stack_peek(GraphIdStack *s);
+bool gid_stack_is_empty(GraphIdStack *s);
+int64 gid_stack_size(GraphIdStack *s);
+graphid gid_stack_get(GraphIdStack *s, int64 i);
 
 #endif

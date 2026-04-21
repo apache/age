@@ -59,4 +59,16 @@ Oid get_edge_entry_label_table_oid(edge_entry *ee);
 Datum get_edge_entry_properties(edge_entry *ee);
 graphid get_edge_entry_start_vertex_id(edge_entry *ee);
 graphid get_edge_entry_end_vertex_id(edge_entry *ee);
+
+/* Graph version counter functions — shared memory (DSM or shmem) */
+uint64 get_graph_version(Oid graph_oid);
+void increment_graph_version(Oid graph_oid);
+Oid get_graph_oid_for_table(Oid table_oid);
+
+/* Shared memory initialization for PG < 17 (shmem_request_hook path) */
+#if PG_VERSION_NUM < 170000
+void age_graph_version_shmem_request(void);
+void age_graph_version_shmem_startup(void);
+#endif
+
 #endif

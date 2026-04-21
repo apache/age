@@ -25,6 +25,7 @@
 #include "catalog/pg_class_d.h"
 #include "catalog/pg_namespace_d.h"
 #include "commands/defrem.h"
+#include "nodes/parsenodes.h"
 #include "tcop/utility.h"
 #include "utils/lsyscache.h"
 
@@ -33,6 +34,7 @@
 #include "catalog/ag_label.h"
 #include "catalog/ag_namespace.h"
 #include "utils/ag_cache.h"
+#include "utils/age_global_graph.h"
 
 static object_access_hook_type prev_object_access_hook;
 static ProcessUtility_hook_type prev_process_utility_hook;
@@ -93,13 +95,54 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool re
                              QueryCompletion *qc)
 {
     if (is_age_drop(pstmt))
+    {
         drop_age_extension((DropStmt *)pstmt->utilityStmt);
-    else if (prev_process_utility_hook)
-        (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree, context, params,
-                                      queryEnv, dest, qc);
+    }
     else
-        standard_ProcessUtility(pstmt, queryString, readOnlyTree, context, params, queryEnv,
-                                dest, qc);
+    {
+        /*
+         * Check for TRUNCATE on graph label tables. If any truncated
+         * table is a graph label table, increment the version counter
+         * for that graph to invalidate VLE caches. We do this before
+         * the truncate executes so the cache is invalidated regardless.
+         */
+        if (IsA(pstmt->utilityStmt, TruncateStmt))
+        {
+            TruncateStmt *tstmt = (TruncateStmt *) pstmt->utilityStmt;
+            ListCell *lc;
+
+            foreach(lc, tstmt->relations)
+            {
+                RangeVar *rv = (RangeVar *) lfirst(lc);
+                Oid rel_oid = RangeVarGetRelid(rv, AccessShareLock, true);
+
+                if (OidIsValid(rel_oid))
+                {
+                    Oid graph_oid = get_graph_oid_for_table(rel_oid);
+
+                    if (OidIsValid(graph_oid))
+                    {
+                        increment_graph_version(graph_oid);
+                    }
+                }
+            }
+        }
+
+        if (prev_process_utility_hook)
+        {
+            (*prev_process_utility_hook) (pstmt, queryString, readOnlyTree,
+                                          context, params, queryEnv, dest, qc);
+        }
+        else
+        {
+            Assert(IsA(pstmt, PlannedStmt));
+            Assert(pstmt->commandType == CMD_UTILITY);
+            Assert(queryString != NULL);
+            Assert(qc == NULL || qc->commandTag == CMDTAG_UNKNOWN);
+            standard_ProcessUtility(pstmt, queryString, readOnlyTree, context,
+                                    params, queryEnv, dest, qc);
+        }
+    }
 }
 
 static void drop_age_extension(DropStmt *stmt)

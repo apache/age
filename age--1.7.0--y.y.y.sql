@@ -408,3 +408,54 @@ $function$;
 
 COMMENT ON FUNCTION ag_catalog.age_pg_upgrade_status() IS
 'Returns the current pg_upgrade readiness status of the AGE installation.';
+
+--
+-- VLE cache invalidation trigger function
+-- Installed on graph label tables to catch SQL-level mutations
+-- and increment the per-graph version counter for VLE cache invalidation.
+--
+CREATE FUNCTION ag_catalog.age_invalidate_graph_cache()
+    RETURNS trigger
+    LANGUAGE c
+AS 'MODULE_PATHNAME';
+
+--
+-- Install the cache invalidation trigger on all pre-existing label tables.
+-- New label tables created after this upgrade will get the trigger
+-- automatically via label_commands.c. This DO block handles tables
+-- that were created before the upgrade.
+--
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT n.nspname AS schema_name, c.relname AS table_name
+        FROM ag_catalog.ag_label l
+        JOIN pg_catalog.pg_class c ON c.oid = l.relation
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE l.name != '_ag_label_vertex'
+          AND l.name != '_ag_label_edge'
+    LOOP
+        -- Skip if trigger already exists on this table
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_trigger t
+            JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = r.schema_name
+              AND c.relname = r.table_name
+              AND t.tgname = '_age_cache_invalidate'
+        )
+        THEN
+            EXECUTE format(
+                'CREATE TRIGGER _age_cache_invalidate '
+                'AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE '
+                'ON %I.%I '
+                'FOR EACH STATEMENT '
+                'EXECUTE FUNCTION ag_catalog.age_invalidate_graph_cache()',
+                r.schema_name, r.table_name
+            );
+        END IF;
+    END LOOP;
+END;
+$$;

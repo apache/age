@@ -79,9 +79,9 @@ typedef struct VLE_local_context
     bool uidx_infinite;            /* flag if the upper bound is omitted */
     cypher_rel_dir edge_direction; /* the direction of the edge */
     HTAB *edge_state_hashtable;    /* local state hashtable for our edges */
-    ListGraphId *dfs_vertex_stack; /* dfs stack for vertices */
-    ListGraphId *dfs_edge_stack;   /* dfs stack for edges */
-    ListGraphId *dfs_path_stack;   /* dfs stack containing the path */
+    GraphIdStack *dfs_vertex_stack; /* dfs stack for vertices (array-based) */
+    GraphIdStack *dfs_edge_stack;   /* dfs stack for edges (array-based) */
+    GraphIdStack *dfs_path_stack;   /* dfs stack containing the path (array-based) */
     VLE_path_function path_function; /* which path function to use */
     GraphIdNode *next_vertex;      /* for VLE_FUNCTION_PATHS_TO */
     int64 vle_grammar_node_id;     /* the unique VLE grammar assigned node id */
@@ -364,54 +364,70 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
         return false;
     }
 
-    /* get our edge's properties */
-    edge_property = DATUM_GET_AGTYPE_P(get_edge_entry_properties(ee));
-    /* get the containers */
-    agtc_edge_property_constraint = &vlelctx->edge_property_constraint->root;
-    agtc_edge_property = &edge_property->root;
-    /* get the number of properties in the edge to be matched */
-    num_edge_properties = AGTYPE_CONTAINER_SIZE(agtc_edge_property);
-
     /*
-     * Check to see if the edge_properties object has AT LEAST as many pairs
-     * to compare as the edge_property_constraint object has pairs. If not, it
-     * can't possibly match.
+     * Fast path: if the label matched (or wasn't constrained) and there
+     * are no property constraints, the edge is a match. This avoids
+     * accessing edge properties entirely for label-only VLE patterns
+     * like [:KNOWS*1..3] which are the common case.
      */
-    if (num_edge_property_constraints > num_edge_properties)
+    if (num_edge_property_constraints == 0)
     {
-        return false;
+        return true;
     }
 
     /*
-     * If the number of constraints are the same as the number of properties,
-     * then the datums would be the same if they match.
+     * Fetch edge properties once and cache locally. With thin entries,
+     * get_edge_entry_properties() does a heap_fetch, so we avoid calling
+     * it multiple times for the same edge.
      */
-    if (num_edge_property_constraints == num_edge_properties)
     {
-        Datum edge_props = get_edge_entry_properties(ee);
-        uint32 edge_props_hash = datum_image_hash(edge_props, false, -1);
+        Datum edge_props_datum = get_edge_entry_properties(ee);
 
-        /* check the hash first */
-        if (vlelctx->edge_property_constraint_hash == edge_props_hash)
+        edge_property = DATUM_GET_AGTYPE_P(edge_props_datum);
+        agtc_edge_property_constraint = &vlelctx->edge_property_constraint->root;
+        agtc_edge_property = &edge_property->root;
+        num_edge_properties = AGTYPE_CONTAINER_SIZE(agtc_edge_property);
+
+        /*
+         * Check to see if the edge_properties object has AT LEAST as many
+         * pairs to compare as the edge_property_constraint object has pairs.
+         * If not, it can't possibly match.
+         */
+        if (num_edge_property_constraints > num_edge_properties)
         {
-            /* if the hashes match, check the datum images */
-            if (datum_image_eq(vlelctx->edge_property_constraint_datum,
-                               edge_props, false, -1))
-            {
-                return true;
-            }
+            return false;
         }
 
-        /* if we got here they aren't the same */
-        return false;
+        /*
+         * If the number of constraints are the same as the number of
+         * properties, then the datums would be the same if they match.
+         */
+        if (num_edge_property_constraints == num_edge_properties)
+        {
+            uint32 edge_props_hash = datum_image_hash(edge_props_datum,
+                                                      false, -1);
+            /* check the hash first */
+            if (vlelctx->edge_property_constraint_hash == edge_props_hash)
+            {
+                /* if the hashes match, check the datum images */
+                if (datum_image_eq(vlelctx->edge_property_constraint_datum,
+                                   edge_props_datum, false, -1))
+                {
+                    return true;
+                }
+            }
+
+            /* if we got here they aren't the same */
+            return false;
+        }
+
+        /* get the iterators */
+        constraint_it = agtype_iterator_init(agtc_edge_property_constraint);
+        property_it = agtype_iterator_init(agtc_edge_property);
+
+        /* return the value of deep contains */
+        return agtype_deep_contains(&property_it, &constraint_it, false);
     }
-
-    /* get the iterators */
-    constraint_it = agtype_iterator_init(agtc_edge_property_constraint);
-    property_it = agtype_iterator_init(agtc_edge_property);
-
-    /* return the value of deep contains */
-    return agtype_deep_contains(&property_it, &constraint_it, false);
 }
 
 /*
@@ -449,22 +465,23 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     vlelctx->edge_state_hashtable = NULL;
 
     /*
-     * We need to free the contents of our stacks if the context is not dirty.
-     * These stacks are created in a more volatile memory context. If the
-     * process was interrupted, they will be garbage collected by PG. The only
-     * time we will ever clean them here is if the cache isn't being used.
+     * Free the DFS stacks. When is_dirty is false, the stacks are in the
+     * current context and need explicit cleanup. When is_dirty is true
+     * (cached context), only free the containers — the contents were
+     * allocated in a volatile SRF context that was already cleaned up.
      */
-    if (vlelctx->is_dirty == false)
+    if (vlelctx->dfs_vertex_stack != NULL)
     {
-        free_graphid_stack(vlelctx->dfs_vertex_stack);
-        free_graphid_stack(vlelctx->dfs_edge_stack);
-        free_graphid_stack(vlelctx->dfs_path_stack);
+        free_gid_stack(vlelctx->dfs_vertex_stack);
     }
-
-    /* free the containers */
-    pfree_if_not_null(vlelctx->dfs_vertex_stack);
-    pfree_if_not_null(vlelctx->dfs_edge_stack);
-    pfree_if_not_null(vlelctx->dfs_path_stack);
+    if (vlelctx->dfs_edge_stack != NULL)
+    {
+        free_gid_stack(vlelctx->dfs_edge_stack);
+    }
+    if (vlelctx->dfs_path_stack != NULL)
+    {
+        free_gid_stack(vlelctx->dfs_path_stack);
+    }
     vlelctx->dfs_vertex_stack = NULL;
     vlelctx->dfs_edge_stack = NULL;
     vlelctx->dfs_path_stack = NULL;
@@ -812,9 +829,9 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     create_VLE_local_state_hashtable(vlelctx);
 
     /* initialize the dfs stacks */
-    vlelctx->dfs_vertex_stack = new_graphid_stack();
-    vlelctx->dfs_edge_stack = new_graphid_stack();
-    vlelctx->dfs_path_stack = new_graphid_stack();
+    vlelctx->dfs_vertex_stack = new_gid_stack();
+    vlelctx->dfs_edge_stack = new_gid_stack();
+    vlelctx->dfs_path_stack = new_gid_stack();
 
     /* load in the starting edge(s) */
     load_initial_dfs_stacks(vlelctx);
@@ -885,7 +902,7 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
 
         case CYPHER_REL_DIR_NONE:
         {
-            ListGraphId *vertex_stack = NULL;
+            GraphIdStack *vertex_stack = NULL;
             graphid parent_vertex_id;
 
             vertex_stack = vlelctx->dfs_vertex_stack;
@@ -894,7 +911,7 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
              * as un-directional, where we go to next depends on where we came
              * from. This is because we can go against an edge.
              */
-            parent_vertex_id = PEEK_GRAPHID_STACK(vertex_stack);
+            parent_vertex_id = gid_stack_peek(vertex_stack);
             /* find the terminal vertex */
             if (get_edge_entry_start_vertex_id(ee) == parent_vertex_id)
             {
@@ -933,9 +950,9 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
  */
 static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
 {
-    ListGraphId *vertex_stack = NULL;
-    ListGraphId *edge_stack = NULL;
-    ListGraphId *path_stack = NULL;
+    GraphIdStack *vertex_stack = NULL;
+    GraphIdStack *edge_stack = NULL;
+    GraphIdStack *path_stack = NULL;
     graphid end_vertex_id;
 
     Assert(vlelctx != NULL);
@@ -947,7 +964,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
     end_vertex_id = vlelctx->veid;
 
     /* while we have edges to process */
-    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)))
+    while (!(gid_stack_is_empty(edge_stack)))
     {
         graphid edge_id;
         graphid next_vertex_id;
@@ -956,7 +973,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         bool found = false;
 
         /* get an edge, but leave it on the stack for now */
-        edge_id = PEEK_GRAPHID_STACK(edge_stack);
+        edge_id = gid_stack_peek(edge_stack);
         /* get the edge's state */
         ese = get_edge_state(vlelctx, edge_id);
         /*
@@ -972,18 +989,18 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
             graphid path_edge_id;
 
             /* get the edge id on the top of the path stack (last edge) */
-            path_edge_id = PEEK_GRAPHID_STACK(path_stack);
+            path_edge_id = gid_stack_peek(path_stack);
             /*
              * If the ids are the same, we're backing up. So, remove it from the
              * path stack and reset used_in_path.
              */
             if (edge_id == path_edge_id)
             {
-                pop_graphid_stack(path_stack);
+                gid_stack_pop(path_stack);
                 ese->used_in_path = false;
             }
             /* now remove it from the edge stack */
-            pop_graphid_stack(edge_stack);
+            gid_stack_pop(edge_stack);
             /*
              * Remove its source vertex, if we are looking at edges as
              * un-directional. We only maintain the vertex stack when the
@@ -992,7 +1009,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
              */
             if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
             {
-                pop_graphid_stack(vertex_stack);
+                gid_stack_pop(vertex_stack);
             }
             /* move to the next edge */
             continue;
@@ -1003,7 +1020,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          * the edge stack as it is already there.
          */
         ese->used_in_path = true;
-        push_graphid_stack(path_stack, edge_id);
+        gid_stack_push(path_stack, edge_id);
 
         /* now get the edge entry so we can get the next vertex to move to */
         ee = get_edge_entry(vlelctx->ggctx, edge_id);
@@ -1014,9 +1031,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          * within the bounds specified?
          */
         if (next_vertex_id == end_vertex_id &&
-            get_stack_size(path_stack) >= vlelctx->lidx &&
+            gid_stack_size(path_stack) >= vlelctx->lidx &&
             (vlelctx->uidx_infinite ||
-             get_stack_size(path_stack) <= vlelctx->uidx))
+             gid_stack_size(path_stack) <= vlelctx->uidx))
         {
             /* we found one */
             found = true;
@@ -1028,14 +1045,14 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          */
         if (next_vertex_id == end_vertex_id &&
             !vlelctx->uidx_infinite &&
-            get_stack_size(path_stack) > vlelctx->uidx)
+            gid_stack_size(path_stack) > vlelctx->uidx)
         {
             continue;
         }
 
         /* add in the edges for the next vertex if we won't exceed the bounds */
         if (vlelctx->uidx_infinite ||
-            get_stack_size(path_stack) < vlelctx->uidx)
+            gid_stack_size(path_stack) < vlelctx->uidx)
         {
             add_valid_vertex_edges(vlelctx, next_vertex_id);
         }
@@ -1063,9 +1080,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
  */
 static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
 {
-    ListGraphId *vertex_stack = NULL;
-    ListGraphId *edge_stack = NULL;
-    ListGraphId *path_stack = NULL;
+    GraphIdStack *vertex_stack = NULL;
+    GraphIdStack *edge_stack = NULL;
+    GraphIdStack *path_stack = NULL;
 
     Assert(vlelctx != NULL);
 
@@ -1075,7 +1092,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
     path_stack = vlelctx->dfs_path_stack;
 
     /* while we have edges to process */
-    while (!(IS_GRAPHID_STACK_EMPTY(edge_stack)))
+    while (!(gid_stack_is_empty(edge_stack)))
     {
         graphid edge_id;
         graphid next_vertex_id;
@@ -1084,7 +1101,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         bool found = false;
 
         /* get an edge, but leave it on the stack for now */
-        edge_id = PEEK_GRAPHID_STACK(edge_stack);
+        edge_id = gid_stack_peek(edge_stack);
         /* get the edge's state */
         ese = get_edge_state(vlelctx, edge_id);
         /*
@@ -1100,18 +1117,18 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
             graphid path_edge_id;
 
             /* get the edge id on the top of the path stack (last edge) */
-            path_edge_id = PEEK_GRAPHID_STACK(path_stack);
+            path_edge_id = gid_stack_peek(path_stack);
             /*
              * If the ids are the same, we're backing up. So, remove it from the
              * path stack and reset used_in_path.
              */
             if (edge_id == path_edge_id)
             {
-                pop_graphid_stack(path_stack);
+                gid_stack_pop(path_stack);
                 ese->used_in_path = false;
             }
             /* now remove it from the edge stack */
-            pop_graphid_stack(edge_stack);
+            gid_stack_pop(edge_stack);
             /*
              * Remove its source vertex, if we are looking at edges as
              * un-directional. We only maintain the vertex stack when the
@@ -1120,7 +1137,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
              */
             if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
             {
-                pop_graphid_stack(vertex_stack);
+                gid_stack_pop(vertex_stack);
             }
             /* move to the next edge */
             continue;
@@ -1131,7 +1148,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          * the edge stack as it is already there.
          */
         ese->used_in_path = true;
-        push_graphid_stack(path_stack, edge_id);
+        gid_stack_push(path_stack, edge_id);
 
         /* now get the edge entry so we can get the next vertex to move to */
         ee = get_edge_entry(vlelctx->ggctx, edge_id);
@@ -1141,9 +1158,9 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          * Is this a path that meets our requirements? Is its length within the
          * bounds specified?
          */
-        if (get_stack_size(path_stack) >= vlelctx->lidx &&
+        if (gid_stack_size(path_stack) >= vlelctx->lidx &&
             (vlelctx->uidx_infinite ||
-             get_stack_size(path_stack) <= vlelctx->uidx))
+             gid_stack_size(path_stack) <= vlelctx->uidx))
         {
             /* we found one */
             found = true;
@@ -1151,7 +1168,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
 
         /* add in the edges for the next vertex if we won't exceed the bounds */
         if (vlelctx->uidx_infinite ||
-            get_stack_size(path_stack) < vlelctx->uidx)
+            gid_stack_size(path_stack) < vlelctx->uidx)
         {
             add_valid_vertex_edges(vlelctx, next_vertex_id);
         }
@@ -1173,20 +1190,16 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
  */
 static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
 {
-    GraphIdNode *edge = NULL;
+    GraphIdStack *stack = vlelctx->dfs_path_stack;
+    int64 i;
 
-    /* start at the top of the stack */
-    edge = peek_stack_head(vlelctx->dfs_path_stack);
-
-    /* go through the path stack, return true if we find the edge */
-    while (edge != NULL)
+    /* scan the array-based path stack */
+    for (i = 0; i < gid_stack_size(stack); i++)
     {
-        if (get_graphid(edge) == edge_id)
+        if (gid_stack_get(stack, i) == edge_id)
         {
             return true;
         }
-        /* get the next stack element */
-        edge = next_GraphIdNode(edge);
     }
     /* we didn't find it if we get here */
     return false;
@@ -1205,8 +1218,8 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id)
 {
-    ListGraphId *vertex_stack = NULL;
-    ListGraphId *edge_stack = NULL;
+    GraphIdStack *vertex_stack = NULL;
+    GraphIdStack *edge_stack = NULL;
     ListGraphId *edges = NULL;
     vertex_entry *ve = NULL;
     GraphIdNode *edge_in = NULL;
@@ -1267,7 +1280,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
          * This is a fast existence check, relative to the hash search, for when
          * the path stack is small. If the edge is in the path, we skip it.
          */
-        if (get_stack_size(vlelctx->dfs_path_stack) < 10 &&
+        if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
             is_edge_in_path(vlelctx, edge_id))
         {
             /* set to the next available edge */
@@ -1325,9 +1338,9 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                  */
                  if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
                  {
-                     push_graphid_stack(vertex_stack, get_vertex_entry_id(ve));
+                     gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
                  }
-                 push_graphid_stack(edge_stack, edge_id);
+                 gid_stack_push(edge_stack, edge_id);
             }
         }
         /* get the next working edge */
@@ -1412,13 +1425,13 @@ static VLE_path_container *create_VLE_path_container(int64 path_size)
 
 static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
 {
-    ListGraphId *stack = vlelctx->dfs_path_stack;
+    GraphIdStack *stack = vlelctx->dfs_path_stack;
     VLE_path_container *vpc = NULL;
     graphid *graphid_array = NULL;
-    GraphIdNode *edge = NULL;
     graphid vid = 0;
     int index = 0;
     int ssize = 0;
+    int j = 0;
 
     if (stack == NULL)
     {
@@ -1426,7 +1439,7 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
     }
 
     /* allocate the graphid array */
-    ssize = get_stack_size(stack);
+    ssize = gid_stack_size(stack);
 
     /*
      * Create the container. Note that the path size will always be 2 times the
@@ -1444,25 +1457,21 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
     vid = vlelctx->vsid;
     graphid_array[0] = vid;
 
-    /* get the head of the stack */
-    edge = peek_stack_head(stack);
-
     /*
-     * We need to fill in the array from the back to the front. This is due
-     * to the order of the path stack - last in first out. Remember that the
-     * last entry is a vertex.
+     * Fill in edge entries from the back to the front. The path stack
+     * is array-based with index 0 = bottom (first pushed) and
+     * index size-1 = top (last pushed). We iterate from top to bottom
+     * to fill the graphid_array from back to front.
      */
     index = vpc->graphid_array_size - 2;
 
-    /* copy while we have an edge to copy */
-    while (edge != NULL)
+    for (j = ssize - 1; j >= 0; j--)
     {
         /* 0 is the vsid, we should never get here */
         Assert(index > 0);
 
-        /* store and set to the next edge */
-        graphid_array[index] = get_graphid(edge);
-        edge = next_GraphIdNode(edge);
+        /* store the edge from stack position j */
+        graphid_array[index] = gid_stack_get(stack, j);
 
         /* we need to skip over the interior vertices */
         index -= 2;
@@ -1487,13 +1496,13 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
 /* helper function to build a VPC for just the start vertex */
 static VLE_path_container *build_VLE_zero_container(VLE_local_context *vlelctx)
 {
-    ListGraphId *stack = vlelctx->dfs_path_stack;
+    GraphIdStack *stack = vlelctx->dfs_path_stack;
     VLE_path_container *vpc = NULL;
     graphid *graphid_array = NULL;
     graphid vid = 0;
 
     /* we should have an empty stack */
-    if (get_stack_size(stack) != 0)
+    if (gid_stack_size(stack) != 0)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_DATA_EXCEPTION),
@@ -2011,10 +2020,6 @@ PG_FUNCTION_INFO_V1(age_match_vle_edge_to_id_qual);
 
 Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
 {
-    int nargs = 0;
-    Datum *args = NULL;
-    bool *nulls = NULL;
-    Oid *types = NULL;
     agtype *agt_arg_vpc = NULL;
     agtype *edge_id = NULL;
     agtype *pos_agt = NULL;
@@ -2023,11 +2028,10 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     graphid *array = NULL;
     bool vle_is_on_left = false;
     graphid gid = 0;
+    Oid type1;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    if (nargs != 3)
+    /* check argument count */
+    if (PG_NARGS() != 3)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("age_match_vle_edge_to_id_qual() invalid number of arguments")));
@@ -2038,13 +2042,13 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
      * OPTIONAL MATCH (LEFT JOIN) contexts where a preceding clause
      * produced no results.
      */
-    if (nulls[0] || nulls[1] || nulls[2])
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
     {
         PG_RETURN_BOOL(false);
     }
 
     /* get the VLE_path_container argument */
-    agt_arg_vpc = DATUM_GET_AGTYPE_P(args[0]);
+    agt_arg_vpc = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(0));
 
     if (!AGT_ROOT_IS_BINARY(agt_arg_vpc) ||
         AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) != AGT_FBINARY_TYPE_VLE_PATH)
@@ -2058,11 +2062,23 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     vle_path = (VLE_path_container *)agt_arg_vpc;
     array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vle_path);
 
-    if (types[1] == AGTYPEOID)
+    /*
+     * Get arg type for argument 1 — cache in fn_extra to avoid
+     * repeated expression type resolution.
+     */
+    if (fcinfo->flinfo->fn_extra == NULL)
+    {
+        Oid *cached_type = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                               sizeof(Oid));
+        *cached_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+        fcinfo->flinfo->fn_extra = cached_type;
+    }
+    type1 = *(Oid *)fcinfo->flinfo->fn_extra;
+
+    if (type1 == AGTYPEOID)
     {
         /* Get the edge id we are checking the end of the list too */
         edge_id = AG_GET_ARG_AGTYPE_P(1);
-
         if (!AGT_ROOT_IS_SCALAR(edge_id))
         {
             ereport(ERROR,
@@ -2081,11 +2097,9 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
 
         gid = id->val.int_value;
     }
-    else if (types[1] == GRAPHIDOID)
+    else if (type1 == GRAPHIDOID)
     {
-
-        gid = DATUM_GET_GRAPHID(args[1]);
-
+        gid = DATUM_GET_GRAPHID(PG_GETARG_DATUM(1));
     }
     else
     {
@@ -2240,10 +2254,6 @@ PG_FUNCTION_INFO_V1(age_match_vle_terminal_edge);
 
 Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
 {
-    int nargs = 0;
-    Datum *args = NULL;
-    bool *nulls = NULL;
-    Oid *types = NULL;
     VLE_path_container *vpc = NULL;
     agtype *agt_arg_vsid = NULL;
     agtype *agt_arg_veid = NULL;
@@ -2253,11 +2263,10 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
     graphid veid = 0;
     graphid *gida = NULL;
     int gidasize = 0;
+    Oid type0, type1;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    if (nargs != 3)
+    /* check argument count */
+    if (PG_NARGS() != 3)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("age_match_vle_terminal_edge() invalid number of arguments")));
@@ -2269,13 +2278,13 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
      * where a preceding OPTIONAL MATCH produced no results. Returning
      * FALSE allows PostgreSQL to produce the correct NULL-extended rows.
      */
-    if (nulls[0] || nulls[1] || nulls[2])
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
     {
         PG_RETURN_BOOL(false);
     }
 
     /* get the vpc */
-    agt_arg_path = DATUM_GET_AGTYPE_P(args[2]);
+    agt_arg_path = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(2));
 
     /* if the vpc is an agtype NULL, return FALSE */
     if (is_agtype_null(agt_arg_path))
@@ -2302,14 +2311,29 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
     /* verify the minimum size is 3 or 1 */
     Assert(gidasize >= 3 || gidasize == 1);
 
-    /* get the vsid */
-    if (types[0] == AGTYPEOID)
+    /*
+     * Get argument types directly instead of using extract_variadic_args.
+     * This avoids the expensive exprType/get_call_expr_argtype overhead
+     * on every call. Cache the types in fn_extra on first invocation.
+     */
+    if (fcinfo->flinfo->fn_extra == NULL)
     {
-        agt_arg_vsid = DATUM_GET_AGTYPE_P(args[0]);
+        Oid *cached_types = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                                2 * sizeof(Oid));
+        cached_types[0] = get_fn_expr_argtype(fcinfo->flinfo, 0);
+        cached_types[1] = get_fn_expr_argtype(fcinfo->flinfo, 1);
+        fcinfo->flinfo->fn_extra = cached_types;
+    }
+    type0 = ((Oid *)fcinfo->flinfo->fn_extra)[0];
+    type1 = ((Oid *)fcinfo->flinfo->fn_extra)[1];
+
+    /* get the vsid */
+    if (type0 == AGTYPEOID)
+    {
+        agt_arg_vsid = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(0));
 
         if (!is_agtype_null(agt_arg_vsid))
         {
-
             agtv_temp =
                get_ith_agtype_value_from_container(&agt_arg_vsid->root, 0);
 
@@ -2321,9 +2345,9 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
             PG_RETURN_BOOL(false);
         }
     }
-    else if (types[0] == GRAPHIDOID)
+    else if (type0 == GRAPHIDOID)
     {
-        vsid = DATUM_GET_GRAPHID(args[0]);
+        vsid = DATUM_GET_GRAPHID(PG_GETARG_DATUM(0));
     }
     else
     {
@@ -2333,9 +2357,9 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
     }
 
     /* get the veid */
-    if (types[1] == AGTYPEOID)
+    if (type1 == AGTYPEOID)
     {
-        agt_arg_veid = DATUM_GET_AGTYPE_P(args[1]);
+        agt_arg_veid = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(1));
 
         if (!is_agtype_null(agt_arg_veid))
         {
@@ -2349,9 +2373,9 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
             PG_RETURN_BOOL(false);
         }
     }
-    else if (types[1] == GRAPHIDOID)
+    else if (type1 == GRAPHIDOID)
     {
-        veid = DATUM_GET_GRAPHID(args[1]);
+        veid = DATUM_GET_GRAPHID(PG_GETARG_DATUM(1));
     }
     else
     {
