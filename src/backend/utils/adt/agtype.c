@@ -4102,6 +4102,115 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
     agtype *result = NULL;
     int i = 0;
 
+    /*
+     * Fast path for the common 2-argument case (object.property or
+     * array[index]). Avoids extract_variadic_args overhead which
+     * includes exprType, get_call_expr_argtype, and memory allocation
+     * on every call.
+     */
+    if (PG_NARGS() == 2)
+    {
+        agtype *key = NULL;
+
+        /* check for NULLs */
+        if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        {
+            PG_RETURN_NULL();
+        }
+
+        /* get the container argument */
+        container = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(0));
+
+        /* handle binary container (VLE vpc) */
+        if (AGT_ROOT_IS_BINARY(container))
+        {
+            if (AGT_ROOT_BINARY_FLAGS(container) == AGT_FBINARY_TYPE_VLE_PATH)
+            {
+                container_value = agtv_materialize_vle_edges(container);
+                container = NULL;
+            }
+            else
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                         errmsg("binary container must be a VLE vpc")));
+            }
+        }
+        /* handle scalar (vertex or edge) */
+        else if (AGT_ROOT_IS_SCALAR(container))
+        {
+            container_value = get_ith_agtype_value_from_container(
+                                  &container->root, 0);
+            if (container_value->type != AGTV_EDGE &&
+                container_value->type != AGTV_VERTEX)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                         errmsg("scalar object must be a vertex or edge")));
+            }
+            container = NULL;
+        }
+
+        /* get the key */
+        key = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(1));
+
+        if (!(AGT_ROOT_IS_SCALAR(key)))
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                            errmsg("key must resolve to a scalar value")));
+        }
+
+        /* extract properties from vertex/edge */
+        if (container_value != NULL &&
+            (container_value->type == AGTV_EDGE ||
+             container_value->type == AGTV_VERTEX))
+        {
+            container_value = (container_value->type == AGTV_EDGE)
+                ? &container_value->val.object.pairs[4].value
+                : &container_value->val.object.pairs[2].value;
+        }
+
+        /* map access */
+        if ((container_value != NULL &&
+             (container_value->type == AGTV_OBJECT ||
+              (container_value->type == AGTV_BINARY &&
+               AGTYPE_CONTAINER_IS_OBJECT(container_value->val.binary.data)))) ||
+            (container != NULL && AGT_ROOT_IS_OBJECT(container)))
+        {
+            container_value = execute_map_access_operator(container,
+                                                          container_value, key);
+        }
+        /* array access */
+        else if ((container_value != NULL &&
+                  (container_value->type == AGTV_ARRAY ||
+                   (container_value->type == AGTV_BINARY &&
+                    AGTYPE_CONTAINER_IS_ARRAY(container_value->val.binary.data)))) ||
+                 (container != NULL && AGT_ROOT_IS_ARRAY(container)))
+        {
+            container_value = execute_array_access_operator(container,
+                                                            container_value,
+                                                            key);
+        }
+        else
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                            errmsg("container must be an array or object")));
+        }
+
+        if (container_value == NULL || container_value->type == AGTV_NULL)
+        {
+            PG_RETURN_NULL();
+        }
+
+        result = agtype_value_to_agtype(container_value);
+        return AGTYPE_P_GET_DATUM(result);
+    }
+
+    /*
+     * Standard variadic path for 3+ arguments (chained access like a.b.c)
+     * or edge cases.
+     */
+
     /* extract our args, we need at least 2 */
     nargs = extract_variadic_args_min(fcinfo, 0, true, &args, &types, &nulls,
                                       2);
@@ -6653,24 +6762,52 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
     Oid type;
     int64 result;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("toInteger() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
-        PG_RETURN_NULL();
-
     /*
-     * toInteger() supports integer, float, numeric, text, cstring, or the
-     * agtype integer, float, numeric, and string input
+     * Fast path: toInteger() always takes exactly 1 argument.
+     * Avoid extract_variadic_args overhead by accessing the arg directly
+     * and caching the type via fn_extra.
      */
-    arg = args[0];
-    type = types[0];
+    if (PG_NARGS() == 1)
+    {
+        if (PG_ARGISNULL(0))
+        {
+            PG_RETURN_NULL();
+        }
+
+        arg = PG_GETARG_DATUM(0);
+
+        /* cache the arg type on first call */
+        if (fcinfo->flinfo->fn_extra == NULL)
+        {
+            Oid *cached = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                              sizeof(Oid));
+            *cached = get_fn_expr_argtype(fcinfo->flinfo, 0);
+            fcinfo->flinfo->fn_extra = cached;
+        }
+        type = *(Oid *)fcinfo->flinfo->fn_extra;
+        nargs = 1;
+    }
+    else
+    {
+        /* fallback variadic path */
+        nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+
+        /* check number of args */
+        if (nargs > 1)
+        {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                            errmsg("toInteger() only supports one argument")));
+        }
+
+        /* check for null */
+        if (nargs < 0 || nulls[0])
+        {
+            PG_RETURN_NULL();
+        }
+
+        arg = args[0];
+        type = types[0];
+    }
 
     if (type != AGTYPEOID)
     {
