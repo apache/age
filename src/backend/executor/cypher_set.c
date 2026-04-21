@@ -440,7 +440,7 @@ void apply_update_list(CustomScanState *node,
         agtype_value *id;
         agtype_value *label;
         agtype *original_entity;
-        agtype *new_property_value;
+        agtype *new_property_value = NULL;
         TupleTableSlot *slot;
         ResultRelInfo *resultRelInfo;
         ScanKeyData scan_keys[1];

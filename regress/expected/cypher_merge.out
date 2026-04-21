@@ -2160,6 +2160,77 @@ $$) AS (name agtype);
  "test"
 (1 row)
 
+-- Issue #2347: RHS of ON CREATE / ON MATCH SET referencing a bound
+-- variable crashed the backend when MERGE had a previous clause, because
+-- the lateral-join's ParseNamespaceItem had p_nscolumns=NULL.
+-- ON CREATE SET with RHS referencing the outer MATCH's variable
+SELECT * FROM cypher('merge_actions', $$ CREATE (:Person {name:'Anchor'}) $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'FromOuter'})
+    ON CREATE SET b.source_name = a.name
+  RETURN a.name, b.name, b.source_name
+$$) AS (a_name agtype, b_name agtype, b_source agtype);
+  a_name  |   b_name    | b_source 
+----------+-------------+----------
+ "Anchor" | "FromOuter" | "Anchor"
+(1 row)
+
+-- ON CREATE SET with RHS referencing the MERGE-bound variable itself
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'SelfRef'})
+    ON CREATE SET b.echo_name = b.name
+  RETURN b.name, b.echo_name
+$$) AS (b_name agtype, b_echo agtype);
+  b_name   |  b_echo   
+-----------+-----------
+ "SelfRef" | "SelfRef"
+(1 row)
+
+-- ON CREATE SET driven by UNWIND with self-reference on the RHS
+-- (Muhammad's second reproducer)
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND ['U1', 'U2'] AS nm
+  MERGE (n:Person {name: nm})
+    ON CREATE SET n.copy_name = n.name
+  RETURN n.name, n.copy_name
+$$) AS (n_name agtype, n_copy agtype);
+ n_name | n_copy 
+--------+--------
+ "U1"   | "U1"
+ "U2"   | "U2"
+(2 rows)
+
+-- Multiple SET items mixing outer-ref, self-ref, and literal RHS
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'MultiItem'})
+    ON CREATE SET b.from_a = a.name, b.self = b.name, b.lit = 'literal'
+  RETURN b.from_a, b.self, b.lit
+$$) AS (fa agtype, sf agtype, lit agtype);
+    fa    |     sf      |    lit    
+----------+-------------+-----------
+ "Anchor" | "MultiItem" | "literal"
+(1 row)
+
+-- ON MATCH SET with variable RHS (second run on existing node)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'FromOuter'})
+    ON CREATE SET b.source_name = a.name
+    ON MATCH SET b.last_seen_by = a.name
+  RETURN b.source_name, b.last_seen_by
+$$) AS (src agtype, last agtype);
+   src    |   last   
+----------+----------
+ "Anchor" | "Anchor"
+(1 row)
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
  a 
