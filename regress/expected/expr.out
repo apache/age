@@ -489,13 +489,13 @@ $$RETURN [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10][-1..10]$$) AS r(c agtype);
 SELECT agtype_access_slice('[0]'::agtype, 'null'::agtype, '1'::agtype);
  agtype_access_slice 
 ---------------------
- [0]
+ 
 (1 row)
 
 SELECT agtype_access_slice('[0]'::agtype, '0'::agtype, 'null'::agtype);
  agtype_access_slice 
 ---------------------
- [0]
+ 
 (1 row)
 
 -- should error - ERROR:  slice must access a list
