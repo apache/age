@@ -2098,7 +2098,7 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                 char* str = NULL;
                 lindex = strtol(cur_key->val.string.val, &str, 10);
 
-                if (strcmp(str, ""))
+                if (strcmp(str, "") != 0)
                 {
                     PG_RETURN_NULL();
                 }
