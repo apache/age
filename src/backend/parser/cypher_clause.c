@@ -7269,6 +7269,33 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
  * similar to OPTIONAL MATCH, however with the added feature of creating the
  * path if not there, rather than just emitting NULL.
  */
+/*
+ * Resolve prop_expr for each SET item by looking up its target entry.
+ * The planner may strip SET expression target entries from the plan,
+ * so we embed the Expr in the update item for direct evaluation.
+ */
+static void
+resolve_merge_set_exprs(List *set_items, List *targetList,
+                        const char *clause_name)
+{
+    ListCell *lc;
+
+    foreach(lc, set_items)
+    {
+        cypher_update_item *item = lfirst(lc);
+        TargetEntry *set_tle = get_tle_by_resno(targetList,
+                                                item->prop_position);
+        if (set_tle == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                     errmsg("%s target entry not found at position %d",
+                            clause_name, item->prop_position)));
+        }
+        item->prop_expr = (Node *)set_tle->expr;
+    }
+}
+
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause)
 {
@@ -7340,6 +7367,32 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
 
     merge_information->graph_oid = cpstate->graph_oid;
     merge_information->path = merge_path;
+
+    /* Transform ON MATCH SET items, if any */
+    if (self->on_match != NIL)
+    {
+        merge_information->on_match_set_info =
+            transform_cypher_set_item_list(cpstate, self->on_match, query);
+        merge_information->on_match_set_info->clause_name = "MERGE ON MATCH SET";
+        merge_information->on_match_set_info->graph_name = cpstate->graph_name;
+
+        resolve_merge_set_exprs(
+            merge_information->on_match_set_info->set_items,
+            query->targetList, "ON MATCH SET");
+    }
+
+    /* Transform ON CREATE SET items, if any */
+    if (self->on_create != NIL)
+    {
+        merge_information->on_create_set_info =
+            transform_cypher_set_item_list(cpstate, self->on_create, query);
+        merge_information->on_create_set_info->clause_name = "MERGE ON CREATE SET";
+        merge_information->on_create_set_info->graph_name = cpstate->graph_name;
+
+        resolve_merge_set_exprs(
+            merge_information->on_create_set_info->set_items,
+            query->targetList, "ON CREATE SET");
+    }
 
     if (!clause->next)
     {
@@ -7456,10 +7509,63 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
      */
     get_res_cols(pstate, l_nsitem, r_nsitem, &res_colnames, &res_colvars);
 
-    /* make the RTE for the join */
-    jnsitem = addRangeTableEntryForJoin(pstate, res_colnames, NULL, j->jointype,
-                                        0, res_colvars, NIL, NIL, j->alias,
-                                        NULL, true);
+    /*
+     * Build a ParseNamespaceColumn array for the join RTE so that
+     * subsequent name lookups (e.g. transform_cypher_set_item_list for an
+     * ON CREATE SET / ON MATCH SET expression) can resolve references to
+     * variables bound in the prev clause or the MERGE's path via
+     * colNameToVar → scanNSItemForColumn, which dereferences
+     * nsitem->p_nscolumns. Passing NULL here left p_nscolumns unset and
+     * caused a segfault whenever an ON SET item's RHS referenced a bound
+     * variable (issue #2347).
+     *
+     * Each column's nscolumn references the join RTE (via its rtindex) with
+     * p_varattno = position in res_colnames. This matches the scantuple
+     * layout that apply_update_list sees at execution time: the join's
+     * target list (built by make_target_list_from_join below) iterates
+     * eref->colnames in order, so scantuple[i-1] corresponds to the i-th
+     * entry in eref->colnames. Using the underlying RTE's varno/varattno
+     * would be semantically equivalent for planner-rewritten Vars in the
+     * query tree, but the Vars we produce here end up inside prop_expr --
+     * opaque metadata the planner does not walk -- so they stay un-remapped
+     * and must index the scantuple layout directly.
+     *
+     * addRangeTableEntryForJoin appends the new RTE to pstate->p_rtable, so
+     * its rtindex is list_length(p_rtable) + 1 at this point.
+     */
+    {
+        int colcount = list_length(res_colvars);
+        int join_rtindex = list_length(pstate->p_rtable) + 1;
+        ParseNamespaceColumn *nscolumns;
+        ListCell *lvar;
+        int col_idx = 0;
+
+        nscolumns = (ParseNamespaceColumn *)
+                    palloc0(colcount * sizeof(ParseNamespaceColumn));
+
+        foreach (lvar, res_colvars)
+        {
+            Var *v = (Var *) lfirst(lvar);
+
+            /* res_colvars is populated by get_res_cols via expandRTE */
+            Assert(IsA(v, Var));
+
+            nscolumns[col_idx].p_varno = join_rtindex;
+            nscolumns[col_idx].p_varattno = col_idx + 1;
+            nscolumns[col_idx].p_vartype = v->vartype;
+            nscolumns[col_idx].p_vartypmod = v->vartypmod;
+            nscolumns[col_idx].p_varcollid = v->varcollid;
+            nscolumns[col_idx].p_varnosyn = join_rtindex;
+            nscolumns[col_idx].p_varattnosyn = col_idx + 1;
+            col_idx++;
+        }
+
+        /* make the RTE for the join */
+        jnsitem = addRangeTableEntryForJoin(pstate, res_colnames, nscolumns,
+                                            j->jointype, 0, res_colvars,
+                                            NIL, NIL, j->alias, NULL, true);
+        Assert(jnsitem->p_rtindex == join_rtindex);
+    }
 
     j->rtindex = jnsitem->p_rtindex;
 
