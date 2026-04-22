@@ -721,6 +721,39 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10
  {"id": 281474976710668, "label": "", "properties": {"b": [0, 1, 2, 3, 4, 5], "c": [0, 2, 4, 6, 8, 10, 12], "list": [0, 2, 4, 6, 8, 10, 12]}}::vertex
 (2 rows)
 
+-- Issue 2393 - WHERE filter over null elements should use openCypher's
+-- three-valued logic: IS NULL must keep nulls, IS NOT NULL must drop them.
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NULL] $$) AS (result agtype);
+ result 
+--------
+ [null]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1, null] WHERE x IS NULL] $$) AS (result agtype);
+    result    
+--------------
+ [null, null]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NOT NULL] $$) AS (result agtype);
+ result 
+--------
+ [1]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, 2, 3] WHERE x IS NULL] $$) AS (result agtype);
+ result 
+--------
+ []
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ UNWIND [null, 1] AS x RETURN x, x IS NULL, x IS NOT NULL $$) AS (x agtype, a agtype, b agtype);
+ x |   a   |   b   
+---+-------+-------
+   | true  | false
+ 1 | false | true
+(2 rows)
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 4 other objects

@@ -3445,12 +3445,10 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
  *   none(x IN list WHERE predicate)
  *   single(x IN list WHERE predicate)
  *
- * All four use EXPR_SUBLINK (scalar subquery).  The transform layer
- * generates aggregate-based queries (using bool_or + CASE) for
- * all/any/none to preserve three-valued NULL semantics, and
- * count(*) with IS TRUE filtering for single().
- *
- * For single(), the subquery result is compared = 1.
+ * All four use EXPR_SUBLINK (scalar subquery). The transform layer
+ * generates aggregate-based queries that preserve three-valued NULL
+ * semantics: bool_or + CASE for all/any/none, and a CASE built on
+ * count(*) FILTER for single().
  */
 static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
                                            Node *var, Node *expr,
@@ -3490,28 +3488,11 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
     sub->location = location;
     sub->subLinkType = EXPR_SUBLINK;
 
-    if (kind == CPFK_SINGLE)
-    {
-        /*
-         * single() -> (subquery) = 1
-         * The subquery returns count(*) with IS TRUE filtering.
-         */
-        Node *eq_expr;
-
-        eq_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "=",
-                                            (Node *) sub,
-                                            make_int_const(1, location),
-                                            location);
-        result = (Node *) node_to_agtype(eq_expr, "boolean", location);
-    }
-    else
-    {
-        /*
-         * all()/any()/none(): the subquery returns a boolean directly
-         * from the CASE+bool_or() aggregate expression.
-         */
-        result = (Node *) node_to_agtype((Node *) sub, "boolean", location);
-    }
+    /*
+     * The subquery returns a boolean directly from the CASE+bool_or()
+     * aggregate expression (count(*) FILTER for single()).
+     */
+    result = (Node *) node_to_agtype((Node *) sub, "boolean", location);
 
     /*
      * NULL-list guard: CASE WHEN expr IS NULL THEN NULL ELSE result END
