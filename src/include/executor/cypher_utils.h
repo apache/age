@@ -111,7 +111,13 @@ typedef struct cypher_merge_custom_scan_state
     List *eager_tuples;
     int eager_tuples_index;
     bool eager_buffer_filled;
+    cypher_update_information *on_match_set_info;   /* NULL if not specified */
+    cypher_update_information *on_create_set_info;   /* NULL if not specified */
 } cypher_merge_custom_scan_state;
+
+/* Reusable SET logic callable from MERGE executor */
+void apply_update_list(CustomScanState *node,
+                       cypher_update_information *set_info);
 
 TupleTableSlot *populate_vertex_tts(TupleTableSlot *elemTupleSlot,
                                     agtype_value *id, agtype_value *properties);
