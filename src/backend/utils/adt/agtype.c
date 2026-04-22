@@ -12425,12 +12425,28 @@ Datum age_unnest(PG_FUNCTION_ARGS)
             HeapTuple tuple;
             Datum values[1];
             bool nulls[1] = {false};
-            agtype *val = agtype_value_to_agtype(&v);
 
             /* use the tmp context so we can clean up after each tuple is done */
             old_cxt = MemoryContextSwitchTo(tmp_cxt);
 
-            values[0] = PointerGetDatum(val);
+            /*
+             * Emit an agtype AGTV_NULL element as a SQL-NULL row so that
+             * `IS NULL` / `IS NOT NULL` on the unwound variable match
+             * openCypher's null semantics (issue #2393). Wrapping it as a
+             * non-SQL-NULL agtype container would leave SQL's IS NULL blind
+             * to it, dropping `WHERE x IS NULL` filters and passing through
+             * `WHERE x IS NOT NULL` filters.
+             */
+            if (v.type == AGTV_NULL)
+            {
+                values[0] = (Datum) 0;
+                nulls[0] = true;
+            }
+            else
+            {
+                agtype *val = agtype_value_to_agtype(&v);
+                values[0] = PointerGetDatum(val);
+            }
 
             tuple = heap_form_tuple(ret_tdesc, values, nulls);
 
