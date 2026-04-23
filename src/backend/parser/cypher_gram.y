@@ -34,7 +34,7 @@
     do \
     { \
         if ((n) > 0) \
-            current = (rhs)[1]; \
+            current = YYRHSLOC(rhs, 1); \
         else \
             current = -1; \
     } while (0)
@@ -49,6 +49,34 @@
 %locations
 %name-prefix="cypher_yy"
 %pure-parser
+/*
+ * GLR mode handles the ambiguity between parenthesized expressions and
+ * graph patterns.  For example, WHERE (a)-[:KNOWS]->(b) starts with (a)
+ * which is valid as both an expression and a path_node.  The parser forks
+ * at the conflict point and discards the failing path.  %dprec annotations
+ * on expr_var/var_name_opt and '(' expr ')'/anonymous_path resolve cases
+ * where both paths succeed (bare (a) prefers the expression interpretation).
+ */
+%glr-parser
+/*
+ * GLR conflicts are expected and correct for this grammar.  They arise
+ * from the inherent ambiguity between parenthesized expressions and
+ * graph patterns: the shift/reduce conflicts on '-', '<', '{',
+ * PARAMETER and ')' all come from path extension vs. arithmetic or
+ * parenthesized-expression alternatives after a leading '(', and the
+ * reduce/reduce conflicts on ')', '}' and '=' come from the overlap
+ * between expr_var and var_name_opt.  GLR handles all of these by
+ * forking at the conflict point and discarding the failing alternative;
+ * %dprec annotations on expr_var/var_name_opt and '(' expr ')' /
+ * anonymous_path resolve cases where both forks succeed (bare (a)
+ * prefers the expression interpretation).
+ *
+ * We intentionally do not use %expect / %expect-rr here because the
+ * exact conflict counts can vary across Bison versions (and across
+ * distros) as the generator's internals change.  Instead, the Makefile
+ * passes -Wno-conflicts-sr,-Wno-conflicts-rr via BISONFLAGS so the
+ * build stays clean without binding us to a specific Bison release.
+ */
 
 %lex-param {ag_scanner_t scanner}
 %parse-param {ag_scanner_t scanner}
@@ -291,6 +319,9 @@ static Node *build_list_comprehension_node(Node *var, Node *expr,
 static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
                                            Node *var, Node *expr,
                                            Node *where, int location);
+
+/* pattern expression helper */
+static Node *make_exists_pattern_sublink(Node *pattern, int location);
 
 /* helper functions */
 static ExplainStmt *make_explain_stmt(List *options);
@@ -1876,21 +1907,7 @@ expr_func_subexpr:
         }
     | EXISTS '(' anonymous_path ')'
         {
-            cypher_sub_pattern *sub;
-            SubLink    *n;
-
-            sub = make_ag_node(cypher_sub_pattern);
-            sub->kind = CSP_EXISTS;
-            sub->pattern = list_make1($3);
-
-            n = makeNode(SubLink);
-            n->subLinkType = EXISTS_SUBLINK;
-            n->subLinkId = 0;
-            n->testexpr = NULL;
-            n->operName = NIL;
-            n->subselect = (Node *) sub;
-            n->location = @1;
-            $$ = (Node *)node_to_agtype((Node *)n, "boolean", @1);
+            $$ = make_exists_pattern_sublink($3, @1);
         }
     | EXISTS '(' property_value ')'
         {
@@ -2026,7 +2043,7 @@ expr_atom:
 
             $$ = (Node *)n;
         }
-    | '(' expr ')'
+    | '(' expr ')' %dprec 2
         {
             Node *n = $2;
 
@@ -2036,6 +2053,17 @@ expr_atom:
                 n = (Node *)node_to_agtype(n, "boolean", @2);
             }
             $$ = n;
+        }
+    | anonymous_path %dprec 1
+        {
+            /*
+             * Bare pattern in expression context is semantically
+             * equivalent to EXISTS(pattern).  Example:
+             *   WHERE (a)-[:KNOWS]->(b)
+             * becomes
+             *   WHERE EXISTS((a)-[:KNOWS]->(b))
+             */
+            $$ = make_exists_pattern_sublink($1, @1);
         }
     | expr_case
     | expr_var
@@ -2288,7 +2316,7 @@ expr_case_default:
     ;
 
 expr_var:
-    var_name
+    var_name %dprec 2
         {
             ColumnRef *n;
 
@@ -2338,11 +2366,11 @@ var_name:
     ;
 
 var_name_opt:
-    /* empty */
+    /* empty */ %dprec 1
         {
             $$ = NULL;
         }
-    | var_name
+    | var_name %dprec 1
     ;
 
 label_name:
@@ -3547,6 +3575,30 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
 
         return (Node *) guard;
     }
+}
+
+/*
+ * Wrap a graph pattern in an EXISTS SubLink.  Used by both
+ * EXISTS(pattern) syntax and bare pattern expressions in WHERE.
+ */
+static Node *make_exists_pattern_sublink(Node *pattern, int location)
+{
+    cypher_sub_pattern *sub;
+    SubLink *n;
+
+    sub = make_ag_node(cypher_sub_pattern);
+    sub->kind = CSP_EXISTS;
+    sub->pattern = list_make1(pattern);
+
+    n = makeNode(SubLink);
+    n->subLinkType = EXISTS_SUBLINK;
+    n->subLinkId = 0;
+    n->testexpr = NULL;
+    n->operName = NIL;
+    n->subselect = (Node *) sub;
+    n->location = location;
+
+    return (Node *)node_to_agtype((Node *)n, "boolean", location);
 }
 
 /* Helper function to create an ExplainStmt node */
