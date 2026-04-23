@@ -177,6 +177,7 @@ REGRESS = scan \
           predicate_functions \
           map_projection \
           direct_field_access \
+          agtype_jsonb_cast \
           security
 
 ifneq ($(EXTRA_TESTS),)

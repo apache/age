@@ -174,6 +174,33 @@ AS 'MODULE_PATHNAME';
 CREATE CAST (agtype AS json)
     WITH FUNCTION ag_catalog.agtype_to_json(agtype);
 
+-- agtype -> jsonb (explicit)
+-- Uses json intermediate (agtype_to_json -> json::jsonb) because agtype
+-- extends jsonb's binary format with types (AGTV_INTEGER, AGTV_FLOAT,
+-- AGTV_VERTEX, AGTV_EDGE, AGTV_PATH) that jsonb does not recognize.
+CREATE FUNCTION ag_catalog.agtype_to_jsonb(agtype)
+    RETURNS jsonb
+    LANGUAGE sql
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'SELECT ag_catalog.agtype_to_json($1)::jsonb';
+
+CREATE CAST (agtype AS jsonb)
+    WITH FUNCTION ag_catalog.agtype_to_jsonb(agtype);
+
+-- jsonb -> agtype (explicit)
+CREATE FUNCTION ag_catalog.jsonb_to_agtype(jsonb)
+    RETURNS agtype
+    LANGUAGE sql
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'SELECT $1::text::agtype';
+
+CREATE CAST (jsonb AS agtype)
+    WITH FUNCTION ag_catalog.jsonb_to_agtype(jsonb);
+
 CREATE FUNCTION ag_catalog.agtype_array_to_agtype(agtype[])
     RETURNS agtype
     LANGUAGE c
