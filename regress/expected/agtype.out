@@ -2167,8 +2167,8 @@ SELECT * FROM cypher('orderability_graph', $$ MATCH (n) RETURN n ORDER BY n.prop
  {"id": 844424930131981, "label": "vertex", "properties": {"prop": [{"id": 0, "label": "v", "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": "v", "properties": {"i": 0}}::vertex]::path}}::vertex
  {"id": 844424930131980, "label": "vertex", "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
  {"id": 844424930131979, "label": "vertex", "properties": {"prop": {"id": 0, "label": "v", "properties": {"i": 0}}::vertex}}::vertex
- {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"bool": true}}}::vertex
  {"id": 844424930131977, "label": "vertex", "properties": {"prop": {"i": 0, "bool": true}}}::vertex
+ {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"i": null, "bool": true}}}::vertex
  {"id": 844424930131975, "label": "vertex", "properties": {"prop": [1, 2, 3]}}::vertex
  {"id": 844424930131976, "label": "vertex", "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
  {"id": 844424930131973, "label": "vertex", "properties": {"prop": "string"}}::vertex
@@ -2190,8 +2190,8 @@ SELECT * FROM cypher('orderability_graph', $$ MATCH (n) RETURN n ORDER BY n.prop
  {"id": 844424930131973, "label": "vertex", "properties": {"prop": "string"}}::vertex
  {"id": 844424930131976, "label": "vertex", "properties": {"prop": [1, 2, 3, 4, 5]}}::vertex
  {"id": 844424930131975, "label": "vertex", "properties": {"prop": [1, 2, 3]}}::vertex
+ {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"i": null, "bool": true}}}::vertex
  {"id": 844424930131977, "label": "vertex", "properties": {"prop": {"i": 0, "bool": true}}}::vertex
- {"id": 844424930131978, "label": "vertex", "properties": {"prop": {"bool": true}}}::vertex
  {"id": 844424930131979, "label": "vertex", "properties": {"prop": {"id": 0, "label": "v", "properties": {"i": 0}}::vertex}}::vertex
  {"id": 844424930131980, "label": "vertex", "properties": {"prop": {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge}}::vertex
  {"id": 844424930131981, "label": "vertex", "properties": {"prop": [{"id": 0, "label": "v", "properties": {"i": 0}}::vertex, {"id": 2, "label": "e", "end_id": 1, "start_id": 0, "properties": {"i": 0}}::edge, {"id": 1, "label": "v", "properties": {"i": 0}}::vertex]::path}}::vertex
