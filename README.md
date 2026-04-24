@@ -215,7 +215,105 @@ LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 ```
 
+<h2><img height="20" src="/img/contents.svg">&nbsp;&nbsp;Using AGE with Non-Autocommit Clients (psycopg, JDBC, etc.)</h2>
 
+If you are using AGE from a database client that does **not** default to autocommit — most commonly `psycopg` v3 or JDBC — you must understand how PostgreSQL's transaction semantics apply to AGE's setup and DDL-like functions. Otherwise, you may see graphs or labels that appear to be created successfully, but are not visible from new connections.
+
+This is **not** a bug in AGE — it is standard PostgreSQL behavior. AGE's DDL-like functions write to the catalog, and catalog writes only become visible to other sessions after the enclosing transaction is committed.
+
+### What is and isn't transactional
+
+| Statement | Scope | Needs commit to be visible elsewhere? |
+|---|---|---|
+| `LOAD 'age'` | Session-local (loads the .so into the current backend) | No |
+| `SET search_path = ag_catalog, "$user", public` | Session-local | No |
+| `SELECT create_graph('g')` | **Writes** to `ag_graph` and creates a schema | **Yes** |
+| `SELECT create_vlabel('g', 'L')` / `create_elabel(...)` | **Writes** to `ag_label` and creates a table | **Yes** |
+| `SELECT drop_graph('g', true)` / `drop_label(...)` | **Writes** to catalog | **Yes** |
+| `SELECT load_labels_from_file(...)` / `load_edges_from_file(...)` | **Writes** to catalog + data | **Yes** |
+| `cypher('g', $$ CREATE (:L {...}) $$)` | **Writes** data | **Yes** |
+
+In a client that defaults to autocommit (e.g. `psql`), every statement commits automatically, so this is never noticed. In a non-autocommit client, the first statement you run implicitly opens a transaction that stays open until you call `commit()`, `rollback()`, or close the connection.
+
+### psycopg v3 — the "savepoint gotcha"
+
+The common pitfall is that `with connection.transaction():` in psycopg does **not** start a new top-level transaction when one is already open — it creates a **savepoint** inside the existing outer transaction. Releasing a savepoint is not a commit, so your `create_graph` write stays invisible to other sessions until the outer transaction is explicitly committed.
+
+#### ❌ Broken: graph is not visible from a new connection
+
+```python
+import psycopg
+
+params = {"host": "localhost", "port": 5432, "user": "postgres",
+          "password": "pw", "dbname": "mydb"}
+
+# --- First connection ---
+conn = psycopg.connect(**params)
+conn.execute("LOAD 'age'")                                      # implicitly opens a txn
+conn.execute("SET search_path = ag_catalog, '$user', public")
+
+with conn.transaction(), conn.cursor() as cur:                  # <-- SAVEPOINT, not a real txn
+    cur.execute("SELECT * FROM create_graph('my_graph')")
+# outer transaction is STILL OPEN here
+
+conn.close()  # outer transaction is rolled back on close → my_graph is gone
+
+# --- New connection ---
+conn = psycopg.connect(**params)
+conn.execute("LOAD 'age'")
+conn.execute("SET search_path = ag_catalog, '$user', public")
+with conn.cursor() as cur:
+    cur.execute("SELECT name FROM ag_graph;")
+    # 'my_graph' is NOT in the results
+```
+
+#### ✅ Fix 1: explicit `commit()` after setup
+
+```python
+conn = psycopg.connect(**params)
+conn.execute("LOAD 'age'")
+conn.execute("SET search_path = ag_catalog, '$user', public")
+conn.commit()   # <-- closes the implicit outer txn
+
+with conn.transaction(), conn.cursor() as cur:
+    cur.execute("SELECT * FROM create_graph('my_graph')")
+# this transaction block is now top-level and commits on exit
+conn.close()
+```
+
+#### ✅ Fix 2: enable autocommit on the connection
+
+```python
+conn = psycopg.connect(**params, autocommit=True)
+conn.execute("LOAD 'age'")
+conn.execute("SET search_path = ag_catalog, '$user', public")
+conn.execute("SELECT * FROM create_graph('my_graph')")          # commits immediately
+conn.close()
+```
+
+You can also toggle autocommit at runtime with `conn.set_autocommit(True)`.
+
+### JDBC
+
+JDBC connections also default to autocommit **true** per the JDBC spec, but many frameworks (Spring, etc.) flip it off. If you are running AGE DDL-like calls from JDBC, either:
+
+```java
+connection.setAutoCommit(true);
+// ... LOAD 'age'; SET search_path ...; SELECT create_graph(...);
+```
+
+or keep autocommit off and explicitly commit after DDL-like calls:
+
+```java
+stmt.execute("LOAD 'age'");
+stmt.execute("SET search_path = ag_catalog, \"$user\", public;");
+stmt.execute("SELECT create_graph('my_graph');");
+connection.commit();   // make the graph visible to other sessions
+```
+
+### Rule of thumb
+
+> If an AGE call creates, drops, or modifies a graph, label, vertex, edge, or property, it is a **transactional write**. In a non-autocommit client, it will not be visible to other sessions until you explicitly `commit()`.
 
 <h2><img height="20" src="/img/contents.svg">&nbsp;&nbsp;Quick Start</h2>
 
