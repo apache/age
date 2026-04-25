@@ -503,6 +503,31 @@ SELECT * FROM cypher('list_comprehension', $$ CREATE n=()-[:edge]->() RETURN [n 
  [{"id": 281474976710664, "label": "", "properties": {}}::vertex, {"id": 281474976710665, "label": "", "properties": {}}::vertex]
 (1 row)
 
+-- Property access on the list-comprehension loop variable
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{name:'a'}, {name:'b'}] | x.name] $$) AS (result agtype);
+   result   
+------------
+ ["a", "b"]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{n:1}, {n:2}, {n:3}] WHERE x.n > 1 | x.n] $$) AS (result agtype);
+ result 
+--------
+ [2, 3]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH p=()-[:edge]->() RETURN [n IN nodes(p) | n.name] $$) AS (result agtype);
+    result    
+--------------
+ [null, null]
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u:csm_match) WITH collect(u) AS ns RETURN [x IN ns | x.list] $$) AS (result agtype);
+         result          
+-------------------------
+ [["abc", "def", "ghi"]]
+(1 row)
+
 -- Multiple list comprehensions in RETURN and WITH clause
 SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN [1,2,3]], [u IN [1,2,3]] $$) AS (result agtype, result2 agtype);
   result   |  result2  

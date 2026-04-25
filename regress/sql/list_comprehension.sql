@@ -123,6 +123,12 @@ SELECT * FROM cypher('list_comprehension', $$ WITH 1 AS m RETURN [m IN [1, 2, 3]
 SELECT * FROM cypher('list_comprehension', $$ WITH [m IN [1,2,3]] AS m RETURN [m IN [1, 2, 3]], m $$) AS (result agtype, result2 agtype);
 SELECT * FROM cypher('list_comprehension', $$ CREATE n=()-[:edge]->() RETURN [n IN nodes(n)] $$) AS (u agtype);
 
+-- Property access on the list-comprehension loop variable
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{name:'a'}, {name:'b'}] | x.name] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{n:1}, {n:2}, {n:3}] WHERE x.n > 1 | x.n] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH p=()-[:edge]->() RETURN [n IN nodes(p) | n.name] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u:csm_match) WITH collect(u) AS ns RETURN [x IN ns | x.list] $$) AS (result agtype);
+
 -- Multiple list comprehensions in RETURN and WITH clause
 SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN [1,2,3]], [u IN [1,2,3]] $$) AS (result agtype, result2 agtype);
 SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN [1,2,3] WHERE u>1], [u IN [1,2,3] WHERE u>2] $$) AS (result agtype, result2 agtype);
