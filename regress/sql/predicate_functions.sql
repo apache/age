@@ -218,6 +218,90 @@ SELECT * FROM cypher('predicate_functions', $$
 $$) AS (result agtype);
 
 --
+-- Property access on the loop variable
+--
+-- any: true (2 > 1) / false (none > 5)
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN any(x IN [{n: 1}, {n: 2}] WHERE x.n > 1)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN any(x IN [{n: 1}, {n: 2}] WHERE x.n > 5)
+$$) AS (result agtype);
+
+-- all: true (both > 0) / false (not all > 1)
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN [{n: 1}, {n: 2}] WHERE x.n > 0)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN all(x IN [{n: 1}, {n: 2}] WHERE x.n > 1)
+$$) AS (result agtype);
+
+-- none: true (neither > 2) / false (one matches)
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN none(x IN [{n: 1}, {n: 2}] WHERE x.n > 2)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN none(x IN [{n: 1}, {n: 2}] WHERE x.n = 1)
+$$) AS (result agtype);
+
+-- single: true (exactly one) / false (both match)
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN single(x IN [{n: 1}, {n: 2}] WHERE x.n = 1)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    RETURN single(x IN [{n: 1}, {n: 2}] WHERE x.n > 0)
+$$) AS (result agtype);
+
+-- Property access on vertex loop variables over a collected node list
+-- any: true ('even' exists) / false (no 'missing')
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN any(x IN ns WHERE x.name = 'even')
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN any(x IN ns WHERE x.name = 'missing')
+$$) AS (result agtype);
+
+-- all: true (all have non-empty vals) / false (not all named 'even')
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN all(x IN ns WHERE size(x.vals) > 0)
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN all(x IN ns WHERE x.name = 'even')
+$$) AS (result agtype);
+
+-- none: true (none 'missing') / false ('even' matches)
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN none(x IN ns WHERE x.name = 'missing')
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN none(x IN ns WHERE x.name = 'even')
+$$) AS (result agtype);
+
+-- single: true (only one 'odd') / false (all have non-empty vals)
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN single(x IN ns WHERE x.name = 'odd')
+$$) AS (result agtype);
+
+SELECT * FROM cypher('predicate_functions', $$
+    MATCH (u) WITH collect(u) AS ns
+    RETURN single(x IN ns WHERE size(x.vals) > 0)
+$$) AS (result agtype);
+
+--
 -- Predicate functions in boolean expressions
 --
 SELECT * FROM cypher('predicate_functions', $$
