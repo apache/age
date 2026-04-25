@@ -3739,3 +3739,45 @@ SELECT * FROM drop_graph('list', true);
 --
 -- End of tests
 --
+
+--
+-- Issue 2391 - map literals must preserve keys whose values are null
+--
+SELECT create_graph('issue_2391');
+-- single-key null
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {a: null} AS m
+$$) AS (m agtype);
+-- multiple null values
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {companyName: null, sinceYear: null} AS m
+$$) AS (m agtype);
+-- keys() must see the null-valued key
+SELECT * FROM cypher('issue_2391', $$
+  RETURN keys({a: null}) AS ks
+$$) AS (ks agtype);
+-- coalesce passes a non-null map (map itself is not null) through
+SELECT * FROM cypher('issue_2391', $$
+  RETURN coalesce({a: null}, null) AS m
+$$) AS (m agtype);
+-- nested map values inside an expression also preserve nulls
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {outer: {inner: null, kept: 1}} AS m
+$$) AS (m agtype);
+-- mixed non-null and null values are all preserved in order
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {a: 1, b: null, c: 'x'} AS m
+$$) AS (m agtype);
+-- control: empty map is still empty
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {} AS m
+$$) AS (m agtype);
+-- control: CREATE must still strip top-level null properties so
+-- setting a property to null removes it from storage
+SELECT * FROM cypher('issue_2391', $$
+  CREATE (n:Item {keep: 1, drop: null}) RETURN n
+$$) AS (n agtype);
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Item) RETURN n
+$$) AS (n agtype);
+SELECT * FROM drop_graph('issue_2391', true);
