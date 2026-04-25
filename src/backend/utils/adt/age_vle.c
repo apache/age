@@ -17,6 +17,50 @@
  * under the License.
  */
 
+/*
+ * VLE (Variable-Length Edge) semantics and cost model
+ * ---------------------------------------------------
+ *
+ * This file implements variable-length relationship matching for Cypher
+ * patterns of the form (a)-[*min..max]->(b). The semantics and cost model
+ * are often misunderstood; this note exists to prevent future
+ * misdiagnoses (see issue #2349).
+ *
+ * Semantics: edge-isomorphism (openCypher-mandated)
+ *
+ *   A path is valid iff no edge appears in it more than once. Vertices MAY
+ *   recur. This is "edge-isomorphism" (a.k.a. relationship-uniqueness) per
+ *   the openCypher specification; it is NOT vertex-isomorphism.
+ *
+ *   Example: in the triangle A-[e1]->B-[e2]->C-[e3]->A, the query
+ *     MATCH (a)-[*3]->(b) WHERE id(a) = id(A)
+ *   MUST return the path (A, e1, B, e2, C, e3, A) with b = A. Switching
+ *   to vertex-isomorphism would silently drop this path and violate the
+ *   spec. Any "optimization" that tracks visited vertices as a filter
+ *   rather than visited edges is therefore incorrect, not merely faster.
+ *
+ * Cost model
+ *
+ *   With E total edges in the traversal-reachable subgraph and a bounded
+ *   pattern [*min..max], the number of enumerated paths is bounded by
+ *   sum_{k=min..max} P(E, k) where P(E, k) = E! / (E - k)! -- polynomial
+ *   in E for fixed max, but factorial in the depth bound.
+ *
+ *   Unbounded patterns ([*], [*1..]) have no termination guarantee other
+ *   than edge-uniqueness depletion. On a cycle-rich graph the worst case
+ *   is O(E!). This is inherent to edge-isomorphic path enumeration and
+ *   cannot be reduced by algorithm change without changing semantics.
+ *   Users who want reachability (not full enumeration) should bound the
+ *   upper length or use a dedicated function such as shortestPath().
+ *
+ * Implementation pointer
+ *
+ *   Cycle prevention is enforced by edge_state_entry.used_in_path, set
+ *   and cleared during DFS traversal in dfs_find_a_path_between() and
+ *   dfs_find_a_path_from(). The helper is_edge_in_path() inspects the
+ *   current path stack. See those functions for the enforcement site.
+ */
+
 #include "postgres.h"
 
 #include "common/hashfn.h"
