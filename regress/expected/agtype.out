@@ -704,6 +704,48 @@ SELECT '3.14::numeric'::agtype + '3.14::numeric'::agtype;
  6.28::numeric
 (1 row)
 
+SELECT 'null'::agtype - '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'null'::agtype + '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'null'::agtype * '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'null'::agtype / '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'null'::agtype % '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'null'::agtype ^ '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT -'null'::agtype;
+ ?column? 
+----------
+ 
+(1 row)
+
 --
 -- Test operator - for extended functionality
 --
@@ -1065,8 +1107,6 @@ SELECT '{"a":1 , "b":2, "c":3}'::agtype - 'null';
 ERROR:  expected agtype string, not agtype NULL
 SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '[1]' - '["a"]';
 ERROR:  expected agtype string, not agtype integer
-SELECT 'null'::agtype - '1';
-ERROR:  Invalid input parameter types for agtype_sub
 SELECT 'null'::agtype - '[1]';
 ERROR:  must be object or array, not a scalar value
 SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '"a"';

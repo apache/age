@@ -180,5 +180,19 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list = [u IN [1, u]] RETURN u $$) AS (u agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list IN [u IN [1, u.list]] RETURN u $$) AS (u agtype);
 
+-- Issue 2394 - projection over a null element should propagate null,
+-- not concatenate the null and the projection result into a sublist and
+-- not error out for operators other than '+'.
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null] | x + 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x + 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | 1 + x] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x - 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x * 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x / 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x % 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x ^ 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | -x] $$) AS (result agtype);
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);
