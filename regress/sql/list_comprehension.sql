@@ -180,5 +180,13 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list = [u IN [1, u]] RETURN u $$) AS (u agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list IN [u IN [1, u.list]] RETURN u $$) AS (u agtype);
 
+-- Issue 2393 - WHERE filter over null elements should use openCypher's
+-- three-valued logic: IS NULL must keep nulls, IS NOT NULL must drop them.
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1, null] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NOT NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, 2, 3] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ UNWIND [null, 1] AS x RETURN x, x IS NULL, x IS NOT NULL $$) AS (x agtype, a agtype, b agtype);
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);

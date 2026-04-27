@@ -1677,24 +1677,70 @@ static Node *make_bool_or_agg(ParseState *pstate, Node *arg)
 }
 
 /*
+ * Helper: build a fully-transformed `count(*) FILTER (WHERE filter)` Aggref.
+ *
+ * The filter must already be a transformed boolean expression.
+ */
+static Node *make_count_star_filter_agg(ParseState *pstate, Node *filter)
+{
+    Aggref *agg;
+    Oid count_oid;
+
+    /* count() -- the zero-argument count-star form */
+    count_oid = LookupFuncName(list_make1(makeString("count")),
+                               0, NULL, false);
+
+    agg = makeNode(Aggref);
+    agg->aggfnoid = count_oid;
+    agg->aggtype = INT8OID;
+    agg->aggcollid = InvalidOid;
+    agg->inputcollid = InvalidOid;
+    agg->aggtranstype = InvalidOid;  /* filled by planner */
+    agg->aggargtypes = NIL;
+    agg->aggdirectargs = NIL;
+    agg->args = NIL;
+    agg->aggorder = NIL;
+    agg->aggdistinct = NIL;
+    agg->aggfilter = (Expr *) filter;
+    agg->aggstar = true;
+    agg->aggvariadic = false;
+    agg->aggkind = AGGKIND_NORMAL;
+    agg->aggpresorted = false;
+    agg->agglevelsup = 0;
+    agg->aggsplit = AGGSPLIT_SIMPLE;
+    agg->aggno = -1;
+    agg->aggtransno = -1;
+    agg->location = -1;
+
+    pstate->p_hasAggs = true;
+
+    return (Node *) agg;
+}
+
+/*
  * Helper: build a transformed CASE expression implementing three-valued
- * predicate logic for all(), any(), and none().
+ * predicate logic for all(), any(), none(), and single().
  *
- * any():   CASE WHEN bool_or(pred IS TRUE) THEN true
- *               WHEN bool_or(pred IS NULL) THEN NULL
- *               ELSE false END
+ * any():    CASE WHEN bool_or(pred IS TRUE)  THEN true
+ *                WHEN bool_or(pred IS NULL)  THEN NULL
+ *                ELSE false END
  *
- * all():   CASE WHEN bool_or(pred IS FALSE) THEN false
- *               WHEN bool_or(pred IS NULL) THEN NULL
- *               ELSE true END
+ * all():    CASE WHEN bool_or(pred IS FALSE) THEN false
+ *                WHEN bool_or(pred IS NULL)  THEN NULL
+ *                ELSE true END
  *
- * none():  CASE WHEN bool_or(pred IS TRUE) THEN false
- *               WHEN bool_or(pred IS NULL) THEN NULL
- *               ELSE true END
+ * none():   CASE WHEN bool_or(pred IS TRUE)  THEN false
+ *                WHEN bool_or(pred IS NULL)  THEN NULL
+ *                ELSE true END
  *
- * Empty list: both bool_or calls return NULL (no rows), so the CASE
- * falls through to the default: false for any(), true for all()/none().
- * This matches Cypher's vacuous truth semantics.
+ * single(): CASE WHEN count(*) FILTER (WHERE pred IS TRUE) >= 2 THEN false
+ *                WHEN bool_or(pred IS NULL)                     THEN NULL
+ *                WHEN count(*) FILTER (WHERE pred IS TRUE) =  1 THEN true
+ *                ELSE false END
+ *
+ * Empty list: all aggregates return NULL on zero rows, so the CASE
+ * falls through to the default: false for any()/single(), true for
+ * all()/none(). This matches Cypher's vacuous truth semantics.
  */
 static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
                                       cypher_predicate_function_kind kind)
@@ -1752,7 +1798,7 @@ static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
         cexpr->defresult = (Expr *) false_const;
         cexpr->location = -1;
     }
-    else /* CPFK_NONE */
+    else if (kind == CPFK_NONE)
     {
         /* bool_or(pred IS TRUE) -> false */
         bool_or_first = make_bool_or_agg(pstate,
@@ -1767,6 +1813,62 @@ static Node *make_predicate_case_expr(ParseState *pstate, Node *pred,
         cexpr->arg = NULL;
         cexpr->args = list_make2(when1, when2);
         cexpr->defresult = (Expr *) true_const;
+        cexpr->location = -1;
+    }
+    else /* CPFK_SINGLE */
+    {
+        /*
+         * Three WHEN arms, in order:
+         *   count(*) FILTER (pred IS TRUE) >= 2 -> false  (definitely >1)
+         *   bool_or(pred IS NULL)               -> NULL   (unknown arm)
+         *   count(*) FILTER (pred IS TRUE) =  1 -> true   (exactly one)
+         *   else                                -> false  (zero true)
+         *
+         * The >=2 arm is tested first so that 2-or-more definite trues
+         * win over any null predicates, matching Neo4j semantics.
+         */
+        CaseWhen *when0, *when3;
+        Node *count_ge_2, *count_eq_1;
+        Node *count_true_a, *count_true_b;
+        Node *int_2 = (Node *) makeConst(INT8OID, -1, InvalidOid, sizeof(int64),
+                                         Int64GetDatum(2), false, FLOAT8PASSBYVAL);
+        Node *int_1 = (Node *) makeConst(INT8OID, -1, InvalidOid, sizeof(int64),
+                                         Int64GetDatum(1), false, FLOAT8PASSBYVAL);
+
+        /*
+         * Two separate Aggref nodes for count(*) FILTER (pred IS TRUE);
+         * the planner will common-subexpression them back to a single
+         * aggregate evaluation.
+         */
+        count_true_a = make_count_star_filter_agg(pstate,
+                           make_boolean_test(pred, IS_TRUE));
+        count_true_b = make_count_star_filter_agg(pstate,
+                           make_boolean_test(pred, IS_TRUE));
+
+        count_ge_2 = (Node *) make_op(pstate, list_make1(makeString(">=")),
+                                      count_true_a, int_2,
+                                      pstate->p_last_srf, -1);
+        count_eq_1 = (Node *) make_op(pstate, list_make1(makeString("=")),
+                                      count_true_b, int_1,
+                                      pstate->p_last_srf, -1);
+
+        /* first arm: count >= 2 -> false */
+        when0 = makeNode(CaseWhen);
+        when0->expr = (Expr *) count_ge_2;
+        when0->result = (Expr *) false_const;
+        when0->location = -1;
+
+        /* third arm: count = 1 -> true */
+        when3 = makeNode(CaseWhen);
+        when3->expr = (Expr *) count_eq_1;
+        when3->result = (Expr *) true_const;
+        when3->location = -1;
+
+        cexpr = makeNode(CaseExpr);
+        cexpr->casetype = BOOLOID;
+        cexpr->arg = NULL;
+        cexpr->args = list_make3(when0, when2, when3);
+        cexpr->defresult = (Expr *) false_const;
         cexpr->location = -1;
     }
 
@@ -1845,67 +1947,12 @@ static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
         pred = coerce_to_boolean(child_pstate, pred, "WHERE");
     }
 
-    if (pred_func->kind == CPFK_SINGLE)
+    /*
+     * Build a CASE expression that preserves three-valued NULL semantics.
+     * No WHERE clause -- the logic is entirely in the SELECT list, so the
+     * CASE can see null predicates and react to them.
+     */
     {
-        /*
-         * single(): SELECT count(*) FROM unnest(list) AS x
-         *           WHERE pred IS TRUE
-         *
-         * Using IS TRUE ensures NULL predicates are not counted as
-         * matches, preserving correct semantics.  The grammar layer
-         * compares the result = 1.
-         *
-         * Note: a LIMIT 2 optimization (to short-circuit after two
-         * matches) would require a nested subquery that breaks
-         * correlated variable references.  Deferred to a future
-         * optimization pass.
-         */
-        FuncCall *count_call;
-        Node *count_expr;
-        Node *is_true_qual;
-
-        /* WHERE pred IS TRUE -- NULLs are not counted */
-        is_true_qual = make_boolean_test(pred, IS_TRUE);
-
-        count_call = makeFuncCall(list_make1(makeString("count")),
-                                  NIL, COERCE_SQL_SYNTAX, -1);
-        count_call->agg_star = true;
-
-        count_expr = transformExpr(child_pstate, (Node *) count_call,
-                                   EXPR_KIND_SELECT_TARGET);
-
-        te = makeTargetEntry((Expr *) count_expr,
-                             (AttrNumber) child_pstate->p_next_resno++,
-                             "count", false);
-
-        query->targetList = lappend(query->targetList, te);
-        query->jointree = makeFromExpr(child_pstate->p_joinlist,
-                                       is_true_qual);
-        query->rtable = child_pstate->p_rtable;
-        query->rteperminfos = child_pstate->p_rteperminfos;
-        query->hasAggs = child_pstate->p_hasAggs;
-        query->hasSubLinks = child_pstate->p_hasSubLinks;
-        query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
-
-        assign_query_collations(child_pstate, query);
-
-        if (child_pstate->p_hasAggs ||
-            query->groupClause || query->groupingSets || query->havingQual)
-        {
-            parse_check_aggregates(child_pstate, query);
-        }
-
-        free_cypher_parsestate(child_cpstate);
-
-        return query;
-    }
-    else
-    {
-        /*
-         * all()/any()/none(): Build a CASE expression with bool_or()
-         * aggregates that preserves three-valued NULL semantics.
-         * No WHERE clause -- the logic is entirely in the SELECT list.
-         */
         Node *case_expr;
 
         case_expr = make_predicate_case_expr(child_pstate, pred,
