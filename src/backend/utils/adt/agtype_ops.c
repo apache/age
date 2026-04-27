@@ -165,6 +165,12 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
 
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     /*
      * One or both values is a string OR one is a string and the other is
      * either an integer, float, or numeric. If so, concatenate them.
@@ -525,6 +531,12 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
 
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
@@ -615,6 +627,12 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
 
     agtv_value = get_ith_agtype_value_from_container(&v->root, 0);
 
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_value->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     if (agtv_value->type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
@@ -665,6 +683,12 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
 
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
@@ -755,6 +779,12 @@ Datum agtype_div(PG_FUNCTION_ARGS)
 
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
@@ -874,6 +904,12 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
 
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
@@ -963,6 +999,12 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
 
     agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
     agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+
+    /* openCypher: arithmetic over null yields null. */
+    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    {
+        PG_RETURN_NULL();
+    }
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {

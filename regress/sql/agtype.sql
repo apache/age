@@ -229,6 +229,13 @@ SELECT '3'::agtype + '3.14'::agtype;
 SELECT '3'::agtype + '3.14::numeric'::agtype;
 SELECT '3.14'::agtype + '3.14::numeric'::agtype;
 SELECT '3.14::numeric'::agtype + '3.14::numeric'::agtype;
+SELECT 'null'::agtype - '1';
+SELECT 'null'::agtype + '1';
+SELECT 'null'::agtype * '1';
+SELECT 'null'::agtype / '1';
+SELECT 'null'::agtype % '1';
+SELECT 'null'::agtype ^ '1';
+SELECT -'null'::agtype;
 
 --
 -- Test operator - for extended functionality
@@ -305,7 +312,6 @@ SELECT '{"a":1 , "b":2, "c":3}'::agtype - '[null]';
 SELECT '{"a":1 , "b":2, "c":3}'::agtype - '1';
 SELECT '{"a":1 , "b":2, "c":3}'::agtype - 'null';
 SELECT '{"a":1 , "b":2, "c":3}'::agtype - '["c","b"]' - '[1]' - '["a"]';
-SELECT 'null'::agtype - '1';
 SELECT 'null'::agtype - '[1]';
 SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '"a"';
 SELECT '{"id": 1125899906842625, "label": "Vertex", "properties": {"a": "xyz", "b": true, "c": -19.888, "e": {"f": "abcdef", "g": {}, "h": [[], {}]}, "i": {"j": 199, "k": {"l": "mnopq"}}}}::vertex'::agtype - '["a"]';
