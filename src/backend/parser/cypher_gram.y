@@ -175,7 +175,7 @@
 %type <node> expr_subquery
 
 /* names */
-%type <string> property_key_name var_name var_name_opt label_name
+%type <string> property_key_name var_name var_name_alias var_name_opt label_name
 %type <string> symbolic_name schema_name type_name
 %type <keyword> reserved_keyword safe_keywords conflicted_keywords
 %type <list> func_name
@@ -480,7 +480,7 @@ yield_item_list:
     ;
 
 yield_item:
-    expr AS var_name
+    expr AS var_name_alias
         {
             ResTarget *n;
 
@@ -791,7 +791,7 @@ return_item_list:
     ;
 
 return_item:
-    expr AS var_name
+    expr AS var_name_alias
         {
             ResTarget *n;
 
@@ -985,7 +985,7 @@ optional_opt:
 
 
 unwind:
-    UNWIND expr AS var_name
+    UNWIND expr AS var_name_alias
         {
             ResTarget  *res;
             cypher_unwind *n;
@@ -2334,6 +2334,42 @@ var_name:
                     errmsg("%s is only for internal use", AGE_DEFAULT_PREFIX),
                     ag_scanner_errposition(@1, scanner)));
         }
+    }
+    ;
+
+/*
+ * var_name_alias is used in alias positions (RETURN/WITH/YIELD ... AS x,
+ * UNWIND ... AS x) where the AS keyword removes any lookahead ambiguity.
+ * Beyond plain identifiers, it permits the same set of non-conflicting
+ * reserved keywords accepted by safe_keywords (already accepted in
+ * func_name; schema_name accepts the broader reserved_keyword), so that
+ * legitimate Cypher such as
+ *     RETURN 1 AS count
+ *     RETURN n AS exists
+ *     UNWIND [1, 2] AS row
+ * is parsed correctly. Truly conflicting tokens (END, NULL, TRUE, FALSE)
+ * are listed under conflicted_keywords (not safe_keywords) and remain
+ * rejected here. See issue #2355.
+ *
+ * It is intentionally NOT used in pattern variable positions
+ * ((x:Label), [r:REL]) or named-path bindings (p = ...), because
+ * allowing reserved keywords there introduces shift/reduce ambiguity.
+ *
+ * NOTE: Reading a keyword-named alias back (e.g. WITH 1 AS count
+ * RETURN count) is intentionally still rejected -- broadening expr_var
+ * (which reads through var_name) to accept safe_keywords reintroduces
+ * ~156 shift/reduce conflicts in bison. That asymmetry (writable but
+ * not readable) is tracked in issue #2416.
+ */
+var_name_alias:
+    var_name
+    | safe_keywords
+    {
+        /* safe_keywords already returns a pnstrdup-allocated copy via
+         * KEYWORD_STRDUP, so no further pstrdup is needed. Mirrors the
+         * established pattern used by schema_name's reserved_keyword
+         * branch. */
+        $$ = (char *) $1;
     }
     ;
 
