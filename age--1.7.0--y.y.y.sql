@@ -459,3 +459,38 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+
+--
+-- Issue #2356: restore lightweight selectivity functions for containment
+-- and key-existence operators.
+--
+-- The PG14+ branches of AGE bound RESTRICT=matchingsel / JOIN=matchingjoinsel
+-- on @>, <@, @>>, <<@, ?, ?|, ?&. matchingsel is built for pattern operators
+-- (LIKE / regex) and invokes the operator's underlying support function on
+-- pg_statistic MCVs during planning. For agtype that re-runs agtype_contains
+-- per MCV, which can dominate planning time on point queries (TPS regression
+-- reported on PG18). PostgreSQL core itself binds @>/<@/? on jsonb to
+-- contsel/contjoinsel for the same reason; this aligns AGE with that
+-- precedent.
+--
+ALTER OPERATOR ag_catalog.@>(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.<@(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.@>>(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.<<@(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?(agtype, text)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?|(agtype, text[])
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?|(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?&(agtype, text[])
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?&(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);

@@ -2407,15 +2407,15 @@ SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name}) MATCH (a {age:a.
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship}]->(b) RETURN p $$) as (a agtype);
                                                                                                                                                                      a                                                                                                                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710661, "label": "", "properties": {"age": 4, "name": "T"}}::vertex, {"id": 4785074604081153, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710661, "properties": {"years": 3, "relationship": "friends"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
  [{"id": 281474976710659, "label": "", "properties": {"age": 3, "name": "orphan"}}::vertex, {"id": 4785074604081154, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710659, "properties": {"years": 4, "relationship": "enemies"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
+ [{"id": 281474976710661, "label": "", "properties": {"age": 4, "name": "T"}}::vertex, {"id": 4785074604081153, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710661, "properties": {"years": 3, "relationship": "friends"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
 (2 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship, years: u.years}]->(b) RETURN p $$) as (a agtype);
                                                                                                                                                                      a                                                                                                                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"id": 281474976710661, "label": "", "properties": {"age": 4, "name": "T"}}::vertex, {"id": 4785074604081153, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710661, "properties": {"years": 3, "relationship": "friends"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
  [{"id": 281474976710659, "label": "", "properties": {"age": 3, "name": "orphan"}}::vertex, {"id": 4785074604081154, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710659, "properties": {"years": 4, "relationship": "enemies"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
+ [{"id": 281474976710661, "label": "", "properties": {"age": 4, "name": "T"}}::vertex, {"id": 4785074604081153, "label": "knows", "end_id": 281474976710666, "start_id": 281474976710661, "properties": {"years": 3, "relationship": "friends"}}::edge, {"id": 281474976710666, "label": "", "properties": {"age": 6}}::vertex]::path
 (2 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationship: u.relationship}]->(b {age:b.age}) RETURN p $$) as (a agtype);
@@ -3398,19 +3398,17 @@ SELECT count(*) FROM cypher('test_enable_containment', $$ MATCH p=(x:Customer)-[
 (1 row)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer)-[:bought ={store: 'Amazon', addr:{city: 'Vancouver', street: 30}}]->(y:Product) RETURN 0 $$) as (a agtype);
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
- Hash Join
-   Hash Cond: (y.id = _age_default_alias_0.end_id)
-   ->  Seq Scan on "Product" y
-   ->  Hash
-         ->  Hash Join
-               Hash Cond: (x.id = _age_default_alias_0.start_id)
-               ->  Seq Scan on "Customer" x
-               ->  Hash
-                     ->  Seq Scan on bought _age_default_alias_0
-                           Filter: (properties @>> '{"addr": {"city": "Vancouver", "street": 30}, "store": "Amazon"}'::agtype)
-(10 rows)
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Nested Loop
+         ->  Seq Scan on bought _age_default_alias_0
+               Filter: (properties @>> '{"addr": {"city": "Vancouver", "street": 30}, "store": "Amazon"}'::agtype)
+         ->  Index Only Scan using "Customer_pkey" on "Customer" x
+               Index Cond: (id = _age_default_alias_0.start_id)
+   ->  Index Only Scan using "Product_pkey" on "Product" y
+         Index Cond: (id = _age_default_alias_0.end_id)
+(8 rows)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
                                                                              QUERY PLAN                                                                              
