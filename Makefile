@@ -177,7 +177,8 @@ REGRESS = scan \
           predicate_functions \
           map_projection \
           direct_field_access \
-          security
+          security \
+          reserved_keyword_alias
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)
