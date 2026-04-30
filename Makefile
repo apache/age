@@ -33,15 +33,17 @@ age_sql = age--1.7.0.sql
 #   4. Temporarily installs the synthetic files into the PG extension directory
 #      so that CREATE EXTENSION age VERSION '<INIT>' and ALTER EXTENSION
 #      age UPDATE TO '<CURR>' can find them.
-#   5. The age_upgrade regression test exercises the full upgrade path: install
-#      at INIT, create data, ALTER EXTENSION UPDATE to CURR, verify data.
+#   5. The age_upgrade regression test snapshots the ag_catalog schema from
+#      a fresh install, then installs at INIT, upgrades to CURR, and compares
+#      the catalog across seven system catalogs to detect missing, extra,
+#      or changed objects.
 #   6. The test SQL cleans up the synthetic files via a generated shell script.
 #
 # This forces developers to keep the upgrade template in sync: any SQL object
 # added after the version-bump commit must also appear in the template, or the
 # upgrade test will fail (the object will be missing after ALTER EXTENSION UPDATE).
 #
-# Because the default install SQL comes from HEAD, all 31 non-upgrade tests
+# Because the default install SQL comes from HEAD, all non-upgrade tests
 # run with every SQL function registered — no functions are missing.
 #
 # Graceful degradation — the upgrade test is silently skipped when:
