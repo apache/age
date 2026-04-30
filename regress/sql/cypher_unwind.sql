@@ -149,6 +149,57 @@ SELECT * FROM cypher('cypher_unwind', $$
 $$) as (i agtype);
 
 --
+-- Issue 2383: UNWIND over a list containing JSON null must produce an
+-- SQL NULL row so that null-strict operators (count, IS NULL, ...) behave
+-- like they do for `WITH null AS x`.
+--
+
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [null] AS x
+    RETURN count(x) AS c
+$$) as (c agtype);
+
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [1, null, 2, null, 3] AS x
+    RETURN count(x) AS c
+$$) as (c agtype);
+
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [null] AS x
+    RETURN x IS NULL AS is_null
+$$) as (is_null agtype);
+
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [1, null, 2] AS x
+    WITH x WHERE x IS NOT NULL
+    RETURN count(x) AS c
+$$) as (c agtype);
+
+-- count(*) must still see the row produced by UNWIND [null]
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [null] AS x
+    RETURN count(*) AS c
+$$) as (c agtype);
+
+-- only the unwound top-level element becomes SQL NULL; nested nulls
+-- stay as agtype-null inside the returned container, so the outer rows
+-- themselves are non-NULL and counted.
+SELECT * FROM cypher('cypher_unwind', $$
+    UNWIND [[null], {k: null}] AS x
+    RETURN count(x) AS c
+$$) as (c agtype);
+
+
+-- The unwound row value itself must be SQL NULL (not a datum wrapping
+-- agtype-null). Without this, count(x)=0 could be achieved by tricks
+-- in count() rather than by UNWIND emitting a real SQL NULL.
+SELECT x IS NULL
+FROM cypher('cypher_unwind', $$
+    UNWIND [null] AS x
+    RETURN x
+$$) as (x agtype);
+
+--
 -- Clean up
 --
 

@@ -188,6 +188,13 @@ IMMUTABLE
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+CREATE FUNCTION ag_catalog.age_unwind(agtype)
+    RETURNS SETOF agtype
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
 CREATE FUNCTION ag_catalog.age_vertex_stats(agtype, agtype)
     RETURNS agtype
     LANGUAGE c
