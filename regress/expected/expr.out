@@ -40,18 +40,18 @@ SELECT * FROM cypher('expr', $$RETURN {}$$) AS r(c agtype);
 SELECT * FROM cypher('expr', $$
 RETURN {s: 's', i: 1, f: 1.0, b: true, z: null}
 $$) AS r(c agtype);
-                    c                    
------------------------------------------
- {"b": true, "f": 1.0, "i": 1, "s": "s"}
+                         c                          
+----------------------------------------------------
+ {"b": true, "f": 1.0, "i": 1, "s": "s", "z": null}
 (1 row)
 
 -- nested maps
 SELECT * FROM cypher('expr', $$
 RETURN {s: {s: 's'}, t: {i: 1, e: {f: 1.0}, s: {a: {b: true}}}, z: null}
 $$) AS r(c agtype);
-                                     c                                      
-----------------------------------------------------------------------------
- {"s": {"s": "s"}, "t": {"e": {"f": 1.0}, "i": 1, "s": {"a": {"b": true}}}}
+                                           c                                           
+---------------------------------------------------------------------------------------
+ {"s": {"s": "s"}, "t": {"e": {"f": 1.0}, "i": 1, "s": {"a": {"b": true}}}, "z": null}
 (1 row)
 
 --
@@ -9457,3 +9457,105 @@ NOTICE:  graph "list" has been dropped
 --
 -- End of tests
 --
+--
+-- Issue 2391 - map literals must preserve keys whose values are null
+--
+SELECT create_graph('issue_2391');
+NOTICE:  graph "issue_2391" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- single-key null
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {a: null} AS m
+$$) AS (m agtype);
+      m      
+-------------
+ {"a": null}
+(1 row)
+
+-- multiple null values
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {companyName: null, sinceYear: null} AS m
+$$) AS (m agtype);
+                    m                     
+------------------------------------------
+ {"sinceYear": null, "companyName": null}
+(1 row)
+
+-- keys() must see the null-valued key
+SELECT * FROM cypher('issue_2391', $$
+  RETURN keys({a: null}) AS ks
+$$) AS (ks agtype);
+  ks   
+-------
+ ["a"]
+(1 row)
+
+-- coalesce passes a non-null map (map itself is not null) through
+SELECT * FROM cypher('issue_2391', $$
+  RETURN coalesce({a: null}, null) AS m
+$$) AS (m agtype);
+      m      
+-------------
+ {"a": null}
+(1 row)
+
+-- nested map values inside an expression also preserve nulls
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {outer: {inner: null, kept: 1}} AS m
+$$) AS (m agtype);
+                   m                   
+---------------------------------------
+ {"outer": {"kept": 1, "inner": null}}
+(1 row)
+
+-- mixed non-null and null values are all preserved in order
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {a: 1, b: null, c: 'x'} AS m
+$$) AS (m agtype);
+               m               
+-------------------------------
+ {"a": 1, "b": null, "c": "x"}
+(1 row)
+
+-- control: empty map is still empty
+SELECT * FROM cypher('issue_2391', $$
+  RETURN {} AS m
+$$) AS (m agtype);
+ m  
+----
+ {}
+(1 row)
+
+-- control: CREATE must still strip top-level null properties so
+-- setting a property to null removes it from storage
+SELECT * FROM cypher('issue_2391', $$
+  CREATE (n:Item {keep: 1, drop: null}) RETURN n
+$$) AS (n agtype);
+                                      n                                      
+-----------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Item", "properties": {"keep": 1}}::vertex
+(1 row)
+
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Item) RETURN n
+$$) AS (n agtype);
+                                      n                                      
+-----------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Item", "properties": {"keep": 1}}::vertex
+(1 row)
+
+SELECT * FROM drop_graph('issue_2391', true);
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table issue_2391._ag_label_vertex
+drop cascades to table issue_2391._ag_label_edge
+drop cascades to table issue_2391."Item"
+NOTICE:  graph "issue_2391" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

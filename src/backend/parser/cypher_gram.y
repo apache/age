@@ -2081,6 +2081,14 @@ map:
 
             n = make_ag_node(cypher_map);
             n->keyvals = $2;
+            /*
+             * By default, a Cypher map literal preserves keys whose
+             * values are null (openCypher / Neo4j semantics: e.g.
+             * RETURN {a: null} yields {a: null}, not {}). Callers
+             * that need property-stripping semantics (CREATE, SET =)
+             * override this to false in cypher_clause.c.
+             */
+            n->keep_null = true;
 
             $$ = (Node *)n;
         }
