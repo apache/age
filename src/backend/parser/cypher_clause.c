@@ -130,6 +130,60 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
 static Expr *transform_cypher_node(cypher_parsestate *cpstate,
                                    cypher_node *node, List **target_list,
                                    bool output_node, bool valid_label);
+/*
+ * Issue #2382: For variable-length relationships with a lower bound of 0
+ * (e.g., [:LABEL*0..N]), the zero-hop self-binding case must succeed even
+ * when LABEL is missing from the cache, because Neo4j/openCypher semantics
+ * say a zero-hop pattern matches the same node regardless of any edges.
+ *
+ * By the time match_check_valid_label() runs, build_VLE_relation() (in
+ * cypher_gram.y) has rewritten cypher_relationship.varlen from A_Indices
+ * into a FuncCall named "vle" whose argument list is:
+ *   (start_id, end_id, edge_match_proto, lidx, uidx, dir, unique_id)
+ * so the lower-bound is the 4th argument (1-based).
+ *
+ * This helper is intentionally defensive: every assumption about the shape
+ * of the FuncCall is guarded so any parser refactor that changes it will
+ * fall back to "not zero-bound", which is the safe behaviour (the existing
+ * false-where short-circuit will still kick in for impossible patterns).
+ */
+static bool is_zero_lower_bound_vle(Node *varlen)
+{
+    FuncCall *fc;
+    String *fname;
+    Node *lidx_node;
+    A_Const *lidx;
+
+    if (varlen == NULL || !IsA(varlen, FuncCall))
+        return false;
+
+    fc = (FuncCall *) varlen;
+
+    if (list_length(fc->funcname) != 1)
+        return false;
+    fname = (String *) linitial(fc->funcname);
+    if (fname == NULL || !IsA(fname, String))
+        return false;
+    if (strcmp(strVal(fname), "vle") != 0)
+        return false;
+
+    /* args = {start, end, edge_match, lidx, uidx, dir, uniq} */
+    if (list_length(fc->args) < 5)
+        return false;
+
+    lidx_node = (Node *) list_nth(fc->args, 3);
+    if (lidx_node == NULL || !IsA(lidx_node, A_Const))
+        return false;
+
+    lidx = (A_Const *) lidx_node;
+    if (lidx->isnull)
+        return false;
+    if (lidx->val.ival.type != T_Integer)
+        return false;
+
+    return lidx->val.ival.ival == 0;
+}
+
 static bool match_check_valid_label(cypher_match *match,
                                     cypher_parsestate *cpstate);
 static Node *make_vertex_expr(cypher_parsestate *cpstate,
@@ -2900,7 +2954,14 @@ static bool match_check_valid_label(cypher_match *match,
 
                     if (lcd == NULL || lcd->kind != LABEL_KIND_EDGE)
                     {
-                        return false;
+                        /*
+                         * Issue #2382: a missing edge label is fatal only if
+                         * the pattern actually requires an edge of that label.
+                         * For VLE with lower bound 0, the zero-hop self-bind
+                         * case must still produce rows.
+                         */
+                        if (!is_zero_lower_bound_vle(rel->varlen))
+                            return false;
                     }
                 }
             }
@@ -4967,7 +5028,15 @@ static bool path_check_valid_label(cypher_path *path,
 
                 if (lcd == NULL || lcd->kind != LABEL_KIND_EDGE)
                 {
-                    return false;
+                    /*
+                     * Issue #2382: Don't invalidate the whole path just
+                     * because a VLE edge with lower bound 0 references a
+                     * missing label. The zero-hop self-binding semantics
+                     * still allow the surrounding nodes to bind, so the
+                     * other vertex labels in this path must be honoured.
+                     */
+                    if (!is_zero_lower_bound_vle(rel->varlen))
+                        return false;
                 }
             }
         }

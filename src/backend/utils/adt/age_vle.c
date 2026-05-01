@@ -385,6 +385,20 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
     num_edge_property_constraints = AGT_ROOT_COUNT(vlelctx->edge_property_constraint);
 
     /*
+     * Issue #2382: If the user asked for a specific edge label but that label
+     * does not exist in the graph (edge_label_name_oid == InvalidOid while
+     * edge_label_name is non-NULL), no real edge can match. Returning false
+     * here ensures that for VLE patterns like [:NOEXIST*0..N] we do not
+     * traverse arbitrary other-label edges. Zero-hop self-binding is handled
+     * separately via build_VLE_zero_container() so this does not break it.
+     */
+    if (vlelctx->edge_label_name != NULL &&
+        vlelctx->edge_label_name_oid == InvalidOid)
+    {
+        return false;
+    }
+
+    /*
      * We only care about verifying that we have all of the property conditions.
      * We don't care about extra unmatched properties. If there aren't any edge
      * constraints, then the edge passes by default.
