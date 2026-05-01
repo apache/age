@@ -86,6 +86,16 @@ CREATE FUNCTION ag_catalog._label_id(graph_name name, label_name name)
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
+-- Internal selftest for the agehash open-addressing hashtable. Returns "OK"
+-- on success or "FAIL: ..." with a diagnostic message. Intended for the
+-- agehash regression test only.
+CREATE FUNCTION ag_catalog._agehash_self_test()
+    RETURNS text
+    LANGUAGE c
+    VOLATILE
+    PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
 --
 -- utility functions
 --

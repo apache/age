@@ -163,8 +163,9 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx);
 static void free_VLE_local_context(VLE_local_context *vlelctx);
 /* VLE graph traversal functions */
-static edge_state_entry *get_edge_state(VLE_local_context *vlelctx,
-                                        graphid edge_id);
+static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
+                                                  graphid edge_id,
+                                                  uint32 hashvalue);
 /* graphid data structures */
 static void load_initial_dfs_stacks(VLE_local_context *vlelctx);
 static bool dfs_find_a_path_between(VLE_local_context *vlelctx);
@@ -358,7 +359,7 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
     MemSet(&edge_state_ctl, 0, sizeof(edge_state_ctl));
     edge_state_ctl.keysize = sizeof(int64);
     edge_state_ctl.entrysize = sizeof(edge_state_entry);
-    edge_state_ctl.hash = tag_hash;
+    edge_state_ctl.hash = graphid_hash;
     vlelctx->edge_state_hashtable = hash_create(eshn,
                                                 EDGE_STATE_HTAB_INITIAL_SIZE,
                                                 &edge_state_ctl,
@@ -900,23 +901,24 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 }
 
 /*
- * Helper function to get the specified edge's state. If it does not find it, it
- * creates and initializes it.
+ * Helper function to get the specified edge's state, using a precomputed hash
+ * value. The dynahash table keyed on graphid is shared with edge_hashtable
+ * elsewhere, so callers can compute graphid_hash() once and reuse it for
+ * lookups in both tables.
  */
-static edge_state_entry *get_edge_state(VLE_local_context *vlelctx,
-                                        graphid edge_id)
+static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
+                                                  graphid edge_id,
+                                                  uint32 hashvalue)
 {
     edge_state_entry *ese = NULL;
     bool found = false;
 
-    /* retrieve the edge_state_entry from the edge state hashtable */
-    ese = (edge_state_entry *)hash_search(vlelctx->edge_state_hashtable,
-                                          (void *)&edge_id, HASH_ENTER, &found);
-
-    /* if it isn't found, it needs to be created and initialized */
+    ese = (edge_state_entry *)hash_search_with_hash_value(
+                                            vlelctx->edge_state_hashtable,
+                                            (void *)&edge_id, hashvalue,
+                                            HASH_ENTER, &found);
     if (!found)
     {
-        /* the edge id is also the hash key for resolving collisions */
         ese->edge_id = edge_id;
         ese->used_in_path = false;
         ese->has_been_matched = false;
@@ -1015,11 +1017,18 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+        uint32 edge_hashvalue;
 
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
+        /*
+         * Compute the hash for edge_id once and reuse it for both the
+         * edge_state_hashtable lookup and (later) the edge_hashtable lookup.
+         * Both tables key on graphid using graphid_hash().
+         */
+        edge_hashvalue = graphid_hash(&edge_id, sizeof(int64));
         /* get the edge's state */
-        ese = get_edge_state(vlelctx, edge_id);
+        ese = get_edge_state_with_hash(vlelctx, edge_id, edge_hashvalue);
         /*
          * If the edge is already in use, it means that the edge is in the path.
          * So, we need to see if it is the last path entry (we are backing up -
@@ -1067,7 +1076,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         gid_stack_push(path_stack, edge_id);
 
         /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
+        ee = get_edge_entry_with_hash(vlelctx->ggctx, edge_id, edge_hashvalue);
         next_vertex_id = get_next_vertex(vlelctx, ee);
 
         /*
@@ -1143,11 +1152,18 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+        uint32 edge_hashvalue;
 
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
+        /*
+         * Compute the hash for edge_id once and reuse it for both the
+         * edge_state_hashtable lookup and (later) the edge_hashtable lookup.
+         * Both tables key on graphid using graphid_hash().
+         */
+        edge_hashvalue = graphid_hash(&edge_id, sizeof(int64));
         /* get the edge's state */
-        ese = get_edge_state(vlelctx, edge_id);
+        ese = get_edge_state_with_hash(vlelctx, edge_id, edge_hashvalue);
         /*
          * If the edge is already in use, it means that the edge is in the path.
          * So, we need to see if it is the last path entry (we are backing up -
@@ -1195,7 +1211,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         gid_stack_push(path_stack, edge_id);
 
         /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
+        ee = get_edge_entry_with_hash(vlelctx->ggctx, edge_id, edge_hashvalue);
         next_vertex_id = get_next_vertex(vlelctx, ee);
 
         /*
@@ -1259,16 +1275,50 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
  *
  * Note: The vertex must exist.
  */
+/*
+ * Batched candidate buffer size for the adjacency lookup pipeline below.
+ * 8 was chosen because it comfortably fits within the OoO window and the
+ * per-core L1 MSHR count of modern Xeons (12+), so the K back-to-back
+ * dynahash bucket misses overlap in a single MLP wave.
+ */
+#define VLE_LOOKUP_BATCH 8
+
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id)
 {
     GraphIdStack *vertex_stack = NULL;
     GraphIdStack *edge_stack = NULL;
-    ListGraphId *edges = NULL;
     vertex_entry *ve = NULL;
-    GraphIdNode *edge_in = NULL;
-    GraphIdNode *edge_out = NULL;
-    GraphIdNode *edge_self = NULL;
+    /*
+     * Three flat-array adjacency lists, walked in parallel via integer
+     * indices. An empty (or direction-disabled) list has size == 0 so its
+     * branch never fires. This replaces the previous GraphIdNode pointer
+     * walk with a contiguous-memory traversal — significantly better for
+     * cache and branch-predictor behaviour on the DFS hot path.
+     */
+    graphid *arr_out = NULL;
+    int32    sz_out = 0;
+    int32    idx_out = 0;
+    graphid *arr_in = NULL;
+    int32    sz_in = 0;
+    int32    idx_in = 0;
+    graphid *arr_self = NULL;
+    int32    sz_self = 0;
+    int32    idx_self = 0;
+    VertexEdgeArray *vea = NULL;
+
+    /*
+     * Per-batch scratch arrays for the MLP lookup pipeline. Each iteration
+     * gathers up to VLE_LOOKUP_BATCH not-already-in-path candidate edges,
+     * then issues their edge_hashtable and edge_state_hashtable lookups in
+     * two tight back-to-back loops. The CPU's out-of-order engine overlaps
+     * the K independent dynahash bucket misses inside each loop, hiding
+     * memory latency that the original one-edge-at-a-time loop serialized.
+     */
+    graphid           batch_eids[VLE_LOOKUP_BATCH];
+    uint32            batch_hashes[VLE_LOOKUP_BATCH];
+    edge_entry       *batch_ee[VLE_LOOKUP_BATCH];
+    edge_state_entry *batch_ese[VLE_LOOKUP_BATCH];
 
     /* get the vertex entry */
     ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
@@ -1282,82 +1332,127 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     vertex_stack = vlelctx->dfs_vertex_stack;
     edge_stack = vlelctx->dfs_edge_stack;
 
-    /* set to the first edge for each edge list for the specified direction */
+    /* set up walked arrays for the requested direction(s) */
     if (vlelctx->edge_direction == CYPHER_REL_DIR_RIGHT ||
         vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
     {
-        edges = get_vertex_entry_edges_out(ve);
-        edge_out = (edges != NULL) ? get_list_head(edges) : NULL;
+        vea = get_vertex_entry_edges_out_array(ve);
+        arr_out = vea->array;
+        sz_out  = vea->size;
     }
     if (vlelctx->edge_direction == CYPHER_REL_DIR_LEFT ||
         vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
     {
-        edges = get_vertex_entry_edges_in(ve);
-        edge_in = (edges != NULL) ? get_list_head(edges) : NULL;
+        vea = get_vertex_entry_edges_in_array(ve);
+        arr_in = vea->array;
+        sz_in  = vea->size;
     }
-    /* set to the first selfloop edge */
-    edges = get_vertex_entry_edges_self(ve);
-    edge_self = (edges != NULL) ? get_list_head(edges) : NULL;
+    /* selfloops are always traversed */
+    vea = get_vertex_entry_edges_self_array(ve);
+    arr_self = vea->array;
+    sz_self  = vea->size;
 
-    /* add in valid vertex edges */
-    while (edge_out != NULL || edge_in != NULL || edge_self != NULL)
+    /*
+     * Outer loop: drain the three flat arrays via a 5-phase pipeline.
+     *   1. Gather: pull up to VLE_LOOKUP_BATCH next edge_ids that survive
+     *      the cheap is_edge_in_path() early-skip.
+     *   2. Hash:   compute graphid_hash for the batch (pure compute).
+     *   3. Lookup: K back-to-back edge_hashtable HASH_FIND calls — MLP
+     *      window 1 (the CPU overlaps the K bucket misses).
+     *   4. State:  K back-to-back edge_state_hashtable HASH_ENTER calls —
+     *      MLP window 2 (different table, different bucket misses).
+     *   5. Apply:  per-edge match/state-update/stack-push, now operating
+     *      on cache-warm ee/ese pointers.
+     * Phase 5 preserves the exact processing order of the original loop
+     * (out direction first, then in, then self), so DFS stack ordering and
+     * therefore path enumeration are identical to the previous version.
+     */
+    while (idx_out < sz_out || idx_in < sz_in || idx_self < sz_self)
     {
-        edge_entry *ee = NULL;
-        edge_state_entry *ese = NULL;
-        graphid edge_id;
+        int batch_n = 0;
+        int i;
 
-        /* get the edge_id from the next available edge*/
-        if (edge_out != NULL)
+        /* Phase 1: gather */
+        while (batch_n < VLE_LOOKUP_BATCH &&
+               (idx_out < sz_out || idx_in < sz_in || idx_self < sz_self))
         {
-            edge_id = get_graphid(edge_out);
-        }
-        else if (edge_in != NULL)
-        {
-            edge_id = get_graphid(edge_in);
-        }
-        else
-        {
-            edge_id = get_graphid(edge_self);
-        }
+            graphid edge_id;
 
-        /*
-         * This is a fast existence check, relative to the hash search, for when
-         * the path stack is small. If the edge is in the path, we skip it.
-         */
-        if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
-            is_edge_in_path(vlelctx, edge_id))
-        {
-            /* set to the next available edge */
-            if (edge_out != NULL)
+            if (idx_out < sz_out)
             {
-                edge_out = next_GraphIdNode(edge_out);
+                edge_id = arr_out[idx_out++];
             }
-            else if (edge_in != NULL)
+            else if (idx_in < sz_in)
             {
-                edge_in = next_GraphIdNode(edge_in);
+                edge_id = arr_in[idx_in++];
             }
             else
             {
-                edge_self = next_GraphIdNode(edge_self);
+                edge_id = arr_self[idx_self++];
             }
-            continue;
+
+            /*
+             * Fast early-skip when the path stack is small: avoids two
+             * dynahash lookups for edges already on the path.
+             */
+            if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
+                is_edge_in_path(vlelctx, edge_id))
+            {
+                continue;
+            }
+
+            batch_eids[batch_n++] = edge_id;
         }
 
-        /* get the edge entry */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
-        /* it better exist */
-        if (ee == NULL)
+        if (batch_n == 0)
         {
-            elog(ERROR, "add_valid_vertex_edges: no edge found");
+            break;
         }
-        /* get its state */
-        ese = get_edge_state(vlelctx, edge_id);
-        /*
-         * Don't add any edges that we have already seen because they will
-         * cause a loop to form.
-         */
-        if (!ese->used_in_path)
+
+        /* Phase 2: compute hashes (pure compute, no misses) */
+        for (i = 0; i < batch_n; i++)
         {
+            batch_hashes[i] = graphid_hash(&batch_eids[i], sizeof(int64));
+        }
+
+        /* Phase 3: K back-to-back edge_hashtable lookups (MLP wave 1) */
+        for (i = 0; i < batch_n; i++)
+        {
+            batch_ee[i] = get_edge_entry_with_hash(vlelctx->ggctx,
+                                                   batch_eids[i],
+                                                   batch_hashes[i]);
+        }
+
+        /* Phase 4: K back-to-back edge_state_hashtable lookups (MLP wave 2) */
+        for (i = 0; i < batch_n; i++)
+        {
+            batch_ese[i] = get_edge_state_with_hash(vlelctx,
+                                                    batch_eids[i],
+                                                    batch_hashes[i]);
+        }
+
+        /* Phase 5: process the batch sequentially */
+        for (i = 0; i < batch_n; i++)
+        {
+            edge_entry       *ee  = batch_ee[i];
+            edge_state_entry *ese = batch_ese[i];
+            graphid           edge_id = batch_eids[i];
+
+            /* it better exist */
+            if (ee == NULL)
+            {
+                elog(ERROR, "add_valid_vertex_edges: no edge found");
+            }
+
+            /*
+             * Don't add any edges that we have already seen because they
+             * will cause a loop to form.
+             */
+            if (ese->used_in_path)
+            {
+                continue;
+            }
+
             /* validate the edge if it hasn't been already */
             if (!ese->has_been_matched && is_an_edge_match(vlelctx, ee))
             {
@@ -1369,36 +1464,24 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                 ese->has_been_matched = true;
                 ese->matched = false;
             }
+
             /* if it is a match, add it */
             if (ese->has_been_matched && ese->matched)
             {
                 /*
-                 * We need to maintain our source vertex for each edge added
-                 * if the edge_direction is CYPHER_REL_DIR_NONE. This is due
-                 * to the edges having a fixed direction and the dfs
+                 * We need to maintain our source vertex for each edge
+                 * added if the edge_direction is CYPHER_REL_DIR_NONE. This
+                 * is due to the edges having a fixed direction and the dfs
                  * algorithm working strictly through edges. With an
                  * un-directional VLE edge, you don't know the vertex that
                  * you just came from. So, we need to store it.
                  */
-                 if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
-                 {
-                     gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
-                 }
-                 gid_stack_push(edge_stack, edge_id);
+                if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
+                {
+                    gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
+                }
+                gid_stack_push(edge_stack, edge_id);
             }
-        }
-        /* get the next working edge */
-        if (edge_out != NULL)
-        {
-            edge_out = next_GraphIdNode(edge_out);
-        }
-        else if (edge_in != NULL)
-        {
-            edge_in = next_GraphIdNode(edge_in);
-        }
-        else
-        {
-            edge_self = next_GraphIdNode(edge_self);
         }
     }
 }
@@ -2613,7 +2696,7 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
     MemSet(&exists_ctl, 0, sizeof(exists_ctl));
     exists_ctl.keysize = sizeof(int64);
     exists_ctl.entrysize = sizeof(int64);
-    exists_ctl.hash = tag_hash;
+    exists_ctl.hash = graphid_hash;
 
     /* create exists_hash table */
     exists_hash = hash_create(EXISTS_HTAB_NAME, EXISTS_HTAB_NAME_INITIAL_SIZE,
