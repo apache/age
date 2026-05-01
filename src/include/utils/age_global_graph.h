@@ -23,6 +23,25 @@
 #include "utils/age_graphid_ds.h"
 
 /*
+ * Flat dynamic-array adjacency container for vertex edges. Replaces a
+ * linked-list (ListGraphId) of GraphIdNodes for vertex_entry::edges_*.
+ *
+ * Storage: a single palloc'd graphid array, doubled on growth. The struct
+ * itself is embedded by value in vertex_entry so that the (array, size,
+ * capacity) triple lives in the same cache line as the surrounding entry
+ * fields, saving one indirection on the DFS hot path.
+ *
+ * Empty arrays carry array == NULL, size == 0, capacity == 0 and incur no
+ * allocation until the first append.
+ */
+typedef struct VertexEdgeArray
+{
+    graphid *array;     /* contiguous edge graphid array; NULL when empty */
+    int32 size;         /* number of edges currently stored */
+    int32 capacity;     /* allocated capacity (in graphid slots) */
+} VertexEdgeArray;
+
+/*
  * We declare the graph nodes and edges here, and in this way, so that it may be
  * used elsewhere. However, we keep the contents private by defining it in
  * age_global_graph.c
@@ -46,13 +65,27 @@ ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx);
 vertex_entry *get_vertex_entry(GRAPH_global_context *ggctx,
                                graphid vertex_id);
 edge_entry *get_edge_entry(GRAPH_global_context *ggctx, graphid edge_id);
+
+/*
+ * Variant of get_edge_entry that accepts a precomputed hash value, allowing
+ * the same hash to be reused across multiple lookups of the same graphid
+ * (e.g. edge_state_hashtable + edge_hashtable in the VLE DFS hot loop).
+ */
+edge_entry *get_edge_entry_with_hash(GRAPH_global_context *ggctx,
+                                     graphid edge_id, uint32 hashvalue);
 /* vertex entry accessor functions*/
 graphid get_vertex_entry_id(vertex_entry *ve);
-ListGraphId *get_vertex_entry_edges_in(vertex_entry *ve);
-ListGraphId *get_vertex_entry_edges_out(vertex_entry *ve);
-ListGraphId *get_vertex_entry_edges_self(vertex_entry *ve);
 Oid get_vertex_entry_label_table_oid(vertex_entry *ve);
 Datum get_vertex_entry_properties(vertex_entry *ve);
+
+/*
+ * Flat-array adjacency accessors. Returned pointer is into the entry's
+ * embedded VertexEdgeArray and is therefore non-NULL for a valid entry,
+ * but the underlying VertexEdgeArray::array may be NULL when size == 0.
+ */
+VertexEdgeArray *get_vertex_entry_edges_out_array(vertex_entry *ve);
+VertexEdgeArray *get_vertex_entry_edges_in_array(vertex_entry *ve);
+VertexEdgeArray *get_vertex_entry_edges_self_array(vertex_entry *ve);
 /* edge entry accessor functions */
 graphid get_edge_entry_id(edge_entry *ee);
 Oid get_edge_entry_label_table_oid(edge_entry *ee);
@@ -64,6 +97,16 @@ graphid get_edge_entry_end_vertex_id(edge_entry *ee);
 uint64 get_graph_version(Oid graph_oid);
 void increment_graph_version(Oid graph_oid);
 Oid get_graph_oid_for_table(Oid table_oid);
+
+/*
+ * Fast hash function for graphid (int64) keys used in dynahash tables.
+ * Replaces tag_hash with the MurmurHash3 fmix64 finalizer for better
+ * distribution and lower instruction count on modern x86_64.
+ */
+uint32 graphid_hash(const void *key, Size keysize);
+
+/* Equality predicate for graphid (int64) keys; agehash_keyeq_fn signature. */
+bool graphid_keyeq(const void *a, const void *b, Size keysize);
 
 /* Shared memory initialization for PG < 17 (shmem_request_hook path) */
 #if PG_VERSION_NUM < 170000

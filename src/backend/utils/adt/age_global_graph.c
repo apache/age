@@ -40,6 +40,7 @@
 #endif
 
 #include "utils/age_global_graph.h"
+#include "utils/agehash.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
@@ -48,7 +49,6 @@
 
 /* defines */
 #define VERTEX_HTAB_NAME "Vertex to edge lists " /* added a space at end for */
-#define EDGE_HTAB_NAME "Edge to vertex mapping " /* the graph name to follow */
 #define VERTEX_HTAB_INITIAL_SIZE 10000
 #define EDGE_HTAB_INITIAL_SIZE 10000
 
@@ -104,17 +104,26 @@ static GraphVersionState *shmem_version_state = NULL;
 typedef struct vertex_entry
 {
     graphid vertex_id;             /* vertex id, it is also the hash key */
-    ListGraphId *edges_in;         /* List of entering edges graphids (int64) */
-    ListGraphId *edges_out;        /* List of exiting edges graphids (int64) */
-    ListGraphId *edges_self;       /* List of selfloop edges graphids (int64) */
+    VertexEdgeArray edges_in;      /* incoming edge graphids (flat array) */
+    VertexEdgeArray edges_out;     /* outgoing edge graphids (flat array) */
+    VertexEdgeArray edges_self;    /* self-loop edge graphids (flat array) */
     Oid vertex_label_table_oid;    /* the label table oid */
     ItemPointerData tid;           /* physical tuple location for lazy fetch */
 } vertex_entry;
 
-/* edge entry for the edge_hashtable */
+/*
+ * edge entry for the edge_table.
+ *
+ * The edge_id is the hash key and is stored in the agehash slot header
+ * (immediately before the payload). It is intentionally NOT a field on this
+ * payload struct: duplicating it would add 8 bytes per edge to the slot,
+ * which on SF10 (~175M edges) is over a gigabyte of overhead. Use
+ * get_edge_entry_id(ee) when you need the id of an entry returned by
+ * get_edge_entry / get_edge_entry_with_hash; that helper recovers the key
+ * from the slot via agehash_key_from_payload.
+ */
 typedef struct edge_entry
 {
-    graphid edge_id;               /* edge id, it is also the hash key */
     Oid edge_label_table_oid;      /* the label table oid */
     ItemPointerData tid;           /* physical tuple location for lazy fetch */
     graphid start_vertex_id;       /* start vertex */
@@ -131,7 +140,8 @@ typedef struct GRAPH_global_context
     char *graph_name;              /* graph name */
     Oid graph_oid;                 /* graph oid for searching */
     HTAB *vertex_hashtable;        /* hashtable to hold vertex edge lists */
-    HTAB *edge_hashtable;          /* hashtable to hold edge to vertex map */
+    AgeHashTable *edge_table;      /* edge to vertex map (Robin Hood) */
+    MemoryContext edge_table_mcxt; /* private context owning edge_table */
     uint64 graph_version;          /* version counter for cache invalidation */
     TransactionId xmin;            /* snapshot fallback: transaction xmin */
     TransactionId xmax;            /* snapshot fallback: transaction xmax */
@@ -154,6 +164,50 @@ typedef struct GRAPH_global_context_container
 
 /* global variable to hold the per process GRAPH global contexts */
 static GRAPH_global_context_container global_graph_contexts_container = {0};
+
+/*
+ * VertexEdgeArray helpers — flat-array adjacency container used by
+ * vertex_entry's edges_in / edges_out / edges_self.
+ *
+ * Growth policy: start at 4 slots on first append, then double on each
+ * overflow. This keeps the average cost of n appends amortised O(n) and
+ * keeps the memory waste bounded by 2x.
+ */
+#define VEA_INITIAL_CAPACITY 4
+
+static inline void vea_append(VertexEdgeArray *vea, graphid edge_id)
+{
+    if (vea->size == vea->capacity)
+    {
+        int32 new_capacity = (vea->capacity == 0)
+                                 ? VEA_INITIAL_CAPACITY
+                                 : vea->capacity * 2;
+
+        if (vea->array == NULL)
+        {
+            vea->array = (graphid *) palloc(new_capacity * sizeof(graphid));
+        }
+        else
+        {
+            vea->array = (graphid *) repalloc(vea->array,
+                                              new_capacity * sizeof(graphid));
+        }
+
+        vea->capacity = new_capacity;
+    }
+    vea->array[vea->size++] = edge_id;
+}
+
+static inline void vea_free(VertexEdgeArray *vea)
+{
+    if (vea->array != NULL)
+    {
+        pfree(vea->array);
+        vea->array = NULL;
+    }
+    vea->size = 0;
+    vea->capacity = 0;
+}
 
 /* declarations */
 /* GRAPH global context functions */
@@ -223,6 +277,57 @@ bool is_ggctx_invalid(GRAPH_global_context *ggctx)
     }
 }
 /*
+ * Fast hash function for graphid (int64) keys.
+ *
+ * Replaces dynahash's tag_hash (Jenkins lookup3 → ~17 mixing ops) with the
+ * MurmurHash3 fmix64 finalizer (5 ops: 3 xorshifts + 2 multiplies).
+ *
+ * Quality: fmix64 is the avalanche stage of MurmurHash3 and passes all SMHasher
+ * tests for 64-bit integer inputs. The output is truncated to uint32 to match
+ * dynahash's HashValueFunc signature; bits 0..31 of fmix64 are well-mixed.
+ *
+ * Performance rationale: graphid lookups dominate hash_search_with_hash_value
+ * time (≈41% IC1 on SF3). Reducing the per-call mixing cost cuts both insert
+ * and lookup overhead in age_global_graph and age_vle hashtables.
+ */
+uint32 graphid_hash(const void *key, Size keysize)
+{
+    uint64 k;
+
+    /* keysize is always sizeof(int64) at our four call sites; assert in debug. */
+    Assert(keysize == sizeof(int64));
+    (void) keysize;
+
+    /* graphid keys are stored as int64; load aligned (callers pass &graphid). */
+    memcpy(&k, key, sizeof(uint64));
+
+    /* MurmurHash3 fmix64 (Austin Appleby, public domain). */
+    k ^= k >> 33;
+    k *= UINT64CONST(0xff51afd7ed558ccd);
+    k ^= k >> 33;
+    k *= UINT64CONST(0xc4ceb9fe1a85ec53);
+    k ^= k >> 33;
+
+    return (uint32) k;
+}
+
+/*
+ * agehash key-equality callback for graphid (int64) keys.
+ *
+ * graphid_hash collisions are rare but real (32-bit hash space, billions of
+ * possible keys), so the equality check has to compare the full 8 bytes.
+ * memcmp on a fixed 8-byte length compiles to a single load + cmp on x86,
+ * which is just as fast as an int64 cast and avoids any alignment risk on
+ * other architectures.
+ */
+bool graphid_keyeq(const void *a, const void *b, Size keysize)
+{
+    Assert(keysize == sizeof(int64));
+    (void) keysize;
+    return memcmp(a, b, sizeof(int64)) == 0;
+}
+
+/*
  * Helper function to create the global vertex and edge hashtables. One
  * hashtable will hold the vertex, its edges (both incoming and exiting) as a
  * list, and its properties datum. The other hashtable will hold the edge, its
@@ -231,49 +336,50 @@ bool is_ggctx_invalid(GRAPH_global_context *ggctx)
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 {
     HASHCTL vertex_ctl;
-    HASHCTL edge_ctl;
     char *graph_name = NULL;
     char *vhn = NULL;
-    char *ehn = NULL;
     int glen;
     int vlen;
-    int elen;
 
     /* get the graph name and length */
     graph_name = ggctx->graph_name;
     glen = strlen(graph_name);
     /* get the vertex htab name length */
     vlen = strlen(VERTEX_HTAB_NAME);
-    /* get the edge htab name length */
-    elen = strlen(EDGE_HTAB_NAME);
-    /* allocate the space and build the names */
+    /* allocate the space and build the name */
     vhn = palloc0(vlen + glen + 1);
-    ehn = palloc0(elen + glen + 1);
-    /* copy in the names */
     strcpy(vhn, VERTEX_HTAB_NAME);
-    strcpy(ehn, EDGE_HTAB_NAME);
-    /* add in the graph name */
     vhn = strncat(vhn, graph_name, glen);
-    ehn = strncat(ehn, graph_name, glen);
 
     /* initialize the vertex hashtable */
     MemSet(&vertex_ctl, 0, sizeof(vertex_ctl));
     vertex_ctl.keysize = sizeof(int64);
     vertex_ctl.entrysize = sizeof(vertex_entry);
-    vertex_ctl.hash = tag_hash;
+    vertex_ctl.hash = graphid_hash;
     ggctx->vertex_hashtable = hash_create(vhn, VERTEX_HTAB_INITIAL_SIZE,
                                           &vertex_ctl,
                                           HASH_ELEM | HASH_FUNCTION);
     pfree_if_not_null(vhn);
 
-    /* initialize the edge hashtable */
-    MemSet(&edge_ctl, 0, sizeof(edge_ctl));
-    edge_ctl.keysize = sizeof(int64);
-    edge_ctl.entrysize = sizeof(edge_entry);
-    edge_ctl.hash = tag_hash;
-    ggctx->edge_hashtable = hash_create(ehn, EDGE_HTAB_INITIAL_SIZE, &edge_ctl,
-                                        HASH_ELEM | HASH_FUNCTION);
-    pfree_if_not_null(ehn);
+    /*
+     * Initialize the edge_table (agehash, INLINE mode).
+     *
+     * Owns its own MemoryContext as a child of CurrentMemoryContext (which,
+     * at the call site, is TopMemoryContext for the lifetime of the cached
+     * GRAPH_global_context). Cleanup is a single MemoryContextDelete in
+     * free_specific_GRAPH_global_context, so an elog during build cannot
+     * leak slots.
+     */
+    ggctx->edge_table_mcxt =
+        AllocSetContextCreate(CurrentMemoryContext,
+                              "AGE edge_table",
+                              ALLOCSET_DEFAULT_SIZES);
+    ggctx->edge_table = agehash_create_inline(ggctx->edge_table_mcxt,
+                                              sizeof(graphid),
+                                              sizeof(edge_entry),
+                                              EDGE_HTAB_INITIAL_SIZE,
+                                              graphid_hash,
+                                              graphid_keyeq);
 }
 
 /* helper function to get a List of all label names for the specified graph */
@@ -420,10 +526,10 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
     bool found = false;
 
     /* search for the edge */
-    ee = (edge_entry *)hash_search(ggctx->edge_hashtable, (void *)&edge_id,
-                                      HASH_ENTER, &found);
+    ee = (edge_entry *) agehash_insert(ggctx->edge_table,
+                                       (void *) &edge_id, &found);
 
-    /* if the hash enter returned is NULL, error out */
+    /* agehash never returns NULL on insert; a NULL would indicate a bug. */
     if (ee == NULL)
     {
         elog(ERROR, "insert_edge_entry: hash table returned NULL for ee");
@@ -445,20 +551,17 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
         ereport(WARNING,
                 (errcode(ERRCODE_DATA_EXCEPTION),
                  errmsg("previous edge: [id: %ld, start: %ld, end: %ld, label oid: %d]",
-                        ee->edge_id, ee->start_vertex_id, ee->end_vertex_id,
+                        edge_id, ee->start_vertex_id, ee->end_vertex_id,
                         ee->edge_label_table_oid)));
 
         return false;
     }
 
-    /* not sure if we really need to zero out the entry, as we set everything */
-    MemSet(ee, 0, sizeof(edge_entry));
-
     /*
-     * Set the edge id - this is important as this is the hash key value used
-     * for hash function collisions.
+     * agehash_insert zero-fills the payload on a fresh insert, so we can fill
+     * in only the fields we care about. The hash key (edge_id) lives in the
+     * slot header; recoverable via get_edge_entry_id() if needed.
      */
-    ee->edge_id = edge_id;
     ee->tid = tid;
     ee->start_vertex_id = start_vertex_id;
     ee->end_vertex_id = end_vertex_id;
@@ -520,10 +623,10 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
     ve->vertex_label_table_oid = vertex_label_table_oid;
     /* set the TID for lazy property fetch */
     ve->tid = tid;
-    /* set the NIL edge list */
-    ve->edges_in = NULL;
-    ve->edges_out = NULL;
-    ve->edges_self = NULL;
+    /*
+     * MemSet above already zeroed the embedded VertexEdgeArray fields
+     * (array=NULL, size=0, capacity=0); no explicit NIL assignment needed.
+     */
 
     /* we also need to store the vertex id for clean up of vertex lists */
     ggctx->vertices = append_graphid(ggctx->vertices, vertex_id);
@@ -561,7 +664,7 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
      */
     if (start_found && is_selfloop)
     {
-        value->edges_self = append_graphid(value->edges_self, edge_id);
+        vea_append(&value->edges_self, edge_id);
         return true;
     }
     /*
@@ -570,7 +673,7 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
      */
     else if (start_found)
     {
-        value->edges_out = append_graphid(value->edges_out, edge_id);
+        vea_append(&value->edges_out, edge_id);
     }
 
     /* search for the end vertex of the edge */
@@ -584,7 +687,7 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
      */
     if (start_found && end_found)
     {
-        value->edges_in = append_graphid(value->edges_in, edge_id);
+        vea_append(&value->edges_in, edge_id);
         return true;
     }
     /*
@@ -836,7 +939,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
 static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 {
     hash_freeze(ggctx->vertex_hashtable);
-    hash_freeze(ggctx->edge_hashtable);
+    agehash_freeze(ggctx->edge_table);
 }
 
 /*
@@ -885,14 +988,10 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
             return false;
         }
 
-        /* free the edge list associated with this vertex */
-        free_ListGraphId(value->edges_in);
-        free_ListGraphId(value->edges_out);
-        free_ListGraphId(value->edges_self);
-
-        value->edges_in = NULL;
-        value->edges_out = NULL;
-        value->edges_self = NULL;
+        /* free the edge arrays associated with this vertex */
+        vea_free(&value->edges_in);
+        vea_free(&value->edges_out);
+        vea_free(&value->edges_self);
 
         /* move to the next vertex */
         curr_vertex = next_vertex;
@@ -904,10 +1003,18 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
 
     /* free the hashtables */
     hash_destroy(ggctx->vertex_hashtable);
-    hash_destroy(ggctx->edge_hashtable);
+    /*
+     * The edge_table and all of its slots live entirely inside
+     * edge_table_mcxt, so a single MemoryContextDelete reclaims them.
+     */
+    if (ggctx->edge_table_mcxt != NULL)
+    {
+        MemoryContextDelete(ggctx->edge_table_mcxt);
+    }
 
     ggctx->vertex_hashtable = NULL;
-    ggctx->edge_hashtable = NULL;
+    ggctx->edge_table = NULL;
+    ggctx->edge_table_mcxt = NULL;
 
     /* free the context */
     pfree_if_not_null(ggctx);
@@ -1201,17 +1308,33 @@ vertex_entry *get_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id)
     return ve;
 }
 
-/* helper function to retrieve an edge_entry from the graph's edge hash table */
+/* helper function to retrieve an edge_entry from the graph's edge table */
 edge_entry *get_edge_entry(GRAPH_global_context *ggctx, graphid edge_id)
 {
-    edge_entry *ee = NULL;
-    bool found = false;
+    edge_entry *ee;
 
-    /* retrieve the current edge entry */
-    ee = (edge_entry *)hash_search(ggctx->edge_hashtable, (void *)&edge_id,
-                                   HASH_FIND, &found);
+    ee = (edge_entry *) agehash_lookup(ggctx->edge_table, (void *) &edge_id);
     /* it should be found, otherwise we have problems */
-    Assert(found);
+    Assert(ee != NULL);
+
+    return ee;
+}
+
+/*
+ * Variant of get_edge_entry that uses a precomputed hash value to skip the
+ * agehash internal hash callback. The caller is responsible for ensuring
+ * hashvalue == graphid_hash(&edge_id, sizeof(int64)). Used by the VLE DFS
+ * hot loop where the same edge_id is also looked up in edge_state_hashtable.
+ */
+edge_entry *get_edge_entry_with_hash(GRAPH_global_context *ggctx,
+                                     graphid edge_id, uint32 hashvalue)
+{
+    edge_entry *ee;
+
+    ee = (edge_entry *) agehash_lookup_with_hash(ggctx->edge_table,
+                                                 (void *) &edge_id,
+                                                 hashvalue);
+    Assert(ee != NULL);
 
     return ee;
 }
@@ -1264,19 +1387,19 @@ graphid get_vertex_entry_id(vertex_entry *ve)
     return ve->vertex_id;
 }
 
-ListGraphId *get_vertex_entry_edges_in(vertex_entry *ve)
+VertexEdgeArray *get_vertex_entry_edges_in_array(vertex_entry *ve)
 {
-    return ve->edges_in;
+    return &ve->edges_in;
 }
 
-ListGraphId *get_vertex_entry_edges_out(vertex_entry *ve)
+VertexEdgeArray *get_vertex_entry_edges_out_array(vertex_entry *ve)
 {
-    return ve->edges_out;
+    return &ve->edges_out;
 }
 
-ListGraphId *get_vertex_entry_edges_self(vertex_entry *ve)
+VertexEdgeArray *get_vertex_entry_edges_self_array(vertex_entry *ve)
 {
-    return ve->edges_self;
+    return &ve->edges_self;
 }
 
 
@@ -1343,7 +1466,15 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
 /* edge_entry accessor functions */
 graphid get_edge_entry_id(edge_entry *ee)
 {
-    return ee->edge_id;
+    /*
+     * The edge_id is stored as the agehash slot key, immediately preceding
+     * the payload pointer we hand back as `edge_entry *`. Recover it via
+     * the public agehash_key_from_payload helper to avoid a redundant
+     * 8-byte field on every entry (saves ~400MB on SF3, ~1.4GB on SF10).
+     */
+    graphid k;
+    memcpy(&k, agehash_key_from_payload(ee, sizeof(graphid)), sizeof(graphid));
+    return k;
 }
 
 Oid get_edge_entry_label_table_oid(edge_entry *ee)
@@ -1450,7 +1581,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
 {
     GRAPH_global_context *ggctx = NULL;
     vertex_entry *ve = NULL;
-    ListGraphId *edges = NULL;
+    VertexEdgeArray *edges = NULL;
     agtype_value *agtv_vertex = NULL;
     agtype_value *agtv_temp = NULL;
     agtype_value agtv_integer;
@@ -1530,24 +1661,24 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     agtv_temp->val.int_value = 0;
 
     /* get and store the self_loops */
-    edges = get_vertex_entry_edges_self(ve);
-    self_loops = (edges != NULL) ? get_list_size(edges) : 0;
+    edges = get_vertex_entry_edges_self_array(ve);
+    self_loops = edges->size;
     agtv_temp->val.int_value = self_loops;
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("self_loops"));
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
 
     /* get and store the in_degree */
-    edges = get_vertex_entry_edges_in(ve);
-    degree = (edges != NULL) ? get_list_size(edges) : 0;
+    edges = get_vertex_entry_edges_in_array(ve);
+    degree = edges->size;
     agtv_temp->val.int_value = degree + self_loops;
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("in_degree"));
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
 
     /* get and store the out_degree */
-    edges = get_vertex_entry_edges_out(ve);
-    degree = (edges != NULL) ? get_list_size(edges) : 0;
+    edges = get_vertex_entry_edges_out_array(ve);
+    degree = edges->size;
     agtv_temp->val.int_value = degree + self_loops;
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("out_degree"));
