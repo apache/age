@@ -417,6 +417,75 @@ SELECT drop_graph('issue_2092', true);
 DROP TABLE start_and_end_points;
 
 SELECT drop_graph('cypher_vle', true);
+--
+-- Issue #2382: variable-length relationships with a zero lower bound must
+-- still produce the zero-hop self-binding even when the edge label does not
+-- exist in the graph (Neo4j/openCypher semantics).
+--
+SELECT create_graph('issue_2382');
+
+SELECT * FROM cypher('issue_2382', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS]->(:Person {name: 'Bob'})
+$$) AS (v agtype);
+
+-- Plain MATCH on a non-existent edge label with [*0..N] must return the
+-- zero-hop self-binding row (Alice -> Alice). It must NOT match arbitrary
+-- edges of other labels (e.g. KNOWS).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- OPTIONAL MATCH form (the exact shape from the issue report).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    OPTIONAL MATCH (p)-[:NOEXIST*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- [*0..0] still emits exactly the zero-hop self-binding.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*0..0]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- Fixed-length (lower bound > 0) on a missing label must still return zero
+-- rows: there is no edge of that label, so the pattern is unsatisfiable.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*1..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- OPTIONAL MATCH on the unsatisfiable fixed-length pattern still preserves
+-- the outer row with NULL bindings.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    OPTIONAL MATCH (p)-[:NOEXIST*1..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- Mixed pattern: a zero-bound VLE on a missing label combined with another
+-- fixed-length missing label segment must still yield zero rows. The other
+-- segment is impossible regardless of the zero-hop case.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (a:Person {name: 'Alice'})
+    MATCH (a)-[:NOEXIST*0..1]-(b:Person)-[:STILL_MISSING]-(c:Person)
+    RETURN a.name, b.name, c.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Sanity: zero-bound VLE on an EXISTING label still works the way it did
+-- before (Alice via zero-hop, Bob via 1-hop KNOWS).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:KNOWS*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+    ORDER BY f.name
+$$) AS (person agtype, friend agtype);
+
+SELECT drop_graph('issue_2382', true);
 
 --
 -- End
