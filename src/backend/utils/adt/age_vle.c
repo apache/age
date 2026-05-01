@@ -140,6 +140,25 @@ typedef struct VLE_local_context
  * structure is set up to contains a BINARY container that can be accessed by
  * functions that need to process the path.
  */
+/*
+ * Layout (offsets, with int64 alignment):
+ *
+ *     0:  vl_len_[4]              varlena length header (int32 + pad)
+ *     4:  header                  AGT_FBINARY | AGT_FBINARY_TYPE_VLE_PATH
+ *     8:  graph_oid               source graph oid
+ *    12:  (4 bytes pad)           int64 alignment
+ *    16:  graphid_array_size      number of graphids in the path
+ *    24:  container_size_bytes    total bytes of this container
+ *    32:  start_vid               redundant cache of graphid_array[0]
+ *    40:  end_vid                 redundant cache of
+ *                                 graphid_array[graphid_array_size - 1]
+ *    48:  graphid_array_data      flexible array start
+ *
+ * start_vid / end_vid are populated whenever the container is built and let
+ * downstream consumers (the age_vle SRF's start_id/end_id output columns)
+ * read the join endpoints without traversing the (potentially toasted)
+ * variadic payload.
+ */
 typedef struct VLE_path_container
 {
     char vl_len_[4]; /* Do not touch this field! */
@@ -147,6 +166,8 @@ typedef struct VLE_path_container
     uint32 graph_oid;
     int64 graphid_array_size;
     int64 container_size_bytes;
+    graphid start_vid;
+    graphid end_vid;
     graphid graphid_array_data;
 } VLE_path_container;
 
@@ -1421,9 +1442,11 @@ static VLE_path_container *create_VLE_path_container(int64 path_size)
      *     One for both the header and graph oid (they are both 32 bits).
      *     One for the size of the graphid_array_size.
      *     One for the container_size_bytes.
+     *     One for start_vid (Stage 1: inline endpoint cache).
+     *     One for end_vid   (Stage 1: inline endpoint cache).
      *
      */
-    container_size_bytes = sizeof(graphid) * (path_size + 4);
+    container_size_bytes = sizeof(graphid) * (path_size + 6);
 
     /* allocate the container */
     vpc = palloc0(container_size_bytes);
@@ -1533,6 +1556,13 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
         graphid_array[index+1] = vid;
     }
 
+    /*
+     * Stage 1: cache endpoints in the fixed header so the join qual can read
+     * them without touching the (possibly toasted) graphid array.
+     */
+    vpc->start_vid = graphid_array[0];
+    vpc->end_vid = graphid_array[vpc->graphid_array_size - 1];
+
     /* return the container */
     return vpc;
 }
@@ -1568,6 +1598,12 @@ static VLE_path_container *build_VLE_zero_container(VLE_local_context *vlelctx)
     /* get and store the start vertex */
     vid = vlelctx->vsid;
     graphid_array[0] = vid;
+
+    /*
+     * Stage 1: zero-edge container; start and end are both the start vertex.
+     */
+    vpc->start_vid = vid;
+    vpc->end_vid = vid;
 
     return vpc;
 }
@@ -1788,6 +1824,26 @@ Datum age_vle(PG_FUNCTION_ARGS)
         /* create a function context for cross-call persistence */
         funcctx = SRF_FIRSTCALL_INIT();
 
+        /*
+         * S4: capture the result tuple descriptor.  age_vle now emits a
+         * composite (edges, start_id, end_id) row, so we need a blessed
+         * TupleDesc that survives across SRF calls.
+         */
+        {
+            TupleDesc      tupdesc;
+            MemoryContext  tdesc_oldctx;
+
+            tdesc_oldctx = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+            if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                         errmsg("age_vle: function returning record called in context that cannot accept type record")));
+            }
+            funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+            MemoryContextSwitchTo(tdesc_oldctx);
+        }
+
         /* build the local vle context */
         vlelctx = build_local_vle_context(fcinfo, funcctx);
 
@@ -1920,8 +1976,24 @@ Datum age_vle(PG_FUNCTION_ARGS)
             vpc = build_VLE_zero_container(vlelctx);
         }
 
-        /* return the result and signal that the function is not yet done */
-        SRF_RETURN_NEXT(funcctx, PointerGetDatum(vpc));
+        /*
+         * S4: emit a composite (edges, start_id, end_id) row.  The
+         * scalar endpoint columns let the cypher transformer (S5)
+         * rewrite terminal-edge quals as integer equalities, removing
+         * the per-row age_match_vle_terminal_edge function call.
+         */
+        {
+            Datum     values[3];
+            bool      nulls[3] = {false, false, false};
+            HeapTuple tuple;
+
+            values[0] = PointerGetDatum(vpc);
+            values[1] = GRAPHID_GET_DATUM(vpc->start_vid);
+            values[2] = GRAPHID_GET_DATUM(vpc->end_vid);
+
+            tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+            SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
+        }
     }
     /* otherwise, we are done and we need to cleanup and signal done */
     else
@@ -1992,66 +2064,31 @@ agtype_value *agtv_materialize_vle_path(agtype *agt_arg_vpc)
     return agtv_path;
 }
 
-/* PG function to match 2 VLE edges */
+/*
+ * age_match_two_vle_edges and age_match_vle_terminal_edge are retained as
+ * stub C symbols only.  The cypher transformer no longer emits calls to
+ * either function: terminal-edge match quals are now plain graphid
+ * equalities on the age_vle SRF's start_id/end_id output columns
+ * (Stages S4/S5/S6 of the VLE terminal-qual rewrite).
+ *
+ * The corresponding SQL declarations have been removed from fresh
+ * installs (sql/agtype_typecast.sql) and are DROP'd by the upgrade
+ * script (age--1.7.0--y.y.y.sql).  These C entry points exist solely so
+ * the upgrade-test machinery, which loads an older "1.7.0_initial" SQL
+ * snapshot against the current age.so, can resolve the symbols before
+ * the immediate ALTER EXTENSION UPDATE drops them.  They should never
+ * be reachable from any committed SQL path.
+ */
 PG_FUNCTION_INFO_V1(age_match_two_vle_edges);
 
 Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
 {
-    agtype *agt_arg_vpc = NULL;
-    VLE_path_container *left_path = NULL, *right_path = NULL;
-    graphid *left_array, *right_array;
-    int left_array_size;
-
-    /*
-     * If either argument is NULL, return FALSE. This can occur in
-     * OPTIONAL MATCH (LEFT JOIN) contexts where a preceding clause
-     * produced no results.
-     */
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-    {
-        PG_RETURN_BOOL(false);
-    }
-
-    /* get the VLE_path_container argument */
-    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
-
-    if (!AGT_ROOT_IS_BINARY(agt_arg_vpc) ||
-        AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) != AGT_FBINARY_TYPE_VLE_PATH)
-    {
-        ereport(ERROR,
-            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-            errmsg("argument 1 of age_match_two_vle_edges must be a VLE_Path_Container")));
-    }
-
-    /* cast argument as a VLE_Path_Container and extract graphid array */
-    left_path = (VLE_path_container *)agt_arg_vpc;
-    left_array_size = left_path->graphid_array_size;
-    left_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(left_path);
-
-    PG_FREE_IF_COPY(agt_arg_vpc, 0);
-
-    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(1);
-
-    if (!AGT_ROOT_IS_BINARY(agt_arg_vpc) ||
-        AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) != AGT_FBINARY_TYPE_VLE_PATH)
-    {
-        ereport(ERROR,
-            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-            errmsg("argument 2 of age_match_two_vle_edges must be a VLE_Path_Container")));
-    }
-
-    /* cast argument as a VLE_Path_Container and extract graphid array */
-    right_path = (VLE_path_container *)agt_arg_vpc;
-    right_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(right_path);
-
-    PG_FREE_IF_COPY(agt_arg_vpc, 1);
-
-    if (left_array[left_array_size - 1] != right_array[0])
-    {
-        PG_RETURN_BOOL(false);
-    }
-
-    PG_RETURN_BOOL(true);
+    ereport(ERROR,
+        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+         errmsg("age_match_two_vle_edges() is removed; "
+                "VLE endpoint matching is now handled by the planner via "
+                "the age_vle SRF's start_id/end_id output columns")));
+    PG_RETURN_BOOL(false);
 }
 
 /*
@@ -2289,147 +2326,17 @@ Datum age_materialize_vle_path(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agt_materialize_vle_path(agt_arg_vpc));
 }
 
-/*
- * PG function to take a VLE_path_container and return whether the supplied end
- * vertex (target/veid) matches against the last edge in the VLE path. The VLE
- * path is encoded in a BINARY container.
- */
+/* Stub: see comment on age_match_two_vle_edges above. */
 PG_FUNCTION_INFO_V1(age_match_vle_terminal_edge);
 
 Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
 {
-    VLE_path_container *vpc = NULL;
-    agtype *agt_arg_vsid = NULL;
-    agtype *agt_arg_veid = NULL;
-    agtype *agt_arg_path = NULL;
-    agtype_value *agtv_temp = NULL;
-    graphid vsid = 0;
-    graphid veid = 0;
-    graphid *gida = NULL;
-    int gidasize = 0;
-    Oid type0, type1;
-
-    /* check argument count */
-    if (PG_NARGS() != 3)
-    {
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("age_match_vle_terminal_edge() invalid number of arguments")));
-    }
-
-    /*
-     * If any argument is NULL, return FALSE. This can occur when this
-     * function is used as a join qual in an OPTIONAL MATCH (LEFT JOIN)
-     * where a preceding OPTIONAL MATCH produced no results. Returning
-     * FALSE allows PostgreSQL to produce the correct NULL-extended rows.
-     */
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
-    {
-        PG_RETURN_BOOL(false);
-    }
-
-    /* get the vpc */
-    agt_arg_path = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(2));
-
-    /* if the vpc is an agtype NULL, return FALSE */
-    if (is_agtype_null(agt_arg_path))
-    {
-        PG_RETURN_BOOL(false);
-    }
-
-    /*
-     * The vpc (path) must be a binary container and the type of the object in
-     * the container must be an AGT_FBINARY_TYPE_VLE_PATH.
-     */
-    Assert(AGT_ROOT_IS_BINARY(agt_arg_path));
-    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_path) == AGT_FBINARY_TYPE_VLE_PATH);
-
-    /* get the container */
-    vpc = (VLE_path_container *)agt_arg_path;
-
-    /* get the graphid array from the container */
-    gida = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
-
-    /* get the gida array size */
-    gidasize = vpc->graphid_array_size;
-
-    /* verify the minimum size is 3 or 1 */
-    Assert(gidasize >= 3 || gidasize == 1);
-
-    /*
-     * Get argument types directly instead of using extract_variadic_args.
-     * This avoids the expensive exprType/get_call_expr_argtype overhead
-     * on every call. Cache the types in fn_extra on first invocation.
-     */
-    if (fcinfo->flinfo->fn_extra == NULL)
-    {
-        Oid *cached_types = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-                                                2 * sizeof(Oid));
-        cached_types[0] = get_fn_expr_argtype(fcinfo->flinfo, 0);
-        cached_types[1] = get_fn_expr_argtype(fcinfo->flinfo, 1);
-        fcinfo->flinfo->fn_extra = cached_types;
-    }
-    type0 = ((Oid *)fcinfo->flinfo->fn_extra)[0];
-    type1 = ((Oid *)fcinfo->flinfo->fn_extra)[1];
-
-    /* get the vsid */
-    if (type0 == AGTYPEOID)
-    {
-        agt_arg_vsid = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(0));
-
-        if (!is_agtype_null(agt_arg_vsid))
-        {
-            agtv_temp =
-               get_ith_agtype_value_from_container(&agt_arg_vsid->root, 0);
-
-            Assert(agtv_temp->type == AGTV_INTEGER);
-            vsid = agtv_temp->val.int_value;
-        }
-        else
-        {
-            PG_RETURN_BOOL(false);
-        }
-    }
-    else if (type0 == GRAPHIDOID)
-    {
-        vsid = DATUM_GET_GRAPHID(PG_GETARG_DATUM(0));
-    }
-    else
-    {
-        ereport(ERROR,
-            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-             errmsg("match_vle_terminal_edge() argument 1 must be an agtype integer or a graphid")));
-    }
-
-    /* get the veid */
-    if (type1 == AGTYPEOID)
-    {
-        agt_arg_veid = DATUM_GET_AGTYPE_P(PG_GETARG_DATUM(1));
-
-        if (!is_agtype_null(agt_arg_veid))
-        {
-            agtv_temp = get_ith_agtype_value_from_container(&agt_arg_veid->root,
-                                                            0);
-            Assert(agtv_temp->type == AGTV_INTEGER);
-            veid = agtv_temp->val.int_value;
-        }
-        else
-        {
-            PG_RETURN_BOOL(false);
-        }
-    }
-    else if (type1 == GRAPHIDOID)
-    {
-        veid = DATUM_GET_GRAPHID(PG_GETARG_DATUM(1));
-    }
-    else
-    {
-        ereport(ERROR,
-            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-             errmsg("match_vle_terminal_edge() argument 2 must be an agtype integer or a graphid")));
-    }
-
-    /* compare the path beginning or end points */
-    PG_RETURN_BOOL(gida[0] == vsid && veid == gida[gidasize - 1]);
+    ereport(ERROR,
+        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+         errmsg("age_match_vle_terminal_edge() is removed; "
+                "VLE endpoint matching is now handled by the planner via "
+                "the age_vle SRF's start_id/end_id output columns")));
+    PG_RETURN_BOOL(false);
 }
 
 /* PG helper function to build an agtype (Datum) edge for matching */

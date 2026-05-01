@@ -459,3 +459,50 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+
+--
+-- S4: VLE SRF signature change
+--
+-- The age_vle SRF now emits start_id and end_id as scalar graphid columns
+-- alongside the existing `edges` column. This allows the cypher transformer
+-- to rewrite terminal-edge match quals as plain integer equalities,
+-- removing the per-row age_match_vle_terminal_edge and age_match_two_vle_edges
+-- function calls from VLE query plans.  Both qual functions are dropped.
+--
+-- BREAKING CHANGE for any external SQL that called age_vle(...) directly
+-- and relied on `RETURNS SETOF agtype`, or called age_match_vle_terminal_edge
+-- / age_match_two_vle_edges directly.  Internal AGE callers (the cypher
+-- transformer) are not affected.
+--
+DROP FUNCTION IF EXISTS ag_catalog.age_match_vle_terminal_edge(variadic "any");
+DROP FUNCTION IF EXISTS ag_catalog.age_match_two_vle_edges(agtype, agtype);
+
+DROP FUNCTION IF EXISTS ag_catalog.age_vle(agtype, agtype, agtype, agtype,
+                                           agtype, agtype, agtype);
+DROP FUNCTION IF EXISTS ag_catalog.age_vle(agtype, agtype, agtype, agtype,
+                                           agtype, agtype, agtype, agtype);
+
+CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
+                                   IN agtype, IN agtype, IN agtype,
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
+CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
+                                   IN agtype, IN agtype, IN agtype, IN agtype,
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';

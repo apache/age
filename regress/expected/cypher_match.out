@@ -2784,13 +2784,13 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[*]->() RETURN length(p) $$) 
  length 
 --------
  1
- 2
- 1
- 1
  1
  2
  1
+ 1
  2
+ 2
+ 1
 (8 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[*]->() WHERE length(p) > 1 RETURN length(p) $$) as (length agtype);
@@ -2812,8 +2812,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[*]->() WHERE size(nodes(p)) 
 SELECT * FROM cypher('cypher_match', $$ MATCH (n {name:'Dave'}) MATCH p=()-[*]->() WHERE nodes(p)[0] = n RETURN length(p) $$) as (length agtype);
  length 
 --------
- 1
  2
+ 1
 (2 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH p1=(n {name:'Dave'})-[]->() MATCH p2=()-[*]->() WHERE p2=p1 RETURN p2=p1 $$) as (path agtype);

@@ -70,10 +70,14 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 -- original VLE function definition
+-- S4: emit start_id/end_id as scalar columns to enable transformer rewrite
+-- of terminal-edge quals as integer equalities (see PERF_VLE_TERMINAL_QUAL_PLAN).
 CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
                                    IN agtype, IN agtype, IN agtype,
-                                   OUT edges agtype)
-    RETURNS SETOF agtype
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
 LANGUAGE C
 STABLE
 CALLED ON NULL INPUT
@@ -84,8 +88,10 @@ AS 'MODULE_PATHNAME';
 -- caching mechanism to coexist with the previous VLE version.
 CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
                                    IN agtype, IN agtype, IN agtype, IN agtype,
-                                   OUT edges agtype)
-    RETURNS SETOF agtype
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
 LANGUAGE C
 STABLE
 CALLED ON NULL INPUT
@@ -97,15 +103,6 @@ CREATE FUNCTION ag_catalog.age_build_vle_match_edge(agtype, agtype)
     RETURNS agtype
     LANGUAGE C
     IMMUTABLE
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
-
--- function to match a terminal vle edge
-CREATE FUNCTION ag_catalog.age_match_vle_terminal_edge(variadic "any")
-    RETURNS boolean
-    LANGUAGE C
-    STABLE
-CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -128,14 +125,6 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_match_vle_edge_to_id_qual(variadic "any")
-    RETURNS boolean
-    LANGUAGE C
-    STABLE
-RETURNS NULL ON NULL INPUT
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
-
-CREATE FUNCTION ag_catalog.age_match_two_vle_edges(agtype, agtype)
     RETURNS boolean
     LANGUAGE C
     STABLE

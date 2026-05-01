@@ -3982,10 +3982,6 @@ static List *make_join_condition_for_edge(cypher_parsestate *cpstate,
     {
         Node *left_id = NULL;
         Node *right_id = NULL;
-        String *ag_catalog = makeString("ag_catalog");
-        String *func_name;
-        List *qualified_func_name;
-        List *args = NIL;
         List *quals = NIL;
 
         /*
@@ -3998,56 +3994,86 @@ static List *make_join_condition_for_edge(cypher_parsestate *cpstate,
         }
 
         /*
-         * If the previous node and the next node are in the join tree, we need
-         * to create the age_match_vle_terminal_edge to compare the vle returned
-         * results against the two nodes.
+         * S5: if the previous and next nodes are both in the join tree,
+         * emit two graphid equality A_Exprs:
+         *   <vle_alias>.start_id = prev_node.id
+         *   <vle_alias>.end_id   = next_node.id
+         * This replaces the historical per-row
+         *   age_match_vle_terminal_edge(prev.id, next.id, edges)
+         * function call with plain integer (int8) equality quals on the
+         * SRF's S4 output columns.  The planner can now drive the join
+         * directly on these keys (HashJoin hash keys, NestLoop index
+         * conditions where indexed).
          */
         if (prev_node->in_join_tree)
         {
-            func_name = makeString("age_match_vle_terminal_edge");
-            qualified_func_name = list_make2(ag_catalog, func_name);
+            ColumnRef *cr_start;
+            ColumnRef *cr_end;
+            A_Expr    *eq_start;
+            A_Expr    *eq_end;
 
-            /*
-             * Get the vertex's id and pass to the function. Pass in NULL
-             * otherwise.
-             */
-            left_id = (Node *)make_qual(cpstate, prev_node, "id");
+            Assert(entity->vle_alias != NULL);
+
+            cr_start = makeNode(ColumnRef);
+            cr_start->fields = list_make2(makeString(entity->vle_alias),
+                                          makeString("start_id"));
+            cr_start->location = -1;
+
+            cr_end = makeNode(ColumnRef);
+            cr_end->fields = list_make2(makeString(entity->vle_alias),
+                                        makeString("end_id"));
+            cr_end->location = -1;
+
+            left_id  = (Node *)make_qual(cpstate, prev_node, "id");
             right_id = (Node *)make_qual(cpstate, next_node, "id");
 
-            /* create the argument list */
-            args = list_make3(left_id, right_id, entity->expr);
+            eq_start = makeSimpleA_Expr(AEXPR_OP, "=",
+                                        (Node *)cr_start, left_id, -1);
+            eq_end   = makeSimpleA_Expr(AEXPR_OP, "=",
+                                        (Node *)cr_end,   right_id, -1);
 
-            /* add to quals */
-            quals = lappend(quals, makeFuncCall(qualified_func_name, args,
-                                                COERCE_EXPLICIT_CALL, -1));
+            quals = lappend(quals, eq_start);
+            quals = lappend(quals, eq_end);
         }
 
         /*
-         * When the previous node is not in the join tree, but there is a vle
-         * edge before that join, then we need to compare this vle's start node
-         * against the previous vle's end node. No need to check the next edge,
-         * because that would be redundant.
+         * S6: when the previous node is not in the join tree but there is
+         * a vle edge before that join, emit a single graphid equality
+         * connecting the two VLE SRFs:
+         *
+         *     prev_vle.end_id = this_vle.start_id
+         *
+         * This replaces the per-row age_match_two_vle_edges(prev, this)
+         * function call with a plain int8 equality on the S4 scalar
+         * output columns of both age_vle SRFs.  No detoasting of either
+         * VLE_path_container is needed.
          */
         if (!prev_node->in_join_tree &&
             prev_edge != NULL &&
             prev_edge->type == ENT_VLE_EDGE)
         {
-            List *qualified_name;
-            String *match_qual;
-            FuncCall *fc;
+            ColumnRef *cr_prev_end;
+            ColumnRef *cr_this_start;
+            A_Expr    *eq_chain;
 
-            match_qual = makeString("age_match_two_vle_edges");
+            Assert(prev_edge->vle_alias != NULL);
+            Assert(entity->vle_alias != NULL);
 
-            /* make the qualified function name */
-            qualified_name = list_make2(ag_catalog, match_qual);
+            cr_prev_end = makeNode(ColumnRef);
+            cr_prev_end->fields = list_make2(makeString(prev_edge->vle_alias),
+                                             makeString("end_id"));
+            cr_prev_end->location = -1;
 
-            /* make the args */
-            args = list_make2(prev_edge->expr, entity->expr);
+            cr_this_start = makeNode(ColumnRef);
+            cr_this_start->fields = list_make2(makeString(entity->vle_alias),
+                                               makeString("start_id"));
+            cr_this_start->location = -1;
 
-            /* create the function call */
-            fc = makeFuncCall(qualified_name, args, COERCE_EXPLICIT_CALL, -1);
+            eq_chain = makeSimpleA_Expr(AEXPR_OP, "=",
+                                        (Node *)cr_prev_end,
+                                        (Node *)cr_this_start, -1);
 
-            quals = lappend(quals, fc);
+            quals = lappend(quals, eq_chain);
         }
 
         return quals;
@@ -4897,6 +4923,12 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     /* Make a transform entity for the vle. */
     vle_entity = make_transform_entity(cpstate, ENT_VLE_EDGE, (Node *)rel,
                                        (Expr *)var);
+
+    /*
+     * S5: stash the auto-generated alias name so make_join_condition_for_edge
+     * can build ColumnRefs for the SRF's start_id/end_id output columns.
+     */
+    vle_entity->vle_alias = alias->aliasname;
 
     /* return the vle entity */
     return vle_entity;
