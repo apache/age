@@ -32,8 +32,8 @@ CREATE OPERATOR ? (
   LEFTARG = agtype,
   RIGHTARG = text,
   FUNCTION = ag_catalog.agtype_exists,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
 
 CREATE FUNCTION ag_catalog.agtype_exists_agtype(agtype, agtype)
@@ -48,8 +48,8 @@ CREATE OPERATOR ? (
   LEFTARG = agtype,
   RIGHTARG = agtype,
   FUNCTION = ag_catalog.agtype_exists_agtype,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
 
 CREATE FUNCTION ag_catalog.agtype_exists_any(agtype, text[])
@@ -64,8 +64,8 @@ CREATE OPERATOR ?| (
   LEFTARG = agtype,
   RIGHTARG = text[],
   FUNCTION = ag_catalog.agtype_exists_any,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
 
 CREATE FUNCTION ag_catalog.agtype_exists_any_agtype(agtype, agtype)
@@ -80,8 +80,8 @@ CREATE OPERATOR ?| (
   LEFTARG = agtype,
   RIGHTARG = agtype,
   FUNCTION = ag_catalog.agtype_exists_any_agtype,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
 
 CREATE FUNCTION ag_catalog.agtype_exists_all(agtype, text[])
@@ -96,8 +96,8 @@ CREATE OPERATOR ?& (
   LEFTARG = agtype,
   RIGHTARG = text[],
   FUNCTION = ag_catalog.agtype_exists_all,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
 
 CREATE FUNCTION ag_catalog.agtype_exists_all_agtype(agtype, agtype)
@@ -112,6 +112,6 @@ CREATE OPERATOR ?& (
   LEFTARG = agtype,
   RIGHTARG = agtype,
   FUNCTION = ag_catalog.agtype_exists_all_agtype,
-  RESTRICT = matchingsel,
-  JOIN = matchingjoinsel
+  RESTRICT = contsel,
+  JOIN = contjoinsel
 );
