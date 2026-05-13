@@ -1443,8 +1443,8 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
 /*
  * transform_cypher_unwind
  *      It contains logic to convert the form of an array into a row. Here, we
- *      are simply calling `age_unnest` function, and the actual transformation
- *      is handled by `age_unnest` function.
+ *      are simply calling `age_unwind` function, and the actual transformation
+ *      is handled by `age_unwind` function.
  */
 static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                                       cypher_clause *clause)
@@ -1501,7 +1501,7 @@ static Query *transform_cypher_unwind(cypher_parsestate *cpstate,
                 parser_errposition(pstate, self->target->location));
     }
 
-    unwind = makeFuncCall(list_make1(makeString("age_unnest")), NIL,
+    unwind = makeFuncCall(list_make1(makeString("age_unwind")), NIL,
                           COERCE_SQL_SYNTAX, -1);
 
     old_expr_kind = pstate->p_expr_kind;

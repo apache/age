@@ -459,3 +459,15 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+--
+-- Issue #2383: add age_unwind() for Cypher UNWIND clause. Behaves like
+-- age_unnest() but emits SQL NULL for top-level agtype JSON null elements
+-- so null-strict operators (count, IS NULL) match Neo4j/openCypher.
+--
+CREATE FUNCTION ag_catalog.age_unwind(agtype)
+    RETURNS SETOF agtype
+LANGUAGE c
+IMMUTABLE
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';
