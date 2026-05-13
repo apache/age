@@ -15,7 +15,7 @@
 import json
 import re
 
-from age.models import Vertex
+from age.models import Vertex, Edge, Path
 import unittest
 import unittest.mock
 import decimal
@@ -169,6 +169,160 @@ class TestBuildCypher(unittest.TestCase):
         self.assertEqual(_validate_column("v agtype"), '"v" agtype')
         self.assertEqual(_validate_column("count"), '"count" agtype')
         self.assertEqual(_validate_column("my_col"), '"my_col" agtype')
+
+
+class TestModelToDict(unittest.TestCase):
+    """Unit tests for Vertex/Edge/Path to_dict() — no DB required."""
+
+    def test_vertex_to_dict(self):
+        v = Vertex(id=123, label="Person", properties={"name": "Alice", "age": 30})
+        d = v.to_dict()
+        self.assertEqual(d["id"], 123)
+        self.assertEqual(d["label"], "Person")
+        self.assertEqual(d["properties"], {"name": "Alice", "age": 30})
+        # Verify it's a plain dict (JSON-serializable)
+        json_str = json.dumps(d)
+        self.assertIn("Alice", json_str)
+
+    def test_vertex_to_dict_empty_properties(self):
+        v = Vertex(id=1, label="Empty", properties=None)
+        d = v.to_dict()
+        self.assertEqual(d["properties"], {})
+
+    def test_edge_to_dict(self):
+        e = Edge(id=456, label="KNOWS", properties={"since": 2020})
+        e.start_id = 123
+        e.end_id = 789
+        d = e.to_dict()
+        self.assertEqual(d["id"], 456)
+        self.assertEqual(d["label"], "KNOWS")
+        self.assertEqual(d["start_id"], 123)
+        self.assertEqual(d["end_id"], 789)
+        self.assertEqual(d["properties"], {"since": 2020})
+        json_str = json.dumps(d)
+        self.assertIn("KNOWS", json_str)
+
+    def test_path_to_dict(self):
+        v1 = Vertex(id=1, label="A", properties={"name": "start"})
+        e = Edge(id=10, label="r", properties={"w": 1})
+        e.start_id = 1
+        e.end_id = 2
+        v2 = Vertex(id=2, label="B", properties={"name": "end"})
+        p = Path([v1, e, v2])
+        d = p.to_dict()
+        self.assertEqual(len(d), 3)
+        self.assertEqual(d[0]["label"], "A")
+        self.assertEqual(d[1]["label"], "r")
+        self.assertEqual(d[1]["start_id"], 1)
+        self.assertEqual(d[2]["label"], "B")
+        # Verify the whole path is JSON-serializable
+        json_str = json.dumps(d)
+        self.assertIn("start", json_str)
+
+    def test_vertex_to_dict_is_plain_dict(self):
+        """to_dict() returns standard dict, not a model object."""
+        v = Vertex(id=1, label="X", properties={"k": "v"})
+        d = v.to_dict()
+        self.assertIsInstance(d, dict)
+        self.assertIsInstance(d["properties"], dict)
+
+
+class TestPublicImports(unittest.TestCase):
+    """Verify that public API symbols are importable without type: ignore."""
+
+    def test_import_configure_connection(self):
+        from age import configure_connection
+        self.assertTrue(callable(configure_connection))
+
+    def test_import_age_loader(self):
+        from age import AgeLoader
+        self.assertIsNotNone(AgeLoader)
+
+    def test_import_client_cursor(self):
+        from age import ClientCursor
+        self.assertIsNotNone(ClientCursor)
+
+
+class TestConfigureConnection(unittest.TestCase):
+    """Unit tests for configure_connection() — no DB required."""
+
+    def _make_mock_conn(self):
+        mock_conn = unittest.mock.MagicMock()
+        mock_cursor = unittest.mock.MagicMock()
+        mock_conn.cursor.return_value.__enter__ = unittest.mock.Mock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = unittest.mock.Mock(return_value=False)
+        mock_conn.adapters = unittest.mock.MagicMock()
+        mock_type_info = unittest.mock.MagicMock()
+        mock_type_info.oid = 1
+        mock_type_info.array_oid = 2
+        return mock_conn, mock_cursor, mock_type_info
+
+    def test_default_does_not_load(self):
+        """By default, configure_connection should NOT execute LOAD."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        mock_cursor.execute.assert_called_once_with(
+            'SET search_path = ag_catalog, "$user", public;'
+        )
+
+    def test_load_true_executes_load(self):
+        """When load=True, LOAD 'age' must be executed."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn, load=True)
+        mock_cursor.execute.assert_any_call("LOAD 'age';")
+
+    def test_load_from_plugins(self):
+        """When load=True and load_from_plugins=True, use plugins path."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn, load=True, load_from_plugins=True)
+        mock_cursor.execute.assert_any_call("LOAD '$libdir/plugins/age';")
+
+    def test_load_from_plugins_without_load_raises(self):
+        """load_from_plugins=True without load=True must raise ValueError."""
+        mock_conn, _, _ = self._make_mock_conn()
+        with self.assertRaises(ValueError):
+            age.age.configure_connection(mock_conn, load_from_plugins=True)
+
+    def test_always_sets_search_path(self):
+        """search_path must always be set regardless of load parameter."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        mock_cursor.execute.assert_any_call(
+            'SET search_path = ag_catalog, "$user", public;'
+        )
+
+    def test_registers_agtype_adapters(self):
+        """AgeLoader must be registered for agtype OIDs."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated"):
+            age.age.configure_connection(mock_conn)
+        mock_conn.adapters.register_loader.assert_any_call(1, age.age.AgeLoader)
+        mock_conn.adapters.register_loader.assert_any_call(2, age.age.AgeLoader)
+
+    def test_graph_name_triggers_check(self):
+        """When graph_name is provided, checkGraphCreated must be called."""
+        mock_conn, mock_cursor, mock_type_info = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=mock_type_info), \
+             unittest.mock.patch("age.age.checkGraphCreated") as mock_check:
+            age.age.configure_connection(mock_conn, graph_name="my_graph")
+        mock_check.assert_called_once_with(mock_conn, "my_graph")
+
+    def test_age_not_set_when_type_info_is_none(self):
+        """AgeNotSet must be raised when TypeInfo.fetch returns None."""
+        from age.exceptions import AgeNotSet
+        mock_conn, _, _ = self._make_mock_conn()
+        with unittest.mock.patch("age.age.TypeInfo.fetch", return_value=None):
+            with self.assertRaises(AgeNotSet):
+                age.age.configure_connection(mock_conn)
 
 
 class TestAgeBasic(unittest.TestCase):
@@ -591,6 +745,78 @@ class TestAgeBasic(unittest.TestCase):
             self.assertFalse(as_str.endswith(", }}::VERTEX"))
         print("Vertex.toString() 'properties' field is formatted properly.")
 
+    def testConfigureConnection(self):
+        """Integration: configure_connection() on an externally-opened
+        connection must register agtype adapters so cypher queries return
+        real Vertex/Edge/Path objects, and to_dict() must round-trip those
+        parser-produced objects through json.dumps()."""
+        print("\n-------------------------------------------------------")
+        print("Test 8: configure_connection + to_dict end-to-end.....")
+        print("-------------------------------------------------------\n")
+
+        import psycopg
+
+        from age import configure_connection
+
+        dsn = "host={host} port={port} dbname={database} user={user} password={password}".format(
+            **vars(self.args)
+        )
+        # Deliberately bypass age.connect(): the whole point of
+        # configure_connection() is to enable AGE on a caller-managed
+        # connection (e.g. one obtained from psycopg_pool.ConnectionPool).
+        raw = psycopg.connect(dsn)
+        try:
+            configure_connection(raw, graph_name=self.args.graphName, load=True)
+
+            graph = self.args.graphName
+            with raw.cursor() as cur:
+                cur.execute(
+                    f"SELECT * FROM cypher('{graph}', $$ "
+                    "CREATE (a:Person {name: 'Alice'})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob'}) "
+                    "RETURN a, r, b "
+                    "$$) AS (a agtype, r agtype, b agtype);"
+                )
+                row = cur.fetchone()
+                raw.commit()
+
+            v_a, e, v_b = row
+            self.assertIsInstance(v_a, Vertex)
+            self.assertIsInstance(e, Edge)
+            self.assertIsInstance(v_b, Vertex)
+            self.assertEqual(v_a["name"], "Alice")
+            self.assertEqual(v_b["name"], "Bob")
+            self.assertEqual(e["since"], 2020)
+
+            payload = {
+                "start": v_a.to_dict(),
+                "edge": e.to_dict(),
+                "end": v_b.to_dict(),
+            }
+            serialised = json.loads(json.dumps(payload))
+            self.assertEqual(serialised["start"]["label"], "Person")
+            self.assertEqual(serialised["edge"]["label"], "KNOWS")
+            self.assertEqual(serialised["edge"]["start_id"], v_a.id)
+            self.assertEqual(serialised["edge"]["end_id"], v_b.id)
+            self.assertEqual(serialised["start"]["properties"]["name"], "Alice")
+
+            with raw.cursor() as cur:
+                cur.execute(
+                    f"SELECT * FROM cypher('{graph}', $$ "
+                    "MATCH p=(:Person)-[:KNOWS]->(:Person) RETURN p "
+                    "$$) AS (p agtype);"
+                )
+                path = cur.fetchone()[0]
+
+            self.assertIsInstance(path, Path)
+            path_dict = json.loads(json.dumps(path.to_dict()))
+            self.assertEqual(len(path_dict), 3)
+            self.assertEqual(path_dict[0]["label"], "Person")
+            self.assertEqual(path_dict[1]["label"], "KNOWS")
+            self.assertEqual(path_dict[2]["label"], "Person")
+            print("\nTest 8 Successful....")
+        finally:
+            raw.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -628,9 +854,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     suite = unittest.TestSuite()
+    # Unit tests (no DB required)
     loader = unittest.TestLoader()
     suite.addTests(loader.loadTestsFromTestCase(TestSetUpAge))
     suite.addTests(loader.loadTestsFromTestCase(TestBuildCypher))
+    suite.addTests(loader.loadTestsFromTestCase(TestModelToDict))
+    suite.addTests(loader.loadTestsFromTestCase(TestPublicImports))
+    suite.addTests(loader.loadTestsFromTestCase(TestConfigureConnection))
+    # Integration tests (require DB)
     suite.addTest(TestAgeBasic("testExec"))
     suite.addTest(TestAgeBasic("testQuery"))
     suite.addTest(TestAgeBasic("testChangeData"))
@@ -638,5 +869,6 @@ if __name__ == "__main__":
     suite.addTest(TestAgeBasic("testMultipleEdges"))
     suite.addTest(TestAgeBasic("testCollect"))
     suite.addTest(TestAgeBasic("testSerialization"))
+    suite.addTest(TestAgeBasic("testConfigureConnection"))
     TestAgeBasic.args = args
     unittest.TextTestRunner().run(suite)
