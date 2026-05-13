@@ -71,12 +71,21 @@
  * anonymous_path resolve cases where both forks succeed (bare (a)
  * prefers the expression interpretation).
  *
- * We intentionally do not use %expect / %expect-rr here because the
- * exact conflict counts can vary across Bison versions (and across
- * distros) as the generator's internals change.  Instead, the Makefile
- * passes -Wno-conflicts-sr,-Wno-conflicts-rr via BISONFLAGS so the
- * build stays clean without binding us to a specific Bison release.
+ * The %expect / %expect-rr counts below match the Bison-reported totals
+ * (7 SR / 3 RR on Bison 3.8.2).  Bison treats %expect as exact, not as
+ * a ceiling: any deviation up or down fails the build.  That is the
+ * alarm bell — if a grammar change moves either count, the build stops
+ * and the conflicts must be audited to confirm they remain the inherent
+ * '(' expr ')' vs anonymous_path ambiguities (resolved by %dprec at
+ * runtime) rather than an unintended new ambiguity.  The Makefile
+ * downgrades -Wconflicts-sr / -Wconflicts-rr from errors to warnings
+ * (-Wno-error=conflicts-{sr,rr}) so %expect, not the warning category,
+ * controls the build-fail threshold.  If a future Bison version reports
+ * different counts for the same grammar, update these numbers and note
+ * the version in the commit message.
  */
+%expect 7
+%expect-rr 3
 
 %lex-param {ag_scanner_t scanner}
 %parse-param {ag_scanner_t scanner}
