@@ -107,7 +107,12 @@ class ResultVisitor(AgtypeVisitor):
 
     # Visit a parse tree produced by AgtypeParser#StringValue.
     def visitStringValue(self, ctx:AgtypeParser.StringValueContext):
-        return ctx.STRING().getText().strip('"')
+        # The STRING token always has surrounding '"' delimiters per the
+        # Agtype grammar.  str.strip('"') would also drop any '"' characters
+        # that are part of the actual data when the value starts or ends
+        # with an escaped quote, e.g. '"foo \\"bar\\""' -> 'foo \\"bar\\',
+        # so trim exactly the first and last character instead.
+        return ctx.STRING().getText()[1:-1]
 
 
     # Visit a parse tree produced by AgtypeParser#IntegerValue.
@@ -182,7 +187,8 @@ class ResultVisitor(AgtypeVisitor):
             raise AGTypeError(ctx.getText(), "Missing key in object pair")
         if agValNode is None:
             raise AGTypeError(ctx.getText(), "Missing value in object pair")
-        return (strNode.getText().strip('"') , agValNode)
+        # See visitStringValue() for why we slice instead of using strip('"').
+        return (strNode.getText()[1:-1] , agValNode)
 
 
     # Visit a parse tree produced by AgtypeParser#array.
