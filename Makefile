@@ -180,7 +180,8 @@ REGRESS = scan \
           map_projection \
           direct_field_access \
           security \
-          reserved_keyword_alias
+          reserved_keyword_alias \
+          agtype_jsonb_cast
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)
