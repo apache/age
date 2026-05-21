@@ -246,9 +246,11 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(result[5], {"key": "val"})
 
     def test_string_value_preserves_inner_quotes(self):
-        """Issue #2418: visitStringValue must remove only the outer quote
-        delimiters, not every '"' on either side, otherwise values that end
-        with an escaped quote (e.g. '"foo \\"bar\\""') lose data."""
+        """Issue #2418: preserve escaped boundary quotes when stripping.
+
+        visitStringValue must strip only the outer delimiters; otherwise
+        values like '"foo \\"bar\\""' lose their trailing escaped quote.
+        """
         self.assertEqual(self.parse('"foo \\"bar\\""'), 'foo \\"bar\\"')
         self.assertEqual(self.parse('"\\"leading"'), '\\"leading')
         self.assertEqual(self.parse('"trailing\\""'), 'trailing\\"')
