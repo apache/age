@@ -546,8 +546,10 @@ static path_entry **prebuild_path(CustomScanState *node)
 
             agtype *agt = NULL;
             Datum d;
-            agtype_value *agtv_vertex = NULL;
+            agtype_value agtv_vertex;
             agtype_value *agtv_id = NULL;
+            bool vertex_needs_free = false;
+            bool vertex_found;
 
             /* check that the variable isn't NULL */
             if (scanTupleSlot->tts_isnull[node->tuple_position - 1])
@@ -563,21 +565,33 @@ static path_entry **prebuild_path(CustomScanState *node)
             agt = DATUM_GET_AGTYPE_P(d);
 
             /* Convert to an agtype value */
-            agtv_vertex = get_ith_agtype_value_from_container(&agt->root, 0);
+            vertex_found = get_ith_agtype_value_from_container_no_copy(
+                &agt->root, 0, &agtv_vertex, &vertex_needs_free);
+            Assert(vertex_found);
 
-            if (agtv_vertex->type != AGTV_VERTEX)
+            if (agtv_vertex.type != AGTV_VERTEX)
             {
+                if (vertex_needs_free)
+                {
+                    pfree_agtype_value_content(&agtv_vertex);
+                }
                 ereport(ERROR,
                         (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                          errmsg("agtype must resolve to a vertex")));
             }
 
             /* extract the id agtype field */
-            agtv_id = AGTYPE_VERTEX_GET_ID(agtv_vertex);
+            agtv_id = AGTYPE_VERTEX_GET_ID(&agtv_vertex);
 
             /* set the necessary entry fields - actual & id */
             entry->actual = true;
             entry->id = (graphid) agtv_id->val.int_value;
+
+            if (vertex_needs_free)
+            {
+                pfree_agtype_value_content(&agtv_vertex);
+            }
+
             entry->id_isNull = false;
             entry->prop = 0;
             entry->prop_isNull = true;
@@ -1570,8 +1584,10 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     {
         agtype *a = NULL;
         Datum d;
-        agtype_value *v = NULL;
+        agtype_value v;
         agtype_value *id_value = NULL;
+        bool v_needs_free = false;
+        bool v_found;
 
         /* check that the variable isn't NULL */
         if (scanTupleSlot->tts_isnull[node->tuple_position - 1])
@@ -1587,20 +1603,31 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         a = DATUM_GET_AGTYPE_P(d);
 
         /* Convert to an agtype value */
-        v = get_ith_agtype_value_from_container(&a->root, 0);
+        v_found = get_ith_agtype_value_from_container_no_copy(&a->root, 0, &v,
+                                                              &v_needs_free);
+        Assert(v_found);
 
-        if (v->type != AGTV_VERTEX)
+        if (v.type != AGTV_VERTEX)
         {
+            if (v_needs_free)
+            {
+                pfree_agtype_value_content(&v);
+            }
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("agtype must resolve to a vertex")));
         }
 
         /* extract the id agtype field */
-        id_value = AGTYPE_VERTEX_GET_ID(v);
+        id_value = AGTYPE_VERTEX_GET_ID(&v);
 
         /* extract the graphid and cast to a Datum */
         id = GRAPHID_GET_DATUM(id_value->val.int_value);
+
+        if (v_needs_free)
+        {
+            pfree_agtype_value_content(&v);
+        }
 
         /*
          * Its possible the variable has already been deleted. There are two

@@ -46,9 +46,11 @@ static void ensure_detach_delete_rls(CustomScanState *node,
                                      Oid relid, bool *rls_checked,
                                      bool *rls_enabled, List **qualExprs,
                                      ExprContext **econtext);
-static agtype_value *extract_entity(CustomScanState *node,
-                                    TupleTableSlot *scanTupleSlot,
-                                    int entity_position);
+static void extract_entity(CustomScanState *node,
+                           TupleTableSlot *scanTupleSlot,
+                           int entity_position,
+                           enum agtype_value_type *entity_type,
+                           graphid *entity_id);
 static bool delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
                           HeapTuple tuple);
 static void init_delete_caches(cypher_delete_custom_scan_state *css);
@@ -355,13 +357,17 @@ Node *create_cypher_delete_plan_state(CustomScan *cscan)
  * Extract the vertex or edge to be deleted, perform some type checking to
  * validate datum is an agtype vertex or edge.
  */
-static agtype_value *extract_entity(CustomScanState *node,
-                                    TupleTableSlot *scanTupleSlot,
-                                    int entity_position)
+static void extract_entity(CustomScanState *node,
+                           TupleTableSlot *scanTupleSlot,
+                           int entity_position,
+                           enum agtype_value_type *entity_type,
+                           graphid *entity_id)
 {
-    agtype_value *original_entity_value;
+    agtype_value original_entity_value;
+    agtype_value *id;
     agtype *original_entity;
     TupleDesc tupleDescriptor;
+    bool entity_needs_free = false;
 
     tupleDescriptor = scanTupleSlot->tts_tupleDescriptor;
 
@@ -370,14 +376,32 @@ static agtype_value *extract_entity(CustomScanState *node,
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                 errmsg("DELETE clause can only delete agtype")));
 
-    original_entity = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[entity_position - 1]);
-    original_entity_value = get_ith_agtype_value_from_container(&original_entity->root, 0);
+    original_entity =
+        DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[entity_position - 1]);
+    (void)get_ith_agtype_value_from_container_no_copy(&original_entity->root,
+                                                      0,
+                                                      &original_entity_value,
+                                                      &entity_needs_free);
 
-    if (original_entity_value->type != AGTV_VERTEX && original_entity_value->type != AGTV_EDGE)
+    if (original_entity_value.type != AGTV_VERTEX &&
+        original_entity_value.type != AGTV_EDGE)
+    {
+        if (entity_needs_free)
+            pfree_agtype_value_content(&original_entity_value);
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                 errmsg("DELETE clause can only delete vertices and edges")));
+    }
 
-    return original_entity_value;
+    if (original_entity_value.type == AGTV_VERTEX)
+        id = AGTYPE_VERTEX_GET_ID(&original_entity_value);
+    else
+        id = AGTYPE_EDGE_GET_ID(&original_entity_value);
+
+    *entity_type = original_entity_value.type;
+    *entity_id = id->val.int_value;
+
+    if (entity_needs_free)
+        pfree_agtype_value_content(&original_entity_value);
 }
 
 /*
@@ -495,7 +519,8 @@ static void process_delete_list(CustomScanState *node)
 
     for (i = 0; i < delete_item_count; i++)
     {
-        agtype_value *original_entity_value, *id;
+        enum agtype_value_type entity_type;
+        graphid entity_id;
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc = NULL;
         ResultRelInfo *resultRelInfo;
@@ -521,25 +546,17 @@ static void process_delete_list(CustomScanState *node)
         if (scanTupleSlot->tts_isnull[entity_position - 1])
             continue;
 
-        original_entity_value = extract_entity(node, scanTupleSlot,
-                                               entity_position);
+        extract_entity(node, scanTupleSlot, entity_position, &entity_type,
+                       &entity_id);
 
-        if (original_entity_value->type == AGTV_VERTEX)
-        {
-            id = AGTYPE_VERTEX_GET_ID(original_entity_value);
-        }
-        else
-        {
-            id = AGTYPE_EDGE_GET_ID(original_entity_value);
-        }
         label_cache = search_label_graph_oid_cache_cached(
-            css->delete_data->graph_oid, GET_LABEL_ID(id->val.int_value));
+            css->delete_data->graph_oid, GET_LABEL_ID(entity_id));
         if (label_cache == NULL)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_UNDEFINED_TABLE),
                      errmsg("label id %lu does not exist",
-                            GET_LABEL_ID(id->val.int_value))));
+                            GET_LABEL_ID(entity_id))));
         }
 
         resultRelInfo = get_entity_result_rel_info(estate,
@@ -552,19 +569,19 @@ static void process_delete_list(CustomScanState *node)
          * Setup the scan key to require the id field on-disc to match the
          * entity's graphid.
          */
-        if (original_entity_value->type == AGTV_VERTEX)
+        if (entity_type == AGTV_VERTEX)
         {
             id_attr_num = Anum_ag_label_vertex_table_id;
             ScanKeyInit(&scan_keys[0], Anum_ag_label_vertex_table_id,
                         BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
+                        GRAPHID_GET_DATUM(entity_id));
         }
-        else if (original_entity_value->type == AGTV_EDGE)
+        else if (entity_type == AGTV_EDGE)
         {
             id_attr_num = Anum_ag_label_edge_table_id;
             ScanKeyInit(&scan_keys[0], Anum_ag_label_edge_table_id,
                         BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
+                        GRAPHID_GET_DATUM(entity_id));
         }
         else
         {
@@ -669,7 +686,7 @@ static void process_delete_list(CustomScanState *node)
                      * For vertices, store successfully deleted IDs for the
                      * later connected-edge pass.
                      */
-                    if (original_entity_value->type == AGTV_VERTEX)
+                    if (entity_type == AGTV_VERTEX)
                     {
                         bool found;
 
@@ -679,7 +696,7 @@ static void process_delete_list(CustomScanState *node)
                         }
 
                         hash_search(css->vertex_id_htab,
-                                    (void *)&(id->val.int_value),
+                                    (void *)&entity_id,
                                     HASH_ENTER, &found);
                     }
                 }

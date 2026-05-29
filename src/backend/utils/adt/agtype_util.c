@@ -622,6 +622,43 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
 }
 
 /*
+ * Get i-th value of an agtype array without copying the value contents when
+ * that is safe. Strings, numerics, and nested containers point into the
+ * original container. Extended composite values still allocate while
+ * deserializing, and needs_free tells the caller when the returned value
+ * content must be released with pfree_agtype_value_content().
+ */
+bool get_ith_agtype_value_from_container_no_copy(agtype_container *container,
+                                                 uint32 i,
+                                                 agtype_value *result,
+                                                 bool *needs_free)
+{
+    char *base_addr;
+    uint32 nelements;
+
+    if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+        ereport(ERROR, (errmsg("container is not an agtype array")));
+
+    nelements = AGTYPE_CONTAINER_SIZE(container);
+
+    if (i >= nelements)
+        return false;
+
+    base_addr = (char *)&container->children[nelements];
+    fill_agtype_value_no_copy(container, i, base_addr,
+                              get_agtype_offset(container, i), result);
+
+    if (needs_free != NULL)
+    {
+        *needs_free = result->type == AGTV_VERTEX ||
+                      result->type == AGTV_EDGE ||
+                      result->type == AGTV_PATH;
+    }
+
+    return true;
+}
+
+/*
  * Get type of i-th value of an agtype array.
  */
 enum agtype_value_type get_ith_agtype_value_type(agtype_container *container,

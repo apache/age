@@ -353,13 +353,16 @@ static bool check_path(agtype_value *path, graphid updated_id)
  * Construct a new agtype path with the entity with updated_id
  * replacing all of its instances in path with updated_entity
  */
-static agtype_value *replace_entity_in_path(agtype_value *path,
-                                            graphid updated_id,
-                                            agtype *updated_entity)
+static agtype *replace_entity_in_path(agtype_value *path,
+                                      graphid updated_id,
+                                      agtype *updated_entity)
 {
     agtype_parse_state *parse_state = NULL;
     agtype_value *parsed_agtype_value = NULL;
-    agtype_value *updated_entity_value = NULL;
+    agtype_value updated_entity_value;
+    agtype *result;
+    bool updated_entity_value_valid = false;
+    bool updated_entity_needs_free = false;
     int i;
 
     parsed_agtype_value = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY,
@@ -395,15 +398,16 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
          */
         if (updated_id == id->val.int_value)
         {
-            if (updated_entity_value == NULL)
+            if (!updated_entity_value_valid)
             {
-                updated_entity_value =
-                    get_ith_agtype_value_from_container(&updated_entity->root,
-                                                        0);
+                (void)get_ith_agtype_value_from_container_no_copy(
+                    &updated_entity->root, 0, &updated_entity_value,
+                    &updated_entity_needs_free);
+                updated_entity_value_valid = true;
             }
 
             parsed_agtype_value = push_agtype_value(&parse_state, WAGT_ELEM,
-                                                    updated_entity_value);
+                                                    &updated_entity_value);
         }
         else
         {
@@ -415,7 +419,13 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
     parsed_agtype_value = push_agtype_value(&parse_state, WAGT_END_ARRAY, NULL);
     parsed_agtype_value->type = AGTV_PATH;
 
-    return parsed_agtype_value;
+    result = agtype_value_to_agtype(parsed_agtype_value);
+    if (updated_entity_needs_free)
+    {
+        pfree_agtype_value_content(&updated_entity_value);
+    }
+
+    return result;
 }
 
 /*
@@ -444,7 +454,8 @@ static void update_all_paths(CustomScanState *node, graphid id,
     for (i = 0; i < attr_count; i++)
     {
         agtype *original_entity;
-        agtype_value *original_entity_value;
+        agtype_value original_entity_value;
+        bool entity_needs_free = false;
         int attr = attrs[i];
 
         if (isnull[attr])
@@ -460,19 +471,27 @@ static void update_all_paths(CustomScanState *node, graphid id,
             continue;
         }
 
-        original_entity_value = get_ith_agtype_value_from_container(&original_entity->root, 0);
+        (void)get_ith_agtype_value_from_container_no_copy(
+            &original_entity->root, 0, &original_entity_value,
+            &entity_needs_free);
 
         /* we found a path */
-        if (original_entity_value->type == AGTV_PATH)
+        if (original_entity_value.type == AGTV_PATH)
         {
             /* check if the path contains the entity. */
-            if (check_path(original_entity_value, id))
+            if (check_path(&original_entity_value, id))
             {
                 /* the path does contain the entity replace with the new entity. */
-                agtype_value *new_path = replace_entity_in_path(original_entity_value, id, updated_entity);
+                agtype *new_path = replace_entity_in_path(
+                    &original_entity_value, id, updated_entity);
 
-                values[attr] = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(new_path));
+                values[attr] = AGTYPE_P_GET_DATUM(new_path);
             }
+        }
+
+        if (entity_needs_free)
+        {
+            pfree_agtype_value_content(&original_entity_value);
         }
     }
 }
@@ -635,7 +654,7 @@ bool apply_update_list(CustomScanState *node,
     foreach (lc, set_info->set_items)
     {
         agtype_value *altered_properties;
-        agtype_value *original_entity_value;
+        agtype_value original_entity_value;
         agtype_value *original_properties;
         agtype_value *id;
         label_cache_data *label_cache;
@@ -660,6 +679,7 @@ bool apply_update_list(CustomScanState *node,
         bool found_idx_entry;
         RLSCacheEntry *rls_entry = NULL;
         bool found_rls_entry;
+        bool original_entity_needs_free = false;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -681,11 +701,17 @@ bool apply_update_list(CustomScanState *node,
         }
 
         original_entity = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[update_item->entity_position - 1]);
-        original_entity_value = get_ith_agtype_value_from_container(&original_entity->root, 0);
+        (void)get_ith_agtype_value_from_container_no_copy(
+            &original_entity->root, 0, &original_entity_value,
+            &original_entity_needs_free);
 
-        if (original_entity_value->type != AGTV_VERTEX &&
-            original_entity_value->type != AGTV_EDGE)
+        if (original_entity_value.type != AGTV_VERTEX &&
+            original_entity_value.type != AGTV_EDGE)
         {
+            if (original_entity_needs_free)
+            {
+                pfree_agtype_value_content(&original_entity_value);
+            }
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("age %s clause can only update vertex and edges",
@@ -693,17 +719,17 @@ bool apply_update_list(CustomScanState *node,
         }
 
         /* get the id and label metadata for later */
-        if (original_entity_value->type == AGTV_VERTEX)
+        if (original_entity_value.type == AGTV_VERTEX)
         {
-            id = AGTYPE_VERTEX_GET_ID(original_entity_value);
+            id = AGTYPE_VERTEX_GET_ID(&original_entity_value);
             original_properties =
-                AGTYPE_VERTEX_GET_PROPERTIES(original_entity_value);
+                AGTYPE_VERTEX_GET_PROPERTIES(&original_entity_value);
         }
         else
         {
-            id = AGTYPE_EDGE_GET_ID(original_entity_value);
+            id = AGTYPE_EDGE_GET_ID(&original_entity_value);
             original_properties =
-                AGTYPE_EDGE_GET_PROPERTIES(original_entity_value);
+                AGTYPE_EDGE_GET_PROPERTIES(&original_entity_value);
         }
         label_cache = search_label_graph_oid_cache_cached(
             graph_oid, GET_LABEL_ID(id->val.int_value));
@@ -812,16 +838,16 @@ bool apply_update_list(CustomScanState *node,
          *  metadata for the on-disc update are only needed for the last update
          *  targeting this entity.
          */
-        if (original_entity_value->type == AGTV_VERTEX)
+        if (original_entity_value.type == AGTV_VERTEX)
         {
             new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
                                      CStringGetDatum(label_name),
                                      AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
         }
-        else if (original_entity_value->type == AGTV_EDGE)
+        else if (original_entity_value.type == AGTV_EDGE)
         {
-            startid = AGTYPE_EDGE_GET_START_ID(original_entity_value);
-            endid = AGTYPE_EDGE_GET_END_ID(original_entity_value);
+            startid = AGTYPE_EDGE_GET_START_ID(&original_entity_value);
+            endid = AGTYPE_EDGE_GET_END_ID(&original_entity_value);
 
             new_entity = make_edge(GRAPHID_GET_DATUM(id->val.int_value),
                                    GRAPHID_GET_DATUM(startid->val.int_value),
@@ -926,7 +952,7 @@ bool apply_update_list(CustomScanState *node,
                 ExecClearTuple(slot);
             }
 
-            if (original_entity_value->type == AGTV_VERTEX)
+            if (original_entity_value.type == AGTV_VERTEX)
             {
                 slot = populate_vertex_tts(slot, id, altered_properties);
             }
@@ -1053,6 +1079,11 @@ bool apply_update_list(CustomScanState *node,
             }
 
             estate->es_snapshot->curcid = cid;
+        }
+
+        if (original_entity_needs_free)
+        {
+            pfree_agtype_value_content(&original_entity_value);
         }
 
         /* increment loop index */

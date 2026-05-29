@@ -569,6 +569,10 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
                                                agtype_value *key);
 agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
                                                   uint32 i);
+bool get_ith_agtype_value_from_container_no_copy(agtype_container *container,
+                                                 uint32 i,
+                                                 agtype_value *result,
+                                                 bool *needs_free);
 enum agtype_value_type get_ith_agtype_value_type(agtype_container *container,
                                                  uint32 i);
 agtype_value *push_agtype_value(agtype_parse_state **pstate,

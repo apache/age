@@ -183,6 +183,12 @@ static bool delete_specific_GRAPH_global_contexts_len(const char *graph_name,
 static bool delete_GRAPH_global_contexts(void);
 static Oid get_cached_global_graph_oid_len(const char *graph_name,
                                            int graph_name_len);
+static void get_global_graph_scalar_arg_no_copy(char *funcname,
+                                                agtype *agt_arg,
+                                                enum agtype_value_type type,
+                                                bool error,
+                                                agtype_value *result,
+                                                bool *needs_free);
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx,
@@ -1200,6 +1206,55 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
     return cached_graph_oid;
 }
 
+static void get_global_graph_scalar_arg_no_copy(char *funcname,
+                                                agtype *agt_arg,
+                                                enum agtype_value_type type,
+                                                bool error,
+                                                agtype_value *result,
+                                                bool *needs_free)
+{
+    bool found;
+
+    Assert(funcname != NULL);
+    Assert(agt_arg != NULL);
+    Assert(result != NULL);
+    Assert(needs_free != NULL);
+
+    if (!AGTYPE_CONTAINER_IS_SCALAR(&agt_arg->root))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument must be a scalar", funcname)));
+    }
+
+    found = get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                        result, needs_free);
+    Assert(found);
+
+    if (error && result->type == AGTV_NULL)
+    {
+        if (*needs_free)
+        {
+            pfree_agtype_value_content(result);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument must not be AGTV_NULL",
+                        funcname)));
+    }
+
+    if (error && result->type != type)
+    {
+        if (*needs_free)
+        {
+            pfree_agtype_value_content(result);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument of wrong type", funcname)));
+    }
+}
+
 static bool delete_specific_GRAPH_global_context_by_oid(Oid graph_oid)
 {
     GRAPH_global_context *prev_ggctx = NULL;
@@ -1558,31 +1613,41 @@ PG_FUNCTION_INFO_V1(age_delete_global_graphs);
 
 Datum age_delete_global_graphs(PG_FUNCTION_ARGS)
 {
-    agtype_value *agtv_temp = NULL;
+    agtype_value agtv_temp;
+    agtype_value *agtv_temp_ptr = NULL;
+    bool agtv_temp_needs_free = false;
     bool success = false;
 
     /* get the graph name if supplied */
     if (!PG_ARGISNULL(0))
     {
-        agtv_temp = get_agtype_value("delete_global_graphs",
-                                     AG_GET_ARG_AGTYPE_P(0),
-                                     AGTV_STRING, false);
+        get_global_graph_scalar_arg_no_copy("delete_global_graphs",
+                                            AG_GET_ARG_AGTYPE_P(0),
+                                            AGTV_STRING, false,
+                                            &agtv_temp,
+                                            &agtv_temp_needs_free);
+        agtv_temp_ptr = &agtv_temp;
     }
 
-    if (agtv_temp == NULL || agtv_temp->type == AGTV_NULL)
+    if (agtv_temp_ptr == NULL || agtv_temp_ptr->type == AGTV_NULL)
     {
         success = delete_GRAPH_global_contexts();
     }
-    else if (agtv_temp->type == AGTV_STRING)
+    else if (agtv_temp_ptr->type == AGTV_STRING)
     {
         success = delete_specific_GRAPH_global_contexts_len(
-            agtv_temp->val.string.val, agtv_temp->val.string.len);
+            agtv_temp_ptr->val.string.val, agtv_temp_ptr->val.string.len);
     }
     else
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("delete_global_graphs: invalid graph name type")));
+    }
+
+    if (agtv_temp_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_temp);
     }
 
     PG_RETURN_BOOL(success);
@@ -1596,10 +1661,14 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     GRAPH_global_context *ggctx = NULL;
     vertex_entry *ve = NULL;
     ListGraphId *edges = NULL;
-    agtype_value *agtv_vertex = NULL;
+    agtype_value agtv_vertex;
     agtype_value *agtv_temp = NULL;
+    agtype_value graph_name_value;
+    bool graph_name_needs_free = false;
+    bool vertex_needs_free = false;
     agtype_value agtv_integer;
     agtype_in_state result;
+    agtype *agt_result;
     Oid graph_oid = InvalidOid;
     graphid vid = 0;
     int64 self_loops = 0;
@@ -1614,8 +1683,9 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     }
 
     /* get the graph name */
-    agtv_temp = get_agtype_value("vertex_stats", AG_GET_ARG_AGTYPE_P(0),
-                                 AGTV_STRING, true);
+    get_global_graph_scalar_arg_no_copy("vertex_stats", AG_GET_ARG_AGTYPE_P(0),
+                                        AGTV_STRING, true, &graph_name_value,
+                                        &graph_name_needs_free);
 
     /* we need the vertex */
     if (PG_ARGISNULL(1))
@@ -1626,23 +1696,24 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     }
 
     /* get the vertex */
-    agtv_vertex = get_agtype_value("vertex_stats", AG_GET_ARG_AGTYPE_P(1),
-                                   AGTV_VERTEX, true);
+    get_global_graph_scalar_arg_no_copy("vertex_stats", AG_GET_ARG_AGTYPE_P(1),
+                                        AGTV_VERTEX, true, &agtv_vertex,
+                                        &vertex_needs_free);
 
     /* get the graph oid */
-    graph_oid = get_cached_global_graph_oid_len(agtv_temp->val.string.val,
-                                                agtv_temp->val.string.len);
+    graph_oid = get_cached_global_graph_oid_len(graph_name_value.val.string.val,
+                                                graph_name_value.val.string.len);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
      */
-    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
-                                             agtv_temp->val.string.len,
+    ggctx = manage_GRAPH_global_contexts_len(graph_name_value.val.string.val,
+                                             graph_name_value.val.string.len,
                                              graph_oid);
 
     /* get the id */
-    agtv_temp = AGTYPE_VERTEX_GET_ID(agtv_vertex);
+    agtv_temp = AGTYPE_VERTEX_GET_ID(&agtv_vertex);
     vid = agtv_temp->val.int_value;
 
     /* get the vertex entry */
@@ -1660,7 +1731,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
 
     /* store the label */
-    agtv_temp = AGTYPE_VERTEX_GET_LABEL(agtv_vertex);
+    agtv_temp = AGTYPE_VERTEX_GET_LABEL(&agtv_vertex);
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
@@ -1699,7 +1770,17 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
 
     result.res->type = AGTV_OBJECT;
 
-    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+    agt_result = agtype_value_to_agtype(result.res);
+    if (graph_name_needs_free)
+    {
+        pfree_agtype_value_content(&graph_name_value);
+    }
+    if (vertex_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_vertex);
+    }
+
+    PG_RETURN_POINTER(agt_result);
 }
 
 /* PG wrapper function for age_graph_stats */
@@ -1709,8 +1790,11 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_value *agtv_temp = NULL;
+    agtype_value graph_name_value;
+    bool graph_name_needs_free = false;
     agtype_value agtv_integer;
     agtype_in_state result;
+    agtype *agt_result;
     Oid graph_oid = InvalidOid;
 
     /* the graph name is required, but this generally isn't user supplied */
@@ -1722,12 +1806,13 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     }
 
     /* get the graph name */
-    agtv_temp = get_agtype_value("graph_stats", AG_GET_ARG_AGTYPE_P(0),
-                                 AGTV_STRING, true);
+    get_global_graph_scalar_arg_no_copy("graph_stats", AG_GET_ARG_AGTYPE_P(0),
+                                        AGTV_STRING, true, &graph_name_value,
+                                        &graph_name_needs_free);
 
     /* get the graph oid */
-    graph_oid = get_cached_global_graph_oid_len(agtv_temp->val.string.val,
-                                                agtv_temp->val.string.len);
+    graph_oid = get_cached_global_graph_oid_len(graph_name_value.val.string.val,
+                                                graph_name_value.val.string.len);
 
     /*
      * Remove any context for this graph. This is done to allow graph_stats to
@@ -1739,8 +1824,8 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
      */
-    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
-                                             agtv_temp->val.string.len,
+    ggctx = manage_GRAPH_global_contexts_len(graph_name_value.val.string.val,
+                                             graph_name_value.val.string.len,
                                              graph_oid);
 
     /* zero the state */
@@ -1752,7 +1837,8 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     /* store the graph name */
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("graph"));
-    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
+    result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
+                                   &graph_name_value);
 
     /* set up an integer for returning values */
     agtv_temp = &agtv_integer;
@@ -1776,7 +1862,13 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
 
     result.res->type = AGTV_OBJECT;
 
-    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+    agt_result = agtype_value_to_agtype(result.res);
+    if (graph_name_needs_free)
+    {
+        pfree_agtype_value_content(&graph_name_value);
+    }
+
+    PG_RETURN_POINTER(agt_result);
 }
 
 /*

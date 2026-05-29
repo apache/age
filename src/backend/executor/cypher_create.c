@@ -552,8 +552,10 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
     else
     {
         agtype *a;
-        agtype_value *v;
+        agtype_value v;
         agtype_value *id_value;
+        bool v_needs_free = false;
+        bool v_found;
         TupleTableSlot *scantuple;
         PlanState *ps;
 
@@ -564,20 +566,31 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         a = DATUM_GET_AGTYPE_P(scantuple->tts_values[node->tuple_position - 1]);
 
         /* Convert to an agtype value */
-        v = get_ith_agtype_value_from_container(&a->root, 0);
+        v_found = get_ith_agtype_value_from_container_no_copy(&a->root, 0, &v,
+                                                              &v_needs_free);
+        Assert(v_found);
 
-        if (v->type != AGTV_VERTEX)
+        if (v.type != AGTV_VERTEX)
         {
+            if (v_needs_free)
+            {
+                pfree_agtype_value_content(&v);
+            }
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                      errmsg("agtype must resolve to a vertex")));
         }
 
         /* extract the id agtype field */
-        id_value = AGTYPE_VERTEX_GET_ID(v);
+        id_value = AGTYPE_VERTEX_GET_ID(&v);
 
         /* extract the graphid and cast to a Datum */
         id = GRAPHID_GET_DATUM(id_value->val.int_value);
+
+        if (v_needs_free)
+        {
+            pfree_agtype_value_content(&v);
+        }
 
         /*
          * Its possible the variable has already been deleted. There are two

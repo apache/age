@@ -94,9 +94,10 @@ PG_FUNCTION_INFO_V1(age_is_valid_label_name);
 Datum age_is_valid_label_name(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg = NULL;
-    agtype_value *agtv_value = NULL;
+    agtype_value agtv_value;
     char *label_name = NULL;
     bool is_valid = false;
+    bool value_needs_free = false;
 
     if (PG_ARGISNULL(0))
     {
@@ -113,17 +114,23 @@ Datum age_is_valid_label_name(PG_FUNCTION_ARGS)
                  errmsg("is_valid_label_name() only supports scalar arguments")));
     }
 
-    agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+    (void)get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                      &agtv_value,
+                                                      &value_needs_free);
 
-    if (agtv_value->type != AGTV_STRING)
+    if (agtv_value.type != AGTV_STRING)
     {
+        if (value_needs_free)
+            pfree_agtype_value_content(&agtv_value);
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("is_valid_label_name() only supports string arguments")));
     }
 
-    label_name = pnstrdup(agtv_value->val.string.val,
-                          agtv_value->val.string.len);
+    label_name = pnstrdup(agtv_value.val.string.val,
+                          agtv_value.val.string.len);
+    if (value_needs_free)
+        pfree_agtype_value_content(&agtv_value);
 
     is_valid = is_valid_label_name(label_name, 0);
     pfree_if_not_null(label_name);

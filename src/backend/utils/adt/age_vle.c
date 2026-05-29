@@ -166,9 +166,17 @@ typedef struct edge_uniqueness_argtype_cache
 static VLE_local_context *global_vle_local_contexts = NULL;
 
 /* agtype functions */
-static agtype_value *get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo,
-                                              int argno,
-                                              const char *type_error_msg);
+static bool get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo, int argno,
+                                     const char *type_error_msg,
+                                     graphid *result);
+static void get_vle_scalar_arg_no_copy(char *funcname, agtype *agt_arg,
+                                       enum agtype_value_type type, bool error,
+                                       agtype_value *result,
+                                       bool *needs_free);
+static graphid get_agtype_scalar_graphid_arg(agtype *agt_arg,
+                                             const char *type_error_msg);
+static bool get_agtype_scalar_bool_arg(agtype *agt_arg,
+                                       const char *type_error_msg);
 static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
                              HTAB *relation_cache);
 /* VLE local context functions */
@@ -492,16 +500,18 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
     }
 }
 
-static agtype_value *get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo,
-                                              int argno,
-                                              const char *type_error_msg)
+static bool get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo, int argno,
+                                     const char *type_error_msg,
+                                     graphid *result)
 {
     agtype *agt_arg;
-    agtype_value *agtv_value;
+    agtype_value agtv_value;
+    agtype_value *id;
+    bool value_needs_free = false;
 
     if (PG_ARGISNULL(argno))
     {
-        return NULL;
+        return false;
     }
 
     agt_arg = AG_GET_ARG_AGTYPE_P(argno);
@@ -513,24 +523,168 @@ static agtype_value *get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo,
                  errmsg("age_vle: agtype argument must be a scalar")));
     }
 
-    agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
-    if (agtv_value->type == AGTV_NULL)
+    (void)get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                      &agtv_value,
+                                                      &value_needs_free);
+    if (agtv_value.type == AGTV_NULL)
     {
-        return NULL;
+        if (value_needs_free)
+            pfree_agtype_value_content(&agtv_value);
+        return false;
     }
 
-    if (agtv_value->type == AGTV_VERTEX)
+    if (agtv_value.type == AGTV_VERTEX)
     {
-        agtv_value = AGTYPE_VERTEX_GET_ID(agtv_value);
+        id = AGTYPE_VERTEX_GET_ID(&agtv_value);
     }
-    else if (agtv_value->type != AGTV_INTEGER)
+    else if (agtv_value.type == AGTV_INTEGER)
+    {
+        id = &agtv_value;
+    }
+    else
+    {
+        if (value_needs_free)
+            pfree_agtype_value_content(&agtv_value);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s", type_error_msg)));
+    }
+
+    *result = id->val.int_value;
+
+    if (value_needs_free)
+        pfree_agtype_value_content(&agtv_value);
+
+    return true;
+}
+
+static void get_vle_scalar_arg_no_copy(char *funcname, agtype *agt_arg,
+                                       enum agtype_value_type type, bool error,
+                                       agtype_value *result,
+                                       bool *needs_free)
+{
+    bool found;
+
+    Assert(funcname != NULL);
+    Assert(agt_arg != NULL);
+    Assert(result != NULL);
+    Assert(needs_free != NULL);
+
+    if (!AGTYPE_CONTAINER_IS_SCALAR(&agt_arg->root))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument must be a scalar", funcname)));
+    }
+
+    found = get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                        result, needs_free);
+    Assert(found);
+
+    if (error && result->type == AGTV_NULL)
+    {
+        if (*needs_free)
+        {
+            pfree_agtype_value_content(result);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument must not be AGTV_NULL",
+                        funcname)));
+    }
+
+    if (error && result->type != type)
+    {
+        if (*needs_free)
+        {
+            pfree_agtype_value_content(result);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s: agtype argument of wrong type", funcname)));
+    }
+}
+
+static graphid get_agtype_scalar_graphid_arg(agtype *agt_arg,
+                                             const char *type_error_msg)
+{
+    agtype_value agtv_value;
+    bool value_needs_free = false;
+    graphid result;
+    bool found;
+
+    if (!AGT_ROOT_IS_SCALAR(agt_arg))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("%s", type_error_msg)));
     }
 
-    return agtv_value;
+    found = get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                        &agtv_value,
+                                                        &value_needs_free);
+    Assert(found);
+
+    if (agtv_value.type != AGTV_INTEGER)
+    {
+        if (value_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_value);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s", type_error_msg)));
+    }
+
+    result = agtv_value.val.int_value;
+
+    if (value_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_value);
+    }
+
+    return result;
+}
+
+static bool get_agtype_scalar_bool_arg(agtype *agt_arg,
+                                       const char *type_error_msg)
+{
+    agtype_value agtv_value;
+    bool value_needs_free = false;
+    bool result;
+    bool found;
+
+    if (!AGT_ROOT_IS_SCALAR(agt_arg))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s", type_error_msg)));
+    }
+
+    found = get_ith_agtype_value_from_container_no_copy(&agt_arg->root, 0,
+                                                        &agtv_value,
+                                                        &value_needs_free);
+    Assert(found);
+
+    if (agtv_value.type != AGTV_BOOL)
+    {
+        if (value_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_value);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s", type_error_msg)));
+    }
+
+    result = agtv_value.val.boolean;
+
+    if (value_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_value);
+    }
+
+    return result;
 }
 
 /*
@@ -641,7 +795,8 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     MemoryContext oldctx = NULL;
     GRAPH_global_context *ggctx = NULL;
     VLE_local_context *vlelctx = NULL;
-    agtype_value *agtv_temp = NULL;
+    agtype_value agtv_temp;
+    bool agtv_temp_needs_free = false;
     agtype_value *agtv_object = NULL;
     agtype *agt_edge_property_constraint = NULL;
     agtype *agt_arg = NULL;
@@ -650,6 +805,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     Oid graph_oid = InvalidOid;
     int64 vle_grammar_node_id = 0;
     bool use_cache = false;
+    graphid vertex_id_arg;
 
     /*
      * Get the VLE grammar node id, if it exists. Remember, we overload the
@@ -658,9 +814,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     if (PG_NARGS() == 8)
     {
         /* get the VLE grammar node id */
-        agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(7),
-                                     AGTV_INTEGER, true);
-        vle_grammar_node_id = agtv_temp->val.int_value;
+        get_vle_scalar_arg_no_copy("age_vle", AG_GET_ARG_AGTYPE_P(7),
+                                   AGTV_INTEGER, true, &agtv_temp,
+                                   &agtv_temp_needs_free);
+        vle_grammar_node_id = agtv_temp.val.int_value;
 
         /* we are using the VLE local context cache, so set it */
         use_cache = true;
@@ -683,10 +840,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
          */
 
         /* get and update the start vertex id */
-        agtv_temp = get_vle_vertex_or_id_arg(
-            fcinfo, 1,
-            "start vertex argument must be a vertex or the integer id");
-        if (agtv_temp == NULL)
+        if (!get_vle_vertex_or_id_arg(
+                fcinfo, 1,
+                "start vertex argument must be a vertex or the integer id",
+                &vertex_id_arg))
         {
             /* if there are no more vertices to process, return NULL */
             if (vlelctx->next_vertex == NULL)
@@ -699,20 +856,20 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         }
         else
         {
-            vlelctx->vsid = agtv_temp->val.int_value;
+            vlelctx->vsid = vertex_id_arg;
         }
 
         /* get and update the end vertex id */
-        agtv_temp = get_vle_vertex_or_id_arg(
-            fcinfo, 2,
-            "end vertex argument must be a vertex or the integer id");
-        if (agtv_temp == NULL)
+        if (!get_vle_vertex_or_id_arg(
+                fcinfo, 2,
+                "end vertex argument must be a vertex or the integer id",
+                &vertex_id_arg))
         {
             vlelctx->veid = 0;
         }
         else
         {
-            vlelctx->veid = agtv_temp->val.int_value;
+            vlelctx->veid = vertex_id_arg;
         }
         vlelctx->is_dirty = true;
 
@@ -746,21 +903,22 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
 
     /* get the graph name - this is a required argument */
-    agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(0),
-                                 AGTV_STRING, true);
+    get_vle_scalar_arg_no_copy("age_vle", AG_GET_ARG_AGTYPE_P(0),
+                               AGTV_STRING, true, &agtv_temp,
+                               &agtv_temp_needs_free);
     /* get the graph oid before copying the graph name into VLE state */
-    graph_oid = get_cached_vle_graph_oid(agtv_temp->val.string.val,
-                                         agtv_temp->val.string.len);
+    graph_oid = get_cached_vle_graph_oid(agtv_temp.val.string.val,
+                                         agtv_temp.val.string.len);
 
-    graph_name = pnstrdup(agtv_temp->val.string.val,
-                          agtv_temp->val.string.len);
+    graph_name = pnstrdup(agtv_temp.val.string.val,
+                          agtv_temp.val.string.len);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
     */
-    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
-                                             agtv_temp->val.string.len,
+    ggctx = manage_GRAPH_global_contexts_len(agtv_temp.val.string.val,
+                                             agtv_temp.val.string.len,
                                              graph_oid);
 
     /* allocate and initialize local VLE context */
@@ -795,10 +953,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
      * which path function is used. If a start vertex isn't provided, we
      * retrieve them incrementally from the vertices list.
      */
-    agtv_temp = get_vle_vertex_or_id_arg(
-        fcinfo, 1,
-        "start vertex argument must be a vertex or the integer id");
-    if (agtv_temp == NULL)
+    if (!get_vle_vertex_or_id_arg(
+            fcinfo, 1,
+            "start vertex argument must be a vertex or the integer id",
+            &vertex_id_arg))
     {
         /* set _TO */
         vlelctx->path_function = VLE_FUNCTION_PATHS_TO;
@@ -810,17 +968,17 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
     else
     {
-        vlelctx->vsid = agtv_temp->val.int_value;
+        vlelctx->vsid = vertex_id_arg;
     }
 
     /*
      * Get the end vertex id - this is an optional parameter and determines
      * which path function is used.
      */
-    agtv_temp = get_vle_vertex_or_id_arg(
-        fcinfo, 2,
-        "end vertex argument must be a vertex or the integer id");
-    if (agtv_temp == NULL)
+    if (!get_vle_vertex_or_id_arg(
+            fcinfo, 2,
+            "end vertex argument must be a vertex or the integer id",
+            &vertex_id_arg))
     {
         if (vlelctx->path_function == VLE_FUNCTION_PATHS_TO)
         {
@@ -835,15 +993,16 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     else
     {
         vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
-        vlelctx->veid = agtv_temp->val.int_value;
+        vlelctx->veid = vertex_id_arg;
     }
 
     /* get the VLE edge prototype */
-    agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(3),
-                                 AGTV_EDGE, true);
+    get_vle_scalar_arg_no_copy("age_vle", AG_GET_ARG_AGTYPE_P(3),
+                               AGTV_EDGE, true, &agtv_temp,
+                               &agtv_temp_needs_free);
 
     /* get the edge prototype's property conditions */
-    agtv_object = AGTYPE_EDGE_GET_PROPERTIES(agtv_temp);
+    agtv_object = AGTYPE_EDGE_GET_PROPERTIES(&agtv_temp);
     agt_edge_property_constraint = agtype_value_to_agtype(agtv_object);
 
     /* store the properties as an agtype */
@@ -856,26 +1015,26 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     vlelctx->edge_property_constraint_hash = datum_image_hash(d_edge_property_constraint, false, -1);
 
     /* get the edge prototype's label name */
-    agtv_temp = AGTYPE_EDGE_GET_LABEL(agtv_temp);
-    if (agtv_temp->type == AGTV_STRING &&
-        agtv_temp->val.string.len != 0)
+    agtv_object = AGTYPE_EDGE_GET_LABEL(&agtv_temp);
+    if (agtv_object->type == AGTV_STRING &&
+        agtv_object->val.string.len != 0)
     {
         label_cache_data *label_cache;
         char label_name_buf[NAMEDATALEN];
         char *label_name;
         bool free_label_name = false;
 
-        if (agtv_temp->val.string.len < NAMEDATALEN)
+        if (agtv_object->val.string.len < NAMEDATALEN)
         {
-            memcpy(label_name_buf, agtv_temp->val.string.val,
-                   agtv_temp->val.string.len);
-            label_name_buf[agtv_temp->val.string.len] = '\0';
+            memcpy(label_name_buf, agtv_object->val.string.val,
+                   agtv_object->val.string.len);
+            label_name_buf[agtv_object->val.string.len] = '\0';
             label_name = label_name_buf;
         }
         else
         {
-            label_name = pnstrdup(agtv_temp->val.string.val,
-                                  agtv_temp->val.string.len);
+            label_name = pnstrdup(agtv_object->val.string.val,
+                                  agtv_object->val.string.len);
             free_label_name = true;
         }
 
@@ -895,6 +1054,12 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         vlelctx->edge_label_name_oid = InvalidOid;
     }
 
+    if (agtv_temp_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_temp);
+        agtv_temp_needs_free = false;
+    }
+
     /* get the left range index */
     if (PG_ARGISNULL(4))
     {
@@ -909,9 +1074,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         }
         else
         {
-            agtv_temp = get_agtype_value("age_vle", agt_arg, AGTV_INTEGER,
-                                         true);
-            vlelctx->lidx = agtv_temp->val.int_value;
+            get_vle_scalar_arg_no_copy("age_vle", agt_arg, AGTV_INTEGER,
+                                       true, &agtv_temp,
+                                       &agtv_temp_needs_free);
+            vlelctx->lidx = agtv_temp.val.int_value;
         }
     }
 
@@ -931,16 +1097,18 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         }
         else
         {
-            agtv_temp = get_agtype_value("age_vle", agt_arg, AGTV_INTEGER,
-                                         true);
-            vlelctx->uidx = agtv_temp->val.int_value;
+            get_vle_scalar_arg_no_copy("age_vle", agt_arg, AGTV_INTEGER,
+                                       true, &agtv_temp,
+                                       &agtv_temp_needs_free);
+            vlelctx->uidx = agtv_temp.val.int_value;
             vlelctx->uidx_infinite = false;
         }
     }
     /* get edge direction */
-    agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(6),
-                                 AGTV_INTEGER, true);
-    vlelctx->edge_direction = agtv_temp->val.int_value;
+    get_vle_scalar_arg_no_copy("age_vle", AG_GET_ARG_AGTYPE_P(6),
+                               AGTV_INTEGER, true, &agtv_temp,
+                               &agtv_temp_needs_free);
+    vlelctx->edge_direction = agtv_temp.val.int_value;
 
     /* create the local state hashtable */
     create_VLE_local_state_hashtable(vlelctx);
@@ -2225,7 +2393,6 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     agtype *agt_arg_vpc = NULL;
     agtype *edge_id = NULL;
     agtype *pos_agt = NULL;
-    agtype_value *id, *position;
     VLE_path_container *vle_path = NULL;
     graphid *array = NULL;
     bool vle_is_on_left = false;
@@ -2281,23 +2448,8 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     {
         /* Get the edge id we are checking the end of the list too */
         edge_id = AG_GET_ARG_AGTYPE_P(1);
-        if (!AGT_ROOT_IS_SCALAR(edge_id))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("argument 2 of age_match_vle_edge_to_edge_qual must be an integer")));
-        }
-
-        id = get_ith_agtype_value_from_container(&edge_id->root, 0);
-
-        if (id->type != AGTV_INTEGER)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("argument 2 of age_match_vle_edge_to_edge_qual must be an integer")));
-        }
-
-        gid = id->val.int_value;
+        gid = get_agtype_scalar_graphid_arg(edge_id,
+            "argument 2 of age_match_vle_edge_to_edge_qual must be an integer");
     }
     else if (type1 == GRAPHIDOID)
     {
@@ -2312,23 +2464,8 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
 
     pos_agt = AG_GET_ARG_AGTYPE_P(2);
 
-    if (!AGT_ROOT_IS_SCALAR(pos_agt))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("argument 3 of age_match_vle_edge_to_edge_qual must be an integer")));
-    }
-
-    position = get_ith_agtype_value_from_container(&pos_agt->root, 0);
-
-    if (position->type != AGTV_BOOL)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("argument 3 of age_match_vle_edge_to_edge_qual must be an integer")));
-    }
-
-    vle_is_on_left = position->val.boolean;
+    vle_is_on_left = get_agtype_scalar_bool_arg(pos_agt,
+        "argument 3 of age_match_vle_edge_to_edge_qual must be an integer");
 
     if (vle_is_on_left)
     {
@@ -2460,7 +2597,6 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
     agtype *agt_arg_vsid = NULL;
     agtype *agt_arg_veid = NULL;
     agtype *agt_arg_path = NULL;
-    agtype_value *agtv_temp = NULL;
     graphid vsid = 0;
     graphid veid = 0;
     graphid *gida = NULL;
@@ -2536,11 +2672,8 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
 
         if (!is_agtype_null(agt_arg_vsid))
         {
-            agtv_temp =
-               get_ith_agtype_value_from_container(&agt_arg_vsid->root, 0);
-
-            Assert(agtv_temp->type == AGTV_INTEGER);
-            vsid = agtv_temp->val.int_value;
+            vsid = get_agtype_scalar_graphid_arg(agt_arg_vsid,
+                "match_vle_terminal_edge() argument 1 must be an agtype integer or a graphid");
         }
         else
         {
@@ -2565,10 +2698,8 @@ Datum age_match_vle_terminal_edge(PG_FUNCTION_ARGS)
 
         if (!is_agtype_null(agt_arg_veid))
         {
-            agtv_temp = get_ith_agtype_value_from_container(&agt_arg_veid->root,
-                                                            0);
-            Assert(agtv_temp->type == AGTV_INTEGER);
-            veid = agtv_temp->val.int_value;
+            veid = get_agtype_scalar_graphid_arg(agt_arg_veid,
+                "match_vle_terminal_edge() argument 2 must be an agtype integer or a graphid");
         }
         else
         {
@@ -2598,7 +2729,9 @@ Datum age_build_vle_match_edge(PG_FUNCTION_ARGS)
     agtype_in_state result;
     agtype_value agtv_zero;
     agtype_value agtv_nstr;
-    agtype_value *agtv_temp = NULL;
+    agtype_value agtv_temp;
+    bool agtv_temp_needs_free = false;
+    agtype *agt_result;
 
     /* create an agtype_value integer 0 */
     agtv_zero.type = AGTV_INTEGER;
@@ -2624,10 +2757,11 @@ Datum age_build_vle_match_edge(PG_FUNCTION_ARGS)
                                    string_to_agtype_value("label"));
     if (!PG_ARGISNULL(0))
     {
-        agtv_temp = get_agtype_value("build_vle_match_edge",
-                                     AG_GET_ARG_AGTYPE_P(0), AGTV_STRING, true);
+        get_vle_scalar_arg_no_copy("build_vle_match_edge",
+                                   AG_GET_ARG_AGTYPE_P(0), AGTV_STRING, true,
+                                   &agtv_temp, &agtv_temp_needs_free);
         result.res = push_agtype_value(&result.parse_state, WAGT_VALUE,
-                                       agtv_temp);
+                                       &agtv_temp);
     }
     else
     {
@@ -2674,7 +2808,13 @@ Datum age_build_vle_match_edge(PG_FUNCTION_ARGS)
 
     result.res->type = AGTV_EDGE;
 
-    PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+    agt_result = agtype_value_to_agtype(result.res);
+    if (agtv_temp_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_temp);
+    }
+
+    PG_RETURN_POINTER(agt_result);
 }
 
 PG_FUNCTION_INFO_V1(_ag_enforce_edge_uniqueness2);
@@ -2962,22 +3102,35 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
             /* if it is a regular AGTYPE scalar */
             else if (AGT_ROOT_IS_SCALAR(agt_i))
             {
-                agtype_value *agtv_id = NULL;
+                agtype_value agtv_id;
                 int64 *value = NULL;
                 bool found = false;
+                bool id_needs_free = false;
+                bool id_found;
                 graphid edge_id = 0;
 
-                agtv_id = get_ith_agtype_value_from_container(&agt_i->root, 0);
+                id_found = get_ith_agtype_value_from_container_no_copy(
+                    &agt_i->root, 0, &agtv_id, &id_needs_free);
+                Assert(id_found);
 
-                if (agtv_id->type != AGTV_INTEGER)
+                if (agtv_id.type != AGTV_INTEGER)
                 {
+                    if (id_needs_free)
+                    {
+                        pfree_agtype_value_content(&agtv_id);
+                    }
                     ereport(ERROR,
                             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                              errmsg("_ag_enforce_edge_uniqueness parameter %d must resolve to an agtype integer",
                                     i)));
                 }
 
-                edge_id = agtv_id->val.int_value;
+                edge_id = agtv_id.val.int_value;
+
+                if (id_needs_free)
+                {
+                    pfree_agtype_value_content(&agtv_id);
+                }
 
                 /* insert the edge_id */
                 value = (int64 *)hash_search(exists_hash, (void *)&edge_id,

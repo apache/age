@@ -44,6 +44,9 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text);
 static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen);
 static agtype *delete_from_array(agtype *agt, agtype* indexes);
 static bool parse_agtype_index_string(char *str, int len, long *lindex);
+static void get_scalar_agtype_value_no_copy(agtype *agt, agtype_value *value,
+                                            bool *needs_free);
+static void free_agtype_value_no_copy(agtype_value *value, bool needs_free);
 
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen)
@@ -164,6 +167,26 @@ static bool parse_agtype_index_string(char *str, int len, long *lindex)
     return true;
 }
 
+static void get_scalar_agtype_value_no_copy(agtype *agt, agtype_value *value,
+                                            bool *needs_free)
+{
+    bool found;
+
+    Assert(AGT_ROOT_IS_SCALAR(agt));
+
+    found = get_ith_agtype_value_from_container_no_copy(&agt->root, 0, value,
+                                                        needs_free);
+    Assert(found);
+}
+
+static void free_agtype_value_no_copy(agtype_value *value, bool needs_free)
+{
+    if (needs_free)
+    {
+        pfree_agtype_value_content(value);
+    }
+}
+
 Datum get_numeric_datum_from_agtype_value(agtype_value *agtv)
 {
     switch (agtv->type)
@@ -206,7 +229,11 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     /* If both are not scalars */
     if (!(AGT_ROOT_IS_SCALAR(lhs) && AGT_ROOT_IS_SCALAR(rhs)))
@@ -217,12 +244,16 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     }
 
     /* Both are scalar */
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -288,6 +319,8 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     {
         Datum agt = AGTYPE_P_GET_DATUM(agtype_concat_impl(lhs, rhs));
 
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_DATUM(agt);
     }
     else
@@ -298,6 +331,8 @@ Datum agtype_add(PG_FUNCTION_ARGS)
                  errmsg("Invalid input parameter types for agtype_add")));
     }
 
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -476,7 +511,11 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     /*
      * Logic to handle when the rhs is a non scalar array. In this
@@ -552,43 +591,65 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
      */
     if(!AGT_ROOT_IS_SCALAR(lhs))
     {
-        agtype_value *key;
-        key = get_ith_agtype_value_from_container(&rhs->root, 0);
+        agtype_value key_value;
+        agtype_value *key = &key_value;
+        bool key_needs_free = false;
+
+        (void)get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, key,
+                                                          &key_needs_free);
 
         if (AGT_ROOT_IS_OBJECT(lhs) && key->type == AGTV_STRING)
         {
-            AG_RETURN_AGTYPE_P(delete_from_object(lhs, key->val.string.val,
-                                                  key->val.string.len));
+            agtype *result = delete_from_object(lhs, key->val.string.val,
+                                                key->val.string.len);
+
+            free_agtype_value_no_copy(key, key_needs_free);
+            AG_RETURN_AGTYPE_P(result);
         }
         else if (AGT_ROOT_IS_ARRAY(lhs) && key->type == AGTV_INTEGER)
         {
-            AG_RETURN_AGTYPE_P(delete_from_array(lhs, rhs));
+            agtype *result = delete_from_array(lhs, rhs);
+
+            free_agtype_value_no_copy(key, key_needs_free);
+            AG_RETURN_AGTYPE_P(result);
         }
         else
         {
             if (AGT_ROOT_IS_OBJECT(lhs))
             {
+                char *type_name = agtype_value_type_to_string(key->type);
+
+                free_agtype_value_no_copy(key, key_needs_free);
                 ereport(ERROR,
                             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("expected agtype string, not agtype %s",
-                                    agtype_value_type_to_string(key->type))));
+                                    type_name)));
             }
             else if (AGT_ROOT_IS_ARRAY(lhs))
             {
+                char *type_name = agtype_value_type_to_string(key->type);
+
+                free_agtype_value_no_copy(key, key_needs_free);
                 ereport(ERROR,
                             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("expected agtype integer, not agtype %s",
-                                    agtype_value_type_to_string(key->type))));
+                                    type_name)));
             }
+
+            free_agtype_value_no_copy(key, key_needs_free);
         }
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -635,6 +696,8 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
                 errmsg("Invalid input parameter types for agtype_sub")));
     }
 
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -670,7 +733,9 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
 {
     agtype *v = AG_GET_ARG_AGTYPE_P(0);
     agtype_value *agtv_value;
+    agtype_value agtv_value_value;
     agtype_value agtv_result;
+    bool value_needs_free = false;
 
     if (!(AGT_ROOT_IS_SCALAR(v)))
     {
@@ -680,11 +745,13 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_value = get_ith_agtype_value_from_container(&v->root, 0);
+    get_scalar_agtype_value_no_copy(v, &agtv_value_value, &value_needs_free);
+    agtv_value = &agtv_value_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_value->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_value, value_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -712,6 +779,7 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Invalid input parameter type for agtype_neg")));
 
+    free_agtype_value_no_copy(agtv_value, value_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -726,7 +794,11 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
     {
@@ -736,12 +808,16 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -785,6 +861,8 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Invalid input parameter types for agtype_mul")));
 
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -822,7 +900,11 @@ Datum agtype_div(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
     {
@@ -832,12 +914,16 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -909,7 +995,9 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Invalid input parameter types for agtype_div")));
 
-     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
+    AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
 PG_FUNCTION_INFO_V1(agtype_any_div);
@@ -946,7 +1034,11 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
     {
@@ -956,12 +1048,16 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -1005,6 +1101,8 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Invalid input parameter types for agtype_mod")));
 
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -1042,7 +1140,11 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
     agtype_value *agtv_lhs;
     agtype_value *agtv_rhs;
+    agtype_value agtv_lhs_value;
+    agtype_value agtv_rhs_value;
     agtype_value agtv_result;
+    bool lhs_needs_free = false;
+    bool rhs_needs_free = false;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
     {
@@ -1052,12 +1154,16 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_scalar_agtype_value_no_copy(lhs, &agtv_lhs_value, &lhs_needs_free);
+    get_scalar_agtype_value_no_copy(rhs, &agtv_rhs_value, &rhs_needs_free);
+    agtv_lhs = &agtv_lhs_value;
+    agtv_rhs = &agtv_rhs_value;
 
     /* openCypher: arithmetic over null yields null. */
     if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
     {
+        free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+        free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
         PG_RETURN_NULL();
     }
 
@@ -1101,6 +1207,8 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("Invalid input parameter types for agtype_pow")));
 
+    free_agtype_value_no_copy(agtv_lhs, lhs_needs_free);
+    free_agtype_value_no_copy(agtv_rhs, rhs_needs_free);
     AG_RETURN_AGTYPE_P(agtype_value_to_agtype(&agtv_result));
 }
 
@@ -1372,8 +1480,10 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
 {
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     agtype *key = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *aval;
+    agtype_value aval_value;
+    agtype_value *aval = &aval_value;
     agtype_value *v = NULL;
+    bool aval_needs_free = false;
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
@@ -1382,7 +1492,7 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
 
     if (AGT_ROOT_IS_SCALAR(key))
     {
-        aval = get_ith_agtype_value_from_container(&key->root, 0);
+        get_scalar_agtype_value_no_copy(key, aval, &aval_needs_free);
     }
     else
     {
@@ -1403,6 +1513,8 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
                                              AGT_FARRAY,
                                              aval);
     }
+
+    free_agtype_value_no_copy(aval, aval_needs_free);
 
     PG_RETURN_BOOL(v != NULL);
 }
@@ -2103,6 +2215,8 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
     int i;
     bool have_object = false, have_array = false;
     agtype_value *agtvp = NULL;
+    agtype_value scalar_value;
+    bool scalar_needs_free = false;
     agtype_value tv;
     agtype_container *container;
 
@@ -2136,7 +2250,10 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         /* Extract the scalar value */
         if (npath <= 0)
         {
-            agtvp = get_ith_agtype_value_from_container(container, 0);
+            (void)get_ith_agtype_value_from_container_no_copy(container, 0,
+                                                              &scalar_value,
+                                                              &scalar_needs_free);
+            agtvp = &scalar_value;
         }
     }
 
@@ -2163,14 +2280,18 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
 
     for (i = 0; i < npath; i++)
     {
-        agtype_value *cur_key =
-            get_ith_agtype_value_from_container(&path->root, i);
+        agtype_value cur_key;
+        bool cur_key_needs_free = false;
 
-        if (have_object && cur_key->type == AGTV_STRING)
+        (void)get_ith_agtype_value_from_container_no_copy(&path->root, i,
+                                                          &cur_key,
+                                                          &cur_key_needs_free);
+
+        if (have_object && cur_key.type == AGTV_STRING)
         {
             agtvp = find_agtype_value_from_container(container,
-                                                     AGT_FOBJECT,
-                                                     cur_key);
+                                                      AGT_FOBJECT,
+                                                      &cur_key);
         }
         else if (have_array)
         {
@@ -2181,30 +2302,33 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
              * for array on LHS, there should be an integer or a
              * valid integer string on RHS
              */
-            if (cur_key->type == AGTV_INTEGER)
+            if (cur_key.type == AGTV_INTEGER)
             {
-                lindex = cur_key->val.int_value;
+                lindex = cur_key.val.int_value;
             }
-            else if (cur_key->type == AGTV_STRING)
+            else if (cur_key.type == AGTV_STRING)
             {
                 /*
                  * extract the integer from the string,
                  * if character other than a digit is found, return null
                  */
-                if (!parse_agtype_index_string(cur_key->val.string.val,
-                                               cur_key->val.string.len,
+                if (!parse_agtype_index_string(cur_key.val.string.val,
+                                               cur_key.val.string.len,
                                                &lindex))
                 {
+                    free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                     PG_RETURN_NULL();
                 }
             }
             else
             {
+                free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                 PG_RETURN_NULL();
             }
 
             if (lindex > INT_MAX || lindex < INT_MIN)
             {
+                free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                 PG_RETURN_NULL();
             }
 
@@ -2227,6 +2351,7 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
 
                 if (-lindex > nelements)
                 {
+                    free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                     PG_RETURN_NULL();
                 }
                 else
@@ -2235,19 +2360,33 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                 }
             }
 
-            agtvp = get_ith_agtype_value_from_container(container, index);
+            if (get_ith_agtype_value_from_container_no_copy(container, index,
+                                                            &scalar_value,
+                                                            &scalar_needs_free))
+            {
+                agtvp = &scalar_value;
+            }
+            else
+            {
+                agtvp = NULL;
+            }
         }
         else
         {
+            free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
             PG_RETURN_NULL();
         }
 
         if (agtvp == NULL)
         {
+            free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
             PG_RETURN_NULL();
         }
         else if (i == npath - 1)
         {
+            free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
             break;
         }
 
@@ -2268,6 +2407,8 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
             have_object = agtvp->type == AGTV_OBJECT;
             have_array = agtvp->type == AGTV_ARRAY;
         }
+
+        free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
     }
 
     if (as_text)
@@ -2275,17 +2416,22 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         /* special-case output for string and null values */
         if (agtvp->type == AGTV_STRING)
         {
-            PG_RETURN_TEXT_P(cstring_to_text_with_len(agtvp->val.string.val,
-                                                      agtvp->val.string.len));
+            text *result = cstring_to_text_with_len(agtvp->val.string.val,
+                                                    agtvp->val.string.len);
+
+            free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            PG_RETURN_TEXT_P(result);
         }
 
         if (agtvp->type == AGTV_NULL)
         {
+            free_agtype_value_no_copy(agtvp, scalar_needs_free);
             PG_RETURN_NULL();
         }
     }
 
     res = agtype_value_to_agtype(agtvp);
+    free_agtype_value_no_copy(agtvp, scalar_needs_free);
 
     if (as_text)
     {
