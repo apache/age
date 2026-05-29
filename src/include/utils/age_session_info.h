@@ -20,12 +20,10 @@
 #ifndef AGE_SESSION_INFO_H
 #define AGE_SESSION_INFO_H
 
-#include "utils/agtype.h"
-
-bool is_session_info_prepared(void);
-char *get_session_info_graph_name(void);
-char *get_session_info_cypher_statement(void);
-void reset_session_info(void);
+/*
+ * The old session-info side channel was removed from cypher() analysis.
+ * This header remains only as a compatibility include for code that has not
+ * been cleaned up yet.
+ */
 
 #endif
-

@@ -33,7 +33,6 @@
 #include "parser/cypher_clause.h"
 #include "parser/cypher_parser.h"
 #include "utils/ag_func.h"
-#include "utils/age_session_info.h"
 
 typedef bool (*cypher_expression_condition)(Node *expr);
 
@@ -437,102 +436,30 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
      */
     query_str = expr_get_const_cstring(arg2, pstate->p_sourcetext);
 
-    /*
-     * Validate appropriate cypher function usage -
-     *
-     * Session info OVERRIDES ANY INPUT PASSED and if any is passed, it will
-     * cause the cypher function to error out.
-     *
-     * If this is using session info, both of the first 2 input parameters need
-     * to be NULL, in addition to the session info being set up. Furthermore,
-     * the input parameters passed in by session info need to both be non-NULL.
-     *
-     * If this is not using session info, both input parameters need to be
-     * non-NULL.
-     *
-     */
-    if (is_session_info_prepared())
+    /* get the graph name string from the passed parameters */
+    if (!graph_name)
     {
-        /* check to see if either input parameter is non-NULL*/
-        if (graph_name != NULL || query_str != NULL)
-        {
-            Node *arg = (graph_name == NULL) ? arg1 : arg2;
-
-            /*
-             * Make sure to clean up session info because the ereport will
-             * cause the function to exit.
-             */
-            reset_session_info();
-
-            ereport(ERROR,
-                    (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("session info requires cypher(NULL, NULL) to be passed"),
-                     parser_errposition(pstate, exprLocation(arg))));
-        }
-        /* get our input parameters from session info */
-        else
-        {
-            graph_name_str = get_session_info_graph_name();
-            query_str = get_session_info_cypher_statement();
-
-            /* check to see if either are NULL */
-            if (graph_name_str == NULL || query_str == NULL)
-            {
-                /*
-                 * Make sure to clean up session info because the ereport will
-                 * cause the function to exit.
-                 */
-                reset_session_info();
-
-                ereport(ERROR,
-                    (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("both session info parameters need to be non-NULL"),
-                     parser_errposition(pstate, -1)));
-            }
-        }
-    }
-    /* otherwise, we get the parameters from the passed function input */
-    else
-    {
-        /* get the graph name string from the passed parameters */
-        if (!graph_name)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("a name constant is expected"),
-                     parser_errposition(pstate, exprLocation(arg1))));
-        }
-        else
-        {
-            graph_name_str = NameStr(*graph_name);
-        }
-        /* get the query string from the passed parameters */
-        if (!query_str)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("a dollar-quoted string constant is expected"),
-                     parser_errposition(pstate, exprLocation(arg2))));
-        }
-    }
-
-    /*
-     * The session info is only valid for one cypher call. Now that we are done
-     * with it, if it was used, we need to reset it to free the memory used.
-     * Additionally, the query location is dependent on how we got the query
-     * string, so set the location accordingly.
-     */
-    if (is_session_info_prepared())
-    {
-        reset_session_info();
-        query_loc = 0;
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("a name constant is expected"),
+                 parser_errposition(pstate, exprLocation(arg1))));
     }
     else
     {
-        /* this call will crash if we use session info */
-        query_loc = get_query_location(((Const *)arg2)->location,
-                                       pstate->p_sourcetext);
+        graph_name_str = NameStr(*graph_name);
     }
+
+    /* get the query string from the passed parameters */
+    if (!query_str)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("a dollar-quoted string constant is expected"),
+                 parser_errposition(pstate, exprLocation(arg2))));
+    }
+
+    query_loc = get_query_location(((Const *)arg2)->location,
+                                   pstate->p_sourcetext);
 
     /* validate the graph exists */
     graph_oid = get_graph_oid(graph_name_str);

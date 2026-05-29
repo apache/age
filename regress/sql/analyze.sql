@@ -36,19 +36,15 @@ SELECT * FROM cypher('analyze', '') AS (result agtype);
 -- should error due to bad cypher statement
 SELECT * FROM cypher('analyze', $$ $$) AS (result agtype);
 
--- should return false due to invalid input to age_prepare_function
+-- age_prepare_cypher is a compatibility stub and must not affect cypher()
 SELECT * FROM age_prepare_cypher(NULL, NULL);
 SELECT * FROM age_prepare_cypher('analyze', NULL);
 SELECT * FROM age_prepare_cypher(NULL, '');
--- should return true but cypher should fail
 SELECT * FROM age_prepare_cypher('analyze', '');
 SELECT * FROM cypher(NULL, NULL) AS (result agtype);
--- should return true and execute cypher command
 SELECT * FROM age_prepare_cypher('analyze', 'MATCH (u) RETURN (u)');
 SELECT * FROM cypher(NULL, NULL) AS (result agtype);
--- should error due to invalid input to cypher function
 SELECT * FROM cypher(NULL, NULL) AS (result agtype);
--- should return true but cypher should fail
 SELECT * FROM age_prepare_cypher('analyze', '$$ $$');
 SELECT * FROM cypher(NULL, NULL) AS (result agtype);
 
