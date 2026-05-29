@@ -463,8 +463,8 @@ static void process_delete_list(CustomScanState *node)
                                                entity_position);
 
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
-        label_cache = search_label_graph_oid_cache(css->delete_data->graph_oid,
-                                                   GET_LABEL_ID(id->val.int_value));
+        label_cache = search_label_graph_oid_cache_cached(
+            css->delete_data->graph_oid, GET_LABEL_ID(id->val.int_value));
         if (label_cache == NULL)
         {
             ereport(ERROR,

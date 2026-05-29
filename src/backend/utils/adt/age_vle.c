@@ -65,6 +65,7 @@
 
 #include "common/hashfn.h"
 #include "funcapi.h"
+#include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 
@@ -78,7 +79,7 @@
 #define GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc) \
             (graphid *) (&vpc->graphid_array_data)
 #define EDGE_STATE_HTAB_NAME "Edge state "
-#define EDGE_STATE_HTAB_INITIAL_SIZE 100000
+#define EDGE_STATE_HTAB_MIN_SIZE 16
 #define EXISTS_HTAB_NAME "known edges"
 #define EXISTS_HTAB_NAME_INITIAL_SIZE 1000
 #define MAXIMUM_NUMBER_OF_CACHED_LOCAL_CONTEXTS 5
@@ -117,6 +118,7 @@ typedef struct VLE_local_context
     char *edge_label_name;         /* edge label name for match */
     Oid edge_label_name_oid;       /* edge label name oid for match */
     agtype *edge_property_constraint; /* edge property constraint as agtype */
+    int num_edge_property_constraints; /* number of edge property constraints */
     Datum edge_property_constraint_datum; /* edge property constraint as Datum */
     uint32 edge_property_constraint_hash; /* edge property constraint hash */
     int64 lidx;                    /* lower (start) bound index */
@@ -157,10 +159,12 @@ typedef struct VLE_path_container
 static VLE_local_context *global_vle_local_contexts = NULL;
 
 /* agtype functions */
-static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee);
+static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
+                             HTAB *relation_cache);
 /* VLE local context functions */
 static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                                   FuncCallContext *funcctx);
+static Oid get_cached_vle_graph_oid(const char *graph_name);
 static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx);
 static void free_VLE_local_context(VLE_local_context *vlelctx);
 /* VLE graph traversal functions */
@@ -174,7 +178,8 @@ static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx);
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id);
 static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
-static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id);
+static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id,
+                            int64 stack_size);
 /* VLE path and edge building functions */
 static VLE_path_container *create_VLE_path_container(int64 path_size);
 static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx);
@@ -340,6 +345,7 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
     HASHCTL edge_state_ctl;
     char *graph_name = NULL;
     char *eshn = NULL;
+    long initial_size;
     int glen;
     int elen;
 
@@ -360,8 +366,10 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
     edge_state_ctl.keysize = sizeof(int64);
     edge_state_ctl.entrysize = sizeof(edge_state_entry);
     edge_state_ctl.hash = tag_hash;
-    vlelctx->edge_state_hashtable = hash_create(eshn,
-                                                EDGE_STATE_HTAB_INITIAL_SIZE,
+
+    initial_size = Max(get_graph_num_loaded_edges(vlelctx->ggctx),
+                       EDGE_STATE_HTAB_MIN_SIZE);
+    vlelctx->edge_state_hashtable = hash_create(eshn, initial_size,
                                                 &edge_state_ctl,
                                                 HASH_ELEM | HASH_FUNCTION);
     pfree_if_not_null(eshn);
@@ -371,7 +379,8 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
  * Helper function to compare the edge constraint (properties we are looking
  * for in a matching edge) against an edge entry's property.
  */
-static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
+static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
+                             HTAB *relation_cache)
 {
     agtype *edge_property = NULL;
     agtype_container *agtc_edge_property = NULL;
@@ -383,7 +392,7 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
     int num_edge_properties = 0;
 
     /* get the number of conditions from the prototype edge */
-    num_edge_property_constraints = AGT_ROOT_COUNT(vlelctx->edge_property_constraint);
+    num_edge_property_constraints = vlelctx->num_edge_property_constraints;
 
     /*
      * We only care about verifying that we have all of the property conditions.
@@ -426,7 +435,8 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
      * it multiple times for the same edge.
      */
     {
-        Datum edge_props_datum = get_edge_entry_properties(ee);
+        Datum edge_props_datum = get_edge_entry_properties_with_cache(
+            ee, relation_cache);
 
         edge_property = DATUM_GET_AGTYPE_P(edge_props_datum);
         agtc_edge_property_constraint = &vlelctx->edge_property_constraint->root;
@@ -707,7 +717,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
     /* get the graph oid */
-    graph_oid = get_graph_oid(graph_name);
+    graph_oid = get_cached_vle_graph_oid(graph_name);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
@@ -818,6 +828,8 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 
     /* store the properties as an agtype */
     vlelctx->edge_property_constraint = agt_edge_property_constraint;
+    vlelctx->num_edge_property_constraints =
+        AGT_ROOT_COUNT(agt_edge_property_constraint);
 
     d_edge_property_constraint = AGTYPE_P_GET_DATUM(agt_edge_property_constraint);
     vlelctx->edge_property_constraint_datum = d_edge_property_constraint;
@@ -833,8 +845,8 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         vlelctx->edge_label_name = pnstrdup(agtv_temp->val.string.val,
                                             agtv_temp->val.string.len);
 
-        label_cache = search_label_name_graph_cache(vlelctx->edge_label_name,
-                                                    graph_oid);
+        label_cache = search_label_name_graph_cache_cached(
+            vlelctx->edge_label_name, graph_oid);
         vlelctx->edge_label_name_oid = label_cache != NULL ?
                                        label_cache->relation : InvalidOid;
     }
@@ -902,6 +914,30 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 
     /* return the new context */
     return vlelctx;
+}
+
+static Oid get_cached_vle_graph_oid(const char *graph_name)
+{
+    static NameData cached_graph_name;
+    static Oid cached_graph_oid = InvalidOid;
+    static uint64 cached_generation = 0;
+    uint64 current_generation = get_graph_cache_generation();
+
+    if (OidIsValid(cached_graph_oid) &&
+        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        cached_generation == current_generation)
+    {
+        return cached_graph_oid;
+    }
+
+    cached_graph_oid = get_graph_oid(graph_name);
+    if (OidIsValid(cached_graph_oid))
+    {
+        namestrcpy(&cached_graph_name, graph_name);
+        cached_generation = get_graph_cache_generation();
+    }
+
+    return cached_graph_oid;
 }
 
 /*
@@ -1020,6 +1056,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+        int64 path_length;
 
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
@@ -1070,6 +1107,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          */
         ese->used_in_path = true;
         gid_stack_push(path_stack, edge_id);
+        path_length = gid_stack_size(path_stack);
 
         /* now get the edge entry so we can get the next vertex to move to */
         ee = get_edge_entry(vlelctx->ggctx, edge_id);
@@ -1080,9 +1118,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          * within the bounds specified?
          */
         if (next_vertex_id == end_vertex_id &&
-            gid_stack_size(path_stack) >= vlelctx->lidx &&
+            path_length >= vlelctx->lidx &&
             (vlelctx->uidx_infinite ||
-             gid_stack_size(path_stack) <= vlelctx->uidx))
+             path_length <= vlelctx->uidx))
         {
             /* we found one */
             found = true;
@@ -1094,14 +1132,14 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          */
         if (next_vertex_id == end_vertex_id &&
             !vlelctx->uidx_infinite &&
-            gid_stack_size(path_stack) > vlelctx->uidx)
+            path_length > vlelctx->uidx)
         {
             continue;
         }
 
         /* add in the edges for the next vertex if we won't exceed the bounds */
         if (vlelctx->uidx_infinite ||
-            gid_stack_size(path_stack) < vlelctx->uidx)
+            path_length < vlelctx->uidx)
         {
             add_valid_vertex_edges(vlelctx, next_vertex_id);
         }
@@ -1148,6 +1186,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
         bool found = false;
+        int64 path_length;
 
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
@@ -1198,6 +1237,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          */
         ese->used_in_path = true;
         gid_stack_push(path_stack, edge_id);
+        path_length = gid_stack_size(path_stack);
 
         /* now get the edge entry so we can get the next vertex to move to */
         ee = get_edge_entry(vlelctx->ggctx, edge_id);
@@ -1207,9 +1247,9 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          * Is this a path that meets our requirements? Is its length within the
          * bounds specified?
          */
-        if (gid_stack_size(path_stack) >= vlelctx->lidx &&
+        if (path_length >= vlelctx->lidx &&
             (vlelctx->uidx_infinite ||
-             gid_stack_size(path_stack) <= vlelctx->uidx))
+             path_length <= vlelctx->uidx))
         {
             /* we found one */
             found = true;
@@ -1217,7 +1257,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
 
         /* add in the edges for the next vertex if we won't exceed the bounds */
         if (vlelctx->uidx_infinite ||
-            gid_stack_size(path_stack) < vlelctx->uidx)
+            path_length < vlelctx->uidx)
         {
             add_valid_vertex_edges(vlelctx, next_vertex_id);
         }
@@ -1237,13 +1277,14 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
  * smaller sized lists. But, it is O(n) so it should only be used for small
  * path_stacks and where appropriate.
  */
-static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
+static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id,
+                            int64 stack_size)
 {
     GraphIdStack *stack = vlelctx->dfs_path_stack;
     int64 i;
 
     /* scan the array-based path stack */
-    for (i = 0; i < gid_stack_size(stack); i++)
+    for (i = 0; i < stack_size; i++)
     {
         if (gid_stack_get(stack, i) == edge_id)
         {
@@ -1274,6 +1315,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     GraphIdNode *edge_in = NULL;
     GraphIdNode *edge_out = NULL;
     GraphIdNode *edge_self = NULL;
+    HTAB *relation_cache = NULL;
 
     /* get the vertex entry */
     ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
@@ -1304,12 +1346,19 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     edges = get_vertex_entry_edges_self(ve);
     edge_self = (edges != NULL) ? get_list_head(edges) : NULL;
 
+    if (vlelctx->num_edge_property_constraints > 0)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "VLE edge match relation cache");
+    }
+
     /* add in valid vertex edges */
     while (edge_out != NULL || edge_in != NULL || edge_self != NULL)
     {
         edge_entry *ee = NULL;
         edge_state_entry *ese = NULL;
         graphid edge_id;
+        int64 path_stack_size;
 
         /* get the edge_id from the next available edge*/
         if (edge_out != NULL)
@@ -1329,8 +1378,9 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
          * This is a fast existence check, relative to the hash search, for when
          * the path stack is small. If the edge is in the path, we skip it.
          */
-        if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
-            is_edge_in_path(vlelctx, edge_id))
+        path_stack_size = gid_stack_size(vlelctx->dfs_path_stack);
+        if (path_stack_size < 10 &&
+            is_edge_in_path(vlelctx, edge_id, path_stack_size))
         {
             /* set to the next available edge */
             if (edge_out != NULL)
@@ -1364,7 +1414,8 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         if (!ese->used_in_path)
         {
             /* validate the edge if it hasn't been already */
-            if (!ese->has_been_matched && is_an_edge_match(vlelctx, ee))
+            if (!ese->has_been_matched &&
+                is_an_edge_match(vlelctx, ee, relation_cache))
             {
                 ese->has_been_matched = true;
                 ese->matched = true;
@@ -1406,6 +1457,8 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
             edge_self = next_GraphIdNode(edge_self);
         }
     }
+
+    destroy_entry_property_relation_cache(relation_cache);
 }
 
 /*
@@ -1587,6 +1640,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state edges_result;
+    HTAB *relation_cache;
     Oid graph_oid = InvalidOid;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
@@ -1608,6 +1662,8 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     MemSet(&edges_result, 0, sizeof(agtype_in_state));
     edges_result.res = push_agtype_value(&edges_result.parse_state,
                                          WAGT_BEGIN_ARRAY, NULL);
+    relation_cache = create_entry_property_relation_cache(
+        "vle edge materialization relation cache");
 
     for (index = 1; index < graphid_array_size - 1; index += 2)
     {
@@ -1622,7 +1678,8 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),
                                             get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties(ee));
+                                            get_edge_entry_properties_with_cache(
+                                                ee, relation_cache));
         /* push the edge*/
         edges_result.res = push_agtype_value(&edges_result.parse_state,
                                              WAGT_ELEM, agtv_edge);
@@ -1631,6 +1688,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     /* close our agtype array */
     edges_result.res = push_agtype_value(&edges_result.parse_state,
                                          WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
 
     /* make it an array */
     edges_result.res->type = AGTV_ARRAY;
@@ -1650,6 +1708,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state path_result;
+    HTAB *relation_cache;
     Oid graph_oid = InvalidOid;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
@@ -1671,6 +1730,8 @@ static agtype_value *build_path(VLE_path_container *vpc)
     MemSet(&path_result, 0, sizeof(agtype_in_state));
     path_result.res = push_agtype_value(&path_result.parse_state,
                                         WAGT_BEGIN_ARRAY, NULL);
+    relation_cache = create_entry_property_relation_cache(
+        "vle path materialization relation cache");
 
     for (index = 0; index < graphid_array_size; index += 2)
     {
@@ -1686,7 +1747,8 @@ static agtype_value *build_path(VLE_path_container *vpc)
         /* reconstruct the vertex */
         agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
                                                 label_name,
-                                                get_vertex_entry_properties(ve));
+                                                get_vertex_entry_properties_with_cache(
+                                                    ve, relation_cache));
         /* push the vertex */
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_vertex);
@@ -1707,7 +1769,8 @@ static agtype_value *build_path(VLE_path_container *vpc)
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),
                                             get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties(ee));
+                                            get_edge_entry_properties_with_cache(
+                                                ee, relation_cache));
         /* push the edge*/
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_edge);
@@ -1716,6 +1779,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
     /* close our agtype array */
     path_result.res = push_agtype_value(&path_result.parse_state,
                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
 
     /* make it a path */
     path_result.res->type = AGTV_PATH;

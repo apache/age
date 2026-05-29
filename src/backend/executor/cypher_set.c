@@ -25,11 +25,11 @@
 #include "utils/rls.h"
 
 #include "commands/label_commands.h"
+#include "catalog/ag_graph.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "utils/age_global_graph.h"
 #include "utils/ag_cache.h"
-#include "catalog/ag_graph.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -68,7 +68,7 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     Plan *subplan;
 
     Assert(list_length(css->cs->custom_plans) == 1);
-    css->graph_oid = get_graph_oid(css->set_list->graph_name);
+    css->graph_oid = css->set_list->graph_oid;
     if (!OidIsValid(css->graph_oid))
     {
         ereport(ERROR,
@@ -559,7 +559,7 @@ void apply_update_list(CustomScanState *node,
 
         /* get the id and label metadata for later */
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
-        label_cache = search_label_graph_oid_cache(
+        label_cache = search_label_graph_oid_cache_cached(
             graph_oid, GET_LABEL_ID(id->val.int_value));
         if (label_cache == NULL)
         {

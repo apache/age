@@ -32,13 +32,16 @@
  *   graph_name      - Name of the graph
  *   graph_oid       - OID of the graph
  *   label_name      - Name of the edge label
+ *   label_relid     - OID of the edge label relation
+ *   label_seq_relid - OID of the edge label sequence relation
  *   label_id        - ID of the label
  *   load_as_agtype  - If true, parse CSV values as agtype (JSON-like)
  *
  * Returns EXIT_SUCCESS on success.
  */
 int create_edges_from_csv_file(char *file_path, char *graph_name, Oid graph_oid,
-                               char *label_name, int label_id,
+                               char *label_name, Oid label_relid,
+                               Oid label_seq_relid, int label_id,
                                bool load_as_agtype);
 
 #endif /* AG_LOAD_EDGES_H */

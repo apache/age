@@ -40,7 +40,9 @@
 #include "utils/builtins.h"
 #include "utils/catcache.h"
 #include "utils/float.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 
 #include "parser/cypher_expr.h"
 #include "parser/cypher_transform_entity.h"
@@ -58,6 +60,20 @@
 #define FUNC_AGTYPE_TYPECAST_PG_BIGINT "agtype_to_int8"
 #define FUNC_AGTYPE_TYPECAST_BOOL "agtype_typecast_bool"
 #define FUNC_AGTYPE_TYPECAST_PG_TEXT "agtype_to_text"
+
+typedef struct function_exists_cache_key
+{
+    NameData funcname;
+    NameData extension;
+} function_exists_cache_key;
+
+typedef struct function_exists_cache_entry
+{
+    function_exists_cache_key key;
+    bool exists;
+} function_exists_cache_entry;
+
+static HTAB *function_exists_cache = NULL;
 
 static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
                                            Node *expr);
@@ -112,6 +128,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found);
 static char *get_mapped_extension(Oid func_oid);
 static bool is_extension_external(char *extension);
 static char *construct_age_function_name(char *funcname);
+static void initialize_function_exists_cache(void);
 static bool function_exists(char *funcname, char *extension);
 static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
                                   Oid source_oid, Oid target_oid,
@@ -1960,7 +1977,29 @@ static bool function_exists(char *funcname, char *extension)
 {
     CatCList *catlist = NULL;
     bool found = false;
+    function_exists_cache_key key;
+    function_exists_cache_entry *entry;
+    bool cache_found;
     int i = 0;
+
+    if (extension != NULL)
+    {
+        initialize_function_exists_cache();
+        MemSet(&key, 0, sizeof(key));
+        namestrcpy(&key.funcname, funcname);
+        namestrcpy(&key.extension, extension);
+
+        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                            &cache_found);
+        if (cache_found)
+        {
+            return entry->exists;
+        }
+    }
+    else
+    {
+        entry = NULL;
+    }
 
     /* get a list of matching functions */
     catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
@@ -1968,6 +2007,10 @@ static bool function_exists(char *funcname, char *extension)
     if (catlist->n_members == 0)
     {
         ReleaseSysCacheList(catlist);
+        if (entry != NULL)
+        {
+            entry->exists = false;
+        }
         return false;
     }
     else if (extension == NULL)
@@ -1992,7 +2035,36 @@ static bool function_exists(char *funcname, char *extension)
     /* we need to release the cache list */
     ReleaseSysCacheList(catlist);
 
+    if (entry != NULL)
+    {
+        entry->exists = found;
+    }
+
     return found;
+}
+
+static void initialize_function_exists_cache(void)
+{
+    HASHCTL hash_ctl;
+
+    if (function_exists_cache != NULL)
+    {
+        return;
+    }
+
+    if (!CacheMemoryContext)
+    {
+        CreateCacheMemoryContext();
+    }
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(function_exists_cache_key);
+    hash_ctl.entrysize = sizeof(function_exists_cache_entry);
+    hash_ctl.hcxt = CacheMemoryContext;
+
+    function_exists_cache = hash_create("cypher function existence cache", 64,
+                                        &hash_ctl,
+                                        HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
 /*
@@ -2062,10 +2134,22 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
          * If it's not in age, check if it's a potential call to some function
          * in another installed extension.
          */
-        else if(function_exists(name, NULL))
+        else
         {
-            Form_pg_proc procform = get_procform(fn, true);
-            char *extension = get_mapped_extension(procform->oid);
+            Form_pg_proc procform = get_procform(fn, false);
+            char *extension;
+
+            if (procform == NULL)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_FUNCTION),
+                        errmsg("function %s does not exist", name),
+                        errhint("If the function is from an external extension, "
+                                "make sure the extension is installed and the "
+                                "function is in the search path.")));
+            }
+
+            extension = get_mapped_extension(procform->oid);
 
             /*
              * If the function is from another extension, transform
@@ -2085,16 +2169,6 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
             {
                 fname = fn->funcname;
             }
-        }
-        /* no function found */
-        else
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_UNDEFINED_FUNCTION),
-                    errmsg("function %s does not exist", name),
-                    errhint("If the function is from an external extension, "
-                            "make sure the extension is installed and the "
-                            "function is in the search path.")));
         }
     }
 

@@ -144,7 +144,7 @@ Oid get_graph_oid(const char *graph_name)
 {
     graph_cache_data *cache_data;
 
-    cache_data = search_graph_name_cache(graph_name);
+    cache_data = search_graph_name_cache_cached(graph_name);
     if (cache_data)
     {
         return cache_data->oid;
@@ -159,7 +159,7 @@ static Oid get_graph_namespace(const char *graph_name)
 {
     graph_cache_data *cache_data;
 
-    cache_data = search_graph_name_cache(graph_name);
+    cache_data = search_graph_name_cache_cached(graph_name);
     if (!cache_data)
     {
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
@@ -178,7 +178,7 @@ bool graph_namespace_exists(Oid graph_oid)
 {
     graph_cache_data *cache_data;
 
-    cache_data = search_graph_namespace_cache(graph_oid);
+    cache_data = search_graph_namespace_cache_cached(graph_oid);
     if (cache_data)
     {
         return true;    

@@ -114,6 +114,11 @@ static Query *transform_cypher_clause_with_where(cypher_parsestate *cpstate,
                                                  transform_method transform,
                                                  cypher_clause *clause,
                                                  Node *where);
+static Relation open_label_relation_with_cache(cypher_parsestate *cpstate,
+                                               const char *label_name,
+                                               int location,
+                                               LOCKMODE lockmode,
+                                               label_cache_data *label_cache);
 /* match clause */
 static Query *transform_cypher_match(cypher_parsestate *cpstate,
                                      cypher_clause *clause);
@@ -413,11 +418,24 @@ open_label_relation_with_lock(cypher_parsestate *cpstate,
                               const char *label_name, int location,
                               LOCKMODE lockmode)
 {
-    label_cache_data *label_cache;
+    return open_label_relation_with_cache(cpstate, label_name, location,
+                                          lockmode, NULL);
+}
+
+static Relation
+open_label_relation_with_cache(cypher_parsestate *cpstate,
+                               const char *label_name, int location,
+                               LOCKMODE lockmode,
+                               label_cache_data *label_cache)
+{
     Oid relid;
 
-    label_cache = search_label_name_graph_cache(label_name,
-                                                cpstate->graph_oid);
+    if (label_cache == NULL)
+    {
+        label_cache = search_label_name_graph_cache_cached(label_name,
+                                                           cpstate->graph_oid);
+    }
+
     relid = label_cache != NULL ? label_cache->relation : InvalidOid;
     if (!OidIsValid(relid))
     {
@@ -428,14 +446,6 @@ open_label_relation_with_lock(cypher_parsestate *cpstate,
     }
 
     return table_open(relid, lockmode);
-}
-
-static Relation
-open_label_relation(cypher_parsestate *cpstate, const char *label_name,
-                    int location)
-{
-    return open_label_relation_with_lock(cpstate, label_name, location,
-                                         RowExclusiveLock);
 }
 
 /*
@@ -473,7 +483,8 @@ add_entity_permissions(cypher_parsestate *cpstate, char *var_name,
         return;
     }
 
-    label_cache = search_label_name_graph_cache(label, cpstate->graph_oid);
+    label_cache = search_label_name_graph_cache_cached(label,
+                                                       cpstate->graph_oid);
     relid = label_cache != NULL ? label_cache->relation : InvalidOid;
     if (OidIsValid(relid))
     {
@@ -2911,8 +2922,8 @@ static bool match_check_valid_label(cypher_match *match,
                 if (node->label)
                 {
                     label_cache_data *lcd =
-                        search_label_name_graph_cache(node->label,
-                                                      cpstate->graph_oid);
+                        search_label_name_graph_cache_cached(
+                            node->label, cpstate->graph_oid);
 
                     if (lcd == NULL ||
                         lcd->kind != LABEL_KIND_VERTEX)
@@ -2930,8 +2941,8 @@ static bool match_check_valid_label(cypher_match *match,
                 if (rel->label)
                 {
                     label_cache_data *lcd =
-                        search_label_name_graph_cache(rel->label,
-                                                      cpstate->graph_oid);
+                        search_label_name_graph_cache_cached(
+                            rel->label, cpstate->graph_oid);
 
                     if (lcd == NULL || lcd->kind != LABEL_KIND_EDGE)
                     {
@@ -4398,8 +4409,8 @@ static List *make_edge_quals(cypher_parsestate *cpstate,
 static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
                                            Node *id_field, char *label)
 {
-    label_cache_data *lcd = search_label_name_graph_cache(label,
-                                                          cpstate->graph_oid);
+    label_cache_data *lcd = search_label_name_graph_cache_cached(
+        label, cpstate->graph_oid);
     A_Const *n;
     FuncCall *fc;
     String *ag_catalog, *extract_label_id;
@@ -4979,8 +4990,8 @@ static bool path_check_valid_label(cypher_path *path,
             if (node->label)
             {
                 label_cache_data *lcd =
-                    search_label_name_graph_cache(node->label,
-                                                  cpstate->graph_oid);
+                    search_label_name_graph_cache_cached(node->label,
+                                                         cpstate->graph_oid);
 
                 if (lcd == NULL || lcd->kind != LABEL_KIND_VERTEX)
                 {
@@ -4997,8 +5008,8 @@ static bool path_check_valid_label(cypher_path *path,
             if (rel->label)
             {
                 label_cache_data *lcd =
-                    search_label_name_graph_cache(rel->label,
-                                                  cpstate->graph_oid);
+                    search_label_name_graph_cache_cached(rel->label,
+                                                         cpstate->graph_oid);
 
                 if (lcd == NULL || lcd->kind != LABEL_KIND_EDGE)
                 {
@@ -6524,8 +6535,8 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
                  parser_errposition(&cpstate->pstate, edge->location)));
     }
 
-    label_cache = search_label_name_graph_cache(edge->label,
-                                                cpstate->graph_oid);
+    label_cache = search_label_name_graph_cache_cached(edge->label,
+                                                       cpstate->graph_oid);
     if (label_cache != NULL && label_cache->kind == LABEL_KIND_VERTEX)
     {
         ereport(ERROR,
@@ -6549,7 +6560,10 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     /* lock the relation of the label */
-    label_relation = open_label_relation(cpstate, edge->label, edge->location);
+    label_relation = open_label_relation_with_cache(cpstate, edge->label,
+                                                    edge->location,
+                                                    RowExclusiveLock,
+                                                    label_cache);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);
@@ -6614,8 +6628,8 @@ transform_create_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     if (node->label)
     {
-        label_cache = search_label_name_graph_cache(node->label,
-                                                    cpstate->graph_oid);
+        label_cache = search_label_name_graph_cache_cached(
+            node->label, cpstate->graph_oid);
         if (label_cache != NULL && label_cache->kind == LABEL_KIND_EDGE)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -6814,8 +6828,8 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
         rel->label_name = node->label;
     }
 
-    label_cache = search_label_name_graph_cache(node->label,
-                                                cpstate->graph_oid);
+    label_cache = search_label_name_graph_cache_cached(node->label,
+                                                       cpstate->graph_oid);
 
     /* create the label entry if it does not exist */
     if (label_cache == NULL)
@@ -6833,7 +6847,10 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    label_relation = open_label_relation(cpstate, node->label, node->location);
+    label_relation = open_label_relation_with_cache(cpstate, node->label,
+                                                    node->location,
+                                                    RowExclusiveLock,
+                                                    label_cache);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);
@@ -8078,8 +8095,8 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
 
-    label_cache = search_label_name_graph_cache(edge->label,
-                                                cpstate->graph_oid);
+    label_cache = search_label_name_graph_cache_cached(edge->label,
+                                                       cpstate->graph_oid);
     if (label_cache != NULL && label_cache->kind == LABEL_KIND_VERTEX)
     {
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -8106,7 +8123,10 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     /* lock the relation of the label */
-    label_relation = open_label_relation(cpstate, edge->label, edge->location);
+    label_relation = open_label_relation_with_cache(cpstate, edge->label,
+                                                    edge->location,
+                                                    RowExclusiveLock,
+                                                    label_cache);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);
@@ -8206,8 +8226,8 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
         rel->label_name = node->label;
     }
 
-    label_cache = search_label_name_graph_cache(node->label,
-                                                cpstate->graph_oid);
+    label_cache = search_label_name_graph_cache_cached(node->label,
+                                                       cpstate->graph_oid);
     if (label_cache != NULL && label_cache->kind == LABEL_KIND_EDGE)
     {
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -8236,7 +8256,10 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    label_relation = open_label_relation(cpstate, node->label, node->location);
+    label_relation = open_label_relation_with_cache(cpstate, node->label,
+                                                    node->location,
+                                                    RowExclusiveLock,
+                                                    label_cache);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);

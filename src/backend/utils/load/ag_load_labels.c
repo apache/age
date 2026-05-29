@@ -130,12 +130,13 @@ int create_labels_from_csv_file(char *file_path,
                                 char *graph_name,
                                 Oid graph_oid,
                                 char *label_name,
+                                Oid label_relid,
+                                Oid label_seq_relid,
                                 int label_id,
                                 bool id_field_exists,
                                 bool load_as_agtype)
 {
     Relation        label_rel;
-    Oid             label_relid;
     CopyFromState   cstate;
     List           *copy_options;
     ParseState     *pstate;
@@ -144,27 +145,17 @@ int create_labels_from_csv_file(char *file_path,
     char          **header = NULL;
     int             header_count = 0;
     bool            is_first_row = true;
-    char           *label_seq_name;
-    Oid             label_seq_relid;
     int64           curr_seq_num = 0;
     batch_insert_state *batch_state = NULL;
     MemoryContext   batch_context;
     MemoryContext   old_context;
-    label_cache_data *label_cache;
 
     /* Create a memory context for batch processing - reset after each batch */
     batch_context = AllocSetContextCreate(CurrentMemoryContext,
                                           "AGE CSV Load Batch Context",
                                           ALLOCSET_DEFAULT_SIZES);
 
-    /* Get the label relation */
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
-    label_relid = label_cache != NULL ? label_cache->relation : InvalidOid;
     label_rel = table_open(label_relid, RowExclusiveLock);
-
-    /* Get sequence info */
-    label_seq_name = get_label_seq_relation_name(label_name);
-    label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
 
     if (id_field_exists)
     {

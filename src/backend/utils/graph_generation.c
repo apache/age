@@ -20,12 +20,19 @@
 #include "postgres.h"
 
 #include "access/genam.h"
+#include "access/table.h"
 #include "commands/graph_commands.h"
 #include "utils/load/age_load.h"
 
 
 int64 get_nextval_internal(graph_cache_data* graph_cache,
                            label_cache_data* label_cache);
+static void queue_vertex_insert(batch_insert_state *batch_state,
+                                graphid vertex_id,
+                                agtype *vertex_properties);
+static void queue_edge_insert(batch_insert_state *batch_state,
+                              graphid edge_id, graphid start_id,
+                              graphid end_id, agtype *edge_properties);
 /*
  * Auxiliary function to get the next internal value in the graph,
  * so a new object (node or edge) graph id can be composed.
@@ -42,6 +49,66 @@ int64 get_nextval_internal(graph_cache_data* graph_cache,
                                    graph_cache->namespace);
 
     return nextval_internal(obj_seq_id, true);
+}
+
+static void queue_vertex_insert(batch_insert_state *batch_state,
+                                graphid vertex_id,
+                                agtype *vertex_properties)
+{
+    TupleTableSlot *slot;
+
+    slot = batch_state->slots[batch_state->num_tuples];
+    ExecClearTuple(slot);
+
+    slot->tts_values[0] = GRAPHID_GET_DATUM(vertex_id);
+    slot->tts_values[1] = AGTYPE_P_GET_DATUM(vertex_properties);
+    slot->tts_isnull[0] = false;
+    slot->tts_isnull[1] = false;
+
+    ExecStoreVirtualTuple(slot);
+
+    batch_state->buffered_bytes += VARSIZE(vertex_properties);
+    batch_state->num_tuples++;
+
+    if (batch_state->num_tuples >= BATCH_SIZE ||
+        batch_state->buffered_bytes >= MAX_BUFFERED_BYTES)
+    {
+        insert_batch(batch_state);
+        batch_state->num_tuples = 0;
+        batch_state->buffered_bytes = 0;
+    }
+}
+
+static void queue_edge_insert(batch_insert_state *batch_state,
+                              graphid edge_id, graphid start_id,
+                              graphid end_id, agtype *edge_properties)
+{
+    TupleTableSlot *slot;
+
+    slot = batch_state->slots[batch_state->num_tuples];
+    ExecClearTuple(slot);
+
+    slot->tts_values[0] = GRAPHID_GET_DATUM(edge_id);
+    slot->tts_values[1] = GRAPHID_GET_DATUM(start_id);
+    slot->tts_values[2] = GRAPHID_GET_DATUM(end_id);
+    slot->tts_values[3] = AGTYPE_P_GET_DATUM(edge_properties);
+    slot->tts_isnull[0] = false;
+    slot->tts_isnull[1] = false;
+    slot->tts_isnull[2] = false;
+    slot->tts_isnull[3] = false;
+
+    ExecStoreVirtualTuple(slot);
+
+    batch_state->buffered_bytes += VARSIZE(edge_properties);
+    batch_state->num_tuples++;
+
+    if (batch_state->num_tuples >= BATCH_SIZE ||
+        batch_state->buffered_bytes >= MAX_BUFFERED_BYTES)
+    {
+        insert_batch(batch_state);
+        batch_state->num_tuples = 0;
+        batch_state->buffered_bytes = 0;
+    }
 }
 
 PG_FUNCTION_INFO_V1(create_complete_graph);
@@ -78,6 +145,10 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     graph_cache_data *graph_cache;
     label_cache_data *vertex_cache;
     label_cache_data *edge_cache;
+    batch_insert_state *vtx_batch_state = NULL;
+    batch_insert_state *edge_batch_state = NULL;
+    Relation vtx_rel;
+    Relation edge_rel;
 
     Oid nsp_id;
     Name vtx_seq_name;
@@ -127,21 +198,30 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
         }
     }
 
-    if (!graph_exists(graph_name_str))
+    graph_cache = search_graph_name_cache_cached(graph_name_str);
+    if (graph_cache == NULL)
     {
         DirectFunctionCall1(create_graph, CStringGetDatum(graph_name->data));
+        graph_cache = search_graph_name_cache_cached(graph_name_str);
+        if (graph_cache == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                     errmsg("graph \"%s\" was not found after creation",
+                            graph_name_str)));
+        }
     }
 
-    graph_oid = get_graph_oid(graph_name_str);
-
-    graph_cache = search_graph_name_cache(graph_name_str);
-    vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
+    graph_oid = graph_cache->oid;
+    vertex_cache = search_label_name_graph_cache_cached(vtx_name_str,
+                                                        graph_oid);
     if (vertex_cache == NULL)
     {
         DirectFunctionCall2(create_vlabel,
                             CStringGetDatum(graph_name->data),
                             CStringGetDatum(vtx_name_str));
-        vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
+        vertex_cache = search_label_name_graph_cache_cached(vtx_name_str,
+                                                            graph_oid);
         if (vertex_cache == NULL)
         {
             ereport(ERROR,
@@ -151,13 +231,14 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
         }
     }
 
-    edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
+    edge_cache = search_label_name_graph_cache_cached(edge_name_str, graph_oid);
     if (edge_cache == NULL)
     {
         DirectFunctionCall2(create_elabel,
                             CStringGetDatum(graph_name->data),
                             CStringGetDatum(edge_label_name->data));
-        edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
+        edge_cache = search_label_name_graph_cache_cached(edge_name_str,
+                                                          graph_oid);
         if (edge_cache == NULL)
         {
             ereport(ERROR,
@@ -182,15 +263,23 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     props = create_empty_agtype();
 
+    vtx_rel = table_open(vertex_cache->relation, RowExclusiveLock);
+    init_batch_insert(&vtx_batch_state, vertex_cache->relation);
+
     /* Creating vertices*/
     for (i=(int64)1; i<=no_vertices; i++)
     {
         vid = nextval_internal(vtx_seq_id, true);
         object_graph_id = make_graphid(vtx_label_id, vid);
-        insert_vertex_simple(graph_oid, vtx_name_str, object_graph_id, props);
+        queue_vertex_insert(vtx_batch_state, object_graph_id, props);
     }
+    finish_batch_insert(&vtx_batch_state);
+    table_close(vtx_rel, RowExclusiveLock);
 
     lid = vid;
+
+    edge_rel = table_open(edge_cache->relation, RowExclusiveLock);
+    init_batch_insert(&edge_batch_state, edge_cache->relation);
 
     /* Creating edges*/
     for (i = 1; i<=no_vertices-1; i++)
@@ -205,11 +294,13 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
             start_vertex_graph_id = make_graphid(vtx_label_id, start_vid);
             end_vertex_graph_id = make_graphid(vtx_label_id, end_vid);
 
-            insert_edge_simple(graph_oid, edge_name_str, object_graph_id,
-                               start_vertex_graph_id, end_vertex_graph_id,
-                               props);
+            queue_edge_insert(edge_batch_state, object_graph_id,
+                              start_vertex_graph_id, end_vertex_graph_id,
+                              props);
         }
     }
+    finish_batch_insert(&edge_batch_state);
+    table_close(edge_rel, RowExclusiveLock);
     PG_RETURN_VOID();
 }
 
@@ -328,14 +419,21 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
                                                arguments->args[5].value,
                                                arguments->args[3].value);
 
-    graph_oid = get_graph_oid(graph_name_str);
-
     /*
      * Fetching caches to get next values for graph id's, and access nodes
      * to be connected with edges.
      */
-    graph_cache = search_graph_name_cache(graph_name_str);
-    node_cache = search_label_name_graph_cache(node_label_str, graph_oid);
+    graph_cache = search_graph_name_cache_cached(graph_name_str);
+    if (graph_cache == NULL)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("graph \"%s\" does not exist",
+                               graph_name_str)));
+    }
+
+    graph_oid = graph_cache->oid;
+    node_cache = search_label_name_graph_cache_cached(node_label_str,
+                                                      graph_oid);
     if (node_cache == NULL)
     {
         ereport(ERROR,
@@ -344,7 +442,8 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
                         node_label_str)));
     }
 
-    edge_cache = search_label_name_graph_cache(edge_label_str, graph_oid);
+    edge_cache = search_label_name_graph_cache_cached(edge_label_str,
+                                                      graph_oid);
     if (edge_cache == NULL)
     {
         ereport(ERROR,

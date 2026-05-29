@@ -80,6 +80,12 @@ typedef struct GraphVersionState
     GraphVersionEntry entries[AGE_MAX_GRAPHS];
 } GraphVersionState;
 
+typedef struct EntryPropertyRelationCacheEntry
+{
+    Oid relid;
+    Relation rel;
+} EntryPropertyRelationCacheEntry;
+
 /*
  * Version mode detection — determined once per backend on first use.
  * DSM:      PG 17+ GetNamedDSMSegment (no shared_preload_libraries needed)
@@ -95,6 +101,8 @@ typedef enum
 } VersionMode;
 
 static VersionMode version_mode = VERSION_MODE_UNKNOWN;
+static Oid cached_version_graph_oid = InvalidOid;
+static int cached_version_graph_index = -1;
 
 /* For PG < 17 shmem path */
 static GraphVersionState *shmem_version_state = NULL;
@@ -167,8 +175,10 @@ static GRAPH_global_context_container global_graph_contexts_container = {0};
 /* declarations */
 /* GRAPH global context functions */
 static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx);
+static bool delete_specific_GRAPH_global_context_by_oid(Oid graph_oid);
 static bool delete_specific_GRAPH_global_contexts(char *graph_name);
 static bool delete_GRAPH_global_contexts(void);
+static Oid get_cached_global_graph_oid(const char *graph_name);
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx);
@@ -187,6 +197,11 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
                                 char *vertex_label_name,
                                 ItemPointerData tid);
+static Datum fetch_entry_properties(Oid relid, ItemPointerData tid,
+                                    AttrNumber property_attr,
+                                    HTAB *relation_cache,
+                                    const char *stale_msg);
+static Relation get_entry_property_relation(Oid relid, HTAB *relation_cache);
 /* definitions */
 
 /*
@@ -1082,8 +1097,6 @@ static bool delete_GRAPH_global_contexts(void)
  */
 static bool delete_specific_GRAPH_global_contexts(char *graph_name)
 {
-    GRAPH_global_context *prev_ggctx = NULL;
-    GRAPH_global_context *curr_ggctx = NULL;
     Oid graph_oid = InvalidOid;
 
     if (graph_name == NULL)
@@ -1092,7 +1105,44 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
     }
 
     /* get the graph oid */
-    graph_oid = get_graph_oid(graph_name);
+    graph_oid = get_cached_global_graph_oid(graph_name);
+
+    return delete_specific_GRAPH_global_context_by_oid(graph_oid);
+}
+
+static Oid get_cached_global_graph_oid(const char *graph_name)
+{
+    static NameData cached_graph_name;
+    static Oid cached_graph_oid = InvalidOid;
+    static uint64 cached_generation = 0;
+    uint64 current_generation = get_graph_cache_generation();
+
+    if (OidIsValid(cached_graph_oid) &&
+        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        cached_generation == current_generation)
+    {
+        return cached_graph_oid;
+    }
+
+    cached_graph_oid = get_graph_oid(graph_name);
+    if (OidIsValid(cached_graph_oid))
+    {
+        namestrcpy(&cached_graph_name, graph_name);
+        cached_generation = get_graph_cache_generation();
+    }
+
+    return cached_graph_oid;
+}
+
+static bool delete_specific_GRAPH_global_context_by_oid(Oid graph_oid)
+{
+    GRAPH_global_context *prev_ggctx = NULL;
+    GRAPH_global_context *curr_ggctx = NULL;
+
+    if (!OidIsValid(graph_oid))
+    {
+        return false;
+    }
 
     /* lock the global contexts list */
     pthread_mutex_lock(&global_graph_contexts_container.mutex_lock);
@@ -1224,6 +1274,11 @@ ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx)
     return ggctx->vertices;
 }
 
+int64 get_graph_num_loaded_edges(GRAPH_global_context *ggctx)
+{
+    return ggctx->num_loaded_edges;
+}
+
 /* vertex_entry accessor functions */
 graphid get_vertex_entry_id(vertex_entry *ve)
 {
@@ -1271,13 +1326,32 @@ char *get_vertex_entry_label_name(vertex_entry *ve)
  */
 Datum get_vertex_entry_properties(vertex_entry *ve)
 {
+    return get_vertex_entry_properties_with_cache(ve, NULL);
+}
+
+Datum get_vertex_entry_properties_with_cache(vertex_entry *ve,
+                                             HTAB *relation_cache)
+{
+    return fetch_entry_properties(
+        ve->vertex_label_table_oid, ve->tid, 2, relation_cache,
+        "get_vertex_entry_properties: stale TID - "
+        "vertex entry references a tuple that is no longer visible");
+}
+
+static Datum fetch_entry_properties(Oid relid, ItemPointerData tid,
+                                    AttrNumber property_attr,
+                                    HTAB *relation_cache,
+                                    const char *stale_msg)
+{
     Relation rel;
     HeapTupleData tuple;
     Buffer buffer;
     Datum result = (Datum) 0;
+    bool close_rel = false;
 
-    rel = table_open(ve->vertex_label_table_oid, AccessShareLock);
-    tuple.t_self = ve->tid;
+    rel = get_entry_property_relation(relid, relation_cache);
+    close_rel = relation_cache == NULL;
+    tuple.t_self = tid;
 
     if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
     {
@@ -1285,8 +1359,7 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
         bool isnull;
         Datum props;
 
-        /* properties is column 2 (1-indexed) */
-        props = heap_getattr(&tuple, 2, tupdesc, &isnull);
+        props = heap_getattr(&tuple, property_attr, tupdesc, &isnull);
         if (!isnull)
         {
             result = datumCopy(props, false, -1);
@@ -1295,7 +1368,10 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
         ReleaseBuffer(buffer);
     }
 
-    table_close(rel, AccessShareLock);
+    if (close_rel)
+    {
+        table_close(rel, AccessShareLock);
+    }
 
     /*
      * If heap_fetch failed, the tuple is no longer visible. This should
@@ -1304,8 +1380,7 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
      */
     if (result == (Datum) 0)
     {
-        elog(ERROR, "get_vertex_entry_properties: stale TID - "
-             "vertex entry references a tuple that is no longer visible");
+        elog(ERROR, "%s", stale_msg);
     }
 
     return result;
@@ -1333,39 +1408,71 @@ char *get_edge_entry_label_name(edge_entry *ee)
  */
 Datum get_edge_entry_properties(edge_entry *ee)
 {
-    Relation rel;
-    HeapTupleData tuple;
-    Buffer buffer;
-    Datum result = (Datum) 0;
+    return get_edge_entry_properties_with_cache(ee, NULL);
+}
 
-    rel = table_open(ee->edge_label_table_oid, AccessShareLock);
-    tuple.t_self = ee->tid;
+Datum get_edge_entry_properties_with_cache(edge_entry *ee,
+                                           HTAB *relation_cache)
+{
+    return fetch_entry_properties(
+        ee->edge_label_table_oid, ee->tid, 4, relation_cache,
+        "get_edge_entry_properties: stale TID - "
+        "edge entry references a tuple that is no longer visible");
+}
 
-    if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
+HTAB *create_entry_property_relation_cache(const char *name)
+{
+    HASHCTL hash_ctl;
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(Oid);
+    hash_ctl.entrysize = sizeof(EntryPropertyRelationCacheEntry);
+    hash_ctl.hcxt = CurrentMemoryContext;
+
+    return hash_create(name, 8, &hash_ctl,
+                       HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+void destroy_entry_property_relation_cache(HTAB *relation_cache)
+{
+    HASH_SEQ_STATUS hash_seq;
+    EntryPropertyRelationCacheEntry *entry;
+
+    if (relation_cache == NULL)
     {
-        TupleDesc tupdesc = RelationGetDescr(rel);
-        bool isnull;
-        Datum props;
+        return;
+    }
 
-        /* properties is column 4 (1-indexed) */
-        props = heap_getattr(&tuple, 4, tupdesc, &isnull);
-        if (!isnull)
+    hash_seq_init(&hash_seq, relation_cache);
+    while ((entry = hash_seq_search(&hash_seq)) != NULL)
+    {
+        if (entry->rel != NULL)
         {
-            result = datumCopy(props, false, -1);
+            table_close(entry->rel, AccessShareLock);
         }
-
-        ReleaseBuffer(buffer);
     }
 
-    table_close(rel, AccessShareLock);
+    hash_destroy(relation_cache);
+}
 
-    if (result == (Datum) 0)
+static Relation get_entry_property_relation(Oid relid, HTAB *relation_cache)
+{
+    EntryPropertyRelationCacheEntry *entry;
+    bool found;
+
+    if (relation_cache == NULL)
     {
-        elog(ERROR, "get_edge_entry_properties: stale TID - "
-             "edge entry references a tuple that is no longer visible");
+        return table_open(relid, AccessShareLock);
     }
 
-    return result;
+    entry = hash_search(relation_cache, &relid, HASH_ENTER, &found);
+    if (!found)
+    {
+        entry->relid = relid;
+        entry->rel = table_open(relid, AccessShareLock);
+    }
+
+    return entry->rel;
 }
 
 graphid get_edge_entry_start_vertex_id(edge_entry *ee)
@@ -1465,7 +1572,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
                           agtv_temp->val.string.len);
 
     /* get the graph oid */
-    graph_oid = get_graph_oid(graph_name);
+    graph_oid = get_cached_global_graph_oid(graph_name);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
@@ -1564,14 +1671,14 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
 
+    /* get the graph oid */
+    graph_oid = get_cached_global_graph_oid(graph_name);
+
     /*
      * Remove any context for this graph. This is done to allow graph_stats to
      * show any load issues.
      */
-    delete_specific_GRAPH_global_contexts(graph_name);
-
-    /* get the graph oid */
-    graph_oid = get_graph_oid(graph_name);
+    delete_specific_GRAPH_global_context_by_oid(graph_oid);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
@@ -1764,14 +1871,29 @@ uint64 get_graph_version(Oid graph_oid)
         return 0;
     }
 
+    if (cached_version_graph_oid == graph_oid &&
+        cached_version_graph_index >= 0 &&
+        cached_version_graph_index < state->num_entries &&
+        state->entries[cached_version_graph_index].graph_oid == graph_oid)
+    {
+        return pg_atomic_read_u64(
+            &state->entries[cached_version_graph_index].version);
+    }
+
     /* lock-free scan of the array */
     for (i = 0; i < state->num_entries; i++)
     {
         if (state->entries[i].graph_oid == graph_oid)
         {
+            cached_version_graph_oid = graph_oid;
+            cached_version_graph_index = i;
+
             return pg_atomic_read_u64(&state->entries[i].version);
         }
     }
+
+    cached_version_graph_oid = InvalidOid;
+    cached_version_graph_index = -1;
 
     return 0;
 }
@@ -1791,11 +1913,24 @@ void increment_graph_version(Oid graph_oid)
         return;
     }
 
+    if (cached_version_graph_oid == graph_oid &&
+        cached_version_graph_index >= 0 &&
+        cached_version_graph_index < state->num_entries &&
+        state->entries[cached_version_graph_index].graph_oid == graph_oid)
+    {
+        pg_atomic_fetch_add_u64(
+            &state->entries[cached_version_graph_index].version, 1);
+        return;
+    }
+
     /* try to find existing entry (lock-free) */
     for (i = 0; i < state->num_entries; i++)
     {
         if (state->entries[i].graph_oid == graph_oid)
         {
+            cached_version_graph_oid = graph_oid;
+            cached_version_graph_index = i;
+
             pg_atomic_fetch_add_u64(&state->entries[i].version, 1);
             return;
         }
@@ -1810,6 +1945,9 @@ void increment_graph_version(Oid graph_oid)
         if (state->entries[i].graph_oid == graph_oid)
         {
             LWLockRelease(&state->lock);
+            cached_version_graph_oid = graph_oid;
+            cached_version_graph_index = i;
+
             pg_atomic_fetch_add_u64(&state->entries[i].version, 1);
             return;
         }
@@ -1822,6 +1960,8 @@ void increment_graph_version(Oid graph_oid)
 
         state->entries[idx].graph_oid = graph_oid;
         pg_atomic_init_u64(&state->entries[idx].version, 1);
+        cached_version_graph_oid = graph_oid;
+        cached_version_graph_index = idx;
 
         /*
          * Write barrier ensures the entry fields are fully visible to

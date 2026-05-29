@@ -161,8 +161,10 @@ static bool is_object_vertex(agtype_value *agtv);
 static bool is_object_edge(agtype_value *agtv);
 static bool is_array_path(agtype_value *agtv);
 /* graph entity retrieval */
+static Oid get_cached_graph_oid_for_name(const char *graph_name);
 static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                         int64 graphid);
+static Oid get_cached_vertex_id_index_oid(Relation vertex_label_relation);
 static char *get_label_name(const char *graph_name, graphid element_graphid,
                             Oid *label_relation);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -5629,17 +5631,18 @@ Datum age_end_id(PG_FUNCTION_ARGS)
 
 /*
  * Function to retrieve a label name, given the graph name and graphid of the
- * node or edge. The function returns a pointer to a duplicated string that
- * needs to be freed when you are finished using it.
+ * node or edge. The returned pointer is owned by the label cache and must not
+ * be modified or freed.
  */
 static char *get_label_name(const char *graph_name, graphid element_graphid,
                             Oid *label_relation)
 {
-    Oid graph_oid = get_graph_oid(graph_name);
+    Oid graph_oid = get_cached_graph_oid_for_name(graph_name);
     int32 label_id = get_graphid_label_id(element_graphid);
     label_cache_data *label_cache;
 
-    label_cache = search_label_graph_oid_cache(graph_oid, label_id);
+    label_cache = search_label_graph_oid_cache_cached(graph_oid, label_id);
+
     if (label_cache == NULL)
     {
         ereport(ERROR,
@@ -5649,7 +5652,31 @@ static char *get_label_name(const char *graph_name, graphid element_graphid,
 
     *label_relation = label_cache->relation;
 
-    return pstrdup(NameStr(label_cache->name));
+    return NameStr(label_cache->name);
+}
+
+static Oid get_cached_graph_oid_for_name(const char *graph_name)
+{
+    static NameData cached_graph_name;
+    static Oid cached_graph_oid = InvalidOid;
+    static uint64 cached_generation = 0;
+    uint64 current_generation = get_graph_cache_generation();
+
+    if (OidIsValid(cached_graph_oid) &&
+        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        cached_generation == current_generation)
+    {
+        return cached_graph_oid;
+    }
+
+    cached_graph_oid = get_graph_oid(graph_name);
+    if (OidIsValid(cached_graph_oid))
+    {
+        namestrcpy(&cached_graph_name, graph_name);
+        cached_generation = get_graph_cache_generation();
+    }
+
+    return cached_graph_oid;
 }
 
 static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
@@ -5681,8 +5708,7 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
     /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
 
-    index_oid = find_usable_btree_index_for_attr(graph_vertex_label,
-                                                 Anum_ag_label_vertex_table_id);
+    index_oid = get_cached_vertex_id_index_oid(graph_vertex_label);
 
     if (OidIsValid(index_oid))
     {
@@ -12163,6 +12189,31 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
     /* return the result */
     *is_agnull = false;
     return result;
+}
+
+static Oid get_cached_vertex_id_index_oid(Relation vertex_label_relation)
+{
+    static Oid cached_relid = InvalidOid;
+    static Oid cached_index_oid = InvalidOid;
+    static uint64 cached_generation = 0;
+    static bool cached = false;
+    Oid relid = RelationGetRelid(vertex_label_relation);
+    uint64 current_generation = get_label_cache_generation();
+
+    if (cached &&
+        cached_relid == relid &&
+        cached_generation == current_generation)
+    {
+        return cached_index_oid;
+    }
+
+    cached_index_oid = find_usable_btree_index_for_attr(
+        vertex_label_relation, Anum_ag_label_vertex_table_id);
+    cached_relid = relid;
+    cached_generation = get_label_cache_generation();
+    cached = true;
+
+    return cached_index_oid;
 }
 
 /*

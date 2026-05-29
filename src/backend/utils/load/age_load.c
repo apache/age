@@ -426,7 +426,7 @@ void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
     HeapTuple tuple;
     label_cache_data *label_cache;
 
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
     /* Check if label provided exists as vertex label, then throw error */
     if (label_cache != NULL && label_cache->kind == LABEL_KIND_VERTEX)
@@ -478,7 +478,7 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     HeapTuple tuple;
     label_cache_data *label_cache;
 
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
     /* Check if label provided exists as edge label, then throw error */
     if (label_cache != NULL && label_cache->kind == LABEL_KIND_EDGE)
@@ -581,6 +581,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     char* file_path_str;
     Oid graph_oid;
     Oid label_relid;
+    Oid label_seq_relid;
     int32 label_id;
     bool id_field_exists;
     bool load_as_agtype;
@@ -630,12 +631,14 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
 
     /* Get the label relation and check permissions */
     label_relid = label_cache->relation;
+    label_seq_relid = get_relname_relid(NameStr(label_cache->seq_name),
+                                        graph_oid);
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
-                                label_name_str, label_id, id_field_exists,
-                                load_as_agtype);
+                                label_name_str, label_relid, label_seq_relid,
+                                label_id, id_field_exists, load_as_agtype);
 
     free(file_path_str);
 
@@ -653,6 +656,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     char* file_path_str;
     Oid graph_oid;
     Oid label_relid;
+    Oid label_seq_relid;
     int32 label_id;
     bool load_as_agtype;
     label_cache_data *label_cache;
@@ -700,11 +704,14 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     /* Get the label relation and check permissions */
     label_relid = label_cache->relation;
+    label_seq_relid = get_relname_relid(NameStr(label_cache->seq_name),
+                                        graph_oid);
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
-                               label_name_str, label_id, load_as_agtype);
+                               label_name_str, label_relid, label_seq_relid,
+                               label_id, load_as_agtype);
 
     free(file_path_str);
 
@@ -745,7 +752,7 @@ static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
 {
     label_cache_data *label_cache;
 
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
     /* Check if label exists */
     if (label_cache != NULL)
@@ -775,7 +782,8 @@ static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
         parent = list_make1(rv);
 
         create_label(graph_name, label_name, label_kind, parent);
-        label_cache = search_label_name_graph_cache(label_name, graph_oid);
+        label_cache = search_label_name_graph_cache_cached(label_name,
+                                                           graph_oid);
         if (label_cache == NULL)
         {
             ereport(ERROR,

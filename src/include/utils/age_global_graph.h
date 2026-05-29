@@ -21,6 +21,7 @@
 #define AG_AGE_GLOBAL_GRAPH_H
 
 #include "utils/age_graphid_ds.h"
+#include "utils/hsearch.h"
 
 /*
  * We declare the graph nodes and edges here, and in this way, so that it may be
@@ -43,6 +44,7 @@ GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid);
 bool is_ggctx_invalid(GRAPH_global_context *ggctx);
 /* GRAPH retrieval functions */
 ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx);
+int64 get_graph_num_loaded_edges(GRAPH_global_context *ggctx);
 vertex_entry *get_vertex_entry(GRAPH_global_context *ggctx,
                                graphid vertex_id);
 edge_entry *get_edge_entry(GRAPH_global_context *ggctx, graphid edge_id);
@@ -54,13 +56,19 @@ ListGraphId *get_vertex_entry_edges_self(vertex_entry *ve);
 Oid get_vertex_entry_label_table_oid(vertex_entry *ve);
 char *get_vertex_entry_label_name(vertex_entry *ve);
 Datum get_vertex_entry_properties(vertex_entry *ve);
+Datum get_vertex_entry_properties_with_cache(vertex_entry *ve,
+                                             HTAB *relation_cache);
 /* edge entry accessor functions */
 graphid get_edge_entry_id(edge_entry *ee);
 Oid get_edge_entry_label_table_oid(edge_entry *ee);
 char *get_edge_entry_label_name(edge_entry *ee);
 Datum get_edge_entry_properties(edge_entry *ee);
+Datum get_edge_entry_properties_with_cache(edge_entry *ee,
+                                           HTAB *relation_cache);
 graphid get_edge_entry_start_vertex_id(edge_entry *ee);
 graphid get_edge_entry_end_vertex_id(edge_entry *ee);
+HTAB *create_entry_property_relation_cache(const char *name);
+void destroy_entry_property_relation_cache(HTAB *relation_cache);
 
 /* Graph version counter functions — shared memory (DSM or shmem) */
 uint64 get_graph_version(Oid graph_oid);

@@ -30,6 +30,8 @@
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
 
+#define LAST_LABEL_CACHE_SIZE 4
+
 typedef struct graph_name_cache_entry
 {
     NameData name; /* hash key */
@@ -87,6 +89,7 @@ typedef struct label_seq_name_graph_cache_entry
 /* ag_graph.name */
 static HTAB *graph_name_cache_hash = NULL;
 static ScanKeyData graph_name_scan_keys[1];
+static uint64 graph_cache_generation = 1;
 
 /* ag_graph.namespace */
 static HTAB *graph_namespace_cache_hash = NULL;
@@ -95,6 +98,7 @@ static ScanKeyData graph_namespace_scan_keys[1];
 /* ag_label.name, ag_label.graph */
 static HTAB *label_name_graph_cache_hash = NULL;
 static ScanKeyData label_name_graph_scan_keys[2];
+static uint64 label_cache_generation = 1;
 
 /* ag_label.graph, ag_label.id */
 static HTAB *label_graph_oid_cache_hash = NULL;
@@ -139,13 +143,13 @@ static void create_label_graph_oid_cache(void);
 static void create_label_relation_cache(void);
 static void create_label_seq_name_graph_cache(void);
 static void invalidate_label_caches(Datum arg, Oid relid);
-static void invalidate_label_name_graph_cache(Oid relid);
+static bool invalidate_label_name_graph_cache(Oid relid);
 static void flush_label_name_graph_cache(void);
-static void invalidate_label_graph_oid_cache(Oid relid);
+static bool invalidate_label_graph_oid_cache(Oid relid);
 static void flush_label_graph_oid_cache(void);
-static void invalidate_label_relation_cache(Oid relid);
+static bool invalidate_label_relation_cache(Oid relid);
 static void flush_label_relation_cache(void);
-static void invalidate_label_seq_name_graph_cache(Oid relid);
+static bool invalidate_label_seq_name_graph_cache(Oid relid);
 static void flush_label_seq_name_graph_cache(void);
 
 static label_cache_data *search_label_name_graph_cache_miss(Name name,
@@ -277,6 +281,8 @@ static void invalidate_graph_caches(Datum arg, int cache_id, uint32 hash_value)
 {
     Assert(graph_name_cache_hash);
 
+    graph_cache_generation++;
+
     /*
      * Currently, all entries in the graph caches are flushed because
      * hash_value is for an entry in NAMESPACEOID cache. Since the caches
@@ -316,6 +322,63 @@ static void flush_graph_namespace_cache(void)
 
     /* recreate the graph_namespace_cache */
     create_graph_namespace_cache();
+}
+
+uint64 get_graph_cache_generation(void)
+{
+    initialize_caches();
+
+    return graph_cache_generation;
+}
+
+graph_cache_data *search_graph_name_cache_cached(const char *name)
+{
+    static NameData cached_name;
+    static uint64 cached_generation = 0;
+    static graph_cache_data *cached_graph = NULL;
+    uint64 current_generation = get_graph_cache_generation();
+
+    Assert(name);
+
+    if (cached_graph != NULL &&
+        namestrcmp(&cached_name, name) == 0 &&
+        cached_generation == current_generation)
+    {
+        return cached_graph;
+    }
+
+    cached_graph = search_graph_name_cache(name);
+    if (cached_graph != NULL)
+    {
+        namestrcpy(&cached_name, name);
+        cached_generation = get_graph_cache_generation();
+    }
+
+    return cached_graph;
+}
+
+graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
+{
+    static Oid cached_namespace = InvalidOid;
+    static uint64 cached_generation = 0;
+    static graph_cache_data *cached_graph = NULL;
+    uint64 current_generation = get_graph_cache_generation();
+
+    if (cached_graph != NULL &&
+        cached_namespace == namespace &&
+        cached_generation == current_generation)
+    {
+        return cached_graph;
+    }
+
+    cached_graph = search_graph_namespace_cache(namespace);
+    if (cached_graph != NULL)
+    {
+        cached_namespace = namespace;
+        cached_generation = get_graph_cache_generation();
+    }
+
+    return cached_graph;
 }
 
 graph_cache_data *search_graph_name_cache(const char *name)
@@ -607,16 +670,23 @@ static void invalidate_label_caches(Datum arg, Oid relid)
     Assert(label_name_graph_cache_hash);
     Assert(label_seq_name_graph_cache_hash);
 
-
     if (OidIsValid(relid))
     {
-        invalidate_label_name_graph_cache(relid);
-        invalidate_label_graph_oid_cache(relid);
-        invalidate_label_relation_cache(relid);
-        invalidate_label_seq_name_graph_cache(relid);
+        bool changed = false;
+
+        changed |= invalidate_label_name_graph_cache(relid);
+        changed |= invalidate_label_graph_oid_cache(relid);
+        changed |= invalidate_label_relation_cache(relid);
+        changed |= invalidate_label_seq_name_graph_cache(relid);
+
+        if (changed)
+        {
+            label_cache_generation++;
+        }
     }
     else
     {
+        label_cache_generation++;
         flush_label_name_graph_cache();
         flush_label_graph_oid_cache();
         flush_label_relation_cache();
@@ -624,9 +694,10 @@ static void invalidate_label_caches(Datum arg, Oid relid)
     }
 }
 
-static void invalidate_label_name_graph_cache(Oid relid)
+static bool invalidate_label_name_graph_cache(Oid relid)
 {
     HASH_SEQ_STATUS hash_seq;
+    bool changed = false;
 
     hash_seq_init(&hash_seq, label_name_graph_cache_hash);
     for (;;)
@@ -653,8 +724,11 @@ static void invalidate_label_name_graph_cache(Oid relid)
                     (errmsg_internal("label (name, graph) cache corrupted")));
         }
 
+        changed = true;
         break;
     }
+
+    return changed;
 }
 
 static void flush_label_name_graph_cache(void)
@@ -673,9 +747,10 @@ static void flush_label_name_graph_cache(void)
     create_label_name_graph_cache();
 }
 
-static void invalidate_label_graph_oid_cache(Oid relid)
+static bool invalidate_label_graph_oid_cache(Oid relid)
 {
     HASH_SEQ_STATUS hash_seq;
+    bool changed = false;
 
     hash_seq_init(&hash_seq, label_graph_oid_cache_hash);
     for (;;)
@@ -702,8 +777,11 @@ static void invalidate_label_graph_oid_cache(Oid relid)
                     (errmsg_internal("label (graph, id) cache corrupted")));
         }
 
+        changed = true;
         break;
     }
+
+    return changed;
 }
 
 static void flush_label_graph_oid_cache(void)
@@ -722,7 +800,7 @@ static void flush_label_graph_oid_cache(void)
     create_label_graph_oid_cache();
 }
 
-static void invalidate_label_relation_cache(Oid relid)
+static bool invalidate_label_relation_cache(Oid relid)
 {
     label_relation_cache_entry *entry;
     void *removed;
@@ -730,7 +808,7 @@ static void invalidate_label_relation_cache(Oid relid)
     entry = hash_search(label_relation_cache_hash, &relid, HASH_FIND, NULL);
     if (!entry)
     {
-        return;
+        return false;
     }
     removed = hash_search(label_relation_cache_hash, &relid, HASH_REMOVE,
                           NULL);
@@ -738,6 +816,8 @@ static void invalidate_label_relation_cache(Oid relid)
     {
         ereport(ERROR, (errmsg_internal("label (namespace) cache corrupted")));
     }
+
+    return true;
 }
 
 static void flush_label_relation_cache(void)
@@ -756,9 +836,10 @@ static void flush_label_relation_cache(void)
     create_label_relation_cache();
 }
 
-static void invalidate_label_seq_name_graph_cache(Oid relid)
+static bool invalidate_label_seq_name_graph_cache(Oid relid)
 {
     HASH_SEQ_STATUS hash_seq;
+    bool changed = false;
 
     hash_seq_init(&hash_seq, label_seq_name_graph_cache_hash);
     for (;;)
@@ -785,8 +866,11 @@ static void invalidate_label_seq_name_graph_cache(Oid relid)
                     (errmsg_internal("label (seq_name, graph) cache corrupted")));
         }
 
+        changed = true;
         break;
     }
+
+    return changed;
 }
 
 static void flush_label_seq_name_graph_cache(void)
@@ -803,6 +887,104 @@ static void flush_label_seq_name_graph_cache(void)
 
     /* recreate the label_seq_name_graph_cache */
     create_label_seq_name_graph_cache();
+}
+
+uint64 get_label_cache_generation(void)
+{
+    initialize_caches();
+
+    return label_cache_generation;
+}
+
+label_cache_data *search_label_graph_oid_cache_cached(Oid graph, int32 id)
+{
+    static Oid cached_graphs[LAST_LABEL_CACHE_SIZE] = {InvalidOid};
+    static int32 cached_ids[LAST_LABEL_CACHE_SIZE] = {-1, -1, -1, -1};
+    static uint64 cached_generations[LAST_LABEL_CACHE_SIZE] = {0};
+    static label_cache_data *cached_labels[LAST_LABEL_CACHE_SIZE] = {NULL};
+    uint64 current_generation = get_label_cache_generation();
+    label_cache_data *label;
+    int i;
+
+    for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
+    {
+        if (cached_labels[i] != NULL &&
+            cached_graphs[i] == graph &&
+            cached_ids[i] == id &&
+            cached_generations[i] == current_generation)
+        {
+            return cached_labels[i];
+        }
+    }
+
+    label = search_label_graph_oid_cache(graph, id);
+    if (label != NULL)
+    {
+        int slot = 0;
+
+        for (i = 1; i < LAST_LABEL_CACHE_SIZE; i++)
+        {
+            if (cached_labels[i] == NULL ||
+                cached_generations[i] < cached_generations[slot])
+            {
+                slot = i;
+            }
+        }
+
+        cached_graphs[slot] = graph;
+        cached_ids[slot] = id;
+        cached_generations[slot] = get_label_cache_generation();
+        cached_labels[slot] = label;
+    }
+
+    return label;
+}
+
+label_cache_data *search_label_name_graph_cache_cached(const char *name,
+                                                       Oid graph)
+{
+    static NameData cached_names[LAST_LABEL_CACHE_SIZE];
+    static Oid cached_graphs[LAST_LABEL_CACHE_SIZE] = {InvalidOid};
+    static uint64 cached_generations[LAST_LABEL_CACHE_SIZE] = {0};
+    static label_cache_data *cached_labels[LAST_LABEL_CACHE_SIZE] = {NULL};
+    uint64 current_generation = get_label_cache_generation();
+    label_cache_data *label;
+    int i;
+
+    Assert(name);
+
+    for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
+    {
+        if (cached_labels[i] != NULL &&
+            cached_graphs[i] == graph &&
+            namestrcmp(&cached_names[i], name) == 0 &&
+            cached_generations[i] == current_generation)
+        {
+            return cached_labels[i];
+        }
+    }
+
+    label = search_label_name_graph_cache(name, graph);
+    if (label != NULL)
+    {
+        int slot = 0;
+
+        for (i = 1; i < LAST_LABEL_CACHE_SIZE; i++)
+        {
+            if (cached_labels[i] == NULL ||
+                cached_generations[i] < cached_generations[slot])
+            {
+                slot = i;
+            }
+        }
+
+        namestrcpy(&cached_names[slot], name);
+        cached_graphs[slot] = graph;
+        cached_generations[slot] = get_label_cache_generation();
+        cached_labels[slot] = label;
+    }
+
+    return label;
 }
 
 label_cache_data *search_label_name_graph_cache(const char *name, Oid graph)

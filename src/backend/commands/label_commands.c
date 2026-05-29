@@ -85,6 +85,9 @@ static void create_index_on_column(char *schema_name,
                                    char *rel_name,
                                    char *colname,
                                    bool unique);
+static void create_label_with_graph_cache(char *graph_name, char *label_name,
+                                          char label_type, List *parents,
+                                          graph_cache_data *cache_data);
 
 PG_FUNCTION_INFO_V1(age_is_valid_label_name);
 
@@ -149,6 +152,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 {
     char *graph_name;
     Oid graph_oid;
+    graph_cache_data *graph_cache;
     List *parent;
     RangeVar *rv;
     char *label_name;
@@ -184,14 +188,15 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     }
 
     /* Check if graph does not exist */
-    if (!graph_exists(graph_name))
+    graph_cache = search_graph_name_cache_cached(graph_name);
+    if (graph_cache == NULL)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("graph \"%s\" does not exist.", graph_name)));
     }
 
-    graph_oid = get_graph_oid(graph_name);
+    graph_oid = graph_cache->oid;
 
     /* Check if label with the input name already exists */
     if (label_exists(label_name, graph_oid))
@@ -206,7 +211,8 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
 
     parent = list_make1(rv);
 
-    create_label(graph_name, label_name, LABEL_TYPE_VERTEX, parent);
+    create_label_with_graph_cache(graph_name, label_name, LABEL_TYPE_VERTEX,
+                                  parent, graph_cache);
 
     ereport(NOTICE,
             (errmsg("VLabel \"%s\" has been created", label_name)));
@@ -230,6 +236,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
 {
     char *graph_name;
     Oid graph_oid;
+    graph_cache_data *graph_cache;
     List *parent;
     RangeVar *rv;
     char *label_name;
@@ -265,14 +272,15 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     }
 
     /* Check if graph does not exist */
-    if (!graph_exists(graph_name))
+    graph_cache = search_graph_name_cache_cached(graph_name);
+    if (graph_cache == NULL)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                  errmsg("graph \"%s\" does not exist.", graph_name)));
     }
 
-    graph_oid = get_graph_oid(graph_name);
+    graph_oid = graph_cache->oid;
 
     /* Check if label with the input name already exists */
     if (label_exists(label_name, graph_oid))
@@ -286,7 +294,8 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_EDGE);
 
     parent = list_make1(rv);
-    create_label(graph_name, label_name, LABEL_TYPE_EDGE, parent);
+    create_label_with_graph_cache(graph_name, label_name, LABEL_TYPE_EDGE,
+                                  parent, graph_cache);
 
     ereport(NOTICE,
             (errmsg("ELabel \"%s\" has been created", label_name)));
@@ -303,6 +312,28 @@ void create_label(char *graph_name, char *label_name, char label_type,
                   List *parents)
 {
     graph_cache_data *cache_data;
+
+    if (!is_valid_label_name(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
+
+    cache_data = search_graph_name_cache_cached(graph_name);
+    if (!cache_data)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("graph \"%s\" does not exist", graph_name)));
+    }
+
+    create_label_with_graph_cache(graph_name, label_name, label_type, parents,
+                                  cache_data);
+}
+
+static void create_label_with_graph_cache(char *graph_name, char *label_name,
+                                          char label_type, List *parents,
+                                          graph_cache_data *cache_data)
+{
     Oid graph_oid;
     Oid nsp_id;
     char *schema_name;
@@ -312,18 +343,6 @@ void create_label(char *graph_name, char *label_name, char label_type,
     int32 label_id;
     Oid relation_id;
 
-    if (!is_valid_label_name(label_name, label_type))
-    {
-        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("label name is invalid")));
-    }
-
-    cache_data = search_graph_name_cache(graph_name);
-    if (!cache_data)
-    {
-        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                        errmsg("graph \"%s\" does not exist", graph_name)));
-    }
     graph_oid = cache_data->oid;
     nsp_id = cache_data->namespace;
 
@@ -910,7 +929,7 @@ Datum drop_label(PG_FUNCTION_ARGS)
     force = PG_GETARG_BOOL(2);
 
     graph_name_str = NameStr(*graph_name);
-    cache_data = search_graph_name_cache(graph_name_str);
+    cache_data = search_graph_name_cache_cached(graph_name_str);
     if (!cache_data)
     {
         ereport(ERROR,
