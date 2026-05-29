@@ -644,6 +644,7 @@ Datum make_vertex(Datum id, Datum label, Datum properties);
 Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
                    Datum properties);
 Datum make_path(List *path);
+Datum make_path_with_length(List *path, int path_len);
 agtype_value *agtype_value_build_vertex(graphid id, char *label,
                                         Datum properties);
 agtype_value *agtype_value_build_edge(graphid id, char *label, graphid end_id,

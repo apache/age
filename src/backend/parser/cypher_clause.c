@@ -1499,6 +1499,7 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
     delete_data->delete_items = transform_cypher_delete_item_list(cpstate,
                                                                   self->exprs,
                                                                   query);
+    delete_data->delete_item_count = list_length(delete_data->delete_items);
     delete_data->graph_name = cpstate->graph_name;
     delete_data->graph_oid = cpstate->graph_oid;
     delete_data->detach = self->detach;
@@ -2171,6 +2172,7 @@ cypher_update_information *transform_cypher_remove_item_list(
 
     info->set_items = NIL;
     info->flags = 0;
+    info->set_item_count = 0;
 
     foreach (li, remove_item_list)
     {
@@ -2267,6 +2269,7 @@ cypher_update_information *transform_cypher_remove_item_list(
         item->prop_name = property_name;
 
         info->set_items = lappend(info->set_items, item);
+        info->set_item_count++;
     }
 
     return info;
@@ -2282,6 +2285,7 @@ cypher_update_information *transform_cypher_set_item_list(
 
     info->set_items = NIL;
     info->flags = 0;
+    info->set_item_count = 0;
 
     foreach (li, set_item_list)
     {
@@ -2462,6 +2466,7 @@ cypher_update_information *transform_cypher_set_item_list(
 
         query->targetList = lappend(query->targetList, target_item);
         info->set_items = lappend(info->set_items, item);
+        info->set_item_count++;
     }
 
     return info;
@@ -6323,6 +6328,7 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
     bool in_path = path->var_name != NULL;
 
     ccp->path_attr_num = InvalidAttrNumber;
+    ccp->path_length = 0;
 
     if (in_path)
     {
@@ -6362,6 +6368,7 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
             }
 
             transformed_path = lappend(transformed_path, rel);
+            ccp->path_length++;
 
             entity = make_transform_entity(cpstate, ENT_VERTEX, (Node *)node,
                                            NULL);
@@ -6390,6 +6397,7 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
             }
 
             transformed_path = lappend(transformed_path, rel);
+            ccp->path_length++;
 
             entity = make_transform_entity(cpstate, ENT_EDGE, (Node *)edge,
                                            NULL);
@@ -6414,7 +6422,7 @@ transform_cypher_create_path(cypher_parsestate *cpstate, List **target_list,
     {
         TargetEntry *te;
 
-        if (list_length(transformed_path) < 1)
+        if (ccp->path_length < 1)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -6521,8 +6529,9 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
 
         parent = list_make1(rv);
 
-        created_label_relid = create_label(cpstate->graph_name, edge->label,
-                                           LABEL_TYPE_EDGE, parent);
+        created_label_relid = create_label_with_graph_oid(
+            cpstate->graph_name, cpstate->graph_oid, edge->label,
+            LABEL_TYPE_EDGE, parent);
     }
 
     /* lock the relation of the label */
@@ -6812,8 +6821,9 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
 
         parent = list_make1(rv);
 
-        created_label_relid = create_label(cpstate->graph_name, node->label,
-                                           LABEL_TYPE_VERTEX, parent);
+        created_label_relid = create_label_with_graph_oid(
+            cpstate->graph_name, cpstate->graph_oid, node->label,
+            LABEL_TYPE_VERTEX, parent);
     }
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
@@ -7406,6 +7416,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
 
     merge_information->graph_oid = cpstate->graph_oid;
     merge_information->path = merge_path;
+    merge_information->path_length = merge_path->path_length;
 
     /* Transform ON MATCH SET items, if any */
     if (self->on_match != NIL)
@@ -7419,6 +7430,8 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
         resolve_merge_set_exprs(
             merge_information->on_match_set_info->set_items,
             query->targetList, "ON MATCH SET");
+        merge_information->on_match_set_item_count =
+            merge_information->on_match_set_info->set_item_count;
     }
 
     /* Transform ON CREATE SET items, if any */
@@ -7433,6 +7446,8 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
         resolve_merge_set_exprs(
             merge_information->on_create_set_info->set_items,
             query->targetList, "ON CREATE SET");
+        merge_information->on_create_set_item_count =
+            merge_information->on_create_set_info->set_item_count;
     }
 
     if (!clause->next)
@@ -7917,6 +7932,7 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
     bool in_path = path->var_name != NULL;
 
     ccp->path_attr_num = InvalidAttrNumber;
+    ccp->path_length = 0;
 
     foreach (lc, path->path)
     {
@@ -7956,6 +7972,7 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
             }
 
             transformed_path = lappend(transformed_path, rel);
+            ccp->path_length++;
         }
         else if (is_ag_node(lfirst(lc), cypher_relationship))
         {
@@ -7997,6 +8014,7 @@ transform_cypher_merge_path(cypher_parsestate *cpstate, List **target_list,
             }
 
             transformed_path = lappend(transformed_path, rel);
+            ccp->path_length++;
         }
         else
         {
@@ -8097,8 +8115,9 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
         parent = list_make1(rv);
 
         /* create the label */
-        created_label_relid = create_label(cpstate->graph_name, edge->label,
-                                           LABEL_TYPE_EDGE, parent);
+        created_label_relid = create_label_with_graph_oid(
+            cpstate->graph_name, cpstate->graph_oid, edge->label,
+            LABEL_TYPE_EDGE, parent);
     }
 
     /* lock the relation of the label */
@@ -8235,8 +8254,9 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
         parent = list_make1(rv);
 
         /* create the label */
-        created_label_relid = create_label(cpstate->graph_name, node->label,
-                                           LABEL_TYPE_VERTEX, parent);
+        created_label_relid = create_label_with_graph_oid(
+            cpstate->graph_name, cpstate->graph_oid, node->label,
+            LABEL_TYPE_VERTEX, parent);
     }
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;

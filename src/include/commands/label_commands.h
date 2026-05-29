@@ -54,6 +54,9 @@
 
 Oid create_label(char *graph_name, char *label_name, char label_type,
                  List *parents);
+Oid create_label_with_graph_oid(char *graph_name, Oid graph_oid,
+                                char *label_name, char label_type,
+                                List *parents);
 
 Datum create_vlabel(PG_FUNCTION_ARGS);
 

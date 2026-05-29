@@ -86,6 +86,7 @@ void copy_cypher_create_path(ExtensibleNode *newnode, const ExtensibleNode *from
 
     COPY_SCALAR_FIELD(path_attr_num);
     COPY_STRING_FIELD(var_name);
+    COPY_SCALAR_FIELD(path_length);
     COPY_NODE_FIELD(target_nodes);
 }
 
@@ -123,6 +124,7 @@ void copy_cypher_update_information(ExtensibleNode *newnode, const ExtensibleNod
     COPY_STRING_FIELD(graph_name);
     COPY_SCALAR_FIELD(graph_oid);
     COPY_STRING_FIELD(clause_name);
+    COPY_SCALAR_FIELD(set_item_count);
 
     extended_newnode->last_update_indexes = NULL;
     extended_newnode->last_update_index_count = 0;
@@ -155,9 +157,9 @@ void copy_cypher_delete_information(ExtensibleNode *newnode, const ExtensibleNod
     COPY_STRING_FIELD(graph_name);
     COPY_SCALAR_FIELD(graph_oid);
     COPY_SCALAR_FIELD(detach);
+    COPY_SCALAR_FIELD(delete_item_count);
 
     extended_newnode->delete_item_positions = NULL;
-    extended_newnode->delete_item_count = 0;
     extended_newnode->delete_item_positions_valid = false;
 }
 
@@ -179,8 +181,11 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_SCALAR_FIELD(graph_oid);
     COPY_SCALAR_FIELD(merge_function_attr);
     COPY_NODE_FIELD(path);
+    COPY_SCALAR_FIELD(path_length);
     COPY_NODE_FIELD(on_match_set_info);
     COPY_NODE_FIELD(on_create_set_info);
+    COPY_SCALAR_FIELD(on_match_set_item_count);
+    COPY_SCALAR_FIELD(on_create_set_item_count);
 }
 
 /* copy function for cypher_predicate_function */

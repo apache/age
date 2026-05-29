@@ -254,11 +254,10 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
         cache_data = search_graph_namespace_cache_cached(object_id);
         if (cache_data)
         {
-            char *nspname = get_namespace_name(object_id);
-
             ereport(ERROR, (errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
                             errmsg("schema \"%s\" is for graph \"%s\"",
-                                   nspname, NameStr(cache_data->name))));
+                                   NameStr(cache_data->name),
+                                   NameStr(cache_data->name))));
         }
 
         return;
@@ -285,11 +284,10 @@ static void object_access(ObjectAccessType access, Oid class_id, Oid object_id,
         }
         else
         {
-            char *relname = get_rel_name(object_id);
-
             ereport(ERROR, (errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
                             errmsg("table \"%s\" is for label \"%s\"",
-                                   relname, NameStr(cache_data->name))));
+                                   get_label_cache_relation_name(cache_data),
+                                   NameStr(cache_data->name))));
         }
     }
 }

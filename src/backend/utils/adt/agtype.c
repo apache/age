@@ -201,6 +201,10 @@ static Datum process_access_operator_result_no_copy(FunctionCallInfo fcinfo,
                                                     agtype_value *agtv,
                                                     bool as_text,
                                                     bool needs_free);
+static agtype *build_vertex_agtype(graphid id, const char *label,
+                                   agtype *properties);
+static agtype *build_edge_agtype(graphid id, graphid start_id, graphid end_id,
+                                 const char *label, agtype *properties);
 /* typecast functions */
 static void agtype_typecast_object(agtype_in_state *state, char *annotation);
 static void agtype_typecast_array(agtype_in_state *state, char *annotation);
@@ -2623,18 +2627,16 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agt_result);
 }
 
-Datum make_path(List *path)
+Datum make_path_with_length(List *path, int path_len)
 {
     agtype *agt_result;
     ListCell *lc;
     agtype_in_state result;
-    int path_len;
     int i = 1;
 
     memset(&result, 0, sizeof(agtype_in_state));
 
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY, NULL);
-    path_len = list_length(path);
 
     if (path_len < 1)
     {
@@ -2697,7 +2699,57 @@ Datum make_path(List *path)
     PG_RETURN_POINTER(agt_result);
 }
 
+Datum make_path(List *path)
+{
+    return make_path_with_length(path, list_length(path));
+}
+
 PG_FUNCTION_INFO_V1(_agtype_build_vertex);
+
+static agtype *build_vertex_agtype(graphid id, const char *label,
+                                   agtype *properties)
+{
+    agtype_build_state *bstate;
+    agtype *rawscalar;
+    agtype *vertex;
+    bool properties_was_null = false;
+
+    if (properties == NULL)
+    {
+        properties_was_null = true;
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
+    }
+    else if (!AGT_ROOT_IS_OBJECT(properties))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_vertex() properties argument must be an object")));
+    }
+
+    bstate = init_agtype_build_state(3, AGT_FOBJECT);
+    write_string(bstate, "id");
+    write_string(bstate, "label");
+    write_string(bstate, "properties");
+    write_graphid(bstate, id);
+    write_string(bstate, (char *)label);
+    write_container(bstate, properties);
+    vertex = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
+    write_extended(bstate, vertex, AGT_HEADER_VERTEX);
+    rawscalar = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    if (properties_was_null)
+    {
+        pfree(properties);
+    }
+
+    return rawscalar;
+}
 
 /*
  * SQL function agtype_build_vertex(graphid, cstring, agtype)
@@ -2707,9 +2759,7 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
     graphid id;
     char *label;
     agtype *properties;
-    agtype_build_state *bstate;
-    agtype *rawscalar;
-    agtype *vertex;
+    agtype *result;
 
     /* handles null */
     if (fcinfo->args[0].isnull)
@@ -2730,60 +2780,91 @@ Datum _agtype_build_vertex(PG_FUNCTION_ARGS)
 
     if (fcinfo->args[2].isnull)
     {
-        bstate = init_agtype_build_state(0, AGT_FOBJECT);
-        properties = build_agtype(bstate);
-        pfree_agtype_build_state(bstate);
+        properties = NULL;
     }
     else
     {
         properties = AG_GET_ARG_AGTYPE_P(2);
-
-        if (!AGT_ROOT_IS_OBJECT(properties))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("_agtype_build_vertex() properties argument must be an object")));
-        }
     }
 
-    bstate = init_agtype_build_state(3, AGT_FOBJECT);
-    write_string(bstate, "id");
-    write_string(bstate, "label");
-    write_string(bstate, "properties");
-    write_graphid(bstate, id);
-    write_string(bstate, label);
-    write_container(bstate, properties);
-    vertex = build_agtype(bstate);
-    pfree_agtype_build_state(bstate);
-
-    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
-    write_extended(bstate, vertex, AGT_HEADER_VERTEX);
-    rawscalar = build_agtype(bstate);
-    pfree_agtype_build_state(bstate);
+    result = build_vertex_agtype(id, label, properties);
 
     PG_FREE_IF_COPY(label, 1);
-    PG_FREE_IF_COPY(properties, 2);
+    if (properties != NULL)
+    {
+        PG_FREE_IF_COPY(properties, 2);
+    }
 
-    PG_RETURN_POINTER(rawscalar);
+    PG_RETURN_POINTER(result);
 }
 
 Datum make_vertex(Datum id, Datum label, Datum properties)
 {
-    return DirectFunctionCall3(_agtype_build_vertex, id, label, properties);
+    return PointerGetDatum(build_vertex_agtype(DATUM_GET_GRAPHID(id),
+                                               DatumGetCString(label),
+                                               DATUM_GET_AGTYPE_P(properties)));
 }
 
 PG_FUNCTION_INFO_V1(_agtype_build_edge);
+
+static agtype *build_edge_agtype(graphid id, graphid start_id, graphid end_id,
+                                 const char *label, agtype *properties)
+{
+    agtype_build_state *bstate;
+    agtype *edge;
+    agtype *rawscalar;
+    bool properties_was_null = false;
+
+    if (properties == NULL)
+    {
+        properties_was_null = true;
+        bstate = init_agtype_build_state(0, AGT_FOBJECT);
+        properties = build_agtype(bstate);
+        pfree_agtype_build_state(bstate);
+    }
+    else if (!AGT_ROOT_IS_OBJECT(properties))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_agtype_build_edge() properties argument must be an object")));
+    }
+
+    bstate = init_agtype_build_state(5, AGT_FOBJECT);
+    write_string(bstate, "id");
+    write_string(bstate, "label");
+    write_string(bstate, "end_id");
+    write_string(bstate, "start_id");
+    write_string(bstate, "properties");
+    write_graphid(bstate, id);
+    write_string(bstate, (char *)label);
+    write_graphid(bstate, end_id);
+    write_graphid(bstate, start_id);
+    write_container(bstate, properties);
+    edge = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
+    write_extended(bstate, edge, AGT_HEADER_EDGE);
+    rawscalar = build_agtype(bstate);
+    pfree_agtype_build_state(bstate);
+
+    if (properties_was_null)
+    {
+        pfree(properties);
+    }
+
+    return rawscalar;
+}
 
 /*
  * SQL function agtype_build_edge(graphid, graphid, graphid, cstring, agtype)
  */
 Datum _agtype_build_edge(PG_FUNCTION_ARGS)
 {
-    agtype_build_state *bstate;
-    agtype *edge, *rawscalar;
     graphid id, start_id, end_id;
     char *label;
     agtype *properties;
+    agtype *result;
 
     /* process graph id */
     if (fcinfo->args[0].isnull)
@@ -2829,52 +2910,32 @@ Datum _agtype_build_edge(PG_FUNCTION_ARGS)
     /* if the properties object is null, push an empty object */
     if (fcinfo->args[4].isnull)
     {
-        bstate = init_agtype_build_state(0, AGT_FOBJECT);
-        properties = build_agtype(bstate);
-        pfree_agtype_build_state(bstate);
+        properties = NULL;
     }
     else
     {
         properties = AG_GET_ARG_AGTYPE_P(4);
-
-        if (!AGT_ROOT_IS_OBJECT(properties))
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("_agtype_build_edge() properties argument must be an object")));
-        }
     }
 
-    bstate = init_agtype_build_state(5, AGT_FOBJECT);
-    write_string(bstate, "id");
-    write_string(bstate, "label");
-    write_string(bstate, "end_id");
-    write_string(bstate, "start_id");
-    write_string(bstate, "properties");
-    write_graphid(bstate, id);
-    write_string(bstate, label);
-    write_graphid(bstate, end_id);
-    write_graphid(bstate, start_id);
-    write_container(bstate, properties);
-    edge = build_agtype(bstate);
-    pfree_agtype_build_state(bstate);
-
-    bstate = init_agtype_build_state(1, AGT_FARRAY | AGT_FSCALAR);
-    write_extended(bstate, edge, AGT_HEADER_EDGE);
-    rawscalar = build_agtype(bstate);
-    pfree_agtype_build_state(bstate);
+    result = build_edge_agtype(id, start_id, end_id, label, properties);
 
     PG_FREE_IF_COPY(label, 3);
-    PG_FREE_IF_COPY(properties, 4);
+    if (properties != NULL)
+    {
+        PG_FREE_IF_COPY(properties, 4);
+    }
 
-    PG_RETURN_POINTER(rawscalar);
+    PG_RETURN_POINTER(result);
 }
 
 Datum make_edge(Datum id, Datum startid, Datum endid, Datum label,
                 Datum properties)
 {
-    return DirectFunctionCall5(_agtype_build_edge, id, startid, endid, label,
-                               properties);
+    return PointerGetDatum(build_edge_agtype(DATUM_GET_GRAPHID(id),
+                                             DATUM_GET_GRAPHID(startid),
+                                             DATUM_GET_GRAPHID(endid),
+                                             DatumGetCString(label),
+                                             DATUM_GET_AGTYPE_P(properties)));
 }
 
 static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
@@ -5946,10 +6007,10 @@ Datum agtype_typecast_vertex(PG_FUNCTION_ARGS)
                  errmsg("vertex typecast object has invalid or missing properties")));
 
     /* Hand it off to the build vertex routine */
-    result = DirectFunctionCall3(_agtype_build_vertex,
-                 Int64GetDatum(agtv_graphid->val.int_value),
-                 CStringGetDatum(agtv_label->val.string.val),
-                 PointerGetDatum(agtype_value_to_agtype(agtv_properties)));
+    result = PointerGetDatum(build_vertex_agtype(
+        agtv_graphid->val.int_value,
+        agtv_label->val.string.val,
+        agtype_value_to_agtype(agtv_properties)));
     return result;
 }
 
@@ -6039,12 +6100,12 @@ Datum agtype_typecast_edge(PG_FUNCTION_ARGS)
                  errmsg("edge typecast object has an invalid or missing end_id")));
 
     /* Hand it off to the build edge routine */
-    result = DirectFunctionCall5(_agtype_build_edge,
-                 Int64GetDatum(agtv_graphid->val.int_value),
-                 Int64GetDatum(agtv_startid->val.int_value),
-                 Int64GetDatum(agtv_endid->val.int_value),
-                 CStringGetDatum(agtv_label->val.string.val),
-                 PointerGetDatum(agtype_value_to_agtype(agtv_properties)));
+    result = PointerGetDatum(build_edge_agtype(
+        agtv_graphid->val.int_value,
+        agtv_startid->val.int_value,
+        agtv_endid->val.int_value,
+        agtv_label->val.string.val,
+        agtype_value_to_agtype(agtv_properties)));
     return result;
 }
 
@@ -6414,6 +6475,7 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
     AclResult aclresult;
     TupleTableSlot *slot = NULL;
     Oid index_oid;
+    agtype *properties_agt = NULL;
     bool should_free_tuple = false;
     bool isnull;
 
@@ -6534,8 +6596,14 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
     }
 
     /* reconstruct the vertex */
-    result = DirectFunctionCall3(_agtype_build_vertex, id,
-                                 CStringGetDatum(vertex_label), properties);
+    properties_agt = DATUM_GET_AGTYPE_P(properties);
+    result = PointerGetDatum(build_vertex_agtype(DATUM_GET_GRAPHID(id),
+                                                 vertex_label,
+                                                 properties_agt));
+    if ((Pointer)properties_agt != DatumGetPointer(properties))
+    {
+        pfree(properties_agt);
+    }
 
     /* end the scan and close the relation with new cleanup logic */
     if (scan_desc)

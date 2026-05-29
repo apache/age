@@ -163,6 +163,14 @@ label_cache_data *get_label_cache_data(cypher_parsestate *cpstate,
     label_cache_data *label_cache;
     label_cache_entry *entry;
 
+    if (root_cpstate->last_label_cache_data != NULL &&
+        root_cpstate->last_label_cache_graph_oid == cpstate->graph_oid &&
+        root_cpstate->last_label_cache_generation == generation &&
+        strcmp(root_cpstate->last_label_cache_name, label_name) == 0)
+    {
+        return root_cpstate->last_label_cache_data;
+    }
+
     foreach (lc, root_cpstate->label_cache_entries)
     {
         entry = lfirst(lc);
@@ -171,6 +179,10 @@ label_cache_data *get_label_cache_data(cypher_parsestate *cpstate,
             entry->generation == generation &&
             strcmp(entry->label_name, label_name) == 0)
         {
+            root_cpstate->last_label_cache_name = entry->label_name;
+            root_cpstate->last_label_cache_graph_oid = entry->graph_oid;
+            root_cpstate->last_label_cache_generation = entry->generation;
+            root_cpstate->last_label_cache_data = entry->label_cache;
             return entry->label_cache;
         }
     }
@@ -189,6 +201,10 @@ label_cache_data *get_label_cache_data(cypher_parsestate *cpstate,
     entry->label_cache = label_cache;
     root_cpstate->label_cache_entries =
         lappend(root_cpstate->label_cache_entries, entry);
+    root_cpstate->last_label_cache_name = entry->label_name;
+    root_cpstate->last_label_cache_graph_oid = entry->graph_oid;
+    root_cpstate->last_label_cache_generation = entry->generation;
+    root_cpstate->last_label_cache_data = entry->label_cache;
 
     return label_cache;
 }

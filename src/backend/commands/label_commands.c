@@ -214,7 +214,7 @@ Datum create_vlabel(PG_FUNCTION_ARGS)
     }
 
     /* Create the default label tables */
-    rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_VERTEX);
+    rv = makeRangeVar(graph_name, pstrdup(AG_DEFAULT_LABEL_VERTEX), -1);
 
     parent = list_make1(rv);
 
@@ -298,7 +298,7 @@ Datum create_elabel(PG_FUNCTION_ARGS)
     }
 
     /* Create the default label tables */
-    rv = get_label_range_var(graph_name, graph_oid, AG_DEFAULT_LABEL_EDGE);
+    rv = makeRangeVar(graph_name, pstrdup(AG_DEFAULT_LABEL_EDGE), -1);
 
     parent = list_make1(rv);
     create_label_with_graph_cache(graph_name, label_name, LABEL_TYPE_EDGE,
@@ -336,6 +336,33 @@ Oid create_label(char *graph_name, char *label_name, char label_type,
                                          parents, cache_data);
 }
 
+Oid create_label_with_graph_oid(char *graph_name, Oid graph_oid,
+                                char *label_name, char label_type,
+                                List *parents)
+{
+    graph_cache_data *cache_data;
+
+    if (!is_valid_label_name(label_name, label_type))
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("label name is invalid")));
+    }
+
+    cache_data = search_graph_namespace_cache_cached(graph_oid);
+    if (!cache_data || strcmp(NameStr(cache_data->name), graph_name) != 0)
+    {
+        cache_data = search_graph_name_cache_cached(graph_name);
+    }
+    if (!cache_data || cache_data->oid != graph_oid)
+    {
+        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                        errmsg("graph \"%s\" does not exist", graph_name)));
+    }
+
+    return create_label_with_graph_cache(graph_name, label_name, label_type,
+                                         parents, cache_data);
+}
+
 static Oid create_label_with_graph_cache(char *graph_name, char *label_name,
                                          char label_type, List *parents,
                                          graph_cache_data *cache_data)
@@ -352,8 +379,8 @@ static Oid create_label_with_graph_cache(char *graph_name, char *label_name,
     graph_oid = cache_data->oid;
     nsp_id = cache_data->namespace;
 
-    /* create a sequence for the new label to generate unique IDs for vertices */
-    schema_name = get_namespace_name(nsp_id);
+    /* graph namespace names are kept in sync with graph names */
+    schema_name = pstrdup(NameStr(cache_data->name));
     rel_name = gen_label_relation_name(label_name);
     seq_name = ChooseRelationName(rel_name, "id", "seq", nsp_id, false);
     seq_range_var = makeRangeVar(schema_name, seq_name, -1);
@@ -916,10 +943,9 @@ Datum drop_label(PG_FUNCTION_ARGS)
     bool force;
     char *graph_name_str;
     graph_cache_data *cache_data;
+    label_cache_data *label_cache;
     Oid graph_oid;
-    Oid nsp_id;
     char *label_name_str;
-    Oid label_relation;
     char *schema_name;
     char *rel_name;
     List *qname;
@@ -947,11 +973,11 @@ Datum drop_label(PG_FUNCTION_ARGS)
                  errmsg("graph \"%s\" does not exist", graph_name_str)));
     }
     graph_oid = cache_data->oid;
-    nsp_id = cache_data->namespace;
 
     label_name_str = NameStr(*label_name);
-    label_relation = get_label_relation(label_name_str, graph_oid);
-    if (!OidIsValid(label_relation))
+    label_cache = search_label_name_graph_cache_cached(label_name_str,
+                                                       graph_oid);
+    if (label_cache == NULL)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
@@ -964,25 +990,9 @@ Datum drop_label(PG_FUNCTION_ARGS)
                         errmsg("force option is not supported yet")));
     }
 
-    /* validate schema_name */
-    schema_name = get_namespace_name(nsp_id);
-    if (schema_name == NULL)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("schema_name not found for namespace id \"%d\"",
-                        nsp_id)));
-    }
+    schema_name = pstrdup(NameStr(cache_data->name));
 
-    /* validate rel_name */
-    rel_name = get_rel_name(label_relation);
-    if (rel_name == NULL)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("rel_name not found for label \"%s\"",
-                        label_name_str)));
-    }
+    rel_name = pstrdup(get_label_cache_relation_name(label_cache));
 
     /* build qualified name */
     qname = list_make2(makeString(schema_name), makeString(rel_name));

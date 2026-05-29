@@ -58,6 +58,7 @@ label_cache_data *search_label_graph_oid_cache_cached(Oid graph, int32 id);
 label_cache_data *search_label_relation_cache(Oid relation);
 label_cache_data *search_label_relation_cache_cached(Oid relation);
 label_cache_data *search_label_seq_name_graph_cache(const char *name, Oid graph);
+const char *get_label_cache_relation_name(label_cache_data *label_cache);
 Oid get_label_seq_relation_cached(const label_cache_data *label_cache,
                                   Oid namespace);
 

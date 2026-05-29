@@ -289,7 +289,8 @@ static int *ensure_delete_item_positions(EState *estate,
         return delete_data->delete_item_positions;
     }
 
-    count = list_length(delete_data->delete_items);
+    count = delete_data->delete_item_count;
+    Assert(count == list_length(delete_data->delete_items));
 
     if (delete_data->delete_item_positions != NULL)
     {
@@ -298,8 +299,6 @@ static int *ensure_delete_item_positions(EState *estate,
 
     delete_data->delete_item_positions = count > 0 ?
         MemoryContextAlloc(estate->es_query_cxt, sizeof(int) * count) : NULL;
-    delete_data->delete_item_count = count;
-
     foreach(lc, delete_data->delete_items)
     {
         cypher_delete_item *item = lfirst(lc);

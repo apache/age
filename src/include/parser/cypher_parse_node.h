@@ -41,6 +41,10 @@ typedef struct cypher_parsestate
     int default_alias_num;
     List *entities;
     List *label_cache_entries;
+    const char *last_label_cache_name;
+    Oid last_label_cache_graph_oid;
+    uint64 last_label_cache_generation;
+    label_cache_data *last_label_cache_data;
     List *property_constraint_quals;
     bool subquery_where_flag; /* flag for knowing we are in a subquery where */
     /*

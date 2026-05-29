@@ -213,6 +213,7 @@ void read_cypher_create_path(struct ExtensibleNode *node)
     READ_NODE_FIELD(target_nodes);
     READ_INT_FIELD(path_attr_num);
     READ_STRING_FIELD(var_name);
+    READ_INT_FIELD(path_length);
 }
 
 /*
@@ -253,6 +254,7 @@ void read_cypher_update_information(struct ExtensibleNode *node)
     READ_STRING_FIELD(graph_name);
     READ_UINT_FIELD(graph_oid);
     READ_STRING_FIELD(clause_name);
+    READ_INT_FIELD(set_item_count);
 
     local_node->last_update_indexes = NULL;
     local_node->last_update_index_count = 0;
@@ -291,9 +293,9 @@ void read_cypher_delete_information(struct ExtensibleNode *node)
     READ_STRING_FIELD(graph_name);
     READ_UINT_FIELD(graph_oid);
     READ_BOOL_FIELD(detach);
+    READ_INT_FIELD(delete_item_count);
 
     local_node->delete_item_positions = NULL;
-    local_node->delete_item_count = 0;
     local_node->delete_item_positions_valid = false;
 }
 
@@ -321,8 +323,11 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_UINT_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
+    READ_INT_FIELD(path_length);
     READ_NODE_FIELD(on_match_set_info);
     READ_NODE_FIELD(on_create_set_info);
+    READ_INT_FIELD(on_match_set_item_count);
+    READ_INT_FIELD(on_create_set_item_count);
 }
 
 /*

@@ -743,8 +743,8 @@ static Oid get_or_create_graph(const Name graph_name)
         return graph_cache->oid;
     }
 
-    create_graph_internal(graph_name);
-    graph_cache = search_graph_name_cache_cached(graph_name_str);
+    graph_cache = search_graph_namespace_cache_cached(
+        create_graph_internal(graph_name));
     if (graph_cache == NULL)
     {
         ereport(ERROR,
@@ -798,7 +798,9 @@ static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
         rv = makeRangeVar(graph_name, pstrdup(default_label), -1);
         parent = list_make1(rv);
 
-        label_relid = create_label(graph_name, label_name, label_kind, parent);
+        label_relid = create_label_with_graph_oid(graph_name, graph_oid,
+                                                  label_name, label_kind,
+                                                  parent);
         label_cache = search_label_relation_cache_cached(label_relid);
         if (label_cache == NULL)
         {

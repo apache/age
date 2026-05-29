@@ -26,6 +26,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parser.h"
+#include "utils/builtins.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -40,6 +41,7 @@
 #define gen_graph_namespace_name(graph_name) (graph_name)
 
 static Oid create_schema_for_graph(const Name graph_name);
+static void drop_graph_internal(const char *graph_name_str, const bool cascade);
 static void drop_schema_for_graph(char *graph_name_str, const bool cascade);
 static void remove_schema(Node *schema_name, DropBehavior behavior);
 static void rename_graph(const Name graph_name, const Name new_name);
@@ -104,8 +106,10 @@ Oid create_graph_internal(const Name graph_name)
     CommandCounterIncrement();
 
     /* Create the default label tables */
-    create_label(graph_name_str, AG_DEFAULT_LABEL_VERTEX, LABEL_TYPE_VERTEX, NIL);
-    create_label(graph_name_str, AG_DEFAULT_LABEL_EDGE, LABEL_TYPE_EDGE, NIL);
+    create_label_with_graph_oid(graph_name_str, nsp_id, AG_DEFAULT_LABEL_VERTEX,
+                                LABEL_TYPE_VERTEX, NIL);
+    create_label_with_graph_oid(graph_name_str, nsp_id, AG_DEFAULT_LABEL_EDGE,
+                                LABEL_TYPE_EDGE, NIL);
 
     return nsp_id;
 }
@@ -192,7 +196,6 @@ PG_FUNCTION_INFO_V1(drop_graph);
 Datum drop_graph(PG_FUNCTION_ARGS)
 {
     Name graph_name;
-    char *graph_name_str;
     bool cascade;
 
     if (PG_ARGISNULL(0))
@@ -203,21 +206,28 @@ Datum drop_graph(PG_FUNCTION_ARGS)
     graph_name = PG_GETARG_NAME(0);
     cascade = PG_GETARG_BOOL(1);
 
-    graph_name_str = NameStr(*graph_name);
+    drop_graph_internal(NameStr(*graph_name), cascade);
+
+    PG_RETURN_VOID();
+}
+
+static void drop_graph_internal(const char *graph_name_str, const bool cascade)
+{
+    NameData graph_name;
+
     if (!graph_exists(graph_name_str))
     {
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_SCHEMA),
                         errmsg("graph \"%s\" does not exist", graph_name_str)));
     }
 
-    drop_schema_for_graph(graph_name_str, cascade);
+    drop_schema_for_graph((char *)graph_name_str, cascade);
 
-    delete_graph(graph_name);
+    namestrcpy(&graph_name, graph_name_str);
+    delete_graph(&graph_name);
     CommandCounterIncrement();
 
     ereport(NOTICE, (errmsg("graph \"%s\" has been dropped", graph_name_str)));
-
-    PG_RETURN_VOID();
 }
 
 static void drop_schema_for_graph(char *graph_name_str, const bool cascade)
@@ -407,7 +417,8 @@ List *get_graphnames(void)
 
         slot_getallattrs(slot);
 
-        str = DatumGetCString(slot->tts_values[Anum_ag_graph_name - 1]);
+        str = pstrdup(NameStr(*DatumGetName(
+            slot->tts_values[Anum_ag_graph_name - 1])));
         graphnames = lappend(graphnames, str);
     }
 
@@ -427,7 +438,6 @@ void drop_graphs(List *graphnames)
     {
         char *graphname = lfirst(lc);
 
-        DirectFunctionCall2(
-            drop_graph, CStringGetDatum(graphname), BoolGetDatum(true));
+        drop_graph_internal(graphname, true);
     }
 }

@@ -310,6 +310,7 @@ typedef struct cypher_create_path
     List *target_nodes;
     AttrNumber path_attr_num;
     char *var_name;
+    int path_length;
 } cypher_create_path;
 
 /*
@@ -463,6 +464,7 @@ typedef struct cypher_update_information
     char *graph_name;
     uint32 graph_oid;
     char *clause_name;
+    int set_item_count;
     int *last_update_indexes;
     int last_update_index_count;
     bool last_update_indexes_valid;
@@ -510,8 +512,11 @@ typedef struct cypher_merge_information
     uint32 graph_oid;
     AttrNumber merge_function_attr;
     cypher_create_path *path;
+    int path_length;
     cypher_update_information *on_match_set_info;  /* NULL if no ON MATCH SET */
     cypher_update_information *on_create_set_info;  /* NULL if no ON CREATE SET */
+    int on_match_set_item_count;
+    int on_create_set_item_count;
 } cypher_merge_information;
 
 /* grammar node for typecasts */

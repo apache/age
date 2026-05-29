@@ -184,7 +184,8 @@ static void process_pattern(cypher_create_custom_scan_state *css)
             ps = css->css.ss.ps.lefttree;
             scantuple = ps->ps_ExprContext->ecxt_scantuple;
 
-            result = make_path(css->path_values);
+            result = make_path_with_length(css->path_values,
+                                           path->path_length);
 
             scantuple->tts_values[path->path_attr_num - 1] = result;
             scantuple->tts_isnull[path->path_attr_num - 1] = false;

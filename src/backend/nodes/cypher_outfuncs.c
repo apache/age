@@ -393,6 +393,7 @@ void out_cypher_create_path(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(target_nodes);
     WRITE_INT32_FIELD(path_attr_num);
     WRITE_STRING_FIELD(var_name);
+    WRITE_INT32_FIELD(path_length);
 }
 
 /* serialization function for the cypher_target_node ExtensibleNode. */
@@ -427,6 +428,7 @@ void out_cypher_update_information(StringInfo str, const ExtensibleNode *node)
     WRITE_STRING_FIELD(graph_name);
     WRITE_INT32_FIELD(graph_oid);
     WRITE_STRING_FIELD(clause_name);
+    WRITE_INT32_FIELD(set_item_count);
 }
 
 /* serialization function for the cypher_update_item ExtensibleNode. */
@@ -455,6 +457,7 @@ void out_cypher_delete_information(StringInfo str, const ExtensibleNode *node)
     WRITE_STRING_FIELD(graph_name);
     WRITE_INT32_FIELD(graph_oid);
     WRITE_BOOL_FIELD(detach);
+    WRITE_INT32_FIELD(delete_item_count);
 }
 
 /* serialization function for the cypher_delete_item ExtensibleNode. */
@@ -475,8 +478,11 @@ void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node)
     WRITE_INT32_FIELD(graph_oid);
     WRITE_INT32_FIELD(merge_function_attr);
     WRITE_NODE_FIELD(path);
+    WRITE_INT32_FIELD(path_length);
     WRITE_NODE_FIELD(on_match_set_info);
     WRITE_NODE_FIELD(on_create_set_info);
+    WRITE_INT32_FIELD(on_match_set_item_count);
+    WRITE_INT32_FIELD(on_create_set_item_count);
 }
 
 /*

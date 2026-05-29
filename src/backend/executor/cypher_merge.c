@@ -347,7 +347,8 @@ static void process_path(cypher_merge_custom_scan_state *css,
              (tuple_position < scantuple->tts_tupleDescriptor->natts ||
               scantuple->tts_tupleDescriptor->natts != 1))
         {
-            result = make_path(css->path_values);
+            result = make_path_with_length(css->path_values,
+                                           path->path_length);
 
             /* store the result */
             scantuple->tts_values[tuple_position] = result;
@@ -1350,18 +1351,16 @@ Node *create_cypher_merge_plan_state(CustomScan *cscan)
     cypher_css->flags = merge_information->flags;
     cypher_css->merge_function_attr = merge_information->merge_function_attr;
     cypher_css->path = merge_information->path;
-    cypher_css->path_length = list_length(cypher_css->path->target_nodes);
+    cypher_css->path_length = merge_information->path_length;
     cypher_css->created_new_path = false;
     cypher_css->found_a_path = false;
     cypher_css->graph_oid = merge_information->graph_oid;
     cypher_css->on_match_set_info = merge_information->on_match_set_info;
     cypher_css->on_create_set_info = merge_information->on_create_set_info;
     cypher_css->on_match_set_item_count =
-        cypher_css->on_match_set_info == NULL ? 0 :
-        list_length(cypher_css->on_match_set_info->set_items);
+        merge_information->on_match_set_item_count;
     cypher_css->on_create_set_item_count =
-        cypher_css->on_create_set_info == NULL ? 0 :
-        list_length(cypher_css->on_create_set_info->set_items);
+        merge_information->on_create_set_item_count;
 
     cypher_css->css.ss.ps.type = T_CustomScanState;
     cypher_css->css.methods = &cypher_merge_exec_methods;

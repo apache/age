@@ -154,7 +154,7 @@ char *get_label_relation_name(const char *label_name, Oid graph_oid)
 
     cache_data = search_label_name_graph_cache_cached(label_name, graph_oid);
     if (cache_data)
-        return pstrdup(NameStr(cache_data->relation_name));
+        return pstrdup(get_label_cache_relation_name(cache_data));
     else
         return NULL;
 }
@@ -226,6 +226,14 @@ Datum _label_id(PG_FUNCTION_ARGS)
     Name label_name;
     Oid graph;
     int32 id;
+    static NameData cached_graph_name;
+    static NameData cached_label_name;
+    static int32 cached_label_id = INVALID_LABEL_ID;
+    static uint64 cached_graph_generation = 0;
+    static uint64 cached_label_generation = 0;
+    static bool cached_valid = false;
+    uint64 graph_generation;
+    uint64 label_generation;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -235,8 +243,26 @@ Datum _label_id(PG_FUNCTION_ARGS)
     graph_name = PG_GETARG_NAME(0);
     label_name = PG_GETARG_NAME(1);
 
+    graph_generation = get_graph_cache_generation();
+    label_generation = get_label_cache_generation();
+    if (cached_valid &&
+        cached_graph_generation == graph_generation &&
+        cached_label_generation == label_generation &&
+        namestrcmp(&cached_graph_name, NameStr(*graph_name)) == 0 &&
+        namestrcmp(&cached_label_name, NameStr(*label_name)) == 0)
+    {
+        PG_RETURN_INT32(cached_label_id);
+    }
+
     graph = get_graph_oid(NameStr(*graph_name));
     id = get_label_id(NameStr(*label_name), graph);
+
+    cached_graph_name = *graph_name;
+    cached_label_name = *label_name;
+    cached_label_id = id;
+    cached_graph_generation = graph_generation;
+    cached_label_generation = label_generation;
+    cached_valid = true;
 
     PG_RETURN_INT32(id);
 }
@@ -279,7 +305,7 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
 
     label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
-    relname = pstrdup(NameStr(label_cache->relation_name));
+    relname = pstrdup(get_label_cache_relation_name(label_cache));
 
     return makeRangeVar(graph_name, relname, 2);
 }

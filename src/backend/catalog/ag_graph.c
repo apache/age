@@ -22,12 +22,9 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "catalog/indexing.h"
-#include "utils/lsyscache.h"
 
 #include "catalog/ag_graph.h"
 #include "utils/ag_cache.h"
-
-static Oid get_graph_namespace(const char *graph_name);
 
 /* INSERT INTO ag_catalog.ag_graph VALUES (graph_name, nsp_id) */
 void insert_graph(const Name graph_name, const Oid nsp_id)
@@ -161,7 +158,7 @@ Oid get_graph_oid(const char *graph_name)
     }
 }
 
-static Oid get_graph_namespace(const char *graph_name)
+char *get_graph_namespace_name(const char *graph_name)
 {
     graph_cache_data *cache_data;
 
@@ -172,12 +169,7 @@ static Oid get_graph_namespace(const char *graph_name)
                         errmsg("graph \"%s\" does not exist", graph_name)));
     }
 
-    return cache_data->namespace;
-}
-
-char *get_graph_namespace_name(const char *graph_name)
-{
-    return get_namespace_name(get_graph_namespace(graph_name));
+    return pstrdup(NameStr(cache_data->name));
 }
 
 bool graph_namespace_exists(Oid graph_oid)

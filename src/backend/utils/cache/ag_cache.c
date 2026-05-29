@@ -1389,6 +1389,30 @@ label_cache_data *search_label_seq_name_graph_cache(const char *name, Oid graph)
     return search_label_seq_name_graph_cache_miss(&name_key, graph);
 }
 
+const char *get_label_cache_relation_name(label_cache_data *label_cache)
+{
+    char *relname;
+
+    Assert(label_cache != NULL);
+
+    if (label_cache->relation_name.data[0] != '\0')
+        return NameStr(label_cache->relation_name);
+
+    relname = get_rel_name(label_cache->relation);
+    if (relname == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("label relation %u does not exist",
+                        label_cache->relation)));
+    }
+
+    namestrcpy(&label_cache->relation_name, relname);
+    pfree(relname);
+
+    return NameStr(label_cache->relation_name);
+}
+
 Oid get_label_seq_relation_cached(const label_cache_data *label_cache,
                                   Oid namespace)
 {
@@ -1579,12 +1603,7 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     value = heap_getattr(tuple, Anum_ag_label_relation, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->relation = DatumGetObjectId(value);
-    {
-        char *relname = get_rel_name(cache_data->relation);
-
-        namestrcpy(&cache_data->relation_name, relname);
-        pfree(relname);
-    }
+    cache_data->relation_name.data[0] = '\0';
     /* ag_label.seq_name */
     value = heap_getattr(tuple, Anum_ag_label_seq_name, tuple_desc, &is_null);
     Assert(!is_null);

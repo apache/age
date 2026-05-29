@@ -116,7 +116,8 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
         estate->es_output_cid = estate->es_snapshot->curcid;
     }
 
-    css->set_item_count = list_length(css->set_list->set_items);
+    css->set_item_count = css->set_list->set_item_count;
+    Assert(css->set_item_count == list_length(css->set_list->set_items));
 
     foreach(lc, css->set_list->set_items)
     {
@@ -652,7 +653,8 @@ bool apply_update_list(CustomScanState *node,
     }
 
     if (num_set_items <= 0)
-        num_set_items = list_length(set_info->set_items);
+        num_set_items = set_info->set_item_count;
+    Assert(num_set_items == list_length(set_info->set_items));
 
     if (num_set_items > 1)
     {
