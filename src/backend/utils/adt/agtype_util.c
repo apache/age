@@ -1300,7 +1300,7 @@ static agtype_value *push_agtype_value_scalar(agtype_parse_state **pstate,
         break;
     case WAGT_END_OBJECT:
         uniqueify_agtype_object(&(*pstate)->cont_val);
-        /* fall through! */
+        pg_fallthrough;
     case WAGT_END_ARRAY:
         /* Steps here common to WAGT_END_OBJECT case */
         Assert(!scalar_val);

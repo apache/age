@@ -139,6 +139,7 @@ Datum age_graph_exists(PG_FUNCTION_ARGS)
 
 static Oid create_schema_for_graph(const Name graph_name)
 {
+    ParseState *pstate = make_parsestate(NULL);
     char *graph_name_str = NameStr(*graph_name);
     CreateSchemaStmt *schema_stmt;
     CreateSeqStmt *seq_stmt;
@@ -165,6 +166,7 @@ static Oid create_schema_for_graph(const Name graph_name)
      * ProcessUtilityContext of this command is PROCESS_UTILITY_SUBCOMMAND
      * so the event trigger will not be fired.
      */
+    pstate->p_sourcetext = "(generated CREATE SCHEMA command)";
     schema_stmt = makeNode(CreateSchemaStmt);
     schema_stmt->schemaname = gen_graph_namespace_name(graph_name_str);
     schema_stmt->authrole = NULL;
@@ -180,8 +182,7 @@ static Oid create_schema_for_graph(const Name graph_name)
     seq_stmt->if_not_exists = false;
     schema_stmt->schemaElts = list_make1(seq_stmt);
     schema_stmt->if_not_exists = false;
-    nsp_id = CreateSchemaCommand(schema_stmt,
-                                 "(generated CREATE SCHEMA command)", -1, -1);
+    nsp_id = CreateSchemaCommand(pstate, schema_stmt, -1, -1);
     /* CommandCounterIncrement() is called in CreateSchemaCommand() */
 
     return nsp_id;
@@ -394,7 +395,7 @@ List *get_graphnames(void)
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 0, NULL);
 
-    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple);
+    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple, 0);
 
     for (;;)
     {

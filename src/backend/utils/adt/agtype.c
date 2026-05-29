@@ -32,6 +32,7 @@
 #include "varatt.h"
 #include "utils/jsonfuncs.h"
 #include <math.h>
+#include <time.h>
 
 #include <float.h>
 
@@ -52,9 +53,11 @@
 #include "executor/cypher_utils.h"
 #include "utils/float.h"
 #include "utils/lsyscache.h"
-#include "utils/snapmgr.h"
-#include "utils/typcache.h"
 #include "utils/age_vle.h"
+#include "utils/snapmgr.h"
+#include "utils/tuplesort.h"
+#include "utils/tuplestore.h"
+#include "utils/typcache.h"
 #include "utils/agtype_parser.h"
 #include "utils/ag_float8_supp.h"
 #include "utils/agtype_raw.h"
@@ -6166,7 +6169,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
                     F_GRAPHIDEQ, Int64GetDatum(graphid));
 
         index_scan_desc = index_beginscan(graph_vertex_label, index_rel, 
-                                          snapshot, NULL, 1, 0);
+                                          snapshot, NULL, 1, 0, SO_NONE);
         index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
         if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
@@ -6185,7 +6188,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
                     GRAPHID_GET_DATUM(graphid));
 
-        scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
+        scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys,
+                                    SO_NONE);
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
     }
 
@@ -9481,7 +9485,7 @@ Datum age_split(PG_FUNCTION_ARGS)
                                          PointerGetDatum(text_delimiter));
 
     /* now build an agtype array of strings */
-    if (PointerIsValid(DatumGetPointer(text_array)))
+    if (DatumGetPointer(text_array) != NULL)
     {
         ArrayType *array = DatumGetArrayTypeP(text_array);
         agtype_in_state result;
@@ -9506,8 +9510,8 @@ Datum age_split(PG_FUNCTION_ARGS)
             Datum d;
 
             /* get the string element from the array */
-            string = VARDATA(elements[i]);
-            string_len = VARSIZE(elements[i]) - VARHDRSZ;
+            string = VARDATA(DatumGetPointer(elements[i]));
+            string_len = VARSIZE(DatumGetPointer(elements[i])) - VARHDRSZ;
 
             /* make a copy */
             string_copy = palloc0(string_len);
@@ -12831,6 +12835,7 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 
     ret_tdesc = CreateTupleDescCopy(tupdesc);
+    TupleDescFinalize(ret_tdesc);
     BlessTupleDesc(ret_tdesc);
     tuple_store =
             tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,

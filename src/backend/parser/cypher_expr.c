@@ -24,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/pg_proc.h"
 #include "catalog/dependency.h"
 #include "commands/extension.h"

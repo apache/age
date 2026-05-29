@@ -1418,17 +1418,20 @@ SELECT '["a","b","c",[1,2],null]'::agtype ->> '3'::agtype ->> '1'::agtype;
 ERROR:  operator does not exist: text ->> agtype
 LINE 1: ...["a","b","c",[1,2],null]'::agtype ->> '3'::agtype ->> '1'::a...
                                                              ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 SELECT '["a","b","c",[1,2],null]'::agtype ->> '3'::agtype -> '1'::agtype;
 ERROR:  operator does not exist: text -> agtype
 LINE 1: ...["a","b","c",[1,2],null]'::agtype ->> '3'::agtype -> '1'::ag...
                                                              ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 SELECT '[1, 2, "e", true, null, {"a": true, "b": {}, "c": [{}, [[], {}]]}, null]'::agtype ->> 0.1::float::bigint;
 ERROR:  operator does not exist: agtype ->> bigint
 LINE 1: ...ue, "b": {}, "c": [{}, [[], {}]]}, null]'::agtype ->> 0.1::f...
                                                              ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 SELECT '{"a": [{"b": "c"}, {"b": "cc"}]}'::agtype ->> "'z'"::agtype;
 ERROR:  column "'z'" does not exist
 LINE 1: ...CT '{"a": [{"b": "c"}, {"b": "cc"}]}'::agtype ->> "'z'"::agt...
@@ -1925,12 +1928,14 @@ SELECT '[0,1,2,[3,4],{"5":"five"}]'::agtype #>> '[-1, "5"]' #> '[]';
 ERROR:  operator does not exist: text #> unknown
 LINE 1: ...[0,1,2,[3,4],{"5":"five"}]'::agtype #>> '[-1, "5"]' #> '[]';
                                                                ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 SELECT '{"a":"b","c":[1,2,3], "1" : [{}, {}, [[-3, {"a": {"b": {"d": [-1.9::numeric, false]}, "c": "foo"}}]]]}'::agtype #>> '["1", -1, -1, -1, "a"]' #> '["b", "d", -1]';
 ERROR:  operator does not exist: text #> unknown
 LINE 1: ..."foo"}}]]]}'::agtype #>> '["1", -1, -1, -1, "a"]' #> '["b", ...
                                                              ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 --
 -- concat || operator
 --
@@ -2353,12 +2358,14 @@ SELECT '3'::agtype || 4;
 ERROR:  operator does not exist: agtype || integer
 LINE 1: SELECT '3'::agtype || 4;
                            ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 SELECT '3'::agtype || true;
 ERROR:  operator does not exist: agtype || boolean
 LINE 1: SELECT '3'::agtype || true;
                            ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No operator of that name accepts the given argument types.
+HINT:  You might need to add explicit type casts.
 --
 -- Agtype containment operator
 --
