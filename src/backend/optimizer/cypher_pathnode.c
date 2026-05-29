@@ -32,7 +32,8 @@
 static Const *convert_sublink_to_subplan(PlannerInfo *root,
                                          List *custom_private);
 static bool expr_has_sublink(Node *node, void *context);
-static void apply_child_path_costs(CustomPath *cp, RelOptInfo *rel);
+static Path *select_best_child_path(RelOptInfo *rel);
+static void apply_child_path_costs(CustomPath *cp, Path *best_child);
 
 const CustomPathMethods cypher_create_path_methods = {
     CREATE_PATH_NAME, plan_cypher_create_path, NULL};
@@ -62,7 +63,8 @@ CustomPath *create_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    apply_child_path_costs(cp, rel);
+    cp->custom_paths = list_make1(select_best_child_path(rel));
+    apply_child_path_costs(cp, linitial(cp->custom_paths));
 
     /* No output ordering for basic CREATE */
     cp->path.pathkeys = NULL;
@@ -70,7 +72,6 @@ CustomPath *create_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
     /* Disable all custom flags for now */
     cp->flags = 0;
 
-    cp->custom_paths = rel->pathlist;
     cp->custom_private = custom_private;
     cp->methods = &cypher_create_path_methods;
 
@@ -96,7 +97,8 @@ CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    apply_child_path_costs(cp, rel);
+    cp->custom_paths = list_make1(select_best_child_path(rel));
+    apply_child_path_costs(cp, linitial(cp->custom_paths));
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
@@ -104,7 +106,6 @@ CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
     /* Disable all custom flags for now */
     cp->flags = 0;
 
-    cp->custom_paths = rel->pathlist;
     cp->custom_private = custom_private;
     cp->methods = &cypher_set_path_methods;
 
@@ -134,7 +135,8 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    apply_child_path_costs(cp, rel);
+    cp->custom_paths = list_make1(select_best_child_path(rel));
+    apply_child_path_costs(cp, linitial(cp->custom_paths));
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
@@ -142,8 +144,6 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
     /* Disable all custom flags for now */
     cp->flags = 0;
 
-    /* Make the original paths the children of the new path */
-    cp->custom_paths = rel->pathlist;
     /* Store the metadata Delete will need in the execution phase. */
     cp->custom_private = custom_private;
     /* Tells Postgres how to turn this path to the correct CustomScan */
@@ -175,16 +175,14 @@ CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    apply_child_path_costs(cp, rel);
+    cp->custom_paths = list_make1(select_best_child_path(rel));
+    apply_child_path_costs(cp, linitial(cp->custom_paths));
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
 
     /* Disable all custom flags for now */
     cp->flags = 0;
-
-    /* Make the original paths the children of the new path */
-    cp->custom_paths = rel->pathlist;
 
     /*
      * Store the metadata Merge will need in the execution phase.
@@ -263,7 +261,7 @@ static bool expr_has_sublink(Node *node, void *context)
     return cypher_expr_tree_walker(node, expr_has_sublink, context);
 }
 
-static void apply_child_path_costs(CustomPath *cp, RelOptInfo *rel)
+static Path *select_best_child_path(RelOptInfo *rel)
 {
     Path *best_child = NULL;
     ListCell *lc;
@@ -279,6 +277,14 @@ static void apply_child_path_costs(CustomPath *cp, RelOptInfo *rel)
             best_child = child;
     }
 
+    if (best_child == NULL)
+        elog(ERROR, "Cypher custom path requires a child path");
+
+    return best_child;
+}
+
+static void apply_child_path_costs(CustomPath *cp, Path *best_child)
+{
     if (best_child == NULL)
     {
         cp->path.rows = 0;

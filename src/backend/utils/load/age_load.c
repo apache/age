@@ -37,11 +37,13 @@
 #include "utils/load/ag_load_edges.h"
 #include "utils/load/ag_load_labels.h"
 #include "utils/load/age_load.h"
+#include "utils/ag_cache.h"
 
 static agtype_value *csv_value_to_agtype_value(char *csv_val);
 static Oid get_or_create_graph(const Name graph_name);
-static int32 get_or_create_label(Oid graph_oid, char *graph_name,
-                                 char *label_name, char label_kind);
+static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
+                                             char *label_name,
+                                             char label_kind);
 static char *build_safe_filename(char *name);
 static void check_file_read_permission(void);
 static void check_table_permissions(Oid relid);
@@ -422,16 +424,19 @@ void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
     bool nulls[4] = {false, false, false, false};
     Relation label_relation;
     HeapTuple tuple;
+    label_cache_data *label_cache;
+
+    label_cache = search_label_name_graph_cache(label_name, graph_oid);
 
     /* Check if label provided exists as vertex label, then throw error */
-    if (get_label_kind(label_name, graph_oid) == LABEL_KIND_VERTEX)
+    if (label_cache != NULL && label_cache->kind == LABEL_KIND_VERTEX)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("label %s already exists as vertex label", label_name)));
     }
 
     /* Open the relation */
-    label_relation = table_open(get_label_relation(label_name, graph_oid),
+    label_relation = table_open(label_cache != NULL ? label_cache->relation : InvalidOid,
                                 RowExclusiveLock);
 
     /* Form the tuple */
@@ -471,9 +476,12 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     bool nulls[2] = {false, false};
     Relation label_relation;
     HeapTuple tuple;
+    label_cache_data *label_cache;
+
+    label_cache = search_label_name_graph_cache(label_name, graph_oid);
 
     /* Check if label provided exists as edge label, then throw error */
-    if (get_label_kind(label_name, graph_oid) == LABEL_KIND_EDGE)
+    if (label_cache != NULL && label_cache->kind == LABEL_KIND_EDGE)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("label %s already exists as edge label",
@@ -481,7 +489,7 @@ void insert_vertex_simple(Oid graph_oid, char *label_name, graphid vertex_id,
     }
 
     /* Open the relation */
-    label_relation = table_open(get_label_relation(label_name, graph_oid),
+    label_relation = table_open(label_cache != NULL ? label_cache->relation : InvalidOid,
                                 RowExclusiveLock);
 
     /* Form the tuple */
@@ -545,7 +553,7 @@ void insert_batch(batch_insert_state *batch_state)
                                            true, NULL, NIL, false);
 
             /* Check if the unique constraint is violated */
-            if (list_length(result) != 0)
+            if (result != NIL)
             {
                 Datum id;
                 bool isnull;
@@ -576,6 +584,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     int32 label_id;
     bool id_field_exists;
     bool load_as_agtype;
+    label_cache_data *label_cache;
 
     if (PG_ARGISNULL(0))
     {
@@ -615,11 +624,12 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     file_path_str = build_safe_filename(text_to_cstring(file_name));
 
     graph_oid = get_or_create_graph(graph_name);
-    label_id = get_or_create_label(graph_oid, graph_name_str,
-                                   label_name_str, LABEL_KIND_VERTEX);
+    label_cache = get_or_create_label(graph_oid, graph_name_str,
+                                      label_name_str, LABEL_KIND_VERTEX);
+    label_id = label_cache->id;
 
     /* Get the label relation and check permissions */
-    label_relid = get_label_relation(label_name_str, graph_oid);
+    label_relid = label_cache->relation;
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 
@@ -645,6 +655,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     Oid label_relid;
     int32 label_id;
     bool load_as_agtype;
+    label_cache_data *label_cache;
 
     if (PG_ARGISNULL(0))
     {
@@ -683,11 +694,12 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     file_path_str = build_safe_filename(text_to_cstring(file_name));
 
     graph_oid = get_or_create_graph(graph_name);
-    label_id = get_or_create_label(graph_oid, graph_name_str,
-                                   label_name_str, LABEL_KIND_EDGE);
+    label_cache = get_or_create_label(graph_oid, graph_name_str,
+                                      label_name_str, LABEL_KIND_EDGE);
+    label_id = label_cache->id;
 
     /* Get the label relation and check permissions */
-    label_relid = get_label_relation(label_name_str, graph_oid);
+    label_relid = label_cache->relation;
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 
@@ -727,15 +739,16 @@ static Oid get_or_create_graph(const Name graph_name)
  * Helper function to create a label if it does not exist.
  * Just returns label_id of the label if it already exists.
  */
-static int32 get_or_create_label(Oid graph_oid, char *graph_name,
-                                 char *label_name, char label_kind)
+static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
+                                             char *label_name,
+                                             char label_kind)
 {
-    int32 label_id;
+    label_cache_data *label_cache;
 
-    label_id = get_label_id(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache(label_name, graph_oid);
 
     /* Check if label exists */
-    if (label_id_is_valid(label_id))
+    if (label_cache != NULL)
     {
         char *label_kind_full = (label_kind == LABEL_KIND_VERTEX)
                                 ? "vertex" : "edge";
@@ -743,7 +756,7 @@ static int32 get_or_create_label(Oid graph_oid, char *graph_name,
                                     ? LABEL_KIND_EDGE : LABEL_KIND_VERTEX;
 
         /* If it exists, but as another label_kind, throw an error */
-        if (get_label_kind(label_name, graph_oid) == opposite_label_kind)
+        if (label_cache->kind == opposite_label_kind)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -762,23 +775,28 @@ static int32 get_or_create_label(Oid graph_oid, char *graph_name,
         parent = list_make1(rv);
 
         create_label(graph_name, label_name, label_kind, parent);
-        label_id = get_label_id(label_name, graph_oid);
+        label_cache = search_label_name_graph_cache(label_name, graph_oid);
+        if (label_cache == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_TABLE),
+                     errmsg("label \"%s\" was not found after creation",
+                            label_name)));
+        }
 
         ereport(NOTICE,
                 (errmsg("VLabel \"%s\" has been created", label_name)));
     }
 
-    return label_id;
+    return label_cache;
 }
 
 /*
  * Initialize the batch insert state.
  */
-void init_batch_insert(batch_insert_state **batch_state,
-                              char *label_name, Oid graph_oid)
+void init_batch_insert(batch_insert_state **batch_state, Oid relid)
 {
     Relation relation;
-    Oid relid;
     EState *estate;
     ResultRelInfo *resultRelInfo;
     RangeTblEntry *rte;
@@ -786,9 +804,6 @@ void init_batch_insert(batch_insert_state **batch_state,
     List *range_table = NIL;
     List *perminfos = NIL;
     int i;
-
-    /* Get the relation OID */
-    relid = get_label_relation(label_name, graph_oid);
 
     /* Initialize executor state */
     estate = CreateExecutorState();

@@ -58,6 +58,7 @@ typedef struct cypher_create_custom_scan_state
     TupleTableSlot *slot;
     Oid graph_oid;
     HTAB *entity_exists_index_cache;
+    HTAB *result_rel_info_cache;
 } cypher_create_custom_scan_state;
 
 typedef struct cypher_set_custom_scan_state
@@ -67,6 +68,7 @@ typedef struct cypher_set_custom_scan_state
     cypher_update_information *set_list;
     HTAB *qual_cache;
     HTAB *index_cache;
+    HTAB *result_rel_info_cache;
     Oid graph_oid;
     int flags;
 } cypher_set_custom_scan_state;
@@ -98,6 +100,7 @@ typedef struct cypher_delete_custom_scan_state
     HTAB *vertex_id_htab;
     HTAB *qual_cache;
     HTAB *index_cache;
+    HTAB *result_rel_info_cache;
 } cypher_delete_custom_scan_state;
 
 typedef struct cypher_merge_custom_scan_state
@@ -121,6 +124,7 @@ typedef struct cypher_merge_custom_scan_state
     cypher_update_information *on_match_set_info;   /* NULL if not specified */
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
     HTAB *entity_exists_index_cache;
+    HTAB *result_rel_info_cache;
 } cypher_merge_custom_scan_state;
 
 /* Reusable SET logic callable from MERGE executor */
@@ -135,8 +139,14 @@ TupleTableSlot *populate_edge_tts(
 
 ResultRelInfo *create_entity_result_rel_info_by_oid(EState *estate, Oid relid);
 void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info);
+HTAB *create_entity_result_rel_info_cache(const char *name);
+ResultRelInfo *get_entity_result_rel_info(EState *estate,
+                                          HTAB *result_rel_info_cache,
+                                          Oid relid);
+void destroy_entity_result_rel_info_cache(HTAB *result_rel_info_cache);
 
 HTAB *create_entity_exists_index_cache(const char *name);
+void destroy_entity_exists_index_cache(HTAB *index_cache);
 bool entity_exists(EState *estate, Oid graph_oid, graphid id);
 bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
                               HTAB *index_cache);
@@ -172,7 +182,24 @@ typedef struct RLSCacheEntry
 /* Hash table entry for caching index OIDs per label */
 typedef struct IndexCacheEntry {
     Oid relid;      /* hash key */
+    Relation rel;
+    bool index_oid_cached;
     Oid index_oid;
+    bool start_index_oid_cached;
+    Oid start_index_oid;
+    bool end_index_oid_cached;
+    Oid end_index_oid;
 } IndexCacheEntry;
+
+static inline void init_index_cache_entry(IndexCacheEntry *entry)
+{
+    entry->rel = NULL;
+    entry->index_oid_cached = false;
+    entry->index_oid = InvalidOid;
+    entry->start_index_oid_cached = false;
+    entry->start_index_oid = InvalidOid;
+    entry->end_index_oid_cached = false;
+    entry->end_index_oid = InvalidOid;
+}
 
 #endif

@@ -37,9 +37,15 @@ typedef enum cypher_clause_kind
 
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 
+static Oid cypher_create_clause_func_oid = InvalidOid;
+static Oid cypher_set_clause_func_oid = InvalidOid;
+static Oid cypher_delete_clause_func_oid = InvalidOid;
+static Oid cypher_merge_clause_func_oid = InvalidOid;
+
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
                              RangeTblEntry *rte);
 static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte);
+static void init_cypher_clause_function_oids(void);
 static void handle_cypher_create_clause(PlannerInfo *root, RelOptInfo *rel,
                                         Index rti, RangeTblEntry *rte);
 static void handle_cypher_set_clause(PlannerInfo *root, RelOptInfo *rel,
@@ -113,17 +119,35 @@ static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte)
         return CYPHER_CLAUSE_NONE;
 
     fe = (FuncExpr *)te->expr;
+    init_cypher_clause_function_oids();
 
-    if (is_oid_ag_func(fe->funcid, CREATE_CLAUSE_FUNCTION_NAME))
+    if (fe->funcid == cypher_create_clause_func_oid)
         return CYPHER_CLAUSE_CREATE;
-    if (is_oid_ag_func(fe->funcid, SET_CLAUSE_FUNCTION_NAME))
+    if (fe->funcid == cypher_set_clause_func_oid)
         return CYPHER_CLAUSE_SET;
-    if (is_oid_ag_func(fe->funcid, DELETE_CLAUSE_FUNCTION_NAME))
+    if (fe->funcid == cypher_delete_clause_func_oid)
         return CYPHER_CLAUSE_DELETE;
-    if (is_oid_ag_func(fe->funcid, MERGE_CLAUSE_FUNCTION_NAME))
+    if (fe->funcid == cypher_merge_clause_func_oid)
         return CYPHER_CLAUSE_MERGE;
     else
         return CYPHER_CLAUSE_NONE;
+}
+
+static void init_cypher_clause_function_oids(void)
+{
+    if (OidIsValid(cypher_create_clause_func_oid))
+    {
+        return;
+    }
+
+    cypher_create_clause_func_oid =
+        get_ag_func_oid(CREATE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    cypher_set_clause_func_oid =
+        get_ag_func_oid(SET_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    cypher_delete_clause_func_oid =
+        get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    cypher_merge_clause_func_oid =
+        get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
 }
 
 /* replace all possible paths with our CustomPath */

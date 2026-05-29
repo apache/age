@@ -52,10 +52,12 @@ ListGraphId *get_vertex_entry_edges_in(vertex_entry *ve);
 ListGraphId *get_vertex_entry_edges_out(vertex_entry *ve);
 ListGraphId *get_vertex_entry_edges_self(vertex_entry *ve);
 Oid get_vertex_entry_label_table_oid(vertex_entry *ve);
+char *get_vertex_entry_label_name(vertex_entry *ve);
 Datum get_vertex_entry_properties(vertex_entry *ve);
 /* edge entry accessor functions */
 graphid get_edge_entry_id(edge_entry *ee);
 Oid get_edge_entry_label_table_oid(edge_entry *ee);
+char *get_edge_entry_label_name(edge_entry *ee);
 Datum get_edge_entry_properties(edge_entry *ee);
 graphid get_edge_entry_start_vertex_id(edge_entry *ee);
 graphid get_edge_entry_end_vertex_id(edge_entry *ee);

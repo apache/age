@@ -25,6 +25,7 @@
 #include "postgres.h"
 
 #include "access/tableam.h"
+#include "common/hashfn.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -36,6 +37,12 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
+
+typedef struct EntityResultRelInfoCacheEntry
+{
+    Oid relid;
+    ResultRelInfo *resultRelInfo;
+} EntityResultRelInfoCacheEntry;
 
 /* RLS helper function declarations */
 static void get_policies_for_relation(Relation relation, CmdType cmd,
@@ -76,6 +83,50 @@ void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info)
 
     /* close the rel */
     table_close(result_rel_info->ri_RelationDesc, RowExclusiveLock);
+}
+
+HTAB *create_entity_result_rel_info_cache(const char *name)
+{
+    HASHCTL hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(EntityResultRelInfoCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+
+    return hash_create(name, 8, &hashctl,
+                       HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+ResultRelInfo *get_entity_result_rel_info(EState *estate,
+                                          HTAB *result_rel_info_cache,
+                                          Oid relid)
+{
+    EntityResultRelInfoCacheEntry *entry;
+    bool found;
+
+    entry = hash_search(result_rel_info_cache, &relid, HASH_ENTER, &found);
+    if (!found)
+    {
+        entry->resultRelInfo = create_entity_result_rel_info_by_oid(estate,
+                                                                    relid);
+    }
+
+    return entry->resultRelInfo;
+}
+
+void destroy_entity_result_rel_info_cache(HTAB *result_rel_info_cache)
+{
+    HASH_SEQ_STATUS hash_seq;
+    EntityResultRelInfoCacheEntry *entry;
+
+    hash_seq_init(&hash_seq, result_rel_info_cache);
+    while ((entry = hash_seq_search(&hash_seq)) != NULL)
+    {
+        destroy_entity_result_rel_info(entry->resultRelInfo);
+    }
+
+    hash_destroy(result_rel_info_cache);
 }
 
 TupleTableSlot *populate_vertex_tts(
@@ -159,6 +210,23 @@ HTAB *create_entity_exists_index_cache(const char *name)
                        HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
+void destroy_entity_exists_index_cache(HTAB *index_cache)
+{
+    HASH_SEQ_STATUS hash_seq;
+    IndexCacheEntry *entry;
+
+    hash_seq_init(&hash_seq, index_cache);
+    while ((entry = hash_seq_search(&hash_seq)) != NULL)
+    {
+        if (entry->rel != NULL)
+        {
+            table_close(entry->rel, AccessShareLock);
+        }
+    }
+
+    hash_destroy(index_cache);
+}
+
 bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 {
     return entity_exists_with_cache(estate, graph_oid, id, NULL);
@@ -208,8 +276,6 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     estate->es_snapshot->curcid = Max(saved_curcid,
                                       GetCurrentCommandId(false));
 
-    rel = table_open(label->relation, AccessShareLock);
-
     if (index_cache != NULL)
     {
         IndexCacheEntry *entry;
@@ -219,12 +285,21 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
                             &found);
         if (!found)
         {
+            init_index_cache_entry(entry);
+            entry->rel = table_open(label->relation, AccessShareLock);
+            rel = entry->rel;
             entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
+            entry->index_oid_cached = true;
+        }
+        else
+        {
+            rel = entry->rel;
         }
         index_oid = entry->index_oid;
     }
     else
     {
+        rel = table_open(label->relation, AccessShareLock);
         index_oid = find_usable_btree_index_for_attr(rel, 1);
     }
 
@@ -266,7 +341,10 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
         table_endscan(scan_desc);
     }
 
-    table_close(rel, AccessShareLock);
+    if (index_cache == NULL)
+    {
+        table_close(rel, AccessShareLock);
+    }
 
     /* Restore the original curcid */
     estate->es_snapshot->curcid = saved_curcid;
@@ -640,7 +718,7 @@ add_with_check_options(Relation rel,
         wco->polname = NULL;
         wco->cascaded = false;
 
-        if (list_length(permissive_quals) == 1)
+        if (lnext(permissive_quals, list_head(permissive_quals)) == NULL)
         {
             wco->qual = (Node *) linitial(permissive_quals);
         }
@@ -844,7 +922,7 @@ add_security_quals(int rt_index,
          * Then add a single security qual combining together the USING
          * clauses from all the permissive policies using OR.
          */
-        if (list_length(permissive_quals) == 1)
+        if (lnext(permissive_quals, list_head(permissive_quals)) == NULL)
         {
             rowsec_expr = (Expr *) linitial(permissive_quals);
         }

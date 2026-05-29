@@ -251,6 +251,7 @@ void read_cypher_update_information(struct ExtensibleNode *node)
     READ_UINT_FIELD(flags);
     READ_INT_FIELD(tuple_position);
     READ_STRING_FIELD(graph_name);
+    READ_UINT_FIELD(graph_oid);
     READ_STRING_FIELD(clause_name);
 }
 

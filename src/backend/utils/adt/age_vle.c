@@ -72,6 +72,7 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "nodes/cypher_nodes.h"
+#include "utils/ag_cache.h"
 
 /* defines */
 #define GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc) \
@@ -827,11 +828,15 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     if (agtv_temp->type == AGTV_STRING &&
         agtv_temp->val.string.len != 0)
     {
+        label_cache_data *label_cache;
+
         vlelctx->edge_label_name = pnstrdup(agtv_temp->val.string.val,
                                             agtv_temp->val.string.len);
 
-        vlelctx->edge_label_name_oid = get_label_relation(vlelctx->edge_label_name,
-                                                          graph_oid);
+        label_cache = search_label_name_graph_cache(vlelctx->edge_label_name,
+                                                    graph_oid);
+        vlelctx->edge_label_name_oid = label_cache != NULL ?
+                                       label_cache->relation : InvalidOid;
     }
     else
     {
@@ -1612,8 +1617,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 
         /* get the edge entry from the hashtable */
         ee = get_edge_entry(ggctx, graphid_array[index]);
-        /* get the label name from the oid */
-        label_name = get_rel_name(get_edge_entry_label_table_oid(ee));
+        label_name = get_edge_entry_label_name(ee);
         /* reconstruct the edge */
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),
@@ -1678,8 +1682,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 
         /* get the vertex entry from the hashtable */
         ve = get_vertex_entry(ggctx, graphid_array[index]);
-        /* get the label name from the oid */
-        label_name = get_rel_name(get_vertex_entry_label_table_oid(ve));
+        label_name = get_vertex_entry_label_name(ve);
         /* reconstruct the vertex */
         agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
                                                 label_name,
@@ -1699,8 +1702,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 
         /* get the edge entry from the hashtable */
         ee = get_edge_entry(ggctx, graphid_array[index+1]);
-        /* get the label name from the oid */
-        label_name = get_rel_name(get_edge_entry_label_table_oid(ee));
+        label_name = get_edge_entry_label_name(ee);
         /* reconstruct the edge */
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),

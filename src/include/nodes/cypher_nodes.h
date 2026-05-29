@@ -461,6 +461,7 @@ typedef struct cypher_update_information
     uint32 flags;
     AttrNumber tuple_position;
     char *graph_name;
+    uint32 graph_oid;
     char *clause_name;
 } cypher_update_information;
 

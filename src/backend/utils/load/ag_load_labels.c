@@ -29,6 +29,7 @@
 #include "utils/rel.h"
 
 #include "utils/load/ag_load_labels.h"
+#include "utils/ag_cache.h"
 
 /*
  * Process a single vertex row from COPY's raw fields.
@@ -149,6 +150,7 @@ int create_labels_from_csv_file(char *file_path,
     batch_insert_state *batch_state = NULL;
     MemoryContext   batch_context;
     MemoryContext   old_context;
+    label_cache_data *label_cache;
 
     /* Create a memory context for batch processing - reset after each batch */
     batch_context = AllocSetContextCreate(CurrentMemoryContext,
@@ -156,7 +158,8 @@ int create_labels_from_csv_file(char *file_path,
                                           ALLOCSET_DEFAULT_SIZES);
 
     /* Get the label relation */
-    label_relid = get_label_relation(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_relid = label_cache != NULL ? label_cache->relation : InvalidOid;
     label_rel = table_open(label_relid, RowExclusiveLock);
 
     /* Get sequence info */
@@ -173,7 +176,7 @@ int create_labels_from_csv_file(char *file_path,
     }
 
     /* Initialize the batch insert state */
-    init_batch_insert(&batch_state, label_name, graph_oid);
+    init_batch_insert(&batch_state, label_relid);
 
     /* Create COPY options for CSV parsing */
     copy_options = create_copy_options();

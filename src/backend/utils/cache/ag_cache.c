@@ -127,6 +127,7 @@ static void flush_graph_name_cache(void);
 static void flush_graph_namespace_cache(void);
 static graph_cache_data *search_graph_name_cache_miss(Name name);
 static graph_cache_data *search_graph_namespace_cache_miss(Oid namespace);
+static void cache_graph_data_in_all_caches(const graph_cache_data *data);
 static void fill_graph_cache_data(graph_cache_data *cache_data,
                                   HeapTuple tuple, TupleDesc tuple_desc);
 
@@ -163,6 +164,7 @@ static void *label_seq_name_graph_cache_hash_search(Name name, Oid graph,
                                                     HASHACTION action,
                                                     bool *found);
 
+static void cache_label_data_in_all_caches(const label_cache_data *data);
 static void fill_label_cache_data(label_cache_data *cache_data,
                                   HeapTuple tuple, TupleDesc tuple_desc);
 
@@ -372,6 +374,7 @@ static graph_cache_data *search_graph_name_cache_miss(Name name)
 
     /* fill the new entry with the retrieved tuple */
     fill_graph_cache_data(&entry->data, tuple, RelationGetDescr(ag_graph));
+    cache_graph_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_graph, AccessShareLock);
@@ -435,11 +438,33 @@ static graph_cache_data *search_graph_namespace_cache_miss(Oid namespace)
 
     /* fill the new entry with the retrieved tuple */
     fill_graph_cache_data(&entry->data, tuple, RelationGetDescr(ag_graph));
+    cache_graph_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_graph, AccessShareLock);
 
     return &entry->data;
+}
+
+static void cache_graph_data_in_all_caches(const graph_cache_data *data)
+{
+    graph_name_cache_entry *name_entry;
+    graph_namespace_cache_entry *namespace_entry;
+    bool found;
+
+    name_entry = hash_search(graph_name_cache_hash, &data->name, HASH_ENTER,
+                             &found);
+    if (!found)
+    {
+        name_entry->data = *data;
+    }
+
+    namespace_entry = hash_search(graph_namespace_cache_hash, &data->namespace,
+                                  HASH_ENTER, &found);
+    if (!found)
+    {
+        namespace_entry->data = *data;
+    }
 }
 
 static void fill_graph_cache_data(graph_cache_data *cache_data,
@@ -482,18 +507,6 @@ static void initialize_label_caches(void)
     /* ag_label.relation */
     ag_cache_scan_key_init(&label_relation_scan_keys[0],
                            Anum_ag_label_relation, F_OIDEQ);
-    
-    /* ag_label.seq_name, ag_label.graph */
-    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0], Anum_ag_label_seq_name,
-                           F_NAMEEQ);
-    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[1], Anum_ag_label_graph,
-                           F_OIDEQ);
-
-    /* ag_label.seq_name, ag_label.graph */
-    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0],
-                           Anum_ag_label_seq_name, F_NAMEEQ);
-    ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[1],
-                           Anum_ag_label_graph, F_OIDEQ);
 
     /* ag_label.seq_name, ag_label.graph */
     ag_cache_scan_key_init(&label_seq_name_graph_scan_keys[0],
@@ -855,6 +868,7 @@ static label_cache_data *search_label_name_graph_cache_miss(Name name,
 
     /* fill the new entry with the retrieved tuple */
     fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
+    cache_label_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
@@ -932,6 +946,7 @@ static label_cache_data *search_label_graph_oid_cache_miss(Oid graph, uint32 id)
 
     /* fill the new entry with the retrieved tuple */
     fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
+    cache_label_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
@@ -972,7 +987,7 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     SysScanDesc scan_desc;
     HeapTuple tuple;
     bool found;
-    label_cache_data *entry;
+    label_relation_cache_entry *entry;
 
     memcpy(scan_keys, label_relation_scan_keys,
            sizeof(label_relation_scan_keys));
@@ -1004,12 +1019,13 @@ static label_cache_data *search_label_relation_cache_miss(Oid relation)
     Assert(!found); /* no concurrent update on label_relation_cache_hash */
 
     /* fill the new entry with the retrieved tuple */
-    fill_label_cache_data(entry, tuple, RelationGetDescr(ag_label));
+    fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
+    cache_label_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
 
-    return entry;
+    return &entry->data;
 }
 
 label_cache_data *search_label_seq_name_graph_cache(const char *name, Oid graph)
@@ -1076,6 +1092,7 @@ static label_cache_data *search_label_seq_name_graph_cache_miss(Name name,
 
     /* fill the new entry with the retrieved tuple */
     fill_label_cache_data(&entry->data, tuple, RelationGetDescr(ag_label));
+    cache_label_data_in_all_caches(&entry->data);
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
@@ -1094,6 +1111,45 @@ static void *label_seq_name_graph_cache_hash_search(Name name, Oid graph,
     key.graph = graph;
 
     return hash_search(label_seq_name_graph_cache_hash, &key, action, found);
+}
+
+static void cache_label_data_in_all_caches(const label_cache_data *data)
+{
+    label_name_graph_cache_entry *name_entry;
+    label_graph_oid_cache_entry *id_entry;
+    label_relation_cache_entry *relation_entry;
+    label_seq_name_graph_cache_entry *seq_entry;
+    bool found;
+
+    name_entry = label_name_graph_cache_hash_search((Name)&data->name,
+                                                    data->graph, HASH_ENTER,
+                                                    &found);
+    if (!found)
+    {
+        name_entry->data = *data;
+    }
+
+    id_entry = label_graph_oid_cache_hash_search(data->graph, data->id,
+                                                HASH_ENTER, &found);
+    if (!found)
+    {
+        id_entry->data = *data;
+    }
+
+    relation_entry = hash_search(label_relation_cache_hash, &data->relation,
+                                 HASH_ENTER, &found);
+    if (!found)
+    {
+        relation_entry->data = *data;
+    }
+
+    seq_entry = label_seq_name_graph_cache_hash_search((Name)&data->seq_name,
+                                                       data->graph, HASH_ENTER,
+                                                       &found);
+    if (!found)
+    {
+        seq_entry->data = *data;
+    }
 }
 
 static void fill_label_cache_data(label_cache_data *cache_data,

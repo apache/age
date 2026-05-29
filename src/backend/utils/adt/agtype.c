@@ -5628,53 +5628,6 @@ Datum age_end_id(PG_FUNCTION_ARGS)
 }
 
 /*
- * Helper function to return the Datum value of a column (attribute) in a heap
- * tuple (row) given the column number (starting from 0), attribute name, typid,
- * and whether it can be null. The function is designed to extract and validate
- * that the data (attribute) is what is expected. The function will error on any
- * issues.
- */
-Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
-                       const char *attname, Oid typid, bool isnull)
-{
-    Form_pg_attribute att;
-    HeapTupleHeader hth;
-    HeapTupleData tmptup, *htd;
-    Datum result;
-    bool _isnull = true;
-
-    /* build the heap tuple data */
-    hth = tuple->t_data;
-    tmptup.t_len = HeapTupleHeaderGetDatumLength(hth);
-    tmptup.t_data = hth;
-    htd = &tmptup;
-
-    /* get the description for the column from the tuple descriptor */
-    att = TupleDescAttr(tupdesc, column);
-    /* get the datum (attribute) for that column*/
-    result = heap_getattr(htd, column + 1, tupdesc, &_isnull);
-    /* verify that the attribute typid is as expected */
-    if (att->atttypid != typid)
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid attribute typid. Expected %d, found %d", typid,
-                        att->atttypid)));
-    /* verify that the attribute name is as expected */
-    if (strcmp(att->attname.data, attname) != 0)
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid attribute name. Expected %s, found %s",
-                        attname, att->attname.data)));
-    /* verify that if it is null, it is allowed to be null */
-    if (isnull == false && _isnull == true)
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Attribute was found to be null when null is not allowed.")));
-
-    return result;
-}
-
-/*
  * Function to retrieve a label name, given the graph name and graphid of the
  * node or edge. The function returns a pointer to a duplicated string that
  * needs to be freed when you are finished using it.
@@ -5712,6 +5665,7 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
     TupleTableSlot *slot = NULL;
     Oid index_oid;
     bool should_free_tuple = false;
+    bool isnull;
 
     /* get the active snapshot */
     Snapshot snapshot = GetActiveSnapshot();
@@ -5812,11 +5766,23 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("Invalid number of attributes for %s", vertex_label)));
 
-    /* get the id */
-    id = column_get_datum(tupdesc, tuple, 0, "id", GRAPHIDOID, true);
-    /* get the properties */
-    properties = column_get_datum(tupdesc, tuple, 1, "properties",
-                                  AGTYPEOID, true);
+    id = heap_getattr(tuple, Anum_ag_label_vertex_table_id, tupdesc, &isnull);
+    if (isnull)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("vertex id is null for %s", vertex_label)));
+    }
+
+    properties = heap_getattr(tuple, Anum_ag_label_vertex_table_properties,
+                              tupdesc, &isnull);
+    if (isnull)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("vertex properties are null for %s", vertex_label)));
+    }
+
     /* reconstruct the vertex */
     result = DirectFunctionCall3(_agtype_build_vertex, id,
                                  CStringGetDatum(vertex_label), properties);

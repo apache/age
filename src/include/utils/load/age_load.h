@@ -58,8 +58,7 @@ void insert_edge_simple(Oid graph_oid, char *label_name, graphid edge_id,
                         graphid start_id, graphid end_id,
                         agtype *edge_properties);
 
-void init_batch_insert(batch_insert_state **batch_state,
-                       char *label_name, Oid graph_oid);
+void init_batch_insert(batch_insert_state **batch_state, Oid relid);
 void insert_batch(batch_insert_state *batch_state);
 void finish_batch_insert(batch_insert_state **batch_state);
 

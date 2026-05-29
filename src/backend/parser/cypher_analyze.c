@@ -54,6 +54,7 @@ static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *js
 static bool convert_cypher_walker(Node *node, ParseState *pstate);
 static bool is_rte_cypher(RangeTblEntry *rte);
 static bool is_func_cypher(FuncExpr *funcexpr);
+static Oid get_cypher_func_oid(void);
 static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate);
 static Name expr_get_const_name(Node *expr);
 static const char *expr_get_const_cstring(Node *expr, const char *source_str);
@@ -312,12 +313,14 @@ static bool is_rte_cypher(RangeTblEntry *rte)
 {
     RangeTblFunction *rtfunc;
     FuncExpr *funcexpr;
+    ListCell *first_function;
 
     /*
      * The planner expects RangeTblFunction nodes in rte->functions list.
      * We cannot replace one of them to a SELECT subquery.
      */
-    if (list_length(rte->functions) != 1)
+    first_function = list_head(rte->functions);
+    if (first_function == NULL || lnext(rte->functions, first_function) != NULL)
         return false;
 
     /*
@@ -369,7 +372,20 @@ static bool is_func_cypher(FuncExpr *funcexpr)
         return false;
     }
 
-    return is_oid_ag_func(funcexpr->funcid, "cypher");
+    return funcexpr->funcid == get_cypher_func_oid();
+}
+
+static Oid get_cypher_func_oid(void)
+{
+    static Oid cypher_func_oid = InvalidOid;
+
+    if (!OidIsValid(cypher_func_oid))
+    {
+        cypher_func_oid = get_ag_func_oid("cypher", 3, NAMEOID, CSTRINGOID,
+                                          AGTYPEOID);
+    }
+
+    return cypher_func_oid;
 }
 
 /* convert cypher() call to SELECT subquery in-place */
@@ -377,6 +393,8 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
 {
     RangeTblFunction *rtfunc = linitial(rte->functions);
     FuncExpr *funcexpr = (FuncExpr *)rtfunc->funcexpr;
+    List *args = funcexpr->args;
+    int nargs = list_length(args);
     Node *arg1 = NULL;
     Node *arg2 = NULL;
     Node *arg3 = NULL;
@@ -405,7 +423,7 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     }
 
     /* verify that we have 2 input parameters as it is possible to get 1 or 0 */
-    if (funcexpr->args == NULL || list_length(funcexpr->args) < 2)
+    if (nargs < 2)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_SYNTAX_ERROR),
@@ -414,8 +432,8 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
     }
 
     /* get our first 2 arguments */
-    arg1 = linitial(funcexpr->args);
-    arg2 = lsecond(funcexpr->args);
+    arg1 = linitial(args);
+    arg2 = lsecond(args);
 
     Assert(exprType(arg1) == NAMEOID);
     Assert(exprType(arg2) == CSTRINGOID);
@@ -475,9 +493,9 @@ static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate)
      * Check to see if the cypher function had a third parameter passed to it,
      * if so make sure Postgres parsed the second argument to a Param node.
      */
-    if (list_length(funcexpr->args) == 3)
+    if (nargs == 3)
     {
-        arg3 = lthird(funcexpr->args);
+        arg3 = lthird(args);
         if (!IsA(arg3, Param))
         {
             ereport(ERROR,

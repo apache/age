@@ -109,6 +109,7 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         (cypher_merge_custom_scan_state *)node;
     ListCell *lc = NULL;
     Plan *subplan = NULL;
+    int result_rtindex;
     css->created_paths_list = NULL;
 
     Assert(list_length(css->cs->custom_plans) == 1);
@@ -135,6 +136,10 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
         ExecAssignProjectionInfo(&node->ss.ps, tupdesc);
     }
 
+    result_rtindex = list_length(estate->es_range_table);
+    css->result_rel_info_cache =
+        create_entity_result_rel_info_cache("merge_result_rel_info_cache");
+
     /*
      * For each vertex and edge in the path, setup the information
      * needed if we need to create them.
@@ -156,17 +161,10 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
             continue;
         }
 
-        /* Open relation and acquire a row exclusive lock. */
-        rel = table_open(cypher_node->relid, RowExclusiveLock);
-
-        /* Initialize resultRelInfo for the vertex */
-        cypher_node->resultRelInfo = makeNode(ResultRelInfo);
-        InitResultRelInfo(cypher_node->resultRelInfo, rel,
-                          list_length(estate->es_range_table), NULL,
-                          estate->es_instrument);
-
-        /* Open all indexes for the relation */
-        ExecOpenIndices(cypher_node->resultRelInfo, false);
+        cypher_node->resultRelInfo = get_entity_result_rel_info(
+            estate, css->result_rel_info_cache, cypher_node->relid);
+        rel = cypher_node->resultRelInfo->ri_RelationDesc;
+        cypher_node->resultRelInfo->ri_RangeTableIndex = result_rtindex;
 
         /* Setup the relation's tuple slot */
         cypher_node->elemTupleSlot = ExecInitExtraTupleSlot(
@@ -1063,7 +1061,7 @@ static void end_cypher_merge(CustomScanState *node)
 
     if (css->entity_exists_index_cache != NULL)
     {
-        hash_destroy(css->entity_exists_index_cache);
+        destroy_entity_exists_index_cache(css->entity_exists_index_cache);
         css->entity_exists_index_cache = NULL;
     }
 
@@ -1076,12 +1074,13 @@ static void end_cypher_merge(CustomScanState *node)
             continue;
         }
 
-        /* close all indices for the node */
-        ExecCloseIndices(cypher_node->resultRelInfo);
+        cypher_node->resultRelInfo = NULL;
+    }
 
-        /* close the relation itself */
-        table_close(cypher_node->resultRelInfo->ri_RelationDesc,
-                    RowExclusiveLock);
+    if (css->result_rel_info_cache != NULL)
+    {
+        destroy_entity_result_rel_info_cache(css->result_rel_info_cache);
+        css->result_rel_info_cache = NULL;
     }
 
     /* free up our created paths lists */

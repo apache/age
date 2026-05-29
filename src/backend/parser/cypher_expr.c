@@ -607,7 +607,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
      * We need to check this before processing to avoid returning NULL result
      * which causes "cache lookup failed for type 0" error.
      */
-    if (rexpr->elems == NIL || list_length((List *)rexpr->elems) == 0)
+    if (rexpr->elems == NIL)
     {
         Datum bool_value;
         Const *const_result;
@@ -662,7 +662,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
      * ScalarArrayOpExpr is only going to be useful if there's more than one
      * non-Var righthand item.
      */
-    if (list_length(rnonvars) > 1)
+    if (rnonvars != NIL && lnext(rnonvars, list_head(rnonvars)) != NULL)
     {
         List *allexprs;
         Oid scalar_type;
@@ -1764,15 +1764,16 @@ static List *cast_agtype_args_to_target_type(cypher_parsestate *cpstate,
 {
     char *funcname = NameStr(procform->proname);
     int nargs = procform->pronargs;
+    int given_nargs = list_length(fargs);
     ListCell *lc = NULL;
 
     /* verify the length of args are same */
-    if (list_length(fargs) != nargs)
+    if (given_nargs != nargs)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_DATA_EXCEPTION),
                  errmsg("function %s requires %d arguments, %d given",
-                        funcname, nargs, list_length(fargs))));
+                        funcname, nargs, given_nargs)));
     }
 
     /* iterate through the function's args */
@@ -2019,7 +2020,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     Assert(!fn->agg_within_group);
 
     /* If it is a qualified function call, let it through. */
-    if (list_length(fn->funcname) > 1)
+    if (lnext(fn->funcname, list_head(fn->funcname)) != NULL)
     {
         fname = fn->funcname;
     }
@@ -2043,7 +2044,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
              * and vle. So, check for those 3 functions here and that the arg list
              * is not empty. Then prepend the graph name if necessary.
              */
-            if ((list_length(targs) != 0) &&
+            if ((targs != NIL) &&
                 (strcmp("startNode", name) == 0 ||
                 strcmp("endNode", name) == 0 ||
                 strcmp("vle", name) == 0 ||

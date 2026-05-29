@@ -134,30 +134,41 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     graph_oid = get_graph_oid(graph_name_str);
 
-    if (!PG_ARGISNULL(3))
+    graph_cache = search_graph_name_cache(graph_name_str);
+    vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
+    if (vertex_cache == NULL)
     {
-        /* Check if label with the input name already exists */
-        if (!label_exists(vtx_name_str, graph_oid))
+        DirectFunctionCall2(create_vlabel,
+                            CStringGetDatum(graph_name->data),
+                            CStringGetDatum(vtx_name_str));
+        vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
+        if (vertex_cache == NULL)
         {
-            DirectFunctionCall2(create_vlabel,
-                                CStringGetDatum(graph_name->data),
-                                CStringGetDatum(vtx_label_name->data));
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_TABLE),
+                     errmsg("vertex label \"%s\" was not found after creation",
+                            vtx_name_str)));
         }
     }
 
-    if (!label_exists(edge_name_str, graph_oid))
+    edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
+    if (edge_cache == NULL)
     {
         DirectFunctionCall2(create_elabel,
                             CStringGetDatum(graph_name->data),
                             CStringGetDatum(edge_label_name->data));
+        edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
+        if (edge_cache == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_TABLE),
+                     errmsg("edge label \"%s\" was not found after creation",
+                            edge_name_str)));
+        }
     }
 
-    vtx_label_id = get_label_id(vtx_name_str, graph_oid);
-    edge_label_id = get_label_id(edge_name_str, graph_oid);
-
-    graph_cache = search_graph_name_cache(graph_name_str);
-    vertex_cache = search_label_name_graph_cache(vtx_name_str, graph_oid);
-    edge_cache = search_label_name_graph_cache(edge_name_str, graph_oid);
+    vtx_label_id = vertex_cache->id;
+    edge_label_id = edge_cache->id;
 
     nsp_id = graph_cache->namespace;
     vtx_seq_name = &(vertex_cache->seq_name);
@@ -250,6 +261,7 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     graphid end_node_graph_id;
 
     graph_cache_data* graph_cache;
+    label_cache_data* node_cache;
     label_cache_data* edge_cache;
 
     agtype* properties = NULL;
@@ -317,15 +329,31 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
                                                arguments->args[3].value);
 
     graph_oid = get_graph_oid(graph_name_str);
-    node_label_id = get_label_id(node_label_str, graph_oid);
-    edge_label_id = get_label_id(edge_label_str, graph_oid);
 
     /*
      * Fetching caches to get next values for graph id's, and access nodes
      * to be connected with edges.
      */
     graph_cache = search_graph_name_cache(graph_name_str);
-    edge_cache = search_label_name_graph_cache(edge_label_str,graph_oid);
+    node_cache = search_label_name_graph_cache(node_label_str, graph_oid);
+    if (node_cache == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("vertex label \"%s\" does not exist",
+                        node_label_str)));
+    }
+
+    edge_cache = search_label_name_graph_cache(edge_label_str, graph_oid);
+    if (edge_cache == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("edge label \"%s\" does not exist", edge_label_str)));
+    }
+
+    node_label_id = node_cache->id;
+    edge_label_id = edge_cache->id;
 
     /* connect a node from each graph */
     /* first created node, from the first complete graph */

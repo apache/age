@@ -109,6 +109,7 @@ typedef struct vertex_entry
     ListGraphId *edges_out;        /* List of exiting edges graphids (int64) */
     ListGraphId *edges_self;       /* List of selfloop edges graphids (int64) */
     Oid vertex_label_table_oid;    /* the label table oid */
+    char *vertex_label_name;       /* the label name */
     ItemPointerData tid;           /* physical tuple location for lazy fetch */
 } vertex_entry;
 
@@ -117,6 +118,7 @@ typedef struct edge_entry
 {
     graphid edge_id;               /* edge id, it is also the hash key */
     Oid edge_label_table_oid;      /* the label table oid */
+    char *edge_label_name;         /* the label name */
     ItemPointerData tid;           /* physical tuple location for lazy fetch */
     graphid start_vertex_id;       /* start vertex */
     graphid end_vertex_id;         /* end vertex */
@@ -176,12 +178,14 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                                  char label_type);
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
                               ItemPointerData tid, graphid start_vertex_id,
-                              graphid end_vertex_id, Oid edge_label_table_oid);
+                              graphid end_vertex_id, Oid edge_label_table_oid,
+                              char *edge_label_name);
 static bool insert_vertex_edge(GRAPH_global_context *ggctx,
                                graphid start_vertex_id, graphid end_vertex_id,
                                graphid edge_id, char *edge_label_name);
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
+                                char *vertex_label_name,
                                 ItemPointerData tid);
 /* definitions */
 
@@ -353,7 +357,8 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
  */
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
                               ItemPointerData tid, graphid start_vertex_id,
-                              graphid end_vertex_id, Oid edge_label_table_oid)
+                              graphid end_vertex_id, Oid edge_label_table_oid,
+                              char *edge_label_name)
 {
     edge_entry *ee = NULL;
     bool found = false;
@@ -402,6 +407,7 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
     ee->start_vertex_id = start_vertex_id;
     ee->end_vertex_id = end_vertex_id;
     ee->edge_label_table_oid = edge_label_table_oid;
+    ee->edge_label_name = pstrdup(edge_label_name);
 
     /* increment the number of loaded edges */
     ggctx->num_loaded_edges++;
@@ -415,6 +421,7 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
  */
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
+                                char *vertex_label_name,
                                 ItemPointerData tid)
 {
     vertex_entry *ve = NULL;
@@ -457,6 +464,7 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
     ve->vertex_id = vertex_id;
     /* set the label table oid for this vertex */
     ve->vertex_label_table_oid = vertex_label_table_oid;
+    ve->vertex_label_name = pstrdup(vertex_label_name);
     /* set the TID for lazy property fetch */
     ve->tid = tid;
     /* set the NIL edge list */
@@ -603,6 +611,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
         while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
         {
             graphid vertex_id;
+            bool isnull;
             bool inserted = false;
 
             /* something is wrong if this isn't true */
@@ -612,13 +621,21 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
             }
             Assert(HeapTupleIsValid(tuple));
 
-            /* get the vertex id */
-            vertex_id = DatumGetInt64(column_get_datum(tupdesc, tuple, 0, "id",
-                                                       GRAPHIDOID, true));
+            vertex_id = DatumGetInt64(heap_getattr(tuple,
+                                                   Anum_ag_label_vertex_table_id,
+                                                   tupdesc, &isnull));
+            if (isnull)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_TABLE),
+                         errmsg("vertex id is null for %s.%s",
+                                ggctx->graph_name, vertex_label_name)));
+            }
 
             /* insert vertex into vertex hashtable with TID (no property copy) */
             inserted = insert_vertex_entry(ggctx, vertex_id,
                                            vertex_label_table_oid,
+                                           vertex_label_name,
                                            tuple->t_self);
 
             /* warn if there is a duplicate */
@@ -703,6 +720,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
             graphid edge_id;
             graphid edge_vertex_start_id;
             graphid edge_vertex_end_id;
+            bool isnull;
             bool inserted = false;
 
             /* something is wrong if this isn't true */
@@ -712,26 +730,43 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
             }
             Assert(HeapTupleIsValid(tuple));
 
-            /* get the edge id */
-            edge_id = DatumGetInt64(column_get_datum(tupdesc, tuple, 0, "id",
-                                                     GRAPHIDOID, true));
-            /* get the edge start_id (start vertex id) */
-            edge_vertex_start_id = DatumGetInt64(column_get_datum(tupdesc,
-                                                                  tuple, 1,
-                                                                  "start_id",
-                                                                  GRAPHIDOID,
-                                                                  true));
-            /* get the edge end_id (end vertex id)*/
-            edge_vertex_end_id = DatumGetInt64(column_get_datum(tupdesc, tuple,
-                                                                2, "end_id",
-                                                                GRAPHIDOID,
-                                                                true));
+            edge_id = DatumGetInt64(heap_getattr(tuple,
+                                                 Anum_ag_label_edge_table_id,
+                                                 tupdesc, &isnull));
+            if (isnull)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_TABLE),
+                         errmsg("edge id is null for %s.%s",
+                                ggctx->graph_name, edge_label_name)));
+            }
+
+            edge_vertex_start_id = DatumGetInt64(heap_getattr(
+                tuple, Anum_ag_label_edge_table_start_id, tupdesc, &isnull));
+            if (isnull)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_TABLE),
+                         errmsg("edge start_id is null for %s.%s",
+                                ggctx->graph_name, edge_label_name)));
+            }
+
+            edge_vertex_end_id = DatumGetInt64(heap_getattr(
+                tuple, Anum_ag_label_edge_table_end_id, tupdesc, &isnull));
+            if (isnull)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_TABLE),
+                         errmsg("edge end_id is null for %s.%s",
+                                ggctx->graph_name, edge_label_name)));
+            }
 
             /* insert edge into edge hashtable with TID (no property copy) */
             inserted = insert_edge_entry(ggctx, edge_id, tuple->t_self,
                                          edge_vertex_start_id,
                                          edge_vertex_end_id,
-                                         edge_label_table_oid);
+                                         edge_label_table_oid,
+                                         edge_label_name);
 
             /* warn if there is a duplicate */
             if (!inserted)
@@ -1216,6 +1251,11 @@ Oid get_vertex_entry_label_table_oid(vertex_entry *ve)
     return ve->vertex_label_table_oid;
 }
 
+char *get_vertex_entry_label_name(vertex_entry *ve)
+{
+    return ve->vertex_label_name;
+}
+
 /*
  * Fetch vertex properties on demand from the heap via stored TID.
  *
@@ -1280,6 +1320,11 @@ graphid get_edge_entry_id(edge_entry *ee)
 Oid get_edge_entry_label_table_oid(edge_entry *ee)
 {
     return ee->edge_label_table_oid;
+}
+
+char *get_edge_entry_label_name(edge_entry *ee)
+{
+    return ee->edge_label_name;
 }
 
 /*

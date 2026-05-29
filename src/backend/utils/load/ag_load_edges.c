@@ -29,6 +29,17 @@
 #include "utils/rel.h"
 
 #include "utils/load/ag_load_edges.h"
+#include "utils/ag_cache.h"
+
+typedef struct vertex_label_id_cache_entry
+{
+    NameData name;
+    int32 id;
+} vertex_label_id_cache_entry;
+
+static HTAB *create_vertex_label_id_cache(void);
+static int32 get_cached_vertex_label_id(HTAB *cache, const char *label_name,
+                                        Oid graph_oid);
 
 /*
  * Process a single edge row from COPY's raw fields.
@@ -38,7 +49,8 @@ static void process_edge_row(char **fields, int nfields,
                              char **header, int header_count,
                              int label_id, Oid label_seq_relid,
                              Oid graph_oid, bool load_as_agtype,
-                             batch_insert_state *batch_state)
+                             batch_insert_state *batch_state,
+                             HTAB *vertex_label_id_cache)
 {
     int64 start_id_int;
     graphid start_vertex_graph_id;
@@ -66,11 +78,15 @@ static void process_edge_row(char **fields, int nfields,
 
     /* Parse start vertex info */
     start_id_int = strtol(fields[0], NULL, 10);
-    start_vertex_type_id = get_label_id(start_vertex_type, graph_oid);
+    start_vertex_type_id = get_cached_vertex_label_id(vertex_label_id_cache,
+                                                      start_vertex_type,
+                                                      graph_oid);
 
     /* Parse end vertex info */
     end_id_int = strtol(fields[2], NULL, 10);
-    end_vertex_type_id = get_label_id(end_vertex_type, graph_oid);
+    end_vertex_type_id = get_cached_vertex_label_id(vertex_label_id_cache,
+                                                    end_vertex_type,
+                                                    graph_oid);
 
     /* Create graphids for start and end vertices */
     start_vertex_graph_id = make_graphid(start_vertex_type_id, start_id_int);
@@ -110,6 +126,38 @@ static void process_edge_row(char **fields, int nfields,
         batch_state->num_tuples = 0;
         batch_state->buffered_bytes = 0;
     }
+}
+
+static HTAB *create_vertex_label_id_cache(void)
+{
+    HASHCTL hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(NameData);
+    hashctl.entrysize = sizeof(vertex_label_id_cache_entry);
+
+    return hash_create("age edge load vertex label id cache", 16, &hashctl,
+                       HASH_ELEM | HASH_BLOBS);
+}
+
+static int32 get_cached_vertex_label_id(HTAB *cache, const char *label_name,
+                                        Oid graph_oid)
+{
+    NameData key;
+    vertex_label_id_cache_entry *entry;
+    bool found;
+
+    namestrcpy(&key, label_name);
+    entry = hash_search(cache, &key, HASH_ENTER, &found);
+    if (!found)
+    {
+        label_cache_data *label_cache;
+
+        label_cache = search_label_name_graph_cache(label_name, graph_oid);
+        entry->id = label_cache != NULL ? label_cache->id : -1;
+    }
+
+    return entry->id;
 }
 
 /*
@@ -160,6 +208,8 @@ int create_edges_from_csv_file(char *file_path,
     batch_insert_state *batch_state = NULL;
     MemoryContext   batch_context;
     MemoryContext   old_context;
+    label_cache_data *label_cache;
+    HTAB           *vertex_label_id_cache = NULL;
 
     /* Create a memory context for batch processing - reset after each batch */
     batch_context = AllocSetContextCreate(CurrentMemoryContext,
@@ -167,7 +217,8 @@ int create_edges_from_csv_file(char *file_path,
                                           ALLOCSET_DEFAULT_SIZES);
 
     /* Get the label relation */
-    label_relid = get_label_relation(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_relid = label_cache != NULL ? label_cache->relation : InvalidOid;
     label_rel = table_open(label_relid, RowExclusiveLock);
 
     /* Get sequence info */
@@ -175,7 +226,8 @@ int create_edges_from_csv_file(char *file_path,
     label_seq_relid = get_relname_relid(label_seq_name, graph_oid);
 
     /* Initialize the batch insert state */
-    init_batch_insert(&batch_state, label_name, graph_oid);
+    init_batch_insert(&batch_state, label_relid);
+    vertex_label_id_cache = create_vertex_label_id_cache();
 
     /* Create COPY options for CSV parsing */
     copy_options = create_copy_options();
@@ -231,7 +283,7 @@ int create_edges_from_csv_file(char *file_path,
                                  header, header_count,
                                  label_id, label_seq_relid,
                                  graph_oid, load_as_agtype,
-                                 batch_state);
+                                 batch_state, vertex_label_id_cache);
 
                 /* Switch back to main context */
                 MemoryContextSwitchTo(old_context);
@@ -247,6 +299,8 @@ int create_edges_from_csv_file(char *file_path,
         /* Finish any remaining batch inserts */
         finish_batch_insert(&batch_state);
         MemoryContextReset(batch_context);
+        hash_destroy(vertex_label_id_cache);
+        vertex_label_id_cache = NULL;
 
         /* Clean up COPY state */
         EndCopyFrom(cstate);
@@ -266,6 +320,11 @@ int create_edges_from_csv_file(char *file_path,
 
         /* Close the relation */
         table_close(label_rel, RowExclusiveLock);
+
+        if (vertex_label_id_cache != NULL)
+        {
+            hash_destroy(vertex_label_id_cache);
+        }
 
         /* Delete batch context */
         MemoryContextDelete(batch_context);

@@ -24,6 +24,7 @@
 #include "storage/bufmgr.h"
 #include "utils/rls.h"
 
+#include "commands/label_commands.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "utils/age_global_graph.h"
@@ -41,8 +42,9 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                      TupleTableSlot *elemTupleSlot,
                                      EState *estate, HeapTuple old_tuple);
 static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
-                               const char *qual_name,
-                               const char *index_name);
+                               HTAB **result_rel_info_cache,
+                               const char *qual_name, const char *index_name,
+                               const char *result_rel_info_name);
 
 const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       begin_cypher_set,
@@ -104,14 +106,17 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     }
 
     init_update_caches(&css->qual_cache, &css->index_cache,
-                       "set_qual_cache", "set_index_cache");
+                       &css->result_rel_info_cache,
+                       "set_qual_cache", "set_index_cache",
+                       "set_result_rel_info_cache");
 
     Increment_Estate_CommandId(estate);
 }
 
 static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
-                               const char *qual_name,
-                               const char *index_name)
+                               HTAB **result_rel_info_cache,
+                               const char *qual_name, const char *index_name,
+                               const char *result_rel_info_name)
 {
     HASHCTL hashctl;
     HASHCTL idx_hashctl;
@@ -129,6 +134,9 @@ static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
     idx_hashctl.hcxt = CurrentMemoryContext;
     *index_cache = hash_create(index_name, 8, &idx_hashctl,
                                HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    *result_rel_info_cache =
+        create_entity_result_rel_info_cache(result_rel_info_name);
 }
 
 static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
@@ -426,6 +434,7 @@ void apply_update_list(CustomScanState *node,
     int lidx = 0;
     HTAB *qual_cache = NULL;
     HTAB *index_cache = NULL;
+    HTAB *result_rel_info_cache = NULL;
     bool local_caches = false;
     Oid graph_oid;
 
@@ -436,20 +445,27 @@ void apply_update_list(CustomScanState *node,
 
         qual_cache = css->qual_cache;
         index_cache = css->index_cache;
+        result_rel_info_cache = css->result_rel_info_cache;
         graph_oid = css->graph_oid;
     }
     else
     {
         init_update_caches(&qual_cache, &index_cache,
-                           "update_qual_cache", "update_index_cache");
+                           &result_rel_info_cache,
+                           "update_qual_cache", "update_index_cache",
+                           "update_result_rel_info_cache");
         local_caches = true;
-        graph_oid = get_graph_oid(set_info->graph_name);
+        graph_oid = set_info->graph_oid;
         if (!OidIsValid(graph_oid))
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
-                     errmsg("graph \"%s\" does not exist",
-                            set_info->graph_name)));
+            graph_oid = get_graph_oid(set_info->graph_name);
+            if (!OidIsValid(graph_oid))
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                         errmsg("graph \"%s\" does not exist",
+                                set_info->graph_name)));
+            }
         }
     }
 
@@ -486,7 +502,7 @@ void apply_update_list(CustomScanState *node,
         agtype_value *original_entity_value;
         agtype_value *original_properties;
         agtype_value *id;
-        agtype_value *label;
+        label_cache_data *label_cache;
         agtype_value *startid = NULL;
         agtype_value *endid = NULL;
         agtype *original_entity;
@@ -541,11 +557,23 @@ void apply_update_list(CustomScanState *node,
                             clause_name)));
         }
 
-        /* get the id and label for later */
+        /* get the id and label metadata for later */
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
-        label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
+        label_cache = search_label_graph_oid_cache(
+            graph_oid, GET_LABEL_ID(id->val.int_value));
+        if (label_cache == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_TABLE),
+                     errmsg("label id %lu does not exist",
+                            GET_LABEL_ID(id->val.int_value))));
+        }
+        label_name = NameStr(label_cache->name);
+        if (IS_AG_DEFAULT_LABEL(label_name))
+        {
+            label_name = "";
+        }
 
-        label_name = pnstrdup(label->val.string.val, label->val.string.len);
         /* get the properties we need to update */
         original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
                                                             "properties");
@@ -687,19 +715,8 @@ void apply_update_list(CustomScanState *node,
 
         if (luindex[update_item->entity_position - 1] == lidx)
         {
-            label_cache_data *label_cache;
-
-            label_cache = search_label_graph_oid_cache(
-                graph_oid, GET_LABEL_ID(id->val.int_value));
-            if (label_cache == NULL)
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_UNDEFINED_TABLE),
-                         errmsg("label \"%s\" does not exist", label_name)));
-            }
-
-            resultRelInfo = create_entity_result_rel_info_by_oid(
-                estate, label_cache->relation);
+            resultRelInfo = get_entity_result_rel_info(
+                estate, result_rel_info_cache, label_cache->relation);
 
             rel = resultRelInfo->ri_RelationDesc;
             relid = RelationGetRelid(rel);
@@ -708,8 +725,13 @@ void apply_update_list(CustomScanState *node,
                                     &found_idx_entry);
             if (!found_idx_entry)
             {
+                init_index_cache_entry(idx_entry);
+            }
+            if (!idx_entry->index_oid_cached)
+            {
                 /* Check if there is a valid index on the 'id' column. */
                 idx_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
+                idx_entry->index_oid_cached = true;
             }
             index_oid = idx_entry->index_oid;
 
@@ -866,9 +888,6 @@ void apply_update_list(CustomScanState *node,
                 table_endscan(scan_desc);
             }
 
-            /* close relation */
-            ExecCloseIndices(resultRelInfo);
-            table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
         }
 
         estate->es_snapshot->curcid = cid;
@@ -881,6 +900,7 @@ void apply_update_list(CustomScanState *node,
     {
         hash_destroy(qual_cache);
         hash_destroy(index_cache);
+        destroy_entity_result_rel_info_cache(result_rel_info_cache);
     }
 
     /* free our lookup array */
@@ -961,6 +981,12 @@ static void end_cypher_set(CustomScanState *node)
     {
         hash_destroy(css->index_cache);
         css->index_cache = NULL;
+    }
+
+    if (css->result_rel_info_cache != NULL)
+    {
+        destroy_entity_result_rel_info_cache(css->result_rel_info_cache);
+        css->result_rel_info_cache = NULL;
     }
 
     ExecEndNode(node->ss.ps.lefttree);

@@ -215,6 +215,12 @@ static void end_cypher_delete(CustomScanState *node)
         css->index_cache = NULL;
     }
 
+    if (css->result_rel_info_cache != NULL)
+    {
+        destroy_entity_result_rel_info_cache(css->result_rel_info_cache);
+        css->result_rel_info_cache = NULL;
+    }
+
     hash_destroy(((cypher_delete_custom_scan_state *)node)->vertex_id_htab);
 
     ExecEndNode(node->ss.ps.lefttree);
@@ -238,6 +244,9 @@ static void init_delete_caches(cypher_delete_custom_scan_state *css)
     idx_hashctl.hcxt = CurrentMemoryContext;
     css->index_cache = hash_create("delete_index_cache", 8, &idx_hashctl,
                                    HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    css->result_rel_info_cache =
+        create_entity_result_rel_info_cache("delete_result_rel_info_cache");
 }
 
 /*
@@ -420,12 +429,11 @@ static void process_delete_list(CustomScanState *node)
     foreach(lc, css->delete_data->delete_items)
     {
         cypher_delete_item *item;
-        agtype_value *original_entity_value, *id, *label;
+        agtype_value *original_entity_value, *id;
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc = NULL;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple = NULL;
-        char *label_name;
         label_cache_data *label_cache;
         Integer *pos;
         int entity_position;
@@ -455,19 +463,19 @@ static void process_delete_list(CustomScanState *node)
                                                entity_position);
 
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
-        label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
-        label_name = pnstrdup(label->val.string.val, label->val.string.len);
         label_cache = search_label_graph_oid_cache(css->delete_data->graph_oid,
                                                    GET_LABEL_ID(id->val.int_value));
         if (label_cache == NULL)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_UNDEFINED_TABLE),
-                     errmsg("label \"%s\" does not exist", label_name)));
+                     errmsg("label id %lu does not exist",
+                            GET_LABEL_ID(id->val.int_value))));
         }
 
-        resultRelInfo = create_entity_result_rel_info_by_oid(
-            estate, label_cache->relation);
+        resultRelInfo = get_entity_result_rel_info(estate,
+                                                   css->result_rel_info_cache,
+                                                   label_cache->relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
 
@@ -495,11 +503,17 @@ static void process_delete_list(CustomScanState *node)
                     errmsg("DELETE clause can only delete vertices and edges")));
         }
 
-        idx_entry = hash_search(index_cache, &relid, HASH_ENTER, &found_idx_entry);
-
+        idx_entry = hash_search(index_cache, &relid, HASH_ENTER,
+                                &found_idx_entry);
         if (!found_idx_entry)
         {
+            init_index_cache_entry(idx_entry);
+        }
+
+        if (!idx_entry->index_oid_cached)
+        {
             idx_entry->index_oid = find_usable_btree_index_for_attr(rel, id_attr_num);
+            idx_entry->index_oid_cached = true;
         }
 
         index_oid = idx_entry->index_oid;
@@ -598,7 +612,6 @@ static void process_delete_list(CustomScanState *node)
             table_endscan(scan_desc);
         }
 
-        destroy_entity_result_rel_info(resultRelInfo);
     }
 
 }
@@ -786,20 +799,41 @@ static void check_for_connected_edges(CustomScanState *node)
         bool delete_acl_checked = false;
         List *qualExprs = NIL;
         ExprContext *econtext = NULL;
-        Oid start_index_oid = InvalidOid;
-        Oid end_index_oid = InvalidOid;
+        Oid start_index_oid;
+        Oid end_index_oid;
         Relation rel;
+        IndexCacheEntry *idx_entry;
+        bool found_idx_entry;
 
-        resultRelInfo = create_entity_result_rel_info_by_oid(
-            estate, label_info->relation);
+        resultRelInfo = get_entity_result_rel_info(estate,
+                                                   css->result_rel_info_cache,
+                                                   label_info->relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
         estate->es_snapshot->curcid = GetCurrentCommandId(false);
         estate->es_output_cid = GetCurrentCommandId(false);
 
-        /* Look for indexes on start_id and end_id columns. */
-        start_index_oid = find_usable_btree_index_for_attr(rel, Anum_ag_label_edge_table_start_id);
-        end_index_oid = find_usable_btree_index_for_attr(rel, Anum_ag_label_edge_table_end_id);
+        idx_entry = hash_search(css->index_cache, &relid, HASH_ENTER,
+                                &found_idx_entry);
+        if (!found_idx_entry)
+        {
+            init_index_cache_entry(idx_entry);
+        }
+        if (!idx_entry->start_index_oid_cached)
+        {
+            idx_entry->start_index_oid = find_usable_btree_index_for_attr(
+                rel, Anum_ag_label_edge_table_start_id);
+            idx_entry->start_index_oid_cached = true;
+        }
+        if (!idx_entry->end_index_oid_cached)
+        {
+            idx_entry->end_index_oid = find_usable_btree_index_for_attr(
+                rel, Anum_ag_label_edge_table_end_id);
+            idx_entry->end_index_oid_cached = true;
+        }
+
+        start_index_oid = idx_entry->start_index_oid;
+        end_index_oid = idx_entry->end_index_oid;
 
         if (OidIsValid(start_index_oid) && OidIsValid(end_index_oid))
         {
@@ -914,6 +948,5 @@ static void check_for_connected_edges(CustomScanState *node)
             table_endscan(scan_desc);
         }
 
-        destroy_entity_result_rel_info(resultRelInfo);
     }
 }

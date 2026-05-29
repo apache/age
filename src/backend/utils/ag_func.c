@@ -27,11 +27,31 @@
 #include "access/htup_details.h"
 #include "catalog/pg_proc.h"
 #include "utils/builtins.h"
+#include "utils/catcache.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/syscache.h"
 
 #include "catalog/ag_namespace.h"
 #include "utils/ag_func.h"
+
+typedef struct ag_func_cache_key
+{
+    NameData name;
+    int nargs;
+    Oid args[FUNC_MAX_ARGS];
+} ag_func_cache_key;
+
+typedef struct ag_func_cache_entry
+{
+    ag_func_cache_key key;
+    Oid func_oid;
+} ag_func_cache_entry;
+
+static HTAB *ag_func_oid_cache = NULL;
+
+static void initialize_ag_func_oid_cache(void);
 
 /* checks that func_oid is of func_name function in ag_catalog */
 bool is_oid_ag_func(Oid func_oid, const char *func_name)
@@ -64,33 +84,67 @@ bool is_oid_ag_func(Oid func_oid, const char *func_name)
 /* gets the function OID that matches with func_name and argument types */
 Oid get_ag_func_oid(const char *func_name, const int nargs, ...)
 {
-    Oid oids[FUNC_MAX_ARGS];
+    ag_func_cache_key key;
+    ag_func_cache_entry *entry;
     va_list ap;
     int i;
-    oidvector *arg_types;
-    Oid func_oid;
+    bool found;
 
     Assert(func_name);
     Assert(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
 
+    initialize_ag_func_oid_cache();
+    MemSet(&key, 0, sizeof(key));
+    namestrcpy(&key.name, func_name);
+    key.nargs = nargs;
+
     va_start(ap, nargs);
     for (i = 0; i < nargs; i++)
-        oids[i] = va_arg(ap, Oid);
+        key.args[i] = va_arg(ap, Oid);
     va_end(ap);
 
-    arg_types = buildoidvector(oids, nargs);
-
-    func_oid = GetSysCacheOid3(PROCNAMEARGSNSP, Anum_pg_proc_oid,
-                               CStringGetDatum(func_name),
-                               PointerGetDatum(arg_types),
-                               ObjectIdGetDatum(ag_catalog_namespace_id()));
-    if (!OidIsValid(func_oid))
+    entry = hash_search(ag_func_oid_cache, &key, HASH_ENTER, &found);
+    if (!found)
     {
-        ereport(ERROR, (errmsg_internal("ag function does not exist"),
-                        errdetail_internal("%s(%d)", func_name, nargs)));
+        oidvector *arg_types;
+
+        arg_types = buildoidvector(key.args, nargs);
+        entry->func_oid = GetSysCacheOid3(
+            PROCNAMEARGSNSP, Anum_pg_proc_oid,
+            CStringGetDatum(func_name),
+            PointerGetDatum(arg_types),
+            ObjectIdGetDatum(ag_catalog_namespace_id()));
+        if (!OidIsValid(entry->func_oid))
+        {
+            ereport(ERROR, (errmsg_internal("ag function does not exist"),
+                            errdetail_internal("%s(%d)", func_name, nargs)));
+        }
     }
 
-    return func_oid;
+    return entry->func_oid;
+}
+
+static void initialize_ag_func_oid_cache(void)
+{
+    HASHCTL hash_ctl;
+
+    if (ag_func_oid_cache != NULL)
+    {
+        return;
+    }
+
+    if (!CacheMemoryContext)
+    {
+        CreateCacheMemoryContext();
+    }
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(ag_func_cache_key);
+    hash_ctl.entrysize = sizeof(ag_func_cache_entry);
+    hash_ctl.hcxt = CacheMemoryContext;
+
+    ag_func_oid_cache = hash_create("ag function oid cache", 32, &hash_ctl,
+                                    HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
 Oid get_pg_func_oid(const char *func_name, const int nargs, ...)
