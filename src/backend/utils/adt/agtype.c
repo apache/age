@@ -188,6 +188,7 @@ static agtype_value *execute_map_access_operator_internal(agtype *map,
                                                           agtype_value *map_value,
                                                           char *key,
                                                           int key_len);
+static agtype *build_empty_agtype_array(void);
 static Datum agtype_object_field_impl(FunctionCallInfo fcinfo,
                                       agtype *agtype_in,
                                       char *key, int key_len, bool as_text);
@@ -2544,16 +2545,7 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
             AGT_ROOT_IS_BINARY(agt) &&
             AGT_ROOT_BINARY_FLAGS(agt) == AGT_FBINARY_TYPE_VLE_PATH)
         {
-            agtype_value *agtv_path = NULL;
-            int j = 0;
-
-            /* get the VLE path from the container as an agtype_value */
-            agtv_path = agtv_materialize_vle_path(agt);
-
-            PG_FREE_IF_COPY(agt, i);
-
-            /* it better be an AGTV_PATH */
-            Assert(agtv_path->type == AGTV_PATH);
+            int64 appended;
 
             /*
              * If the VLE path is the zero boundary case, there isn't an edge to
@@ -2561,21 +2553,11 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
              * We need to flag this condition so that we can skip processing the
              * following vertex.
              */
-            if (agtv_path->val.array.num_elems == 1)
+            appended = agt_vle_append_path_interior(agt, &result);
+            PG_FREE_IF_COPY(agt, i);
+            if (appended == 0)
             {
                 is_zero_boundary_case = true;
-                continue;
-            }
-
-            /*
-             * Add in the interior path - excluding the start and end vertices.
-             * The other iterations of the for loop has handled start and will
-             * handle end.
-             */
-            for (j = 1; j <= agtv_path->val.array.num_elems - 2; j++)
-            {
-                result.res = push_agtype_value(&result.parse_state, WAGT_ELEM,
-                                               &agtv_path->val.array.elems[j]);
             }
         }
         else if (i % 2 == 1 && (!AGTE_IS_AGTYPE(agt->root.children[0]) ||
@@ -3089,6 +3071,23 @@ Datum agtype_build_map_nonull(PG_FUNCTION_ARGS)
 }
 
 PG_FUNCTION_INFO_V1(agtype_build_list);
+
+static agtype *build_empty_agtype_array(void)
+{
+    agtype_in_state result;
+    agtype *agt_result;
+
+    memset(&result, 0, sizeof(agtype_in_state));
+
+    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY,
+                                   NULL);
+    result.res = push_agtype_value(&result.parse_state, WAGT_END_ARRAY, NULL);
+    agt_result = agtype_value_to_agtype(result.res);
+
+    pfree_agtype_in_state(&result);
+
+    return agt_result;
+}
 
 /*
  * SQL function agtype_build_list(variadic "any")
@@ -4711,6 +4710,7 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
     agtype *result = NULL;
     int i = 0;
     bool using_fast_args = false;
+    bool container_is_vpc = false;
 
     /*
      * Fast path for the common 2-argument case (object.property or
@@ -4721,6 +4721,7 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
     if (PG_NARGS() == 2)
     {
         agtype *key = NULL;
+        agtype *vpc_container = NULL;
 
         /* check for NULLs */
         if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -4736,7 +4737,8 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         {
             if (AGT_ROOT_BINARY_FLAGS(container) == AGT_FBINARY_TYPE_VLE_PATH)
             {
-                container_value = agtv_materialize_vle_edges(container);
+                vpc_container = container;
+                container_is_vpc = true;
                 container = NULL;
             }
             else
@@ -4771,6 +4773,38 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         {
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("key must resolve to a scalar value")));
+        }
+
+        if (container_is_vpc)
+        {
+            agtype_value key_value;
+            bool key_needs_free = false;
+
+            (void)get_ith_agtype_value_from_container_no_copy(
+                &key->root, 0, &key_value, &key_needs_free);
+
+            if (key_value.type == AGTV_NULL)
+            {
+                free_agtype_value_no_copy(&key_value, key_needs_free);
+                PG_RETURN_NULL();
+            }
+            if (key_value.type != AGTV_INTEGER)
+            {
+                ereport(ERROR,
+                        (errmsg("array index must resolve to an integer value")));
+            }
+
+            container_value = agtv_materialize_vle_edge_at(
+                vpc_container, key_value.val.int_value);
+            free_agtype_value_no_copy(&key_value, key_needs_free);
+
+            if (container_value == NULL || container_value->type == AGTV_NULL)
+            {
+                PG_RETURN_NULL();
+            }
+
+            result = agtype_value_to_agtype(container_value);
+            return AGTYPE_P_GET_DATUM(result);
         }
 
         /* extract properties from vertex/edge */
@@ -4892,17 +4926,14 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
 
     /* get the container argument. It could be an object or array */
     container = DATUM_GET_AGTYPE_P(args[0]);
+    container_is_vpc = false;
 
     /* if it is a binary container, check for a VLE vpc */
     if (AGT_ROOT_IS_BINARY(container))
     {
         if (AGT_ROOT_BINARY_FLAGS(container) == AGT_FBINARY_TYPE_VLE_PATH)
         {
-            /* retrieve an array of edges from the vpc */
-            container_value = agtv_materialize_vle_edges(container);
-            /* clear the container reference */
-
-            container = NULL;
+            container_is_vpc = true;
         }
         else
         {
@@ -4944,6 +4975,72 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         {
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("key must resolve to a scalar value")));
+        }
+
+        if (container_is_vpc)
+        {
+            agtype_value key_value;
+            bool key_needs_free = false;
+            int64 edge_index;
+
+            (void)get_ith_agtype_value_from_container_no_copy(
+                &key->root, 0, &key_value, &key_needs_free);
+
+            if (key_value.type == AGTV_NULL)
+            {
+                free_agtype_value_no_copy(&key_value, key_needs_free);
+                if (!using_fast_args)
+                {
+                    pfree_if_not_null(args);
+                    pfree_if_not_null(types);
+                    pfree_if_not_null(nulls);
+                }
+                PG_RETURN_NULL();
+            }
+            if (key_value.type != AGTV_INTEGER)
+            {
+                ereport(ERROR,
+                        (errmsg("array index must resolve to an integer value")));
+            }
+
+            edge_index = key_value.val.int_value;
+            free_agtype_value_no_copy(&key_value, key_needs_free);
+
+            if (i + 1 < nargs)
+            {
+                container = agt_vle_edge_properties_at(container, edge_index);
+                if (container == NULL)
+                {
+                    if (!using_fast_args)
+                    {
+                        pfree_if_not_null(args);
+                        pfree_if_not_null(types);
+                        pfree_if_not_null(nulls);
+                    }
+                    PG_RETURN_NULL();
+                }
+
+                container_is_vpc = false;
+                container_value = NULL;
+                continue;
+            }
+
+            container_value = agtv_materialize_vle_edge_at(container,
+                                                           edge_index);
+            if (container_value == NULL || container_value->type == AGTV_NULL)
+            {
+                if (!using_fast_args)
+                {
+                    pfree_if_not_null(args);
+                    pfree_if_not_null(types);
+                    pfree_if_not_null(nulls);
+                }
+                PG_RETURN_NULL();
+            }
+
+            container_is_vpc = false;
+            container = NULL;
+            continue;
         }
 
         /*
@@ -5051,6 +5148,7 @@ Datum agtype_access_slice(PG_FUNCTION_ARGS)
     int64 lower_index = 0;
     uint32 array_size = 0;
     int64 i = 0;
+    bool is_vpc = false;
 
     /* return null if the array to slice is null */
     if (PG_ARGISNULL(0))
@@ -5067,20 +5165,18 @@ Datum agtype_access_slice(PG_FUNCTION_ARGS)
 
     /* get the array parameter and verify that it is a list */
     agt_array = AG_GET_ARG_AGTYPE_P(0);
+    is_vpc = AGT_ROOT_IS_VPC(agt_array);
 
-    if ((!AGT_ROOT_IS_ARRAY(agt_array) && !AGT_ROOT_IS_VPC(agt_array)) || AGT_ROOT_IS_SCALAR(agt_array))
+    if ((!AGT_ROOT_IS_ARRAY(agt_array) && !is_vpc) ||
+        AGT_ROOT_IS_SCALAR(agt_array))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("slice must access a list")));
     }
 
-    /* If we have a vpc, decode it and get AGTV_ARRAY agtype_value */
-    if (AGT_ROOT_IS_VPC(agt_array))
+    if (is_vpc)
     {
-        agtv_array = agtv_materialize_vle_edges(agt_array);
-
-        /* get the size of array */
-        array_size = agtv_array->val.array.num_elems;
+        array_size = (uint32)agtv_vle_edge_count(agt_array);
     }
     else
     {
@@ -5185,6 +5281,30 @@ Datum agtype_access_slice(PG_FUNCTION_ARGS)
         upper_index = array_size;
     }
 
+    if (lower_index >= upper_index)
+    {
+        agt_result = build_empty_agtype_array();
+
+        PG_FREE_IF_COPY(agt_array, 0);
+        PG_FREE_IF_COPY(agt_lidx, 1);
+        PG_FREE_IF_COPY(agt_uidx, 2);
+
+        PG_RETURN_POINTER(agt_result);
+    }
+
+    if (is_vpc)
+    {
+        agtv_array = agtv_materialize_vle_edges_slice(
+            agt_array, lower_index, upper_index);
+        agt_result = agtype_value_to_agtype(agtv_array);
+
+        PG_FREE_IF_COPY(agt_array, 0);
+        PG_FREE_IF_COPY(agt_lidx, 1);
+        PG_FREE_IF_COPY(agt_uidx, 2);
+
+        PG_RETURN_POINTER(agt_result);
+    }
+
     /* build our result array */
     memset(&result, 0, sizeof(agtype_in_state));
 
@@ -5230,7 +5350,7 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg, *agt_item;
     agtype_iterator *it_array, *it_item;
-    agtype_value *agtv_arg, agtv_item, agtv_elem;
+    agtype_value agtv_item, agtv_elem;
     uint32 array_size = 0;
     bool result = false;
     bool is_vpc;
@@ -5252,11 +5372,9 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
     }
     is_vpc = AGT_ROOT_IS_VPC(agt_arg);
 
-    /* If we have vpc as arg, get the agtype_value AGTV_ARRAY of edges */
     if (is_vpc)
     {
-        agtv_arg = agtv_materialize_vle_edges(agt_arg);
-        array_size = agtv_arg->val.array.num_elems;
+        array_size = (uint32)agtv_vle_edge_count(agt_arg);
     }
     /* Else we need to iterate agtype_container */
     else
@@ -5305,12 +5423,47 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         }
     }
 
+    if (is_vpc && agtv_item.type == AGTV_EDGE)
+    {
+        agtype_value *agtv_edge_id = AGTYPE_EDGE_GET_ID(&agtv_item);
+
+        Assert(agtv_edge_id != NULL);
+        Assert(agtv_edge_id->type == AGTV_INTEGER);
+
+        result = agt_vle_contains_edge_id(agt_arg,
+                                          agtv_edge_id->val.int_value);
+        return boolean_to_agtype(result);
+    }
+
     /* iterate through the array, but stop if we find it */
     for (i = 0; i < array_size && !result; i++)
     {
         if (is_vpc)
         {
-            agtv_elem = agtv_arg->val.array.elems[i];
+            agtype_value *agtv_vle_edge = NULL;
+
+            agtv_vle_edge = agtv_materialize_vle_edge_at(agt_arg, i);
+            Assert(agtv_vle_edge != NULL);
+            agtv_elem = *agtv_vle_edge;
+
+            /* if both are containers, compare containers */
+            if (!IS_A_AGTYPE_SCALAR(&agtv_item) &&
+                !IS_A_AGTYPE_SCALAR(&agtv_elem))
+            {
+                result = (compare_agtype_containers_orderability(
+                            &agt_item->root, agtv_elem.val.binary.data) == 0);
+            }
+            /* if both are scalars and of the same type, compare scalars */
+            else if (IS_A_AGTYPE_SCALAR(&agtv_item) &&
+                    IS_A_AGTYPE_SCALAR(&agtv_elem) &&
+                    agtv_item.type == agtv_elem.type)
+            {
+                result = (compare_agtype_scalar_values(&agtv_item,
+                                                       &agtv_elem) == 0);
+            }
+
+            pfree_agtype_value(agtv_vle_edge);
+            continue;
         }
         else
         {
@@ -6797,7 +6950,6 @@ PG_FUNCTION_INFO_V1(age_head);
 Datum age_head(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg = NULL;
-    agtype_value *agtv_arg = NULL;
     agtype_value *agtv_result = NULL;
     agtype_value borrowed_result;
     agtype *result;
@@ -6824,16 +6976,11 @@ Datum age_head(PG_FUNCTION_ARGS)
      */
     if (AGT_ROOT_IS_VPC(agt_arg))
     {
-        agtv_arg = agtv_materialize_vle_edges(agt_arg);
-
-        /* if we have an empty list, return a null */
-        if (agtv_arg->val.array.num_elems == 0)
+        agtv_result = agtv_materialize_vle_edge_at(agt_arg, 0);
+        if (agtv_result == NULL)
         {
             PG_RETURN_NULL();
         }
-
-        /* get the first element of the array */
-        agtv_result = &agtv_arg->val.array.elems[0];
     }
     else
     {
@@ -6868,7 +7015,6 @@ PG_FUNCTION_INFO_V1(age_last);
 Datum age_last(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg = NULL;
-    agtype_value *agtv_arg = NULL;
     agtype_value *agtv_result = NULL;
     agtype_value borrowed_result;
     agtype *result;
@@ -6896,18 +7042,11 @@ Datum age_last(PG_FUNCTION_ARGS)
      */
     if (AGT_ROOT_IS_VPC(agt_arg))
     {
-        agtv_arg = agtv_materialize_vle_edges(agt_arg);
-
-        size = agtv_arg->val.array.num_elems;
-
-        /* if we have an empty list, return a null */
-        if (size == 0)
+        agtv_result = agtv_materialize_vle_edge_at(agt_arg, -1);
+        if (agtv_result == NULL)
         {
             PG_RETURN_NULL();
         }
-
-        /* get the first element of the array */
-        agtv_result = &agtv_arg->val.array.elems[size-1];
     }
     else
     {
@@ -6953,6 +7092,7 @@ Datum age_tail(PG_FUNCTION_ARGS)
     agtype_in_state agis_result;
     int count;
     int i;
+    bool is_vpc = false;
 
     /* check number of arguments */
     if (PG_NARGS() < 1 || PG_NARGS() > 1)
@@ -6978,11 +7118,28 @@ Datum age_tail(PG_FUNCTION_ARGS)
     }
 
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    is_vpc = AGT_ROOT_IS_VPC(agt_arg);
+
     /* check for an array */
-    if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
+    if ((!AGT_ROOT_IS_ARRAY(agt_arg) && !is_vpc) ||
+        AGT_ROOT_IS_SCALAR(agt_arg))
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("tail() argument must resolve to a list or null")));
+    }
+
+    if (is_vpc)
+    {
+        count = agtv_vle_edge_count(agt_arg);
+        if (count <= 1)
+        {
+            PG_RETURN_POINTER(build_empty_agtype_array());
+        }
+
+        agt_result = agtype_value_to_agtype(
+            agtv_materialize_vle_edges_slice(agt_arg, Min(count, 1), count));
+
+        PG_RETURN_POINTER(agt_result);
     }
 
     count = AGT_ROOT_COUNT(agt_arg);
@@ -7110,6 +7267,15 @@ Datum age_length(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
 
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    if (AGT_ROOT_IS_BINARY(agt_arg) &&
+        AGT_ROOT_BINARY_FLAGS(agt_arg) == AGT_FBINARY_TYPE_VLE_PATH)
+    {
+        agtv_result.type = AGTV_INTEGER;
+        agtv_result.val.int_value = agtv_vle_edge_count(agt_arg);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    }
+
     /* check for a scalar */
     if (!AGT_ROOT_IS_SCALAR(agt_arg))
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -8006,10 +8172,7 @@ Datum age_size(PG_FUNCTION_ARGS)
         }
         else if (AGT_ROOT_IS_VPC(agt_arg))
         {
-            agtype_value *agtv_value;
-
-            agtv_value = agtv_materialize_vle_edges(agt_arg);
-            result = agtv_value->val.array.num_elems;
+            result = agtv_vle_edge_count(agt_arg);
         }
         else if (AGT_ROOT_IS_ARRAY(agt_arg))
         {
@@ -8180,9 +8343,7 @@ Datum age_isempty(PG_FUNCTION_ARGS)
         }
         else if (AGT_ROOT_IS_VPC(agt_arg))
         {
-            agtype_value *agtv_edges = agtv_materialize_vle_edges(agt_arg);
-
-            result = agtv_edges->val.array.num_elems;
+            result = agtv_vle_edge_count(agt_arg);
         }
         else if (AGT_ROOT_IS_ARRAY(agt_arg))
         {
@@ -8699,7 +8860,6 @@ Datum age_reverse(PG_FUNCTION_ARGS)
         agtype_value agtv_value;
         agtype_value *agtv_result = NULL;
         bool value_needs_free = false;
-        agtype_in_state result;
         agtype_parse_state *parse_state = NULL;
         agtype_value elem = {0};
         agtype_iterator *it = NULL;
@@ -8769,24 +8929,14 @@ Datum age_reverse(PG_FUNCTION_ARGS)
         }
         else if (AGT_ROOT_IS_VPC(agt_arg))
         {
-            elems = agtv_materialize_vle_edges(agt_arg);
-            num_elems = elems->val.array.num_elems;
-
-            /* build our result array */
-            memset(&result, 0, sizeof(agtype_in_state));
-
-            result.res = push_agtype_value(&result.parse_state,
-                                            WAGT_BEGIN_ARRAY, NULL);
-
-            for (i = num_elems-1; i >= 0; i--)
+            if (agtv_vle_edge_count(agt_arg) == 0)
             {
-                result.res = push_agtype_value(&result.parse_state, WAGT_ELEM,
-                                               &elems->val.array.elems[i]);
+                PG_RETURN_POINTER(build_empty_agtype_array());
             }
 
-            result.res = push_agtype_value(&result.parse_state, WAGT_END_ARRAY, NULL);
+            agtv_result = agtv_materialize_vle_edges_reversed(agt_arg);
 
-            PG_RETURN_POINTER(agtype_value_to_agtype(result.res));
+            PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
         }
         else
         {
@@ -12717,6 +12867,16 @@ Datum age_nodes(PG_FUNCTION_ARGS)
     }
 
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    if (AGT_ROOT_IS_BINARY(agt_arg) &&
+        AGT_ROOT_BINARY_FLAGS(agt_arg) == AGT_FBINARY_TYPE_VLE_PATH)
+    {
+        agtype_value *agtv_nodes = agtv_materialize_vle_nodes(agt_arg);
+
+        result = agtype_value_to_agtype(agtv_nodes);
+        pfree_agtype_value(agtv_nodes);
+        PG_RETURN_POINTER(result);
+    }
+
     /* check for a scalar object */
     if (!AGT_ROOT_IS_SCALAR(agt_arg))
     {
@@ -12860,6 +13020,16 @@ Datum age_relationships(PG_FUNCTION_ARGS)
     }
 
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
+    if (AGT_ROOT_IS_BINARY(agt_arg) &&
+        AGT_ROOT_BINARY_FLAGS(agt_arg) == AGT_FBINARY_TYPE_VLE_PATH)
+    {
+        agtype_value *agtv_edges = agtv_materialize_vle_edges(agt_arg);
+
+        result = agtype_value_to_agtype(agtv_edges);
+        pfree_agtype_value(agtv_edges);
+        PG_RETURN_POINTER(result);
+    }
+
     /* check for a scalar object */
     if (!AGT_ROOT_IS_SCALAR(agt_arg))
     {

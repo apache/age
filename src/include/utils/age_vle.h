@@ -41,9 +41,33 @@ agtype *agt_materialize_vle_path(agtype *agt_arg_vpc);
  */
 agtype_value *agtv_materialize_vle_path(agtype *agt_arg_vpc);
 /*
+ * Append the interior edge/vertex values of a VLE path container into an
+ * existing path builder. Returns the number of appended values.
+ */
+int64 agt_vle_append_path_interior(agtype *agt_arg_vpc,
+                                   agtype_in_state *result);
+/*
  * Exposed helper function to make an agtype_value AGTV_ARRAY of edges from a
  * VLE_path_container.
  */
 agtype_value *agtv_materialize_vle_edges(agtype *agt_arg_vpc);
+/*
+ * Exposed helper function to materialize one edge from a VLE_path_container.
+ * Returns NULL when the index is out of bounds.
+ */
+agtype_value *agtv_materialize_vle_edge_at(agtype *agt_arg_vpc,
+                                           int64 edge_index);
+/*
+ * Exposed helper function to materialize a normalized half-open edge slice
+ * from a VLE_path_container.
+ */
+agtype_value *agtv_materialize_vle_edges_slice(agtype *agt_arg_vpc,
+                                               int64 lower_index,
+                                               int64 upper_index);
+agtype_value *agtv_materialize_vle_edges_reversed(agtype *agt_arg_vpc);
+agtype_value *agtv_materialize_vle_nodes(agtype *agt_arg_vpc);
+agtype *agt_vle_edge_properties_at(agtype *agt_arg_vpc, int64 edge_index);
+bool agt_vle_contains_edge_id(agtype *agt_arg_vpc, graphid edge_id);
+int64 agtv_vle_edge_count(agtype *agt_arg_vpc);
 
 #endif

@@ -56,6 +56,12 @@ graphid get_vertex_entry_id(vertex_entry *ve);
 ListGraphId *get_vertex_entry_edges_in(vertex_entry *ve);
 ListGraphId *get_vertex_entry_edges_out(vertex_entry *ve);
 ListGraphId *get_vertex_entry_edges_self(vertex_entry *ve);
+ListGraphId *get_vertex_entry_edges_in_for_label(vertex_entry *ve,
+                                                 Oid edge_label_table_oid);
+ListGraphId *get_vertex_entry_edges_out_for_label(vertex_entry *ve,
+                                                  Oid edge_label_table_oid);
+ListGraphId *get_vertex_entry_edges_self_for_label(vertex_entry *ve,
+                                                   Oid edge_label_table_oid);
 Oid get_vertex_entry_label_table_oid(vertex_entry *ve);
 char *get_vertex_entry_label_name(vertex_entry *ve);
 Datum get_vertex_entry_properties(vertex_entry *ve);

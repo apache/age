@@ -593,6 +593,119 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
 }
 
 /*
+ * No-copy variant of find_agtype_value_from_container().
+ *
+ * Strings, numerics, and nested binary containers point into the original
+ * container. Extended composite values still allocate during deserialization;
+ * needs_free tells callers when pfree_agtype_value_content() is required.
+ */
+bool find_agtype_value_from_container_no_copy(agtype_container *container,
+                                              uint32 flags,
+                                              agtype_value *key,
+                                              agtype_value *result,
+                                              bool *needs_free)
+{
+    agtentry *children = container->children;
+    int count = AGTYPE_CONTAINER_SIZE(container);
+
+    Assert((flags & ~(AGT_FARRAY | AGT_FOBJECT)) == 0);
+    Assert(result != NULL);
+
+    if (needs_free != NULL)
+    {
+        *needs_free = false;
+    }
+
+    if (count <= 0)
+    {
+        return false;
+    }
+
+    if ((flags & AGT_FARRAY) && AGTYPE_CONTAINER_IS_ARRAY(container))
+    {
+        char *base_addr = (char *)(children + count);
+        uint32 offset = 0;
+        int i;
+
+        for (i = 0; i < count; i++)
+        {
+            fill_agtype_value_no_copy(container, i, base_addr, offset, result);
+
+            if (key->type == result->type &&
+                compare_agtype_scalar_values(key, result) == 0)
+            {
+                if (needs_free != NULL)
+                {
+                    *needs_free = result->type == AGTV_VERTEX ||
+                                  result->type == AGTV_EDGE ||
+                                  result->type == AGTV_PATH;
+                }
+                return true;
+            }
+
+            if (result->type == AGTV_VERTEX ||
+                result->type == AGTV_EDGE ||
+                result->type == AGTV_PATH)
+            {
+                pfree_agtype_value_content(result);
+            }
+            AGTE_ADVANCE_OFFSET(offset, children[i]);
+        }
+    }
+    else if ((flags & AGT_FOBJECT) && AGTYPE_CONTAINER_IS_OBJECT(container))
+    {
+        char *base_addr = (char *)(children + count * 2);
+        uint32 stop_low = 0;
+        uint32 stop_high = count;
+
+        Assert(key->type == AGTV_STRING);
+
+        while (stop_low < stop_high)
+        {
+            uint32 stop_middle;
+            int difference;
+            agtype_value candidate;
+
+            stop_middle = stop_low + (stop_high - stop_low) / 2;
+
+            candidate.type = AGTV_STRING;
+            candidate.val.string.val =
+                base_addr + get_agtype_offset(container, stop_middle);
+            candidate.val.string.len = get_agtype_length(container,
+                                                         stop_middle);
+
+            difference = length_compare_agtype_string_value(&candidate, key);
+
+            if (difference == 0)
+            {
+                int index = stop_middle + count;
+
+                fill_agtype_value_no_copy(container, index, base_addr,
+                                          get_agtype_offset(container, index),
+                                          result);
+                if (needs_free != NULL)
+                {
+                    *needs_free = result->type == AGTV_VERTEX ||
+                                  result->type == AGTV_EDGE ||
+                                  result->type == AGTV_PATH;
+                }
+                return true;
+            }
+            else if (difference < 0)
+            {
+                stop_low = stop_middle + 1;
+            }
+            else
+            {
+                stop_high = stop_middle;
+            }
+        }
+    }
+
+    return false;
+}
+
+/*
  * Get i-th value of an agtype array.
  *
  * Returns palloc()'d copy of the value, or NULL if it does not exist.

@@ -4089,6 +4089,23 @@ static List *make_join_condition_for_edge(cypher_parsestate *cpstate,
         List *args = NIL;
         List *quals = NIL;
 
+        if (prev_node->in_join_tree && next_node->in_join_tree)
+        {
+            FuncCall *vle_func = (FuncCall *)entity->entity.rel->varlen;
+            Node *start_arg = linitial(vle_func->args);
+            Node *end_arg = lsecond(vle_func->args);
+
+            /*
+             * age_vle() already enforces both endpoints when both endpoint
+             * arguments are bound. Avoid adding a redundant terminal-edge join
+             * filter that forces path post-filtering.
+             */
+            if (!IsA(start_arg, A_Const) && !IsA(end_arg, A_Const))
+            {
+                return NIL;
+            }
+        }
+
         /*
          * If the next node is not in the join tree, we don't need to make any
          * quals.
@@ -5027,6 +5044,62 @@ static bool isa_special_VLE_case(cypher_path *path)
     return false;
 }
 
+static transform_entity *transform_match_node_entity(
+    cypher_parsestate *cpstate, Query *query, cypher_node *node,
+    bool output_node, bool valid_label)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+    Expr *expr = NULL;
+    transform_entity *entity = NULL;
+
+    expr = transform_cypher_node(cpstate, node, &query->targetList,
+                                 output_node, valid_label);
+
+    entity = make_transform_entity(cpstate, ENT_VERTEX, (Node *)node, expr);
+
+    /*
+     * Add the entity before transforming property constraints so property
+     * expressions that reference this same entity can be resolved.
+     */
+    cpstate->entities = lappend(cpstate->entities, entity);
+
+    if (node->props)
+    {
+        Node *n = NULL;
+        Node *prop_var = NULL;
+        Node *prop_expr = NULL;
+
+        if (node->name != NULL)
+        {
+            prop_var = colNameToVar(pstate, node->name, false,
+                                    node->location);
+        }
+
+        if (prop_var != NULL &&
+            pg_strncasecmp(node->name, AGE_DEFAULT_ALIAS_PREFIX,
+                           sizeof(AGE_DEFAULT_ALIAS_PREFIX) - 1) == 0)
+        {
+            prop_expr = prop_var;
+        }
+        else if (prop_var != NULL)
+        {
+            prop_expr = make_age_properties_func_expr(prop_var);
+        }
+
+        if (is_ag_node(node->props, cypher_map))
+        {
+            ((cypher_map*)node->props)->keep_null = true;
+        }
+        n = create_property_constraints(cpstate, entity, node->props,
+                                        prop_expr);
+
+        cpstate->property_constraint_quals =
+            lappend(cpstate->property_constraint_quals, n);
+    }
+
+    return entity;
+}
+
 /*
  * Iterate through the path and construct all edges and necessary vertices
  */
@@ -5040,6 +5113,8 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
     bool node_declared_in_prev_clause = false;
     transform_entity *prev_entity = NULL;
     bool special_VLE_case = false;
+    bool skip_pretransformed_node = false;
+    transform_entity *pretransformed_node = NULL;
 
     special_VLE_case = isa_special_VLE_case(path);
 
@@ -5061,6 +5136,15 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             bool output_node = false;
 
             node = lfirst(lc);
+
+            if (skip_pretransformed_node)
+            {
+                prev_entity = pretransformed_node;
+                pretransformed_node = NULL;
+                skip_pretransformed_node = false;
+                i++;
+                continue;
+            }
 
             /*
              * The vle needs to know if the start vertex was
@@ -5114,70 +5198,83 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
              */
             output_node = true;
 
-            /* transform vertex */
-            expr = transform_cypher_node(cpstate, node, &query->targetList,
-                                         output_node, valid_label);
+            /*
+             * A terminal anonymous node after a VLE does not add bindings or
+             * filters. Keeping it in the join tree forces a full vertex scan
+             * plus age_match_vle_terminal_edge(), even though age_vle() has
+             * already generated valid terminal vertices for paths-from
+             * traversal.
+             */
+            if ((path->var_name == NULL || list_length(path->path) == 3) &&
+                i > 0 && i == list_length(path->path) - 1 &&
+                node->name == NULL && node->label == NULL &&
+                node->props == NULL)
+            {
+                cypher_relationship *prev_rel =
+                    (cypher_relationship *)list_nth(path->path, i - 1);
 
-            entity = make_transform_entity(cpstate, ENT_VERTEX, (Node *)node,
-                                           expr);
+                if (prev_rel->varlen != NULL)
+                {
+                    FuncCall *vle_func = (FuncCall *)prev_rel->varlen;
+                    Node *start_arg = linitial(vle_func->args);
+
+                    if (!IsA(start_arg, A_Const))
+                    {
+                        output_node = false;
+                    }
+                }
+            }
 
             /*
-             * We want to add transformed entity to entities before transforming props
-             * so that props referencing currently transformed entity can be resolved.
+             * Symmetric case for right-bound VLE: the anonymous start vertex is
+             * not bound, filtered, or returned. Let age_vle() iterate starts
+             * internally in paths-to mode.
              */
-            cpstate->entities = lappend(cpstate->entities, entity);
-            entities = lappend(entities, entity);
-
-            /* transform the properties if they exist */
-            if (node->props)
+            if (i == 0 &&
+                node->parsed_name == NULL && node->label == NULL &&
+                node->props == NULL &&
+                list_length(path->path) == 3)
             {
-                Node *n = NULL;
-                Node *prop_var = NULL;
-                Node *prop_expr = NULL;
+                cypher_relationship *next_rel =
+                    (cypher_relationship *)lfirst(lnext(path->path, lc));
+                cypher_node *next_node =
+                    (cypher_node *)lfirst(lnext(path->path,
+                                                lnext(path->path, lc)));
 
-                /*
-                 * We need to build a transformed properties(prop_var)
-                 * expression IF the properties variable already exists from a
-                 * previous clause. Please note that the "found" prop_var was
-                 * previously transformed.
-                 */
-
-                /* get the prop_var if it was previously resolved */
-                if (node->name != NULL)
+                if (next_rel->varlen != NULL)
                 {
-                    prop_var = colNameToVar(pstate, node->name, false,
-                                            node->location);
-                }
+                    FuncCall *vle_func = (FuncCall *)next_rel->varlen;
+                    ListCell *start_arg_cell = list_head(vle_func->args);
+                    ListCell *end_arg_cell = lnext(vle_func->args,
+                                                   start_arg_cell);
+                    Node *start_arg = lfirst(start_arg_cell);
+                    Node *end_arg = lfirst(end_arg_cell);
 
-                /*
-                 * If prop_var exists and is an alias, just pass it through by
-                 * assigning the prop_expr the prop_var.
-                 */
-                if (prop_var != NULL &&
-                    pg_strncasecmp(node->name, AGE_DEFAULT_ALIAS_PREFIX,
-                                   sizeof(AGE_DEFAULT_ALIAS_PREFIX) - 1) == 0)
-                {
-                    prop_expr = prop_var;
-                }
-                /*
-                 * Else, if it exists and is not an alias, create the prop_expr
-                 * as a transformed properties(prop_var) function node.
-                 */
-                else if (prop_var != NULL)
-                {
-                    prop_expr = make_age_properties_func_expr(prop_var);
-                }
+                    if (next_node->parsed_name == NULL &&
+                        (next_node->label != NULL || next_node->props != NULL) &&
+                        next_node->name != NULL &&
+                        !IsA(start_arg, A_Const) && IsA(end_arg, A_Const))
+                    {
+                        A_Const *null_const = makeNode(A_Const);
+                        ColumnRef *end_ref = makeNode(ColumnRef);
 
-                if (is_ag_node(node->props, cypher_map))
-                {
-                    ((cypher_map*)node->props)->keep_null = true;
-                }
-                n = create_property_constraints(cpstate, entity, node->props,
-                                                prop_expr);
+                        null_const->isnull = true;
+                        null_const->location = -1;
+                        lfirst(start_arg_cell) = null_const;
 
-                cpstate->property_constraint_quals =
-                    lappend(cpstate->property_constraint_quals, n);
+                        end_ref->fields = list_make2(makeString(next_node->name),
+                                                     makeString("id"));
+                        end_ref->location = next_node->location;
+                        lfirst(end_arg_cell) = end_ref;
+
+                        output_node = false;
+                    }
+                }
             }
+
+            entity = transform_match_node_entity(cpstate, query, node,
+                                                 output_node, valid_label);
+            entities = lappend(entities, entity);
 
             prev_entity = entity;
         }
@@ -5298,6 +5395,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
             else
             {
                 transform_entity *vle_entity = NULL;
+                ListCell *next_lc = lnext(path->path, lc);
 
                 /*
                  * Check to see if the previous node was originally created
@@ -5318,12 +5416,60 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                     cr->fields = list_make1(linitial(cr->fields));
                 }
 
+                if (list_length(path->path) == 3 &&
+                    prev_entity != NULL &&
+                    next_lc != NULL)
+                {
+                    cypher_node *next_node = lfirst(next_lc);
+                    FuncCall *func = (FuncCall *)rel->varlen;
+                    ListCell *start_arg_cell = list_head(func->args);
+                    ListCell *end_arg_cell = lnext(func->args,
+                                                   start_arg_cell);
+                    Node *start_arg = linitial(func->args);
+                    Node *end_arg = lfirst(end_arg_cell);
+                    bool needs_pretransform = false;
+
+                    if (next_node->name != NULL &&
+                        next_node->parsed_name == NULL &&
+                        IsA(end_arg, A_Const) &&
+                        !IsA(start_arg, A_Const))
+                    {
+                        ColumnRef *end_ref = makeNode(ColumnRef);
+
+                        end_ref->fields = list_make2(makeString(next_node->name),
+                                                     makeString("id"));
+                        end_ref->location = next_node->location;
+                        lfirst(end_arg_cell) = end_ref;
+                        needs_pretransform = true;
+                    }
+                    else if (next_node->name != NULL &&
+                             next_node->parsed_name == NULL &&
+                             !prev_entity->in_join_tree &&
+                             !IsA(end_arg, A_Const))
+                    {
+                        needs_pretransform = true;
+                    }
+
+                    if (needs_pretransform)
+                    {
+                        pretransformed_node =
+                            transform_match_node_entity(cpstate, query,
+                                                        next_node, true,
+                                                        valid_label);
+                        skip_pretransformed_node = true;
+                    }
+                }
+
                 /* make a transform entity for the vle */
                 vle_entity = transform_VLE_edge_entity(cpstate, rel, query);
 
                 /* add the entity in */
                 cpstate->entities = lappend(cpstate->entities, vle_entity);
                 entities = lappend(entities, vle_entity);
+                if (pretransformed_node != NULL)
+                {
+                    entities = lappend(entities, pretransformed_node);
+                }
 
                 prev_entity = entity;
             }

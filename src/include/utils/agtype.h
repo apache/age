@@ -567,6 +567,11 @@ int compare_agtype_containers_orderability(agtype_container *a,
 agtype_value *find_agtype_value_from_container(agtype_container *container,
                                                uint32 flags,
                                                agtype_value *key);
+bool find_agtype_value_from_container_no_copy(agtype_container *container,
+                                              uint32 flags,
+                                              agtype_value *key,
+                                              agtype_value *result,
+                                              bool *needs_free);
 agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
                                                   uint32 i);
 bool get_ith_agtype_value_from_container_no_copy(agtype_container *container,

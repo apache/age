@@ -83,6 +83,8 @@
 #define EXISTS_HTAB_NAME "known edges"
 #define EXISTS_HTAB_NAME_MIN_SIZE 16
 #define EDGE_UNIQUENESS_FAST_ARGS 16
+#define EDGE_UNIQUENESS_NESTED_SCAN_LIMIT 64
+#define VLE_NEXT_VERTEX_UNKNOWN ((graphid)0)
 #define MAXIMUM_NUMBER_OF_CACHED_LOCAL_CONTEXTS 5
 
 /* edge state entry for the edge_state_hashtable */
@@ -122,15 +124,23 @@ typedef struct VLE_local_context
     int num_edge_property_constraints; /* number of edge property constraints */
     Datum edge_property_constraint_datum; /* edge property constraint as Datum */
     uint32 edge_property_constraint_hash; /* edge property constraint hash */
+    agtype_pair *edge_property_constraint_pairs; /* cached constraints */
+    int num_cached_edge_property_constraints; /* cached constraint count */
+    HTAB *edge_property_relation_cache; /* relation cache for property fetch */
     int64 lidx;                    /* lower (start) bound index */
     int64 uidx;                    /* upper (end) bound index */
     bool uidx_infinite;            /* flag if the upper bound is omitted */
     cypher_rel_dir edge_direction; /* the direction of the edge */
     HTAB *edge_state_hashtable;    /* local state hashtable for our edges */
+    int64 edge_state_initial_size; /* initial edge-state hash size estimate */
     GraphIdStack *dfs_vertex_stack; /* dfs stack for vertices (array-based) */
     GraphIdStack *dfs_edge_stack;   /* dfs stack for edges (array-based) */
+    GraphIdStack *dfs_next_vertex_stack; /* cached terminal vertices */
     GraphIdStack *dfs_path_stack;   /* dfs stack containing the path (array-based) */
+    GraphIdStack *dfs_path_vertex_stack; /* vertices in current path order */
     VLE_path_function path_function; /* which path function to use */
+    bool reverse_paths_to;          /* traverse paths-to from the bound end */
+    bool reverse_output_path;       /* reverse traversal result before return */
     GraphIdNode *next_vertex;      /* for VLE_FUNCTION_PATHS_TO */
     int64 vle_grammar_node_id;     /* the unique VLE grammar assigned node id */
     bool use_cache;                /* are we using VLE_local_context cache */
@@ -179,6 +189,13 @@ static bool get_agtype_scalar_bool_arg(agtype *agt_arg,
                                        const char *type_error_msg);
 static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
                              HTAB *relation_cache);
+static void cache_edge_property_constraints(VLE_local_context *vlelctx);
+static void free_edge_property_constraint_cache(VLE_local_context *vlelctx);
+static bool cached_edge_property_constraints_match(
+    VLE_local_context *vlelctx, agtype_container *edge_properties);
+static void free_cached_property_value(agtype_value *value);
+static bool agtype_value_satisfies_property_constraint(
+    agtype_value *property_value, agtype_value *constraint_value);
 /* VLE local context functions */
 static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                                   FuncCallContext *funcctx);
@@ -202,18 +219,49 @@ static int get_edge_uniqueness_args_fast(FunctionCallInfo fcinfo,
                                          Oid *fast_types, bool *fast_nulls);
 static Oid get_cached_edge_uniqueness_argtype(FunctionCallInfo fcinfo,
                                               int argno, int nargs);
-static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx);
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id);
+static void add_valid_vertex_edges_for_entry(VLE_local_context *vlelctx,
+                                             vertex_entry *ve);
 static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
+static graphid get_next_vertex_from_source(VLE_local_context *vlelctx,
+                                           edge_entry *ee,
+                                           graphid source_vertex_id);
+static cypher_rel_dir reverse_edge_direction(cypher_rel_dir edge_direction);
+static bool is_zero_length_only(VLE_local_context *vlelctx);
+static bool is_empty_length_range(VLE_local_context *vlelctx);
+static bool should_emit_zero_bound(VLE_local_context *vlelctx);
+static int64 get_initial_edge_count(VLE_local_context *vlelctx,
+                                    graphid vertex_id,
+                                    cypher_rel_dir edge_direction);
+static int64 get_matching_initial_edge_count(ListGraphId *edges);
 static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id,
                             int64 stack_size);
 /* VLE path and edge building functions */
 static VLE_path_container *create_VLE_path_container(int64 path_size);
 static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx);
+static VLE_path_container *build_reversed_VLE_path_container(
+    VLE_local_context *vlelctx);
 static VLE_path_container *build_VLE_zero_container(VLE_local_context *vlelctx);
+static agtype_value *build_vle_edge_value(GRAPH_global_context *ggctx,
+                                          graphid edge_id,
+                                          HTAB *relation_cache);
+static agtype_value *build_vle_vertex_value(GRAPH_global_context *ggctx,
+                                            graphid vertex_id,
+                                            HTAB *relation_cache);
 static agtype_value *build_path(VLE_path_container *vpc);
 static agtype_value *build_edge_list(VLE_path_container *vpc);
+static agtype_value *build_empty_agtype_value_array(void);
+static int64 agtv_vle_node_count(agtype *agt_arg_vpc);
+static bool get_vle_edge_id_at_index(agtype *agt_arg_vpc,
+                                     int64 edge_index, graphid *edge_id);
+static agtype_value *agtv_materialize_vle_vertex_at(agtype *agt_arg_vpc,
+                                                    int64 node_index);
+static agtype_value *agtv_materialize_vle_edge_endpoint_at(
+    agtype *agt_arg_vpc, int64 edge_index, bool start_endpoint);
+static Datum age_vle_edge_endpoint_id_at(FunctionCallInfo fcinfo,
+                                         bool start_endpoint);
+static agtype *build_empty_agtype_array(void);
 /* VLE_local_context cache management */
 static VLE_local_context *get_cached_VLE_local_context(int64 vle_node_id);
 static void cache_VLE_local_context(VLE_local_context *vlelctx);
@@ -385,8 +433,9 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
     edge_state_ctl.entrysize = sizeof(edge_state_entry);
     edge_state_ctl.hash = tag_hash;
 
-    initial_size = Max(get_graph_num_loaded_edges(vlelctx->ggctx),
+    initial_size = Max(vlelctx->edge_state_initial_size,
                        EDGE_STATE_HTAB_MIN_SIZE);
+    initial_size = Min(initial_size, get_graph_num_loaded_edges(vlelctx->ggctx));
     vlelctx->edge_state_hashtable = hash_create(eshn, initial_size,
                                                 &edge_state_ctl,
                                                 HASH_ELEM | HASH_FUNCTION);
@@ -405,7 +454,6 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
     agtype_container *agtc_edge_property_constraint = NULL;
     agtype_iterator *constraint_it = NULL;
     agtype_iterator *property_it = NULL;
-    Oid edge_label_name_oid = InvalidOid;
     int num_edge_property_constraints = 0;
     int num_edge_properties = 0;
 
@@ -413,34 +461,10 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
     num_edge_property_constraints = vlelctx->num_edge_property_constraints;
 
     /*
-     * We only care about verifying that we have all of the property conditions.
-     * We don't care about extra unmatched properties. If there aren't any edge
-     * constraints, then the edge passes by default.
-     */
-    if (vlelctx->edge_label_name_oid == InvalidOid &&
-        num_edge_property_constraints == 0)
-    {
-        return true;
-    }
-
-    /* get the edge label oid */
-    edge_label_name_oid = get_edge_entry_label_table_oid(ee);
-
-    /*
-     * Check for a label constraint. Remember, if the constraint label oid is
-     * InvalidOid, there isn't one. If there is one, they need to match.
-     */
-    if (vlelctx->edge_label_name_oid != InvalidOid &&
-        vlelctx->edge_label_name_oid != edge_label_name_oid)
-    {
-        return false;
-    }
-
-    /*
-     * Fast path: if the label matched (or wasn't constrained) and there
-     * are no property constraints, the edge is a match. This avoids
-     * accessing edge properties entirely for label-only VLE patterns
-     * like [:KNOWS*1..3] which are the common case.
+     * add_valid_vertex_edges() handles direction selection, label selection,
+     * and cycle pruning before consulting edge-state match status. This helper
+     * only verifies property constraints against an already label-compatible
+     * candidate.
      */
     if (num_edge_property_constraints == 0)
     {
@@ -477,8 +501,16 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
          */
         if (num_edge_property_constraints == num_edge_properties)
         {
-            uint32 edge_props_hash = datum_image_hash(edge_props_datum,
-                                                      false, -1);
+            uint32 edge_props_hash = 0;
+
+            if (VARSIZE_ANY(edge_property) !=
+                VARSIZE_ANY(vlelctx->edge_property_constraint))
+            {
+                return false;
+            }
+
+            edge_props_hash = datum_image_hash(edge_props_datum, false, -1);
+
             /* check the hash first */
             if (vlelctx->edge_property_constraint_hash == edge_props_hash)
             {
@@ -494,11 +526,177 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
             return false;
         }
 
+        if (vlelctx->num_cached_edge_property_constraints > 0)
+        {
+            return cached_edge_property_constraints_match(
+                vlelctx, agtc_edge_property);
+        }
+
         /* get the iterators */
         constraint_it = agtype_iterator_init(agtc_edge_property_constraint);
         property_it = agtype_iterator_init(agtc_edge_property);
 
         /* return the value of deep contains */
+        return agtype_deep_contains(&property_it, &constraint_it, false);
+    }
+}
+
+static void cache_edge_property_constraints(VLE_local_context *vlelctx)
+{
+    agtype_iterator *constraint_it = NULL;
+    agtype_iterator_token token;
+    agtype_pair *pairs = NULL;
+    agtype_value agtv;
+    int index;
+
+    vlelctx->edge_property_constraint_pairs = NULL;
+    vlelctx->num_cached_edge_property_constraints = 0;
+
+    if (vlelctx->num_edge_property_constraints <= 0)
+    {
+        return;
+    }
+
+    pairs = palloc0(sizeof(agtype_pair) *
+                    vlelctx->num_edge_property_constraints);
+
+    constraint_it = agtype_iterator_init(
+        &vlelctx->edge_property_constraint->root);
+    token = agtype_iterator_next(&constraint_it, &agtv, true);
+    Assert(token == WAGT_BEGIN_OBJECT);
+
+    for (index = 0; index < vlelctx->num_edge_property_constraints; index++)
+    {
+        token = agtype_iterator_next(&constraint_it, &pairs[index].key, true);
+        Assert(token == WAGT_KEY);
+
+        token = agtype_iterator_next(&constraint_it, &pairs[index].value, true);
+        Assert(token == WAGT_VALUE);
+    }
+
+    token = agtype_iterator_next(&constraint_it, &agtv, true);
+    Assert(token == WAGT_END_OBJECT);
+
+    vlelctx->edge_property_constraint_pairs = pairs;
+    vlelctx->num_cached_edge_property_constraints =
+        vlelctx->num_edge_property_constraints;
+
+}
+
+static void free_edge_property_constraint_cache(VLE_local_context *vlelctx)
+{
+    int index;
+
+    if (vlelctx->edge_property_constraint_pairs == NULL)
+    {
+        vlelctx->num_cached_edge_property_constraints = 0;
+        return;
+    }
+
+    for (index = 0; index < vlelctx->num_cached_edge_property_constraints;
+         index++)
+    {
+        agtype_pair *pair = &vlelctx->edge_property_constraint_pairs[index];
+
+        pfree_if_not_null(pair->key.val.string.val);
+        free_cached_property_value(&pair->value);
+    }
+
+    pfree(vlelctx->edge_property_constraint_pairs);
+    vlelctx->edge_property_constraint_pairs = NULL;
+    vlelctx->num_cached_edge_property_constraints = 0;
+}
+
+static bool cached_edge_property_constraints_match(
+    VLE_local_context *vlelctx, agtype_container *edge_properties)
+{
+    int index;
+
+    for (index = 0; index < vlelctx->num_cached_edge_property_constraints;
+         index++)
+    {
+        agtype_pair *constraint =
+            &vlelctx->edge_property_constraint_pairs[index];
+        agtype_value property_value;
+        bool property_value_needs_free = false;
+        bool found;
+        bool matches;
+
+        found = find_agtype_value_from_container_no_copy(
+            edge_properties, AGT_FOBJECT, &constraint->key, &property_value,
+            &property_value_needs_free);
+        if (!found)
+        {
+            return false;
+        }
+
+        matches = agtype_value_satisfies_property_constraint(
+            &property_value, &constraint->value);
+
+        if (property_value_needs_free)
+        {
+            pfree_agtype_value_content(&property_value);
+        }
+
+        if (!matches)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void free_cached_property_value(agtype_value *value)
+{
+    switch (value->type)
+    {
+        case AGTV_STRING:
+            pfree_if_not_null(value->val.string.val);
+            break;
+
+        case AGTV_NUMERIC:
+            pfree_if_not_null(value->val.numeric);
+            break;
+
+        case AGTV_VERTEX:
+        case AGTV_EDGE:
+        case AGTV_PATH:
+        case AGTV_ARRAY:
+        case AGTV_OBJECT:
+            pfree_agtype_value_content(value);
+            break;
+
+        default:
+            break;
+    }
+}
+
+static bool agtype_value_satisfies_property_constraint(
+    agtype_value *property_value, agtype_value *constraint_value)
+{
+    if (property_value->type != constraint_value->type)
+    {
+        return false;
+    }
+
+    if (IS_A_AGTYPE_SCALAR(property_value))
+    {
+        return compare_agtype_scalar_values(property_value,
+                                            constraint_value) == 0;
+    }
+
+    Assert(property_value->type == AGTV_BINARY);
+    Assert(constraint_value->type == AGTV_BINARY);
+
+    {
+        agtype_iterator *property_it = NULL;
+        agtype_iterator *constraint_it = NULL;
+
+        property_it = agtype_iterator_init(property_value->val.binary.data);
+        constraint_it = agtype_iterator_init(
+            constraint_value->val.binary.data);
+
         return agtype_deep_contains(&property_it, &constraint_it, false);
     }
 }
@@ -720,9 +918,17 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
         vlelctx->edge_label_name = NULL;
     }
 
-    /* we need to free our state hashtable */
-    hash_destroy(vlelctx->edge_state_hashtable);
-    vlelctx->edge_state_hashtable = NULL;
+    /* zero-length-only VLE never creates edge-state entries */
+    if (vlelctx->edge_state_hashtable != NULL)
+    {
+        hash_destroy(vlelctx->edge_state_hashtable);
+        vlelctx->edge_state_hashtable = NULL;
+    }
+
+    destroy_entry_property_relation_cache(
+        vlelctx->edge_property_relation_cache);
+    vlelctx->edge_property_relation_cache = NULL;
+    free_edge_property_constraint_cache(vlelctx);
 
     /*
      * Free the DFS stacks. When is_dirty is false, the stacks are in the
@@ -738,54 +944,64 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     {
         free_gid_stack(vlelctx->dfs_edge_stack);
     }
+    if (vlelctx->dfs_next_vertex_stack != NULL)
+    {
+        free_gid_stack(vlelctx->dfs_next_vertex_stack);
+    }
     if (vlelctx->dfs_path_stack != NULL)
     {
         free_gid_stack(vlelctx->dfs_path_stack);
     }
+    if (vlelctx->dfs_path_vertex_stack != NULL)
+    {
+        free_gid_stack(vlelctx->dfs_path_vertex_stack);
+    }
     vlelctx->dfs_vertex_stack = NULL;
     vlelctx->dfs_edge_stack = NULL;
+    vlelctx->dfs_next_vertex_stack = NULL;
     vlelctx->dfs_path_stack = NULL;
+    vlelctx->dfs_path_vertex_stack = NULL;
 
     /* and finally the context itself */
     pfree_if_not_null(vlelctx);
     vlelctx = NULL;
 }
 
-/* helper function to check if our start and end vertices exist */
-static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx)
-{
-    /* if we are only using the starting vertex */
-    if (vlelctx->path_function == VLE_FUNCTION_PATHS_FROM ||
-        vlelctx->path_function == VLE_FUNCTION_PATHS_ALL)
-    {
-        return (get_vertex_entry(vlelctx->ggctx, vlelctx->vsid) != NULL);
-    }
-
-    /* if we are only using the ending vertex */
-    if (vlelctx->path_function == VLE_FUNCTION_PATHS_TO)
-    {
-        return (get_vertex_entry(vlelctx->ggctx, vlelctx->veid) != NULL);
-    }
-
-    /* if we are using both start and end */
-    return ((get_vertex_entry(vlelctx->ggctx, vlelctx->vsid) != NULL) &&
-            (get_vertex_entry(vlelctx->ggctx, vlelctx->veid) != NULL));
-}
-
 /* load the initial edges into the dfs_edge_stack */
 static void load_initial_dfs_stacks(VLE_local_context *vlelctx)
 {
+    vertex_entry *start_vertex = NULL;
+
+    vlelctx->dfs_path_vertex_stack->size = 0;
+    gid_stack_push(vlelctx->dfs_path_vertex_stack, vlelctx->vsid);
+
     /*
      * If either the vsid or veid don't exist - don't load anything because
      * there won't be anything to find.
      */
-    if (!do_vsid_and_veid_exist(vlelctx))
+    if (is_empty_length_range(vlelctx) ||
+        is_zero_length_only(vlelctx))
+    {
+        return;
+    }
+
+    start_vertex = get_vertex_entry(vlelctx->ggctx, vlelctx->vsid);
+    if (start_vertex == NULL)
+    {
+        return;
+    }
+
+    if ((vlelctx->path_function == VLE_FUNCTION_PATHS_BETWEEN ||
+         (vlelctx->path_function == VLE_FUNCTION_PATHS_TO &&
+          !vlelctx->reverse_paths_to)) &&
+        vlelctx->veid != vlelctx->vsid &&
+        get_vertex_entry(vlelctx->ggctx, vlelctx->veid) == NULL)
     {
         return;
     }
 
     /* add in the edges for the start vertex */
-    add_valid_vertex_edges(vlelctx, vlelctx->vsid);
+    add_valid_vertex_edges_for_entry(vlelctx, start_vertex);
 }
 
 /*
@@ -809,6 +1025,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     int64 vle_grammar_node_id = 0;
     bool use_cache = false;
     graphid vertex_id_arg;
+    int64 selected_start_edge_count = 0;
 
     /*
      * Get the VLE grammar node id, if it exists. Remember, we overload the
@@ -848,14 +1065,17 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                 "start vertex argument must be a vertex or the integer id",
                 &vertex_id_arg))
         {
-            /* if there are no more vertices to process, return NULL */
-            if (vlelctx->next_vertex == NULL)
+            if (!vlelctx->reverse_paths_to)
             {
-                return NULL;
+                /* if there are no more vertices to process, return NULL */
+                if (vlelctx->next_vertex == NULL)
+                {
+                    return NULL;
+                }
+                vlelctx->vsid = get_graphid(vlelctx->next_vertex);
+                /* increment to the next vertex */
+                vlelctx->next_vertex = next_GraphIdNode(vlelctx->next_vertex);
             }
-            vlelctx->vsid = get_graphid(vlelctx->next_vertex);
-            /* increment to the next vertex */
-            vlelctx->next_vertex = next_GraphIdNode(vlelctx->next_vertex);
         }
         else
         {
@@ -873,14 +1093,29 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         else
         {
             vlelctx->veid = vertex_id_arg;
+            if (vlelctx->reverse_paths_to)
+            {
+                vlelctx->vsid = vertex_id_arg;
+                vlelctx->next_vertex = NULL;
+            }
+        }
+        if (!vlelctx->reverse_paths_to && vlelctx->reverse_output_path)
+        {
+            graphid original_vsid = vlelctx->vsid;
+
+            vlelctx->vsid = vlelctx->veid;
+            vlelctx->veid = original_vsid;
         }
         vlelctx->is_dirty = true;
 
         /* we need the SRF context to add in the edges to the stacks */
         oldctx = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-        /* load the initial edges into the dfs stacks */
-        load_initial_dfs_stacks(vlelctx);
+        if (!is_empty_length_range(vlelctx))
+        {
+            /* load the initial edges into the dfs stacks */
+            load_initial_dfs_stacks(vlelctx);
+        }
 
         /* switch back to the original context */
         MemoryContextSwitchTo(oldctx);
@@ -925,7 +1160,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                              graph_oid);
 
     /* allocate and initialize local VLE context */
-    vlelctx = palloc(sizeof(VLE_local_context));
+    vlelctx = palloc0(sizeof(VLE_local_context));
 
     /* store the cache usage */
     vlelctx->use_cache = use_cache;
@@ -942,6 +1177,8 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 
     /* initialize the path function */
     vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
+    vlelctx->reverse_paths_to = false;
+    vlelctx->reverse_output_path = false;
 
     /* initialize the next vertex, in this case the first */
     vlelctx->next_vertex = peek_stack_head(get_graph_vertices(ggctx));
@@ -995,7 +1232,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
     else
     {
-        vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
+        if (vlelctx->path_function != VLE_FUNCTION_PATHS_TO)
+        {
+            vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
+        }
         vlelctx->veid = vertex_id_arg;
     }
 
@@ -1006,16 +1246,30 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
 
     /* get the edge prototype's property conditions */
     agtv_object = AGTYPE_EDGE_GET_PROPERTIES(&agtv_temp);
-    agt_edge_property_constraint = agtype_value_to_agtype(agtv_object);
 
-    /* store the properties as an agtype */
-    vlelctx->edge_property_constraint = agt_edge_property_constraint;
     vlelctx->num_edge_property_constraints =
-        AGT_ROOT_COUNT(agt_edge_property_constraint);
-
-    d_edge_property_constraint = AGTYPE_P_GET_DATUM(agt_edge_property_constraint);
-    vlelctx->edge_property_constraint_datum = d_edge_property_constraint;
-    vlelctx->edge_property_constraint_hash = datum_image_hash(d_edge_property_constraint, false, -1);
+        agtv_object->val.object.num_pairs;
+    vlelctx->edge_property_relation_cache = NULL;
+    if (vlelctx->num_edge_property_constraints > 0)
+    {
+        agt_edge_property_constraint = agtype_value_to_agtype(agtv_object);
+        vlelctx->edge_property_constraint = agt_edge_property_constraint;
+        d_edge_property_constraint =
+            AGTYPE_P_GET_DATUM(agt_edge_property_constraint);
+        vlelctx->edge_property_constraint_datum =
+            d_edge_property_constraint;
+        vlelctx->edge_property_constraint_hash =
+            datum_image_hash(d_edge_property_constraint, false, -1);
+        cache_edge_property_constraints(vlelctx);
+    }
+    else
+    {
+        vlelctx->edge_property_constraint = NULL;
+        vlelctx->edge_property_constraint_datum = 0;
+        vlelctx->edge_property_constraint_hash = 0;
+        vlelctx->edge_property_constraint_pairs = NULL;
+        vlelctx->num_cached_edge_property_constraints = 0;
+    }
 
     /* get the edge prototype's label name */
     agtv_object = AGTYPE_EDGE_GET_LABEL(&agtv_temp);
@@ -1089,16 +1343,93 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                &agtv_temp_needs_free);
     vlelctx->edge_direction = agtv_temp.val.int_value;
 
-    /* create the local state hashtable */
-    create_VLE_local_state_hashtable(vlelctx);
+    /*
+     * A paths-to query has a selective terminal vertex but no useful start
+     * vertex. Traverse from the bound end with the edge direction reversed and
+     * later reverse the emitted path container back to Cypher's left-to-right
+     * order. This avoids repeatedly launching DFS from every graph vertex.
+     */
+    if (vlelctx->path_function == VLE_FUNCTION_PATHS_TO)
+    {
+        vlelctx->reverse_paths_to = true;
+        vlelctx->reverse_output_path = true;
+        vlelctx->vsid = vlelctx->veid;
+        vlelctx->next_vertex = NULL;
+        vlelctx->edge_direction =
+            reverse_edge_direction(vlelctx->edge_direction);
+        if (!is_empty_length_range(vlelctx) &&
+            !is_zero_length_only(vlelctx))
+        {
+            selected_start_edge_count = get_initial_edge_count(
+                vlelctx, vlelctx->vsid, vlelctx->edge_direction);
+        }
+    }
+    /*
+     * For two-bound VLE, choose the cheaper endpoint as the traversal root.
+     * Lower-zero queries are safe here because zero-path endpoint semantics are
+     * handled inside should_emit_zero_bound().
+     */
+    else if (!is_empty_length_range(vlelctx) &&
+             !is_zero_length_only(vlelctx) &&
+             vlelctx->path_function == VLE_FUNCTION_PATHS_BETWEEN)
+    {
+        int64 start_edge_count;
+        int64 end_edge_count;
 
-    /* initialize the dfs stacks */
-    vlelctx->dfs_vertex_stack = new_gid_stack();
-    vlelctx->dfs_edge_stack = new_gid_stack();
-    vlelctx->dfs_path_stack = new_gid_stack();
+        start_edge_count = get_initial_edge_count(
+            vlelctx, vlelctx->vsid, vlelctx->edge_direction);
+        end_edge_count = get_initial_edge_count(
+            vlelctx, vlelctx->veid,
+            reverse_edge_direction(vlelctx->edge_direction));
 
-    /* load in the starting edge(s) */
-    load_initial_dfs_stacks(vlelctx);
+        if (end_edge_count < start_edge_count)
+        {
+            graphid original_vsid = vlelctx->vsid;
+
+            vlelctx->vsid = vlelctx->veid;
+            vlelctx->veid = original_vsid;
+            vlelctx->edge_direction =
+                reverse_edge_direction(vlelctx->edge_direction);
+            vlelctx->reverse_output_path = true;
+            selected_start_edge_count = end_edge_count;
+        }
+        else
+        {
+            selected_start_edge_count = start_edge_count;
+        }
+    }
+    else if (!is_empty_length_range(vlelctx) &&
+             !is_zero_length_only(vlelctx))
+    {
+        selected_start_edge_count = get_initial_edge_count(
+            vlelctx, vlelctx->vsid, vlelctx->edge_direction);
+    }
+
+    if ((!is_empty_length_range(vlelctx) &&
+         !is_zero_length_only(vlelctx)) ||
+        use_cache)
+    {
+        vlelctx->edge_state_initial_size = Max(
+            selected_start_edge_count * Max(vlelctx->uidx_infinite ? 1 :
+                                            vlelctx->uidx, 1),
+            EDGE_STATE_HTAB_MIN_SIZE);
+
+        /* create the local state hashtable */
+        create_VLE_local_state_hashtable(vlelctx);
+    }
+
+    if (!is_empty_length_range(vlelctx))
+    {
+        /* initialize the dfs stacks */
+        vlelctx->dfs_vertex_stack = new_gid_stack();
+        vlelctx->dfs_edge_stack = new_gid_stack();
+        vlelctx->dfs_next_vertex_stack = new_gid_stack();
+        vlelctx->dfs_path_stack = new_gid_stack();
+        vlelctx->dfs_path_vertex_stack = new_gid_stack();
+
+        /* load in the starting edge(s) */
+        load_initial_dfs_stacks(vlelctx);
+    }
 
     /* this is a new one so nothing follows it */
     vlelctx->next = NULL;
@@ -1311,6 +1642,155 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
     return terminal_vertex_id;
 }
 
+static graphid get_next_vertex_from_source(VLE_local_context *vlelctx,
+                                           edge_entry *ee,
+                                           graphid source_vertex_id)
+{
+    switch (vlelctx->edge_direction)
+    {
+        case CYPHER_REL_DIR_RIGHT:
+            return get_edge_entry_end_vertex_id(ee);
+
+        case CYPHER_REL_DIR_LEFT:
+            return get_edge_entry_start_vertex_id(ee);
+
+        case CYPHER_REL_DIR_NONE:
+            if (get_edge_entry_start_vertex_id(ee) == source_vertex_id)
+            {
+                return get_edge_entry_end_vertex_id(ee);
+            }
+            else if (get_edge_entry_end_vertex_id(ee) == source_vertex_id)
+            {
+                return get_edge_entry_start_vertex_id(ee);
+            }
+            elog(ERROR, "get_next_vertex_from_source: no parent match");
+
+        default:
+            elog(ERROR, "get_next_vertex_from_source: unknown edge direction");
+    }
+}
+
+static cypher_rel_dir reverse_edge_direction(cypher_rel_dir edge_direction)
+{
+    switch (edge_direction)
+    {
+        case CYPHER_REL_DIR_RIGHT:
+            return CYPHER_REL_DIR_LEFT;
+
+        case CYPHER_REL_DIR_LEFT:
+            return CYPHER_REL_DIR_RIGHT;
+
+        case CYPHER_REL_DIR_NONE:
+            return CYPHER_REL_DIR_NONE;
+
+        default:
+            elog(ERROR, "reverse_edge_direction: unknown edge direction");
+    }
+
+    return CYPHER_REL_DIR_NONE;
+}
+
+static bool is_zero_length_only(VLE_local_context *vlelctx)
+{
+    return vlelctx->lidx == 0 &&
+           !vlelctx->uidx_infinite &&
+           vlelctx->uidx == 0;
+}
+
+static bool is_empty_length_range(VLE_local_context *vlelctx)
+{
+    return !vlelctx->uidx_infinite &&
+           vlelctx->lidx > vlelctx->uidx;
+}
+
+static bool should_emit_zero_bound(VLE_local_context *vlelctx)
+{
+    /*
+     * For two-bound VLE, zero length is valid only when both endpoints are the
+     * same vertex. When they differ, skip the zero path inside age_vle() so the
+     * parser does not need a terminal-edge post-filter just to discard it.
+     */
+    if (vlelctx->path_function == VLE_FUNCTION_PATHS_BETWEEN)
+    {
+        return vlelctx->vsid == vlelctx->veid;
+    }
+
+    return true;
+}
+
+static int64 get_initial_edge_count(VLE_local_context *vlelctx,
+                                    graphid vertex_id,
+                                    cypher_rel_dir edge_direction)
+{
+    vertex_entry *ve = NULL;
+    int64 count = 0;
+    ListGraphId *edges = NULL;
+
+    ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
+    if (ve == NULL)
+    {
+        return 0;
+    }
+
+    if (edge_direction == CYPHER_REL_DIR_RIGHT ||
+        edge_direction == CYPHER_REL_DIR_NONE)
+    {
+        if (vlelctx->edge_label_name_oid != InvalidOid)
+        {
+            edges = get_vertex_entry_edges_out_for_label(
+                ve, vlelctx->edge_label_name_oid);
+        }
+        else
+        {
+            edges = get_vertex_entry_edges_out(ve);
+        }
+        count += get_matching_initial_edge_count(edges);
+    }
+    if (edge_direction == CYPHER_REL_DIR_LEFT ||
+        edge_direction == CYPHER_REL_DIR_NONE)
+    {
+        if (vlelctx->edge_label_name_oid != InvalidOid)
+        {
+            edges = get_vertex_entry_edges_in_for_label(
+                ve, vlelctx->edge_label_name_oid);
+        }
+        else
+        {
+            edges = get_vertex_entry_edges_in(ve);
+        }
+        count += get_matching_initial_edge_count(edges);
+    }
+
+    if (vlelctx->edge_label_name_oid != InvalidOid)
+    {
+        edges = get_vertex_entry_edges_self_for_label(
+            ve, vlelctx->edge_label_name_oid);
+    }
+    else
+    {
+        edges = get_vertex_entry_edges_self(ve);
+    }
+    count += get_matching_initial_edge_count(edges);
+
+    return count;
+}
+
+static int64 get_matching_initial_edge_count(ListGraphId *edges)
+{
+    if (edges == NULL)
+    {
+        return 0;
+    }
+
+    /*
+     * Label-constrained callers pass a label-partitioned adjacency list, so
+     * every edge in the list already matches. Unlabeled callers need the raw
+     * adjacency size. In both cases ListGraphId tracks size, so avoid scanning
+     * the linked list during root-choice setup.
+     */
+    return get_list_size(edges);
+}
+
 /*
  * Helper function to find one path BETWEEN two vertices.
  *
@@ -1327,7 +1807,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
 {
     GraphIdStack *vertex_stack = NULL;
     GraphIdStack *edge_stack = NULL;
+    GraphIdStack *next_vertex_stack = NULL;
     GraphIdStack *path_stack = NULL;
+    GraphIdStack *path_vertex_stack = NULL;
     graphid end_vertex_id;
 
     Assert(vlelctx != NULL);
@@ -1335,7 +1817,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
     /* for ease of reading */
     vertex_stack = vlelctx->dfs_vertex_stack;
     edge_stack = vlelctx->dfs_edge_stack;
+    next_vertex_stack = vlelctx->dfs_next_vertex_stack;
     path_stack = vlelctx->dfs_path_stack;
+    path_vertex_stack = vlelctx->dfs_path_vertex_stack;
     end_vertex_id = vlelctx->veid;
 
     /* while we have edges to process */
@@ -1345,11 +1829,15 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
+        graphid cached_next_vertex_id;
         bool found = false;
         int64 path_length;
 
+        Assert(gid_stack_size(edge_stack) == gid_stack_size(next_vertex_stack));
+
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
+        cached_next_vertex_id = gid_stack_peek(next_vertex_stack);
         /* get the edge's state */
         ese = get_edge_state(vlelctx, edge_id);
         /*
@@ -1373,10 +1861,12 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
             if (edge_id == path_edge_id)
             {
                 gid_stack_pop(path_stack);
+                gid_stack_pop(path_vertex_stack);
                 ese->used_in_path = false;
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
+            gid_stack_pop(next_vertex_stack);
             /*
              * Remove its source vertex, if we are looking at edges as
              * un-directional. We only maintain the vertex stack when the
@@ -1399,9 +1889,17 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         gid_stack_push(path_stack, edge_id);
         path_length = gid_stack_size(path_stack);
 
-        /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
-        next_vertex_id = get_next_vertex(vlelctx, ee);
+        if (cached_next_vertex_id != VLE_NEXT_VERTEX_UNKNOWN)
+        {
+            next_vertex_id = cached_next_vertex_id;
+        }
+        else
+        {
+            /* get the edge entry so we can get the next vertex to move to */
+            ee = get_edge_entry(vlelctx->ggctx, edge_id);
+            next_vertex_id = get_next_vertex(vlelctx, ee);
+        }
+        gid_stack_push(path_vertex_stack, next_vertex_id);
 
         /*
          * Is this the end of a path that meets our requirements? Is its length
@@ -1459,14 +1957,18 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
 {
     GraphIdStack *vertex_stack = NULL;
     GraphIdStack *edge_stack = NULL;
+    GraphIdStack *next_vertex_stack = NULL;
     GraphIdStack *path_stack = NULL;
+    GraphIdStack *path_vertex_stack = NULL;
 
     Assert(vlelctx != NULL);
 
     /* for ease of reading */
     vertex_stack = vlelctx->dfs_vertex_stack;
     edge_stack = vlelctx->dfs_edge_stack;
+    next_vertex_stack = vlelctx->dfs_next_vertex_stack;
     path_stack = vlelctx->dfs_path_stack;
+    path_vertex_stack = vlelctx->dfs_path_vertex_stack;
 
     /* while we have edges to process */
     while (!(gid_stack_is_empty(edge_stack)))
@@ -1475,11 +1977,15 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
         edge_entry *ee = NULL;
+        graphid cached_next_vertex_id;
         bool found = false;
         int64 path_length;
 
+        Assert(gid_stack_size(edge_stack) == gid_stack_size(next_vertex_stack));
+
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
+        cached_next_vertex_id = gid_stack_peek(next_vertex_stack);
         /* get the edge's state */
         ese = get_edge_state(vlelctx, edge_id);
         /*
@@ -1503,10 +2009,12 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
             if (edge_id == path_edge_id)
             {
                 gid_stack_pop(path_stack);
+                gid_stack_pop(path_vertex_stack);
                 ese->used_in_path = false;
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
+            gid_stack_pop(next_vertex_stack);
             /*
              * Remove its source vertex, if we are looking at edges as
              * un-directional. We only maintain the vertex stack when the
@@ -1529,9 +2037,17 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         gid_stack_push(path_stack, edge_id);
         path_length = gid_stack_size(path_stack);
 
-        /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
-        next_vertex_id = get_next_vertex(vlelctx, ee);
+        if (cached_next_vertex_id != VLE_NEXT_VERTEX_UNKNOWN)
+        {
+            next_vertex_id = cached_next_vertex_id;
+        }
+        else
+        {
+            /* get the edge entry so we can get the next vertex to move to */
+            ee = get_edge_entry(vlelctx->ggctx, edge_id);
+            next_vertex_id = get_next_vertex(vlelctx, ee);
+        }
+        gid_stack_push(path_vertex_stack, next_vertex_id);
 
         /*
          * Is this a path that meets our requirements? Is its length within the
@@ -1571,12 +2087,13 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id,
                             int64 stack_size)
 {
     GraphIdStack *stack = vlelctx->dfs_path_stack;
+    graphid *path_edges = stack->array;
     int64 i;
 
-    /* scan the array-based path stack */
-    for (i = 0; i < stack_size; i++)
+    /* Scan from the tail; immediate back edges are common during DFS. */
+    for (i = stack_size; i > 0; i--)
     {
-        if (gid_stack_get(stack, i) == edge_id)
+        if (path_edges[i - 1] == edge_id)
         {
             return true;
         }
@@ -1598,16 +2115,7 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id,
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id)
 {
-    GraphIdStack *vertex_stack = NULL;
-    GraphIdStack *edge_stack = NULL;
-    ListGraphId *edges = NULL;
     vertex_entry *ve = NULL;
-    GraphIdNode *edge_in = NULL;
-    GraphIdNode *edge_out = NULL;
-    GraphIdNode *edge_self = NULL;
-    HTAB *relation_cache = NULL;
-    graphid source_vertex_id = 0;
-    int64 path_stack_size;
 
     /* get the vertex entry */
     ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
@@ -1617,36 +2125,83 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         elog(ERROR, "add_valid_vertex_edges: no vertex found");
     }
 
+    add_valid_vertex_edges_for_entry(vlelctx, ve);
+}
+
+static void add_valid_vertex_edges_for_entry(VLE_local_context *vlelctx,
+                                             vertex_entry *ve)
+{
+    GraphIdStack *vertex_stack = NULL;
+    GraphIdStack *edge_stack = NULL;
+    GraphIdStack *next_vertex_stack = NULL;
+    ListGraphId *edges = NULL;
+    GraphIdNode *edge_in = NULL;
+    GraphIdNode *edge_out = NULL;
+    GraphIdNode *edge_self = NULL;
+    HTAB *relation_cache = NULL;
+    graphid source_vertex_id = 0;
+    int64 path_stack_size;
+    bool label_constrained = vlelctx->edge_label_name_oid != InvalidOid;
+    bool has_property_constraints =
+        vlelctx->num_edge_property_constraints > 0;
+
     /* point to stacks */
     vertex_stack = vlelctx->dfs_vertex_stack;
     edge_stack = vlelctx->dfs_edge_stack;
+    next_vertex_stack = vlelctx->dfs_next_vertex_stack;
     path_stack_size = gid_stack_size(vlelctx->dfs_path_stack);
-    if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
-    {
-        source_vertex_id = get_vertex_entry_id(ve);
-    }
+    source_vertex_id = get_vertex_entry_id(ve);
 
     /* set to the first edge for each edge list for the specified direction */
     if (vlelctx->edge_direction == CYPHER_REL_DIR_RIGHT ||
         vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
     {
-        edges = get_vertex_entry_edges_out(ve);
+        if (label_constrained)
+        {
+            edges = get_vertex_entry_edges_out_for_label(
+                ve, vlelctx->edge_label_name_oid);
+        }
+        else
+        {
+            edges = get_vertex_entry_edges_out(ve);
+        }
         edge_out = (edges != NULL) ? get_list_head(edges) : NULL;
     }
     if (vlelctx->edge_direction == CYPHER_REL_DIR_LEFT ||
         vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
     {
-        edges = get_vertex_entry_edges_in(ve);
+        if (label_constrained)
+        {
+            edges = get_vertex_entry_edges_in_for_label(
+                ve, vlelctx->edge_label_name_oid);
+        }
+        else
+        {
+            edges = get_vertex_entry_edges_in(ve);
+        }
         edge_in = (edges != NULL) ? get_list_head(edges) : NULL;
     }
     /* set to the first selfloop edge */
-    edges = get_vertex_entry_edges_self(ve);
+    if (label_constrained)
+    {
+        edges = get_vertex_entry_edges_self_for_label(
+            ve, vlelctx->edge_label_name_oid);
+    }
+    else
+    {
+        edges = get_vertex_entry_edges_self(ve);
+    }
     edge_self = (edges != NULL) ? get_list_head(edges) : NULL;
 
-    if (vlelctx->num_edge_property_constraints > 0)
+    if (has_property_constraints)
     {
-        relation_cache = create_entry_property_relation_cache(
-            "VLE edge match relation cache");
+        if (vlelctx->edge_property_relation_cache == NULL)
+        {
+            vlelctx->edge_property_relation_cache =
+                create_entry_property_relation_cache(
+                    "VLE edge match relation cache");
+        }
+        relation_cache = vlelctx->edge_property_relation_cache;
     }
 
     /* add in valid vertex edges */
@@ -1655,6 +2210,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         edge_entry *ee = NULL;
         edge_state_entry *ese = NULL;
         graphid edge_id;
+        graphid fast_next_vertex_id = VLE_NEXT_VERTEX_UNKNOWN;
 
         /* get the edge_id from the next available edge*/
         if (edge_out != NULL)
@@ -1668,13 +2224,15 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         else
         {
             edge_id = get_graphid(edge_self);
+            fast_next_vertex_id = source_vertex_id;
         }
 
         /*
          * This is a fast existence check, relative to the hash search, for when
          * the path stack is small. If the edge is in the path, we skip it.
          */
-        if (path_stack_size < 10 &&
+        if (path_stack_size > 0 &&
+            path_stack_size < 10 &&
             is_edge_in_path(vlelctx, edge_id, path_stack_size))
         {
             /* set to the next available edge */
@@ -1693,13 +2251,38 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
             continue;
         }
 
-        /* get the edge entry */
-        ee = get_edge_entry(vlelctx->ggctx, edge_id);
-        /* it better exist */
-        if (ee == NULL)
+        /*
+         * When the current path is short, the direct path-stack scan above
+         * already proved that this edge is not currently used. If there are no
+         * property constraints, every edge from the selected adjacency list is
+         * a match, so defer edge-state hash creation until DFS actually
+         * consumes the edge.
+         */
+        if (path_stack_size < 10 &&
+            !has_property_constraints)
         {
-            elog(ERROR, "add_valid_vertex_edges: no edge found");
+            if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
+            {
+                gid_stack_push(vertex_stack, source_vertex_id);
+            }
+            gid_stack_push(edge_stack, edge_id);
+            gid_stack_push(next_vertex_stack, fast_next_vertex_id);
+
+            if (edge_out != NULL)
+            {
+                edge_out = next_GraphIdNode(edge_out);
+            }
+            else if (edge_in != NULL)
+            {
+                edge_in = next_GraphIdNode(edge_in);
+            }
+            else
+            {
+                edge_self = next_GraphIdNode(edge_self);
+            }
+            continue;
         }
+
         /* get its state */
         ese = get_edge_state(vlelctx, edge_id);
         /*
@@ -1710,19 +2293,37 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         {
             /* validate the edge if it hasn't been already */
             if (!ese->has_been_matched &&
-                is_an_edge_match(vlelctx, ee, relation_cache))
+                !has_property_constraints)
             {
                 ese->has_been_matched = true;
                 ese->matched = true;
             }
             else if (!ese->has_been_matched)
             {
+                /* get the edge entry */
+                ee = get_edge_entry(vlelctx->ggctx, edge_id);
+                /* it better exist */
+                if (ee == NULL)
+                {
+                    elog(ERROR, "add_valid_vertex_edges: no edge found");
+                }
+
+                if (is_an_edge_match(vlelctx, ee, relation_cache))
+                {
+                    ese->matched = true;
+                }
+                else
+                {
+                    ese->matched = false;
+                }
                 ese->has_been_matched = true;
-                ese->matched = false;
             }
+
             /* if it is a match, add it */
             if (ese->has_been_matched && ese->matched)
             {
+                graphid next_vertex_id;
+
                 /*
                  * We need to maintain our source vertex for each edge added
                  * if the edge_direction is CYPHER_REL_DIR_NONE. This is due
@@ -1731,11 +2332,30 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                  * un-directional VLE edge, you don't know the vertex that
                  * you just came from. So, we need to store it.
                  */
-                 if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
-                 {
-                     gid_stack_push(vertex_stack, source_vertex_id);
-                 }
-                 gid_stack_push(edge_stack, edge_id);
+                if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
+                {
+                    gid_stack_push(vertex_stack, source_vertex_id);
+                }
+                if (fast_next_vertex_id != VLE_NEXT_VERTEX_UNKNOWN)
+                {
+                    next_vertex_id = fast_next_vertex_id;
+                }
+                else
+                {
+                    if (ee == NULL)
+                    {
+                        ee = get_edge_entry(vlelctx->ggctx, edge_id);
+                        if (ee == NULL)
+                        {
+                            elog(ERROR,
+                                 "add_valid_vertex_edges: no edge found");
+                        }
+                    }
+                    next_vertex_id = get_next_vertex_from_source(
+                        vlelctx, ee, source_vertex_id);
+                }
+                gid_stack_push(edge_stack, edge_id);
+                gid_stack_push(next_vertex_stack, next_vertex_id);
             }
         }
         /* get the next working edge */
@@ -1753,7 +2373,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         }
     }
 
-    destroy_entry_property_relation_cache(relation_cache);
+    /* The relation cache is owned by the VLE context and freed with it. */
 }
 
 /*
@@ -1822,10 +2442,11 @@ static VLE_path_container *create_VLE_path_container(int64 path_size)
 static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
 {
     GraphIdStack *stack = vlelctx->dfs_path_stack;
+    GraphIdStack *vertex_stack = vlelctx->dfs_path_vertex_stack;
     VLE_path_container *vpc = NULL;
     graphid *graphid_array = NULL;
-    graphid vid = 0;
-    int index = 0;
+    graphid *edge_array = NULL;
+    graphid *vertex_array = NULL;
     int ssize = 0;
     int j = 0;
 
@@ -1849,43 +2470,68 @@ static VLE_path_container *build_VLE_path_container(VLE_local_context *vlelctx)
     /* get the graphid_array from the container */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
 
-    /* get and store the start vertex */
-    vid = vlelctx->vsid;
-    graphid_array[0] = vid;
-
     /*
-     * Fill in edge entries from the back to the front. The path stack
-     * is array-based with index 0 = bottom (first pushed) and
-     * index size-1 = top (last pushed). We iterate from top to bottom
-     * to fill the graphid_array from back to front.
+     * The path edge stack and path vertex stack are both array based with
+     * index 0 = first path element. DFS already computed each next vertex, so
+     * building the VLE container does not need to look up every edge entry
+     * again just to recover endpoint ids.
      */
-    index = vpc->graphid_array_size - 2;
+    Assert(gid_stack_size(vertex_stack) == ssize + 1);
+    edge_array = stack->array;
+    vertex_array = vertex_stack->array;
 
-    for (j = ssize - 1; j >= 0; j--)
+    for (j = 0; j < ssize; j++)
     {
-        /* 0 is the vsid, we should never get here */
-        Assert(index > 0);
-
-        /* store the edge from stack position j */
-        graphid_array[index] = gid_stack_get(stack, j);
-
-        /* we need to skip over the interior vertices */
-        index -= 2;
+        graphid_array[j * 2] = vertex_array[j];
+        graphid_array[(j * 2) + 1] = edge_array[j];
     }
-
-    /* now add in the interior vertices, starting from the first edge */
-    for (index = 1; index < vpc->graphid_array_size - 1; index += 2)
-    {
-        edge_entry *ee = NULL;
-
-        ee = get_edge_entry(vlelctx->ggctx, graphid_array[index]);
-        vid = (vid == get_edge_entry_start_vertex_id(ee)) ?
-                   get_edge_entry_end_vertex_id(ee) :
-                   get_edge_entry_start_vertex_id(ee);
-        graphid_array[index+1] = vid;
-    }
+    graphid_array[ssize * 2] = vertex_array[ssize];
 
     /* return the container */
+    return vpc;
+}
+
+static VLE_path_container *build_reversed_VLE_path_container(
+    VLE_local_context *vlelctx)
+{
+    GraphIdStack *stack = vlelctx->dfs_path_stack;
+    GraphIdStack *vertex_stack = vlelctx->dfs_path_vertex_stack;
+    VLE_path_container *vpc = NULL;
+    graphid *graphid_array = NULL;
+    graphid *edge_array = NULL;
+    graphid *vertex_array = NULL;
+    int index = 0;
+    int ssize = 0;
+    int j = 0;
+
+    if (stack == NULL)
+    {
+        return NULL;
+    }
+
+    ssize = gid_stack_size(stack);
+    vpc = create_VLE_path_container((ssize * 2) + 1);
+    vpc->graph_oid = vlelctx->graph_oid;
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    /*
+     * Reverse paths-to traversal starts at the Cypher right endpoint and walks
+     * backward. The path vertex stack stores traversal-order vertices, so the
+     * original Cypher order is the reverse of both stacks.
+     */
+    Assert(gid_stack_size(vertex_stack) == ssize + 1);
+    edge_array = stack->array;
+    vertex_array = vertex_stack->array;
+
+    graphid_array[0] = vertex_array[ssize];
+    index = 1;
+    for (j = ssize - 1; j >= 0; j--)
+    {
+        graphid_array[index] = edge_array[j];
+        graphid_array[index + 1] = vertex_array[j];
+        index += 2;
+    }
+
     return vpc;
 }
 
@@ -1940,6 +2586,12 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     int64 graphid_array_size = 0;
     int index = 0;
 
+    graphid_array_size = vpc->graphid_array_size;
+    if (graphid_array_size <= 1)
+    {
+        return build_empty_agtype_value_array();
+    }
+
     /* get the graph_oid */
     graph_oid = vpc->graph_oid;
 
@@ -1950,13 +2602,12 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 
     /* get the graphid_array and size */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
-    graphid_array_size = vpc->graphid_array_size;
 
     /* initialize our agtype array */
     MemSet(&edges_result, 0, sizeof(agtype_in_state));
     edges_result.res = push_agtype_value(&edges_result.parse_state,
                                          WAGT_BEGIN_ARRAY, NULL);
-    if (graphid_array_size > 2)
+    if (graphid_array_size > 3)
     {
         relation_cache = create_entry_property_relation_cache(
             "vle edge materialization relation cache");
@@ -1964,19 +2615,10 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 
     for (index = 1; index < graphid_array_size - 1; index += 2)
     {
-        char *label_name = NULL;
-        edge_entry *ee = NULL;
         agtype_value *agtv_edge = NULL;
 
-        /* get the edge entry from the hashtable */
-        ee = get_edge_entry(ggctx, graphid_array[index]);
-        label_name = get_edge_entry_label_name(ee);
-        /* reconstruct the edge */
-        agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
-                                            get_edge_entry_end_vertex_id(ee),
-                                            get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties_with_cache(
-                                                ee, relation_cache));
+        agtv_edge = build_vle_edge_value(ggctx, graphid_array[index],
+                                         relation_cache);
         /* push the edge*/
         edges_result.res = push_agtype_value(&edges_result.parse_state,
                                              WAGT_ELEM, agtv_edge);
@@ -1994,6 +2636,69 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     return edges_result.res;
 }
 
+static agtype *build_empty_agtype_array(void)
+{
+    agtype_in_state result;
+    agtype *agt_result;
+
+    MemSet(&result, 0, sizeof(agtype_in_state));
+
+    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY,
+                                   NULL);
+    result.res = push_agtype_value(&result.parse_state, WAGT_END_ARRAY, NULL);
+    agt_result = agtype_value_to_agtype(result.res);
+
+    pfree_agtype_in_state(&result);
+
+    return agt_result;
+}
+
+static agtype_value *build_empty_agtype_value_array(void)
+{
+    agtype_in_state result;
+
+    MemSet(&result, 0, sizeof(agtype_in_state));
+
+    result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY,
+                                   NULL);
+    result.res = push_agtype_value(&result.parse_state, WAGT_END_ARRAY, NULL);
+    result.res->type = AGTV_ARRAY;
+
+    return result.res;
+}
+
+static agtype_value *build_vle_edge_value(GRAPH_global_context *ggctx,
+                                          graphid edge_id,
+                                          HTAB *relation_cache)
+{
+    edge_entry *ee = NULL;
+
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    return agtype_value_build_edge(get_edge_entry_id(ee),
+                                   get_edge_entry_label_name(ee),
+                                   get_edge_entry_end_vertex_id(ee),
+                                   get_edge_entry_start_vertex_id(ee),
+                                       get_edge_entry_properties_with_cache(
+                                           ee, relation_cache));
+}
+
+static agtype_value *build_vle_vertex_value(GRAPH_global_context *ggctx,
+                                            graphid vertex_id,
+                                            HTAB *relation_cache)
+{
+    vertex_entry *ve = NULL;
+
+    ve = get_vertex_entry(ggctx, vertex_id);
+    Assert(ve != NULL);
+
+    return agtype_value_build_vertex(get_vertex_entry_id(ve),
+                                     get_vertex_entry_label_name(ve),
+                                     get_vertex_entry_properties_with_cache(
+                                         ve, relation_cache));
+}
+
 /*
  * Helper function to build an array of type AGTV_PATH from an array of
  * graphids.
@@ -2005,7 +2710,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state path_result;
-    HTAB *relation_cache;
+    HTAB *relation_cache = NULL;
     Oid graph_oid = InvalidOid;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
@@ -2027,25 +2732,20 @@ static agtype_value *build_path(VLE_path_container *vpc)
     MemSet(&path_result, 0, sizeof(agtype_in_state));
     path_result.res = push_agtype_value(&path_result.parse_state,
                                         WAGT_BEGIN_ARRAY, NULL);
-    relation_cache = create_entry_property_relation_cache(
-        "vle path materialization relation cache");
+    if (graphid_array_size > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle path materialization relation cache");
+    }
 
     for (index = 0; index < graphid_array_size; index += 2)
     {
-        char *label_name = NULL;
-        vertex_entry *ve = NULL;
-        edge_entry *ee = NULL;
         agtype_value *agtv_vertex = NULL;
         agtype_value *agtv_edge = NULL;
 
-        /* get the vertex entry from the hashtable */
-        ve = get_vertex_entry(ggctx, graphid_array[index]);
-        label_name = get_vertex_entry_label_name(ve);
         /* reconstruct the vertex */
-        agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
-                                                label_name,
-                                                get_vertex_entry_properties_with_cache(
-                                                    ve, relation_cache));
+        agtv_vertex = build_vle_vertex_value(ggctx, graphid_array[index],
+                                             relation_cache);
         /* push the vertex */
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_vertex);
@@ -2059,15 +2759,9 @@ static agtype_value *build_path(VLE_path_container *vpc)
             break;
         }
 
-        /* get the edge entry from the hashtable */
-        ee = get_edge_entry(ggctx, graphid_array[index+1]);
-        label_name = get_edge_entry_label_name(ee);
         /* reconstruct the edge */
-        agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
-                                            get_edge_entry_end_vertex_id(ee),
-                                            get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties_with_cache(
-                                                ee, relation_cache));
+        agtv_edge = build_vle_edge_value(ggctx, graphid_array[index + 1],
+                                         relation_cache);
         /* push the edge*/
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_edge);
@@ -2076,7 +2770,10 @@ static agtype_value *build_path(VLE_path_container *vpc)
     /* close our agtype array */
     path_result.res = push_agtype_value(&path_result.parse_state,
                                         WAGT_END_ARRAY, NULL);
-    destroy_entry_property_relation_cache(relation_cache);
+    if (relation_cache != NULL)
+    {
+        destroy_entry_property_relation_cache(relation_cache);
+    }
 
     /* make it a path */
     path_result.res->type = AGTV_PATH;
@@ -2170,8 +2867,12 @@ Datum age_vle(PG_FUNCTION_ARGS)
          */
         funcctx->user_fctx = vlelctx;
 
+        if (is_empty_length_range(vlelctx))
+        {
+            done = true;
+        }
         /* if we are starting from zero [*0..x] flag it */
-        if (vlelctx->lidx == 0)
+        else if (vlelctx->lidx == 0 && should_emit_zero_bound(vlelctx))
         {
             is_zero_bound = true;
             done = true;
@@ -2196,6 +2897,12 @@ Datum age_vle(PG_FUNCTION_ARGS)
         switch (vlelctx->path_function)
         {
             case VLE_FUNCTION_PATHS_TO:
+                if (vlelctx->reverse_paths_to)
+                {
+                    found_a_path = dfs_find_a_path_from(vlelctx);
+                    break;
+                }
+                /* fall through */
             case VLE_FUNCTION_PATHS_BETWEEN:
                 found_a_path = dfs_find_a_path_between(vlelctx);
                 break;
@@ -2233,7 +2940,11 @@ Datum age_vle(PG_FUNCTION_ARGS)
             load_initial_dfs_stacks(vlelctx);
 
             /* if we are starting from zero [*0..x] flag it */
-            if (vlelctx->lidx == 0)
+            if (is_empty_length_range(vlelctx))
+            {
+                done = true;
+            }
+            else if (vlelctx->lidx == 0 && should_emit_zero_bound(vlelctx))
             {
                 is_zero_bound = true;
                 done = true;
@@ -2275,7 +2986,14 @@ Datum age_vle(PG_FUNCTION_ARGS)
              * path_stack. This will also correct for the path_stack being last
              * in, first out.
              */
-            vpc = build_VLE_path_container(vlelctx);
+            if (vlelctx->reverse_output_path)
+            {
+                vpc = build_reversed_VLE_path_container(vlelctx);
+            }
+            else
+            {
+                vpc = build_VLE_path_container(vlelctx);
+            }
         }
         /* otherwise, this is the zero boundary case [*0..x] */
         else
@@ -2289,6 +3007,10 @@ Datum age_vle(PG_FUNCTION_ARGS)
     /* otherwise, we are done and we need to cleanup and signal done */
     else
     {
+        destroy_entry_property_relation_cache(
+            vlelctx->edge_property_relation_cache);
+        vlelctx->edge_property_relation_cache = NULL;
+
         /* mark local context as clean */
         vlelctx->is_dirty = false;
 
@@ -2355,6 +3077,66 @@ agtype_value *agtv_materialize_vle_path(agtype *agt_arg_vpc)
     return agtv_path;
 }
 
+int64 agt_vle_append_path_interior(agtype *agt_arg_vpc,
+                                   agtype_in_state *result)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 graphid_array_size = 0;
+    int64 index;
+    int64 appended = 0;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(result != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graphid_array_size = vpc->graphid_array_size;
+    if (graphid_array_size <= 1)
+    {
+        return 0;
+    }
+
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    if (graphid_array_size > 3)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle path interior materialization relation cache");
+    }
+
+    for (index = 1; index < graphid_array_size - 1; index++)
+    {
+        agtype_value *agtv_value = NULL;
+
+        if (index % 2 == 1)
+        {
+            agtv_value = build_vle_edge_value(ggctx, graphid_array[index],
+                                              relation_cache);
+        }
+        else
+        {
+            agtv_value = build_vle_vertex_value(ggctx, graphid_array[index],
+                                                relation_cache);
+        }
+
+        result->res = push_agtype_value(&result->parse_state, WAGT_ELEM,
+                                        agtv_value);
+        appended++;
+    }
+
+    destroy_entry_property_relation_cache(relation_cache);
+
+    return appended;
+}
+
 /* PG function to match 2 VLE edges */
 PG_FUNCTION_INFO_V1(age_match_two_vle_edges);
 
@@ -2391,8 +3173,6 @@ Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
     left_array_size = left_path->graphid_array_size;
     left_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(left_path);
 
-    PG_FREE_IF_COPY(agt_arg_vpc, 0);
-
     agt_arg_vpc = AG_GET_ARG_AGTYPE_P(1);
 
     if (!AGT_ROOT_IS_BINARY(agt_arg_vpc) ||
@@ -2407,13 +3187,15 @@ Datum age_match_two_vle_edges(PG_FUNCTION_ARGS)
     right_path = (VLE_path_container *)agt_arg_vpc;
     right_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(right_path);
 
-    PG_FREE_IF_COPY(agt_arg_vpc, 1);
-
     if (left_array[left_array_size - 1] != right_array[0])
     {
+        PG_FREE_IF_COPY(left_path, 0);
+        PG_FREE_IF_COPY(right_path, 1);
         PG_RETURN_BOOL(false);
     }
 
+    PG_FREE_IF_COPY(left_path, 0);
+    PG_FREE_IF_COPY(right_path, 1);
     PG_RETURN_BOOL(true);
 }
 
@@ -2568,6 +3350,612 @@ agtype_value *agtv_materialize_vle_edges(agtype *agt_arg_vpc)
 
 }
 
+agtype_value *agtv_materialize_vle_edge_at(agtype *agt_arg_vpc,
+                                           int64 edge_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    graphid *graphid_array = NULL;
+    int64 edge_count = 0;
+    Oid graph_oid = InvalidOid;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        return NULL;
+    }
+
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    return build_vle_edge_value(ggctx, graphid_array[(edge_index * 2) + 1],
+                                NULL);
+}
+
+static agtype_value *agtv_materialize_vle_vertex_at(agtype *agt_arg_vpc,
+                                                    int64 node_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    graphid *graphid_array = NULL;
+    int64 node_count;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+    if (node_index < 0)
+    {
+        node_index = node_count + node_index;
+    }
+    if (node_index < 0 || node_index >= node_count)
+    {
+        return NULL;
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    return build_vle_vertex_value(ggctx, graphid_array[node_index * 2],
+                                  NULL);
+}
+
+static agtype_value *agtv_materialize_vle_edge_endpoint_at(
+    agtype *agt_arg_vpc, int64 edge_index, bool start_endpoint)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    graphid *graphid_array = NULL;
+    graphid endpoint_id;
+    graphid edge_id;
+    int64 edge_count = 0;
+    Oid graph_oid = InvalidOid;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        return NULL;
+    }
+
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    endpoint_id = start_endpoint ?
+        get_edge_entry_start_vertex_id(ee) :
+        get_edge_entry_end_vertex_id(ee);
+
+    return build_vle_vertex_value(ggctx, endpoint_id, NULL);
+}
+
+agtype_value *agtv_materialize_vle_edges_slice(agtype *agt_arg_vpc,
+                                               int64 lower_index,
+                                               int64 upper_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state edges_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (lower_index >= upper_index)
+    {
+        return build_empty_agtype_value_array();
+    }
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    MemSet(&edges_result, 0, sizeof(agtype_in_state));
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (upper_index - lower_index > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle edge slice materialization relation cache");
+    }
+
+    for (index = lower_index; index < upper_index; index++)
+    {
+        agtype_value *agtv_edge = NULL;
+
+        agtv_edge = build_vle_edge_value(
+            ggctx, graphid_array[(index * 2) + 1], relation_cache);
+        edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                             WAGT_ELEM, agtv_edge);
+    }
+
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    edges_result.res->type = AGTV_ARRAY;
+
+    return edges_result.res;
+}
+
+static agtype_value *agtv_materialize_vle_edges_reversed_slice(
+    agtype *agt_arg_vpc, int64 lower_index, int64 upper_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state edges_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 edge_count;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (lower_index >= upper_index)
+    {
+        return build_empty_agtype_value_array();
+    }
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    MemSet(&edges_result, 0, sizeof(agtype_in_state));
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (upper_index - lower_index > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle reversed edge slice materialization relation cache");
+    }
+
+    for (index = upper_index - 1; index >= lower_index; index--)
+    {
+        agtype_value *agtv_edge = NULL;
+        int64 original_index = edge_count - index - 1;
+
+        agtv_edge = build_vle_edge_value(
+            ggctx, graphid_array[(original_index * 2) + 1],
+            relation_cache);
+        edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                             WAGT_ELEM, agtv_edge);
+    }
+
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    edges_result.res->type = AGTV_ARRAY;
+
+    return edges_result.res;
+}
+
+agtype_value *agtv_materialize_vle_edges_reversed(agtype *agt_arg_vpc)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state edges_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 edge_count;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count == 0)
+    {
+        return build_empty_agtype_value_array();
+    }
+
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    MemSet(&edges_result, 0, sizeof(agtype_in_state));
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (edge_count > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle edge reverse materialization relation cache");
+    }
+
+    for (index = edge_count - 1; index >= 0; index--)
+    {
+        agtype_value *agtv_edge = NULL;
+
+        agtv_edge = build_vle_edge_value(
+            ggctx, graphid_array[(index * 2) + 1], relation_cache);
+        edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                             WAGT_ELEM, agtv_edge);
+    }
+
+    edges_result.res = push_agtype_value(&edges_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    edges_result.res->type = AGTV_ARRAY;
+
+    return edges_result.res;
+}
+
+agtype *agt_vle_edge_properties_at(agtype *agt_arg_vpc, int64 edge_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    int64 edge_count;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        return NULL;
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    return DATUM_GET_AGTYPE_P(get_edge_entry_properties(ee));
+}
+
+agtype_value *agtv_materialize_vle_nodes(agtype *agt_arg_vpc)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state nodes_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 graphid_array_size = 0;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    graphid_array_size = vpc->graphid_array_size;
+
+    MemSet(&nodes_result, 0, sizeof(agtype_in_state));
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (graphid_array_size > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle node materialization relation cache");
+    }
+
+    for (index = 0; index < graphid_array_size; index += 2)
+    {
+        agtype_value *agtv_vertex = NULL;
+
+        agtv_vertex = build_vle_vertex_value(ggctx, graphid_array[index],
+                                             relation_cache);
+        nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                             WAGT_ELEM, agtv_vertex);
+    }
+
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    nodes_result.res->type = AGTV_ARRAY;
+
+    return nodes_result.res;
+}
+
+static agtype_value *agtv_materialize_vle_nodes_slice(agtype *agt_arg_vpc,
+                                                      int64 lower_index,
+                                                      int64 upper_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state nodes_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (lower_index >= upper_index)
+    {
+        return build_empty_agtype_value_array();
+    }
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    MemSet(&nodes_result, 0, sizeof(agtype_in_state));
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (upper_index - lower_index > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle node slice materialization relation cache");
+    }
+
+    for (index = lower_index; index < upper_index; index++)
+    {
+        agtype_value *agtv_vertex = NULL;
+
+        agtv_vertex = build_vle_vertex_value(
+            ggctx, graphid_array[index * 2], relation_cache);
+        nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                             WAGT_ELEM, agtv_vertex);
+    }
+
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    nodes_result.res->type = AGTV_ARRAY;
+
+    return nodes_result.res;
+}
+
+static agtype_value *agtv_materialize_vle_nodes_reversed_slice(
+    agtype *agt_arg_vpc, int64 lower_index, int64 upper_index)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state nodes_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 node_count;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (lower_index >= upper_index)
+    {
+        return build_empty_agtype_value_array();
+    }
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+
+    MemSet(&nodes_result, 0, sizeof(agtype_in_state));
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (upper_index - lower_index > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle reversed node slice materialization relation cache");
+    }
+
+    for (index = upper_index - 1; index >= lower_index; index--)
+    {
+        agtype_value *agtv_vertex = NULL;
+        int64 original_index = node_count - index - 1;
+
+        agtv_vertex = build_vle_vertex_value(
+            ggctx, graphid_array[original_index * 2], relation_cache);
+        nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                             WAGT_ELEM, agtv_vertex);
+    }
+
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    nodes_result.res->type = AGTV_ARRAY;
+
+    return nodes_result.res;
+}
+
+static agtype_value *agtv_materialize_vle_nodes_reversed(agtype *agt_arg_vpc)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype_in_state nodes_result;
+    HTAB *relation_cache = NULL;
+    graphid *graphid_array = NULL;
+    Oid graph_oid = InvalidOid;
+    int64 node_count;
+    int64 index;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graph_oid = vpc->graph_oid;
+    ggctx = find_GRAPH_global_context(graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+
+    MemSet(&nodes_result, 0, sizeof(agtype_in_state));
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_BEGIN_ARRAY, NULL);
+
+    if (node_count > 1)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle node reverse materialization relation cache");
+    }
+
+    for (index = node_count - 1; index >= 0; index--)
+    {
+        agtype_value *agtv_vertex = NULL;
+
+        agtv_vertex = build_vle_vertex_value(
+            ggctx, graphid_array[index * 2], relation_cache);
+        nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                             WAGT_ELEM, agtv_vertex);
+    }
+
+    nodes_result.res = push_agtype_value(&nodes_result.parse_state,
+                                         WAGT_END_ARRAY, NULL);
+    destroy_entry_property_relation_cache(relation_cache);
+    nodes_result.res->type = AGTV_ARRAY;
+
+    return nodes_result.res;
+}
+
+int64 agtv_vle_edge_count(agtype *agt_arg_vpc)
+{
+    VLE_path_container *vpc = NULL;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+
+    return (vpc->graphid_array_size - 1) / 2;
+}
+
+bool agt_vle_contains_edge_id(agtype *agt_arg_vpc, graphid edge_id)
+{
+    VLE_path_container *vpc = NULL;
+    graphid *graphid_array = NULL;
+    int64 graphid_array_size = 0;
+    int64 i;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    graphid_array_size = vpc->graphid_array_size;
+
+    for (i = 1; i < graphid_array_size - 1; i += 2)
+    {
+        if (graphid_array[i] == edge_id)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool get_vle_edge_id_at_index(agtype *agt_arg_vpc, int64 edge_index,
+                                     graphid *edge_id)
+{
+    VLE_path_container *vpc = NULL;
+    graphid *graphid_array = NULL;
+    int64 edge_count;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(edge_id != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        return false;
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    *edge_id = graphid_array[(edge_index * 2) + 1];
+
+    return true;
+}
+
+static int64 agtv_vle_node_count(agtype *agt_arg_vpc)
+{
+    VLE_path_container *vpc = NULL;
+
+    Assert(agt_arg_vpc != NULL);
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+
+    return (vpc->graphid_array_size + 1) / 2;
+}
+
 /* PG wrapper function for agtv_materialize_vle_edges */
 PG_FUNCTION_INFO_V1(age_materialize_vle_edges);
 
@@ -2575,6 +3963,7 @@ Datum age_materialize_vle_edges(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg_vpc = NULL;
     agtype_value *agtv_array = NULL;
+    int64 edge_count;
 
     /* if we have a NULL VLE_path_container, return NULL */
     if (PG_ARGISNULL(0))
@@ -2591,7 +3980,3116 @@ Datum age_materialize_vle_edges(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count == 0)
+    {
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
     agtv_array = agtv_materialize_vle_edges(agt_arg_vpc);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_nodes);
+
+Datum age_materialize_vle_nodes(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_array = NULL;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_array = agtv_materialize_vle_nodes(agt_arg_vpc);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_path_node_count);
+
+Datum age_vle_path_node_count(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_result;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = agtv_vle_node_count(agt_arg_vpc);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_tail_count);
+
+Datum age_vle_edge_tail_count(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_result;
+    int64 edge_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = edge_count > 0 ? edge_count - 1 : 0;
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_list_is_empty);
+
+Datum age_vle_list_is_empty(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_mode;
+    bool mode_needs_free = false;
+    int64 edge_count;
+    int64 node_count;
+    int64 mode;
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_list_is_empty",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_mode, &mode_needs_free);
+    mode = agtv_mode.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_mode);
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    node_count = edge_count + 1;
+
+    switch (mode)
+    {
+        case 0:
+            result = node_count == 0;
+            break;
+
+        case 1:
+            result = edge_count == 0;
+            break;
+
+        case 2:
+            result = node_count <= 1;
+            break;
+
+        case 3:
+            result = edge_count <= 1;
+            break;
+
+        default:
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("age_vle_list_is_empty: invalid mode")));
+    }
+
+    PG_RETURN_BOOL(result);
+}
+
+PG_FUNCTION_INFO_V1(age_vle_list_slice_count);
+
+Datum age_vle_list_slice_count(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype *agt_lidx = NULL;
+    agtype *agt_uidx = NULL;
+    agtype_value lidx_value;
+    agtype_value uidx_value;
+    agtype_value mode_value;
+    agtype_value agtv_result;
+    bool lidx_needs_free = false;
+    bool uidx_needs_free = false;
+    bool mode_needs_free = false;
+    int64 edge_count;
+    int64 list_count;
+    int64 lower_index = 0;
+    int64 upper_index = 0;
+    int64 mode;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(3))
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("slice start and/or end is required")));
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_list_slice_count",
+                               AG_GET_ARG_AGTYPE_P(3), AGTV_INTEGER, true,
+                               &mode_value, &mode_needs_free);
+    mode = mode_value.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&mode_value);
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    switch (mode)
+    {
+    case 0:
+        list_count = edge_count;
+        break;
+    case 1:
+        list_count = edge_count + 1;
+        break;
+    case 2:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 3:
+        list_count = edge_count;
+        break;
+    case 6:
+        list_count = Max(edge_count - 2, 0);
+        break;
+    case 7:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 8:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 9:
+        list_count = edge_count;
+        break;
+    case 10:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 11:
+        list_count = edge_count;
+        break;
+    default:
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_list_slice_count: invalid mode")));
+    }
+
+    if (PG_ARGISNULL(1))
+    {
+        lower_index = 0;
+    }
+    else
+    {
+        agt_lidx = AG_GET_ARG_AGTYPE_P(1);
+        get_vle_scalar_arg_no_copy("age_vle_list_slice_count",
+                                   agt_lidx, AGTV_INTEGER, false,
+                                   &lidx_value, &lidx_needs_free);
+        if (lidx_value.type == AGTV_NULL)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (lidx_value.type != AGTV_INTEGER)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        lower_index = lidx_value.val.int_value;
+        if (lidx_needs_free)
+        {
+            pfree_agtype_value_content(&lidx_value);
+        }
+    }
+
+    if (PG_ARGISNULL(2))
+    {
+        upper_index = list_count;
+    }
+    else
+    {
+        agt_uidx = AG_GET_ARG_AGTYPE_P(2);
+        get_vle_scalar_arg_no_copy("age_vle_list_slice_count",
+                                   agt_uidx, AGTV_INTEGER, false,
+                                   &uidx_value, &uidx_needs_free);
+        if (uidx_value.type == AGTV_NULL)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (uidx_value.type != AGTV_INTEGER)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        upper_index = uidx_value.val.int_value;
+        if (uidx_needs_free)
+        {
+            pfree_agtype_value_content(&uidx_value);
+        }
+    }
+
+    if (lower_index < 0)
+    {
+        lower_index = list_count + lower_index;
+    }
+    if (lower_index < 0)
+    {
+        lower_index = 0;
+    }
+    if (lower_index > list_count)
+    {
+        lower_index = list_count;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = list_count + upper_index;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = 0;
+    }
+    if (upper_index > list_count)
+    {
+        upper_index = list_count;
+    }
+
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = Max(upper_index - lower_index, 0);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_list_slice_is_empty);
+
+Datum age_vle_list_slice_is_empty(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype *agt_lidx = NULL;
+    agtype *agt_uidx = NULL;
+    agtype_value lidx_value;
+    agtype_value uidx_value;
+    agtype_value mode_value;
+    bool lidx_needs_free = false;
+    bool uidx_needs_free = false;
+    bool mode_needs_free = false;
+    int64 edge_count;
+    int64 list_count;
+    int64 lower_index = 0;
+    int64 upper_index = 0;
+    int64 mode;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(3))
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("slice start and/or end is required")));
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_list_slice_is_empty",
+                               AG_GET_ARG_AGTYPE_P(3), AGTV_INTEGER, true,
+                               &mode_value, &mode_needs_free);
+    mode = mode_value.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&mode_value);
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    switch (mode)
+    {
+    case 0:
+        list_count = edge_count;
+        break;
+    case 1:
+        list_count = edge_count + 1;
+        break;
+    case 2:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 3:
+        list_count = edge_count;
+        break;
+    case 6:
+        list_count = Max(edge_count - 2, 0);
+        break;
+    case 7:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 8:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 9:
+        list_count = edge_count;
+        break;
+    case 10:
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 11:
+        list_count = edge_count;
+        break;
+    default:
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_list_slice_is_empty: invalid mode")));
+    }
+
+    if (PG_ARGISNULL(1))
+    {
+        lower_index = 0;
+    }
+    else
+    {
+        agt_lidx = AG_GET_ARG_AGTYPE_P(1);
+        get_vle_scalar_arg_no_copy("age_vle_list_slice_is_empty",
+                                   agt_lidx, AGTV_INTEGER, false,
+                                   &lidx_value, &lidx_needs_free);
+        if (lidx_value.type == AGTV_NULL)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (lidx_value.type != AGTV_INTEGER)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        lower_index = lidx_value.val.int_value;
+        if (lidx_needs_free)
+        {
+            pfree_agtype_value_content(&lidx_value);
+        }
+    }
+
+    if (PG_ARGISNULL(2))
+    {
+        upper_index = list_count;
+    }
+    else
+    {
+        agt_uidx = AG_GET_ARG_AGTYPE_P(2);
+        get_vle_scalar_arg_no_copy("age_vle_list_slice_is_empty",
+                                   agt_uidx, AGTV_INTEGER, false,
+                                   &uidx_value, &uidx_needs_free);
+        if (uidx_value.type == AGTV_NULL)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (uidx_value.type != AGTV_INTEGER)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        upper_index = uidx_value.val.int_value;
+        if (uidx_needs_free)
+        {
+            pfree_agtype_value_content(&uidx_value);
+        }
+    }
+
+    if (lower_index < 0)
+    {
+        lower_index = list_count + lower_index;
+    }
+    if (lower_index < 0)
+    {
+        lower_index = 0;
+    }
+    if (lower_index > list_count)
+    {
+        lower_index = list_count;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = list_count + upper_index;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = 0;
+    }
+    if (upper_index > list_count)
+    {
+        upper_index = list_count;
+    }
+
+    PG_RETURN_BOOL(upper_index <= lower_index);
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_slice_boundary);
+
+Datum age_materialize_vle_slice_boundary(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype *agt_lidx = NULL;
+    agtype *agt_uidx = NULL;
+    agtype_value lidx_value;
+    agtype_value uidx_value;
+    agtype_value mode_value;
+    agtype_value id_result;
+    agtype_value label_result;
+    agtype_value label_array_elem;
+    agtype_in_state label_array_result;
+    agtype_value *agtv_result = NULL;
+    bool lidx_needs_free = false;
+    bool uidx_needs_free = false;
+    bool mode_needs_free = false;
+    bool return_id = false;
+    bool return_label = false;
+    bool return_labels = false;
+    bool return_properties = false;
+    bool return_endpoint = false;
+    bool return_endpoint_id = false;
+    bool return_endpoint_label = false;
+    bool return_endpoint_labels = false;
+    bool return_endpoint_properties = false;
+    bool start_endpoint = false;
+    bool double_tail_list = false;
+    bool tail_reverse_list = false;
+    bool reverse_list = false;
+    bool return_node = false;
+    bool return_last = false;
+    graphid *graphid_array = NULL;
+    int64 edge_count;
+    int64 list_count;
+    int64 lower_index = 0;
+    int64 upper_index = 0;
+    int64 base_index = 0;
+    int64 original_index;
+    int64 mode;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(3))
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("slice start and/or end is required")));
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_slice_boundary",
+                               AG_GET_ARG_AGTYPE_P(3), AGTV_INTEGER, true,
+                               &mode_value, &mode_needs_free);
+    mode = mode_value.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&mode_value);
+    }
+    if (mode >= 360)
+    {
+        double_tail_list = true;
+        mode -= 360;
+    }
+    else if (mode >= 240)
+    {
+        tail_reverse_list = true;
+        mode -= 240;
+    }
+    else if (mode >= 120)
+    {
+        reverse_list = true;
+        mode -= 120;
+    }
+    if (mode >= 8 && mode <= 15)
+    {
+        return_id = true;
+        mode -= 8;
+    }
+    else if (mode >= 16 && mode <= 23)
+    {
+        return_label = true;
+        mode -= 16;
+    }
+    else if (mode >= 24 && mode <= 31)
+    {
+        return_labels = true;
+        mode -= 24;
+    }
+    else if (mode >= 32 && mode <= 39)
+    {
+        return_properties = true;
+        mode -= 32;
+    }
+    else if (mode >= 40 && mode <= 47)
+    {
+        return_endpoint = true;
+        start_endpoint = true;
+        mode -= 40;
+    }
+    else if (mode >= 48 && mode <= 55)
+    {
+        return_endpoint = true;
+        start_endpoint = false;
+        mode -= 48;
+    }
+    else if (mode >= 56 && mode <= 63)
+    {
+        return_endpoint_id = true;
+        start_endpoint = true;
+        mode -= 56;
+    }
+    else if (mode >= 64 && mode <= 71)
+    {
+        return_endpoint_id = true;
+        start_endpoint = false;
+        mode -= 64;
+    }
+    else if (mode >= 72 && mode <= 79)
+    {
+        return_endpoint_label = true;
+        start_endpoint = true;
+        mode -= 72;
+    }
+    else if (mode >= 80 && mode <= 87)
+    {
+        return_endpoint_label = true;
+        start_endpoint = false;
+        mode -= 80;
+    }
+    else if (mode >= 88 && mode <= 95)
+    {
+        return_endpoint_labels = true;
+        start_endpoint = true;
+        mode -= 88;
+    }
+    else if (mode >= 96 && mode <= 103)
+    {
+        return_endpoint_labels = true;
+        start_endpoint = false;
+        mode -= 96;
+    }
+    else if (mode >= 104 && mode <= 111)
+    {
+        return_endpoint_properties = true;
+        start_endpoint = true;
+        mode -= 104;
+    }
+    else if (mode >= 112 && mode <= 119)
+    {
+        return_endpoint_properties = true;
+        start_endpoint = false;
+        mode -= 112;
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    switch (mode)
+    {
+    case 0:
+    case 1:
+        list_count = edge_count;
+        return_node = false;
+        return_last = mode == 1;
+        break;
+    case 2:
+    case 3:
+        list_count = edge_count + 1;
+        return_node = true;
+        return_last = mode == 3;
+        break;
+    case 4:
+    case 5:
+        if (double_tail_list)
+        {
+            list_count = Max(edge_count - 2, 0);
+            base_index = 2;
+        }
+        else if (tail_reverse_list)
+        {
+            list_count = Max(edge_count - 1, 0);
+        }
+        else
+        {
+            list_count = Max(edge_count - 1, 0);
+            base_index = 1;
+        }
+        return_node = false;
+        return_last = mode == 5;
+        break;
+    case 6:
+    case 7:
+        if (double_tail_list)
+        {
+            list_count = Max(edge_count - 1, 0);
+            base_index = 2;
+        }
+        else if (tail_reverse_list)
+        {
+            list_count = edge_count;
+        }
+        else
+        {
+            list_count = edge_count;
+            base_index = 1;
+        }
+        return_node = true;
+        return_last = mode == 7;
+        break;
+    default:
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_materialize_vle_slice_boundary: invalid mode")));
+    }
+
+    if (PG_ARGISNULL(1))
+    {
+        lower_index = 0;
+    }
+    else
+    {
+        agt_lidx = AG_GET_ARG_AGTYPE_P(1);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_slice_boundary",
+                                   agt_lidx, AGTV_INTEGER, false,
+                                   &lidx_value, &lidx_needs_free);
+        if (lidx_value.type == AGTV_NULL)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (lidx_value.type != AGTV_INTEGER)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        lower_index = lidx_value.val.int_value;
+        if (lidx_needs_free)
+        {
+            pfree_agtype_value_content(&lidx_value);
+        }
+    }
+
+    if (PG_ARGISNULL(2))
+    {
+        upper_index = list_count;
+    }
+    else
+    {
+        agt_uidx = AG_GET_ARG_AGTYPE_P(2);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_slice_boundary",
+                                   agt_uidx, AGTV_INTEGER, false,
+                                   &uidx_value, &uidx_needs_free);
+        if (uidx_value.type == AGTV_NULL)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (uidx_value.type != AGTV_INTEGER)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        upper_index = uidx_value.val.int_value;
+        if (uidx_needs_free)
+        {
+            pfree_agtype_value_content(&uidx_value);
+        }
+    }
+
+    if (lower_index < 0)
+    {
+        lower_index = list_count + lower_index;
+    }
+    if (lower_index < 0)
+    {
+        lower_index = 0;
+    }
+    if (lower_index > list_count)
+    {
+        lower_index = list_count;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = list_count + upper_index;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = 0;
+    }
+    if (upper_index > list_count)
+    {
+        upper_index = list_count;
+    }
+
+    if (upper_index <= lower_index)
+    {
+        PG_RETURN_NULL();
+    }
+
+    original_index = return_last ? upper_index - 1 : lower_index;
+    if (reverse_list || tail_reverse_list)
+    {
+        original_index = list_count - original_index - 1;
+    }
+    original_index += base_index;
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    if (return_node)
+    {
+        graphid node_id = graphid_array[original_index * 2];
+
+        if (return_endpoint || return_endpoint_id || return_endpoint_label ||
+            return_endpoint_labels || return_endpoint_properties)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("age_materialize_vle_slice_boundary: endpoint mode is invalid for nodes")));
+        }
+
+        if (return_id)
+        {
+            id_result.type = AGTV_INTEGER;
+            id_result.val.int_value = node_id;
+            PG_RETURN_POINTER(agtype_value_to_agtype(&id_result));
+        }
+
+        ggctx = find_GRAPH_global_context(vpc->graph_oid);
+        Assert(ggctx != NULL);
+
+        if (return_label || return_labels || return_properties)
+        {
+            vertex_entry *ve = get_vertex_entry(ggctx, node_id);
+            char *label_name = NULL;
+
+            Assert(ve != NULL);
+            if (return_properties)
+            {
+                PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+            }
+
+            label_name = get_vertex_entry_label_name(ve);
+            label_result.type = AGTV_STRING;
+            label_result.val.string.val = label_name;
+            label_result.val.string.len = strlen(label_name);
+            if (return_label)
+            {
+                PG_RETURN_POINTER(agtype_value_to_agtype(&label_result));
+            }
+
+            label_array_elem = label_result;
+            MemSet(&label_array_result, 0, sizeof(agtype_in_state));
+            label_array_result.res = push_agtype_value(
+                &label_array_result.parse_state, WAGT_BEGIN_ARRAY, NULL);
+            label_array_result.res = push_agtype_value(
+                &label_array_result.parse_state, WAGT_ELEM,
+                &label_array_elem);
+            label_array_result.res = push_agtype_value(
+                &label_array_result.parse_state, WAGT_END_ARRAY, NULL);
+
+            PG_RETURN_POINTER(agtype_value_to_agtype(label_array_result.res));
+        }
+
+        agtv_result = build_vle_vertex_value(ggctx, node_id, NULL);
+    }
+    else
+    {
+        graphid edge_id = graphid_array[(original_index * 2) + 1];
+
+        if (return_id)
+        {
+            id_result.type = AGTV_INTEGER;
+            id_result.val.int_value = edge_id;
+            PG_RETURN_POINTER(agtype_value_to_agtype(&id_result));
+        }
+
+        ggctx = find_GRAPH_global_context(vpc->graph_oid);
+        Assert(ggctx != NULL);
+
+        if (return_label || return_properties)
+        {
+            edge_entry *ee = get_edge_entry(ggctx, edge_id);
+            char *label_name = NULL;
+
+            Assert(ee != NULL);
+            if (return_properties)
+            {
+                PG_RETURN_DATUM(get_edge_entry_properties(ee));
+            }
+
+            label_name = get_edge_entry_label_name(ee);
+            label_result.type = AGTV_STRING;
+            label_result.val.string.val = label_name;
+            label_result.val.string.len = strlen(label_name);
+
+            PG_RETURN_POINTER(agtype_value_to_agtype(&label_result));
+        }
+        if (return_labels)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("age_materialize_vle_slice_boundary: labels mode is invalid for relationships")));
+        }
+        if (return_endpoint || return_endpoint_id || return_endpoint_label ||
+            return_endpoint_labels || return_endpoint_properties)
+        {
+            edge_entry *ee = get_edge_entry(ggctx, edge_id);
+            graphid endpoint_id;
+
+            Assert(ee != NULL);
+            endpoint_id = start_endpoint ?
+                get_edge_entry_start_vertex_id(ee) :
+                get_edge_entry_end_vertex_id(ee);
+
+            if (return_endpoint_id)
+            {
+                id_result.type = AGTV_INTEGER;
+                id_result.val.int_value = endpoint_id;
+                PG_RETURN_POINTER(agtype_value_to_agtype(&id_result));
+            }
+            if (return_endpoint)
+            {
+                agtv_result = build_vle_vertex_value(ggctx, endpoint_id, NULL);
+                PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
+            }
+            if (return_endpoint_label || return_endpoint_labels ||
+                return_endpoint_properties)
+            {
+                vertex_entry *ve = get_vertex_entry(ggctx, endpoint_id);
+                char *label_name = NULL;
+
+                Assert(ve != NULL);
+                if (return_endpoint_properties)
+                {
+                    PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+                }
+
+                label_name = get_vertex_entry_label_name(ve);
+                label_result.type = AGTV_STRING;
+                label_result.val.string.val = label_name;
+                label_result.val.string.len = strlen(label_name);
+                if (return_endpoint_label)
+                {
+                    PG_RETURN_POINTER(agtype_value_to_agtype(&label_result));
+                }
+
+                label_array_elem = label_result;
+                MemSet(&label_array_result, 0, sizeof(agtype_in_state));
+                label_array_result.res = push_agtype_value(
+                    &label_array_result.parse_state, WAGT_BEGIN_ARRAY, NULL);
+                label_array_result.res = push_agtype_value(
+                    &label_array_result.parse_state, WAGT_ELEM,
+                    &label_array_elem);
+                label_array_result.res = push_agtype_value(
+                    &label_array_result.parse_state, WAGT_END_ARRAY, NULL);
+
+                PG_RETURN_POINTER(
+                    agtype_value_to_agtype(label_array_result.res));
+            }
+        }
+
+        agtv_result = build_vle_edge_value(ggctx, edge_id, NULL);
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_node_at);
+
+Datum age_materialize_vle_node_at(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value *agtv_vertex = NULL;
+    bool index_needs_free = false;
+    int64 node_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_node_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    agtv_vertex = agtv_materialize_vle_vertex_at(agt_arg_vpc, node_index);
+    if (agtv_vertex == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_vertex));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_node_reversed_at);
+
+Datum age_materialize_vle_node_reversed_at(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value *agtv_vertex = NULL;
+    bool index_needs_free = false;
+    int64 node_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_node_reversed_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    if (node_index == PG_INT64_MIN)
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_vertex = agtv_materialize_vle_vertex_at(
+        agt_arg_vpc, -node_index - 1);
+    if (agtv_vertex == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_vertex));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_node_tail_last);
+
+Datum age_materialize_vle_node_tail_last(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    graphid *graphid_array = NULL;
+    int64 node_count;
+    agtype_value *agtv_vertex = NULL;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+    if (node_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    agtv_vertex = build_vle_vertex_value(
+        ggctx, graphid_array[(node_count - 1) * 2], NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_vertex));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_node_tail_last_id);
+
+Datum age_vle_node_tail_last_id(PG_FUNCTION_ARGS)
+{
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_result;
+    graphid *graphid_array = NULL;
+    int64 node_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+    if (node_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = graphid_array[(node_count - 1) * 2];
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_node_id_at);
+
+Datum age_vle_node_id_at(PG_FUNCTION_ARGS)
+{
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    int64 node_count;
+    int64 node_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_node_id_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = (vpc->graphid_array_size + 1) / 2;
+    if (node_index < 0)
+    {
+        node_index = node_count + node_index;
+    }
+    if (node_index < 0 || node_index >= node_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = graphid_array[node_index * 2];
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_node_label_at);
+
+Datum age_vle_node_label_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    vertex_entry *ve = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid node_id;
+    int64 node_count;
+    int64 node_index;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_node_label_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = (vpc->graphid_array_size + 1) / 2;
+    if (node_index < 0)
+    {
+        node_index = node_count + node_index;
+    }
+    if (node_index < 0 || node_index >= node_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    node_id = graphid_array[node_index * 2];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ve = get_vertex_entry(ggctx, node_id);
+    Assert(ve != NULL);
+
+    label_name = get_vertex_entry_label_name(ve);
+    agtv_result.type = AGTV_STRING;
+    agtv_result.val.string.val = label_name;
+    agtv_result.val.string.len = strlen(label_name);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_node_labels_at);
+
+Datum age_vle_node_labels_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    vertex_entry *ve = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_label;
+    agtype_in_state agis_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid node_id;
+    int64 node_count;
+    int64 node_index;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_node_labels_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = (vpc->graphid_array_size + 1) / 2;
+    if (node_index < 0)
+    {
+        node_index = node_count + node_index;
+    }
+    if (node_index < 0 || node_index >= node_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    node_id = graphid_array[node_index * 2];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ve = get_vertex_entry(ggctx, node_id);
+    Assert(ve != NULL);
+
+    label_name = get_vertex_entry_label_name(ve);
+    agtv_label.type = AGTV_STRING;
+    agtv_label.val.string.val = label_name;
+    agtv_label.val.string.len = strlen(label_name);
+
+    MemSet(&agis_result, 0, sizeof(agtype_in_state));
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_BEGIN_ARRAY, NULL);
+    agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM,
+                                        &agtv_label);
+    agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                        WAGT_END_ARRAY, NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_node_properties_at);
+
+Datum age_vle_node_properties_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    vertex_entry *ve = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid node_id;
+    int64 node_count;
+    int64 node_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_node_properties_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    node_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    node_count = (vpc->graphid_array_size + 1) / 2;
+    if (node_index < 0)
+    {
+        node_index = node_count + node_index;
+    }
+    if (node_index < 0 || node_index >= node_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    node_id = graphid_array[node_index * 2];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ve = get_vertex_entry(ggctx, node_id);
+    Assert(ve != NULL);
+
+    PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_nodes_slice);
+
+Datum age_materialize_vle_nodes_slice(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype *agt_lidx = NULL;
+    agtype *agt_uidx = NULL;
+    agtype_value lidx_value;
+    agtype_value uidx_value;
+    agtype_value *lidx_value_ptr = NULL;
+    agtype_value *uidx_value_ptr = NULL;
+    agtype_value *agtv_array = NULL;
+    bool lidx_needs_free = false;
+    bool uidx_needs_free = false;
+    int64 node_count;
+    int64 lower_index = 0;
+    int64 upper_index = 0;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("slice start and/or end is required")));
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+    if (PG_ARGISNULL(1))
+    {
+        lower_index = 0;
+    }
+    else
+    {
+        agt_lidx = AG_GET_ARG_AGTYPE_P(1);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_nodes_slice",
+                                   agt_lidx, AGTV_INTEGER, false,
+                                   &lidx_value, &lidx_needs_free);
+        lidx_value_ptr = &lidx_value;
+        if (lidx_value_ptr->type == AGTV_NULL)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(lidx_value_ptr);
+            }
+            PG_RETURN_NULL();
+        }
+    }
+
+    if (PG_ARGISNULL(2))
+    {
+        upper_index = node_count;
+    }
+    else
+    {
+        agt_uidx = AG_GET_ARG_AGTYPE_P(2);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_nodes_slice",
+                                   agt_uidx, AGTV_INTEGER, false,
+                                   &uidx_value, &uidx_needs_free);
+        uidx_value_ptr = &uidx_value;
+        if (uidx_value_ptr->type == AGTV_NULL)
+        {
+            if (lidx_value_ptr != NULL && lidx_needs_free)
+            {
+                pfree_agtype_value_content(lidx_value_ptr);
+            }
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(uidx_value_ptr);
+            }
+            PG_RETURN_NULL();
+        }
+    }
+
+    if ((lidx_value_ptr != NULL && lidx_value_ptr->type != AGTV_INTEGER) ||
+        (uidx_value_ptr != NULL && uidx_value_ptr->type != AGTV_INTEGER))
+    {
+        if (lidx_value_ptr != NULL && lidx_needs_free)
+        {
+            pfree_agtype_value_content(lidx_value_ptr);
+        }
+        if (uidx_value_ptr != NULL && uidx_needs_free)
+        {
+            pfree_agtype_value_content(uidx_value_ptr);
+        }
+        ereport(ERROR,
+                (errmsg("array slices must resolve to an integer value")));
+    }
+
+    if (lidx_value_ptr != NULL)
+    {
+        lower_index = lidx_value_ptr->val.int_value;
+        if (lidx_needs_free)
+        {
+            pfree_agtype_value_content(lidx_value_ptr);
+        }
+    }
+    if (uidx_value_ptr != NULL)
+    {
+        upper_index = uidx_value_ptr->val.int_value;
+        if (uidx_needs_free)
+        {
+            pfree_agtype_value_content(uidx_value_ptr);
+        }
+    }
+
+    if (lower_index < 0)
+    {
+        lower_index = node_count + lower_index;
+    }
+    if (lower_index < 0)
+    {
+        lower_index = 0;
+    }
+    if (lower_index > node_count)
+    {
+        lower_index = node_count;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = node_count + upper_index;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = 0;
+    }
+    if (upper_index > node_count)
+    {
+        upper_index = node_count;
+    }
+
+    if (upper_index <= lower_index)
+    {
+        PG_FREE_IF_COPY(agt_arg_vpc, 0);
+        PG_FREE_IF_COPY(agt_lidx, 1);
+        PG_FREE_IF_COPY(agt_uidx, 2);
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
+    agtv_array = agtv_materialize_vle_nodes_slice(
+        agt_arg_vpc, lower_index, upper_index);
+
+    PG_FREE_IF_COPY(agt_arg_vpc, 0);
+    PG_FREE_IF_COPY(agt_lidx, 1);
+    PG_FREE_IF_COPY(agt_uidx, 2);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_list_slice);
+
+Datum age_materialize_vle_list_slice(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype *agt_lidx = NULL;
+    agtype *agt_uidx = NULL;
+    agtype_value lidx_value;
+    agtype_value uidx_value;
+    agtype_value mode_value;
+    agtype_value *agtv_array = NULL;
+    bool lidx_needs_free = false;
+    bool uidx_needs_free = false;
+    bool mode_needs_free = false;
+    bool reverse = false;
+    bool node_list = false;
+    int64 edge_count;
+    int64 list_count;
+    int64 lower_index = 0;
+    int64 upper_index = 0;
+    int64 base_index = 0;
+    int64 reverse_base_index = 0;
+    int64 mode;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(3))
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("slice start and/or end is required")));
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_list_slice",
+                               AG_GET_ARG_AGTYPE_P(3), AGTV_INTEGER, true,
+                               &mode_value, &mode_needs_free);
+    mode = mode_value.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&mode_value);
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    switch (mode)
+    {
+    case 0:
+        list_count = edge_count;
+        break;
+    case 1:
+        node_list = true;
+        list_count = edge_count + 1;
+        break;
+    case 2:
+        list_count = Max(edge_count - 1, 0);
+        base_index = 1;
+        break;
+    case 3:
+        node_list = true;
+        list_count = edge_count;
+        base_index = 1;
+        break;
+    case 4:
+        reverse = true;
+        list_count = edge_count;
+        break;
+    case 5:
+        reverse = true;
+        node_list = true;
+        list_count = edge_count + 1;
+        break;
+    case 6:
+        list_count = Max(edge_count - 2, 0);
+        base_index = 2;
+        break;
+    case 7:
+        node_list = true;
+        list_count = Max(edge_count - 1, 0);
+        base_index = 2;
+        break;
+    case 8:
+        reverse = true;
+        list_count = Max(edge_count - 1, 0);
+        reverse_base_index = 1;
+        break;
+    case 9:
+        reverse = true;
+        node_list = true;
+        list_count = edge_count;
+        reverse_base_index = 1;
+        break;
+    case 10:
+        reverse = true;
+        list_count = Max(edge_count - 1, 0);
+        break;
+    case 11:
+        reverse = true;
+        node_list = true;
+        list_count = edge_count;
+        break;
+    default:
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_materialize_vle_list_slice: invalid mode")));
+    }
+
+    if (PG_ARGISNULL(1))
+    {
+        lower_index = 0;
+    }
+    else
+    {
+        agt_lidx = AG_GET_ARG_AGTYPE_P(1);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_list_slice",
+                                   agt_lidx, AGTV_INTEGER, false,
+                                   &lidx_value, &lidx_needs_free);
+        if (lidx_value.type == AGTV_NULL)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (lidx_value.type != AGTV_INTEGER)
+        {
+            if (lidx_needs_free)
+            {
+                pfree_agtype_value_content(&lidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        lower_index = lidx_value.val.int_value;
+        if (lidx_needs_free)
+        {
+            pfree_agtype_value_content(&lidx_value);
+        }
+    }
+
+    if (PG_ARGISNULL(2))
+    {
+        upper_index = list_count;
+    }
+    else
+    {
+        agt_uidx = AG_GET_ARG_AGTYPE_P(2);
+        get_vle_scalar_arg_no_copy("age_materialize_vle_list_slice",
+                                   agt_uidx, AGTV_INTEGER, false,
+                                   &uidx_value, &uidx_needs_free);
+        if (uidx_value.type == AGTV_NULL)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            PG_RETURN_NULL();
+        }
+        if (uidx_value.type != AGTV_INTEGER)
+        {
+            if (uidx_needs_free)
+            {
+                pfree_agtype_value_content(&uidx_value);
+            }
+            ereport(ERROR,
+                    (errmsg("array slices must resolve to an integer value")));
+        }
+        upper_index = uidx_value.val.int_value;
+        if (uidx_needs_free)
+        {
+            pfree_agtype_value_content(&uidx_value);
+        }
+    }
+
+    if (lower_index < 0)
+    {
+        lower_index = list_count + lower_index;
+    }
+    if (lower_index < 0)
+    {
+        lower_index = 0;
+    }
+    if (lower_index > list_count)
+    {
+        lower_index = list_count;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = list_count + upper_index;
+    }
+    if (upper_index < 0)
+    {
+        upper_index = 0;
+    }
+    if (upper_index > list_count)
+    {
+        upper_index = list_count;
+    }
+
+    if (upper_index <= lower_index)
+    {
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
+    if (reverse)
+    {
+        lower_index += reverse_base_index;
+        upper_index += reverse_base_index;
+        agtv_array = node_list ?
+            agtv_materialize_vle_nodes_reversed_slice(agt_arg_vpc,
+                                                      lower_index,
+                                                      upper_index) :
+            agtv_materialize_vle_edges_reversed_slice(agt_arg_vpc,
+                                                      lower_index,
+                                                      upper_index);
+    }
+    else
+    {
+        lower_index += base_index;
+        upper_index += base_index;
+        agtv_array = node_list ?
+            agtv_materialize_vle_nodes_slice(agt_arg_vpc, lower_index,
+                                             upper_index) :
+            agtv_materialize_vle_edges_slice(agt_arg_vpc, lower_index,
+                                             upper_index);
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_nodes_tail);
+
+Datum age_materialize_vle_nodes_tail(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_array = NULL;
+    int64 node_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    node_count = agtv_vle_node_count(agt_arg_vpc);
+    if (node_count <= 1)
+    {
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
+    agtv_array = agtv_materialize_vle_nodes_slice(
+        agt_arg_vpc, Min(node_count, 1), node_count);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_nodes_reversed);
+
+Datum age_materialize_vle_nodes_reversed(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_array = NULL;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_array = agtv_materialize_vle_nodes_reversed(agt_arg_vpc);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_edge_at);
+
+Datum age_materialize_vle_edge_at(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value *agtv_edge = NULL;
+    bool index_needs_free = false;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_edge_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    agtv_edge = agtv_materialize_vle_edge_at(agt_arg_vpc, edge_index);
+    if (agtv_edge == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_edge));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_edge_reversed_at);
+
+Datum age_materialize_vle_edge_reversed_at(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value *agtv_edge = NULL;
+    bool index_needs_free = false;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_materialize_vle_edge_reversed_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    if (edge_index == PG_INT64_MIN)
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_edge = agtv_materialize_vle_edge_at(agt_arg_vpc, -edge_index - 1);
+    if (agtv_edge == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_edge));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_edge_tail_last);
+
+Datum age_materialize_vle_edge_tail_last(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_edge = NULL;
+    graphid *graphid_array = NULL;
+    int64 edge_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    agtv_edge = build_vle_edge_value(ggctx, graphid_array[edge_count * 2 - 1],
+                                     NULL);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_edge));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_tail_last_id);
+
+Datum age_vle_edge_tail_last_id(PG_FUNCTION_ARGS)
+{
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_result;
+    graphid *graphid_array = NULL;
+    int64 edge_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = graphid_array[edge_count * 2 - 1];
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_tail_last_field);
+
+Datum age_vle_tail_last_field(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    vertex_entry *ve = NULL;
+    edge_entry *ee = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_mode;
+    agtype_value agtv_result;
+    agtype_value agtv_label;
+    agtype_in_state agis_result;
+    bool mode_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid entity_id;
+    int64 node_count;
+    int64 edge_count;
+    int64 mode;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_tail_last_field",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_mode, &mode_needs_free);
+    mode = agtv_mode.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_mode);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+
+    if (mode >= 0 && mode <= 2)
+    {
+        node_count = agtv_vle_node_count(agt_arg_vpc);
+        if (node_count <= 1)
+        {
+            PG_RETURN_NULL();
+        }
+
+        entity_id = graphid_array[(node_count - 1) * 2];
+        ggctx = find_GRAPH_global_context(vpc->graph_oid);
+        Assert(ggctx != NULL);
+        ve = get_vertex_entry(ggctx, entity_id);
+        Assert(ve != NULL);
+
+        if (mode == 2)
+        {
+            PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+        }
+
+        label_name = get_vertex_entry_label_name(ve);
+        agtv_label.type = AGTV_STRING;
+        agtv_label.val.string.val = label_name;
+        agtv_label.val.string.len = strlen(label_name);
+
+        if (mode == 0)
+        {
+            PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_label));
+        }
+
+        MemSet(&agis_result, 0, sizeof(agtype_in_state));
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_BEGIN_ARRAY, NULL);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_ELEM, &agtv_label);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_END_ARRAY, NULL);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (mode < 3 || mode > 4)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_tail_last_field: invalid mode")));
+    }
+
+    entity_id = graphid_array[edge_count * 2 - 1];
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, entity_id);
+    Assert(ee != NULL);
+
+    if (mode == 3)
+    {
+        label_name = get_edge_entry_label_name(ee);
+        agtv_result.type = AGTV_STRING;
+        agtv_result.val.string.val = label_name;
+        agtv_result.val.string.len = strlen(label_name);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    }
+    else if (mode == 4)
+    {
+        PG_RETURN_DATUM(get_edge_entry_properties(ee));
+    }
+
+    Assert(false);
+    PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(age_vle_tail_last_edge_endpoint);
+
+Datum age_vle_tail_last_edge_endpoint(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_mode;
+    agtype_value agtv_result;
+    agtype_value *agtv_vertex = NULL;
+    bool mode_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    graphid endpoint_id;
+    int64 edge_count;
+    int64 mode;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_tail_last_edge_endpoint",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_mode, &mode_needs_free);
+    mode = agtv_mode.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_mode);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[edge_count * 2 - 1];
+
+    if (mode < 0 || mode > 3)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_tail_last_edge_endpoint: invalid mode")));
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    endpoint_id = (mode == 0 || mode == 2) ?
+        get_edge_entry_start_vertex_id(ee) :
+        get_edge_entry_end_vertex_id(ee);
+
+    if (mode == 0 || mode == 1)
+    {
+        agtv_vertex = build_vle_vertex_value(ggctx, endpoint_id, NULL);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(agtv_vertex));
+    }
+    else if (mode == 2 || mode == 3)
+    {
+        agtv_result.type = AGTV_INTEGER;
+        agtv_result.val.int_value = endpoint_id;
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    }
+
+    Assert(false);
+    PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(age_vle_tail_last_endpoint_field);
+
+Datum age_vle_tail_last_endpoint_field(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    vertex_entry *ve = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_mode;
+    agtype_value agtv_label;
+    agtype_in_state agis_result;
+    bool mode_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    graphid endpoint_id;
+    int64 edge_count;
+    int64 mode;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_tail_last_endpoint_field",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_mode, &mode_needs_free);
+    mode = agtv_mode.val.int_value;
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_mode);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[edge_count * 2 - 1];
+
+    if (mode < 0 || mode > 5)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_tail_last_endpoint_field: invalid mode")));
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    endpoint_id = (mode % 2 == 0) ?
+        get_edge_entry_start_vertex_id(ee) :
+        get_edge_entry_end_vertex_id(ee);
+    ve = get_vertex_entry(ggctx, endpoint_id);
+    Assert(ve != NULL);
+
+    if (mode == 4 || mode == 5)
+    {
+        PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+    }
+
+    label_name = get_vertex_entry_label_name(ve);
+    agtv_label.type = AGTV_STRING;
+    agtv_label.val.string.val = label_name;
+    agtv_label.val.string.len = strlen(label_name);
+
+    if (mode == 0 || mode == 1)
+    {
+        PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_label));
+    }
+    else if (mode == 2 || mode == 3)
+    {
+        MemSet(&agis_result, 0, sizeof(agtype_in_state));
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_BEGIN_ARRAY, NULL);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_ELEM, &agtv_label);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_END_ARRAY, NULL);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+    }
+
+    Assert(false);
+    PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_id_at);
+
+Datum age_vle_edge_id_at(PG_FUNCTION_ARGS)
+{
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    int64 edge_count;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_id_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = graphid_array[(edge_index * 2) + 1];
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_index_exists);
+
+Datum age_vle_edge_index_exists(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    bool index_needs_free = false;
+    int64 edge_index;
+    graphid edge_id;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_index_exists",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, false,
+                               &agtv_index, &index_needs_free);
+
+    if (agtv_index.type == AGTV_NULL)
+    {
+        if (index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_index);
+        }
+        PG_RETURN_NULL();
+    }
+    if (agtv_index.type != AGTV_INTEGER)
+    {
+        if (index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_index);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_edge_index_exists: index must resolve to an integer")));
+    }
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (!get_vle_edge_id_at_index(agt_arg_vpc, edge_index, &edge_id))
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_DATUM(boolean_to_agtype(true));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_indices_equal);
+
+Datum age_vle_edge_indices_equal(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_left_index;
+    agtype_value agtv_right_index;
+    bool left_index_needs_free = false;
+    bool right_index_needs_free = false;
+    graphid left_edge_id;
+    graphid right_edge_id;
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_indices_equal",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, false,
+                               &agtv_left_index, &left_index_needs_free);
+    get_vle_scalar_arg_no_copy("age_vle_edge_indices_equal",
+                               AG_GET_ARG_AGTYPE_P(2), AGTV_INTEGER, false,
+                               &agtv_right_index, &right_index_needs_free);
+
+    if (agtv_left_index.type == AGTV_NULL ||
+        agtv_right_index.type == AGTV_NULL)
+    {
+        if (left_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_left_index);
+        }
+        if (right_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_right_index);
+        }
+        PG_RETURN_NULL();
+    }
+    if (agtv_left_index.type != AGTV_INTEGER ||
+        agtv_right_index.type != AGTV_INTEGER)
+    {
+        if (left_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_left_index);
+        }
+        if (right_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_right_index);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_edge_indices_equal: indexes must resolve to integers")));
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    if (!get_vle_edge_id_at_index(agt_arg_vpc,
+                                  agtv_left_index.val.int_value,
+                                  &left_edge_id) ||
+        !get_vle_edge_id_at_index(agt_arg_vpc,
+                                  agtv_right_index.val.int_value,
+                                  &right_edge_id))
+    {
+        if (left_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_left_index);
+        }
+        if (right_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_right_index);
+        }
+        PG_RETURN_NULL();
+    }
+
+    result = left_edge_id == right_edge_id;
+
+    if (left_index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_left_index);
+    }
+    if (right_index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_right_index);
+    }
+
+    PG_RETURN_DATUM(boolean_to_agtype(result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_reversed_index_equal);
+
+Datum age_vle_edge_reversed_index_equal(PG_FUNCTION_ARGS)
+{
+    VLE_path_container *vpc = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_reversed_index;
+    agtype_value agtv_normal_index;
+    bool reversed_index_needs_free = false;
+    bool normal_index_needs_free = false;
+    graphid reversed_edge_id;
+    graphid normal_edge_id;
+    int64 edge_count;
+    int64 reversed_index;
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_reversed_index_equal",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, false,
+                               &agtv_reversed_index,
+                               &reversed_index_needs_free);
+    get_vle_scalar_arg_no_copy("age_vle_edge_reversed_index_equal",
+                               AG_GET_ARG_AGTYPE_P(2), AGTV_INTEGER, false,
+                               &agtv_normal_index, &normal_index_needs_free);
+
+    if (agtv_reversed_index.type == AGTV_NULL ||
+        agtv_normal_index.type == AGTV_NULL)
+    {
+        if (reversed_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_reversed_index);
+        }
+        if (normal_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_normal_index);
+        }
+        PG_RETURN_NULL();
+    }
+    if (agtv_reversed_index.type != AGTV_INTEGER ||
+        agtv_normal_index.type != AGTV_INTEGER)
+    {
+        if (reversed_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_reversed_index);
+        }
+        if (normal_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_normal_index);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_edge_reversed_index_equal: indexes must resolve to integers")));
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    reversed_index = agtv_reversed_index.val.int_value;
+    if (reversed_index < 0)
+    {
+        reversed_index = edge_count + reversed_index;
+    }
+    if (reversed_index < 0 || reversed_index >= edge_count ||
+        !get_vle_edge_id_at_index(agt_arg_vpc,
+                                  edge_count - reversed_index - 1,
+                                  &reversed_edge_id) ||
+        !get_vle_edge_id_at_index(agt_arg_vpc,
+                                  agtv_normal_index.val.int_value,
+                                  &normal_edge_id))
+    {
+        if (reversed_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_reversed_index);
+        }
+        if (normal_index_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_normal_index);
+        }
+        PG_RETURN_NULL();
+    }
+
+    result = reversed_edge_id == normal_edge_id;
+
+    if (reversed_index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_reversed_index);
+    }
+    if (normal_index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_normal_index);
+    }
+
+    PG_RETURN_DATUM(boolean_to_agtype(result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_label_at);
+
+Datum age_vle_edge_label_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    int64 edge_count;
+    int64 edge_index;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_label_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    label_name = get_edge_entry_label_name(ee);
+    agtv_result.type = AGTV_STRING;
+    agtv_result.val.string.val = label_name;
+    agtv_result.val.string.len = strlen(label_name);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_properties_at);
+
+Datum age_vle_edge_properties_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    int64 edge_count;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_properties_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    PG_RETURN_DATUM(get_edge_entry_properties(ee));
+}
+
+static Datum age_vle_edge_endpoint_at(FunctionCallInfo fcinfo,
+                                      bool start_endpoint)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value *agtv_vertex = NULL;
+    bool index_needs_free = false;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy(start_endpoint ?
+                               "age_vle_edge_start_node_at" :
+                               "age_vle_edge_end_node_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    agtv_vertex = agtv_materialize_vle_edge_endpoint_at(
+        agt_arg_vpc, edge_index, start_endpoint);
+    if (agtv_vertex == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_vertex));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_start_node_at);
+
+Datum age_vle_edge_start_node_at(PG_FUNCTION_ARGS)
+{
+    return age_vle_edge_endpoint_at(fcinfo, true);
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_end_node_at);
+
+Datum age_vle_edge_end_node_at(PG_FUNCTION_ARGS)
+{
+    return age_vle_edge_endpoint_at(fcinfo, false);
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_endpoint_field_at);
+
+Datum age_vle_edge_endpoint_field_at(PG_FUNCTION_ARGS)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    vertex_entry *ve = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_mode;
+    agtype_value agtv_label;
+    agtype_in_state agis_result;
+    bool index_needs_free = false;
+    bool mode_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    graphid endpoint_id;
+    int64 edge_count;
+    int64 edge_index;
+    int64 mode;
+    char *label_name = NULL;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy("age_vle_edge_endpoint_field_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+    get_vle_scalar_arg_no_copy("age_vle_edge_endpoint_field_at",
+                               AG_GET_ARG_AGTYPE_P(2), AGTV_INTEGER, true,
+                               &agtv_mode, &mode_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    mode = agtv_mode.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+    if (mode_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_mode);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+
+    if (mode < 0 || mode > 5)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle_edge_endpoint_field_at: invalid mode")));
+    }
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    endpoint_id = (mode % 2 == 0) ?
+        get_edge_entry_start_vertex_id(ee) :
+        get_edge_entry_end_vertex_id(ee);
+    ve = get_vertex_entry(ggctx, endpoint_id);
+    Assert(ve != NULL);
+
+    if (mode == 4 || mode == 5)
+    {
+        PG_RETURN_DATUM(get_vertex_entry_properties(ve));
+    }
+
+    label_name = get_vertex_entry_label_name(ve);
+    agtv_label.type = AGTV_STRING;
+    agtv_label.val.string.val = label_name;
+    agtv_label.val.string.len = strlen(label_name);
+
+    if (mode == 0 || mode == 1)
+    {
+        PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_label));
+    }
+    else if (mode == 2 || mode == 3)
+    {
+        MemSet(&agis_result, 0, sizeof(agtype_in_state));
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_BEGIN_ARRAY, NULL);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_ELEM, &agtv_label);
+        agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                            WAGT_END_ARRAY, NULL);
+
+        PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
+    }
+
+    Assert(false);
+    PG_RETURN_NULL();
+}
+
+static Datum age_vle_edge_endpoint_id_at(FunctionCallInfo fcinfo,
+                                         bool start_endpoint)
+{
+    GRAPH_global_context *ggctx = NULL;
+    VLE_path_container *vpc = NULL;
+    edge_entry *ee = NULL;
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_index;
+    agtype_value agtv_result;
+    bool index_needs_free = false;
+    graphid *graphid_array = NULL;
+    graphid edge_id;
+    int64 edge_count;
+    int64 edge_index;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    get_vle_scalar_arg_no_copy(start_endpoint ?
+                               "age_vle_edge_start_id_at" :
+                               "age_vle_edge_end_id_at",
+                               AG_GET_ARG_AGTYPE_P(1), AGTV_INTEGER, true,
+                               &agtv_index, &index_needs_free);
+
+    edge_index = agtv_index.val.int_value;
+    if (index_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_index);
+    }
+
+    Assert(AGT_ROOT_IS_BINARY(agt_arg_vpc));
+    Assert(AGT_ROOT_BINARY_FLAGS(agt_arg_vpc) == AGT_FBINARY_TYPE_VLE_PATH);
+
+    vpc = (VLE_path_container *)agt_arg_vpc;
+    edge_count = (vpc->graphid_array_size - 1) / 2;
+    if (edge_index < 0)
+    {
+        edge_index = edge_count + edge_index;
+    }
+    if (edge_index < 0 || edge_index >= edge_count)
+    {
+        PG_RETURN_NULL();
+    }
+
+    graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+    edge_id = graphid_array[(edge_index * 2) + 1];
+
+    ggctx = find_GRAPH_global_context(vpc->graph_oid);
+    Assert(ggctx != NULL);
+    ee = get_edge_entry(ggctx, edge_id);
+    Assert(ee != NULL);
+
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = start_endpoint ?
+        get_edge_entry_start_vertex_id(ee) :
+        get_edge_entry_end_vertex_id(ee);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_start_id_at);
+
+Datum age_vle_edge_start_id_at(PG_FUNCTION_ARGS)
+{
+    return age_vle_edge_endpoint_id_at(fcinfo, true);
+}
+
+PG_FUNCTION_INFO_V1(age_vle_edge_end_id_at);
+
+Datum age_vle_edge_end_id_at(PG_FUNCTION_ARGS)
+{
+    return age_vle_edge_endpoint_id_at(fcinfo, false);
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_edges_tail);
+
+Datum age_materialize_vle_edges_tail(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_array = NULL;
+    int64 edge_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count <= 1)
+    {
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
+    agtv_array = agtv_materialize_vle_edges_slice(
+        agt_arg_vpc, Min(edge_count, 1), edge_count);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
+}
+
+PG_FUNCTION_INFO_V1(age_materialize_vle_edges_reversed);
+
+Datum age_materialize_vle_edges_reversed(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value *agtv_array = NULL;
+    int64 edge_count;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    edge_count = agtv_vle_edge_count(agt_arg_vpc);
+    if (edge_count == 0)
+    {
+        PG_RETURN_POINTER(build_empty_agtype_array());
+    }
+
+    agtv_array = agtv_materialize_vle_edges_reversed(agt_arg_vpc);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(agtv_array));
 }
@@ -2619,6 +7117,30 @@ Datum age_materialize_vle_path(PG_FUNCTION_ARGS)
     }
 
     PG_RETURN_POINTER(agt_materialize_vle_path(agt_arg_vpc));
+}
+
+PG_FUNCTION_INFO_V1(age_vle_path_length);
+
+Datum age_vle_path_length(PG_FUNCTION_ARGS)
+{
+    agtype *agt_arg_vpc = NULL;
+    agtype_value agtv_result;
+
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agt_arg_vpc = AG_GET_ARG_AGTYPE_P(0);
+    if (is_agtype_null(agt_arg_vpc))
+    {
+        PG_RETURN_NULL();
+    }
+
+    agtv_result.type = AGTV_INTEGER;
+    agtv_result.val.int_value = agtv_vle_edge_count(agt_arg_vpc);
+
+    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
 }
 
 /*
@@ -2973,6 +7495,197 @@ static Oid get_cached_edge_uniqueness_argtype(FunctionCallInfo fcinfo,
     return cache->types[argno];
 }
 
+static bool get_edge_uniqueness_vle_arg(Datum arg, Oid type,
+                                        VLE_path_container **vpc)
+{
+    agtype *agt = NULL;
+
+    if (type != AGTYPEOID)
+    {
+        return false;
+    }
+
+    agt = DATUM_GET_AGTYPE_P(arg);
+    if (!AGT_ROOT_IS_BINARY(agt) ||
+        AGT_ROOT_BINARY_FLAGS(agt) != AGT_FBINARY_TYPE_VLE_PATH)
+    {
+        return false;
+    }
+
+    *vpc = (VLE_path_container *)agt;
+    return true;
+}
+
+static bool get_edge_uniqueness_fixed_edge_id(Datum arg, Oid type, int argno,
+                                              graphid *edge_id)
+{
+    agtype *agt = NULL;
+    agtype_value agtv_id;
+    bool id_needs_free = false;
+    bool id_found;
+
+    if (type == INT8OID || type == GRAPHIDOID)
+    {
+        *edge_id = DatumGetInt64(arg);
+        return true;
+    }
+    if (type != AGTYPEOID)
+    {
+        return false;
+    }
+
+    agt = DATUM_GET_AGTYPE_P(arg);
+    if (AGT_ROOT_IS_BINARY(agt) &&
+        AGT_ROOT_BINARY_FLAGS(agt) == AGT_FBINARY_TYPE_VLE_PATH)
+    {
+        return false;
+    }
+    if (!AGT_ROOT_IS_SCALAR(agt))
+    {
+        return false;
+    }
+
+    id_found = get_ith_agtype_value_from_container_no_copy(
+        &agt->root, 0, &agtv_id, &id_needs_free);
+    Assert(id_found);
+
+    if (agtv_id.type != AGTV_INTEGER)
+    {
+        if (id_needs_free)
+        {
+            pfree_agtype_value_content(&agtv_id);
+        }
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("_ag_enforce_edge_uniqueness parameter %d must resolve to an agtype integer",
+                        argno)));
+    }
+
+    *edge_id = agtv_id.val.int_value;
+    if (id_needs_free)
+    {
+        pfree_agtype_value_content(&agtv_id);
+    }
+
+    return true;
+}
+
+static bool vle_path_contains_edge_id(VLE_path_container *vpc, graphid edge_id)
+{
+    return agt_vle_contains_edge_id((agtype *)vpc, edge_id);
+}
+
+static int64 get_vle_path_edge_count(VLE_path_container *vpc)
+{
+    return (vpc->graphid_array_size - 1) / 2;
+}
+
+static bool vle_paths_have_common_edge(VLE_path_container *left_vpc,
+                                       int64 left_edge_count,
+                                       VLE_path_container *right_vpc,
+                                       int64 right_edge_count)
+{
+    VLE_path_container *outer_vpc = left_vpc;
+    VLE_path_container *inner_vpc = right_vpc;
+    graphid *outer_array = NULL;
+    graphid *inner_array = NULL;
+    int64 outer_edge_count = left_edge_count;
+    int64 inner_edge_count = right_edge_count;
+    int64 i;
+    int64 j;
+
+    if (outer_edge_count > inner_edge_count)
+    {
+        outer_vpc = right_vpc;
+        inner_vpc = left_vpc;
+        outer_edge_count = right_edge_count;
+        inner_edge_count = left_edge_count;
+    }
+
+    outer_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(outer_vpc);
+    inner_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(inner_vpc);
+
+    for (i = 0; i < outer_edge_count; i++)
+    {
+        graphid edge_id = outer_array[(i * 2) + 1];
+
+        for (j = 0; j < inner_edge_count; j++)
+        {
+            if (edge_id == inner_array[(j * 2) + 1])
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool try_enforce_two_vle_uniqueness(Datum *args, Oid *types,
+                                           int nargs, bool *result)
+{
+    VLE_path_container *left_vpc = NULL;
+    VLE_path_container *right_vpc = NULL;
+    int64 left_edge_count;
+    int64 right_edge_count;
+
+    if (nargs != 2)
+    {
+        return false;
+    }
+
+    if (!get_edge_uniqueness_vle_arg(args[0], types[0], &left_vpc) ||
+        !get_edge_uniqueness_vle_arg(args[1], types[1], &right_vpc))
+    {
+        return false;
+    }
+
+    left_edge_count = get_vle_path_edge_count(left_vpc);
+    right_edge_count = get_vle_path_edge_count(right_vpc);
+    if (left_edge_count == 0 || right_edge_count == 0)
+    {
+        *result = true;
+        return true;
+    }
+
+    if (left_edge_count * right_edge_count > EDGE_UNIQUENESS_NESTED_SCAN_LIMIT)
+    {
+        return false;
+    }
+
+    *result = !vle_paths_have_common_edge(left_vpc, left_edge_count,
+                                          right_vpc, right_edge_count);
+    return true;
+}
+
+static bool try_enforce_one_vle_one_edge_uniqueness(Datum *args, Oid *types,
+                                                    int nargs, bool *result)
+{
+    VLE_path_container *vpc = NULL;
+    graphid edge_id = 0;
+
+    if (nargs != 2)
+    {
+        return false;
+    }
+
+    if (get_edge_uniqueness_vle_arg(args[0], types[0], &vpc) &&
+        get_edge_uniqueness_fixed_edge_id(args[1], types[1], 1, &edge_id))
+    {
+        *result = !vle_path_contains_edge_id(vpc, edge_id);
+        return true;
+    }
+
+    if (get_edge_uniqueness_vle_arg(args[1], types[1], &vpc) &&
+        get_edge_uniqueness_fixed_edge_id(args[0], types[0], 0, &edge_id))
+    {
+        *result = !vle_path_contains_edge_id(vpc, edge_id);
+        return true;
+    }
+
+    return false;
+}
+
 /*
  * This function checks the edges in a MATCH clause to see if they are unique or
  * not. Filters out all the paths where the edge uniques rules are not met.
@@ -2993,6 +7706,7 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
     int nargs = 0;
     int64 estimated_edges = 0;
     int i = 0;
+    bool fast_result = false;
 
     /* extract our arguments */
     nargs = get_edge_uniqueness_args_fast(fcinfo, &args, &types, &nulls,
@@ -3017,7 +7731,20 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
                       errmsg("_ag_enforce_edge_uniqueness argument %d must be AGTYPE, INT8, or GRAPHIDOID",
                              i)));
         }
+    }
 
+    if (try_enforce_one_vle_one_edge_uniqueness(args, types, nargs,
+                                                &fast_result))
+    {
+        PG_RETURN_BOOL(fast_result);
+    }
+    if (try_enforce_two_vle_uniqueness(args, types, nargs, &fast_result))
+    {
+        PG_RETURN_BOOL(fast_result);
+    }
+
+    for (i = 0; i < nargs; i++)
+    {
         if (types[i] == INT8OID || types[i] == GRAPHIDOID)
         {
             estimated_edges++;
