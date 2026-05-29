@@ -27,6 +27,8 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "utils/builtins.h"
+#include "utils/inval.h"
+#include "utils/syscache.h"
 
 #include "catalog/ag_graph.h"
 #include "parser/cypher_analyze.h"
@@ -49,12 +51,16 @@ static Node *extra_node = NULL;
 static void build_explain_query(Query *query, Node *explain_node);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
+static Oid cypher_func_oid = InvalidOid;
+static bool cypher_func_oid_callback_registered = false;
 
 static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *jstate);
 static bool convert_cypher_walker(Node *node, ParseState *pstate);
 static bool is_rte_cypher(RangeTblEntry *rte);
 static bool is_func_cypher(FuncExpr *funcexpr);
 static Oid get_cypher_func_oid(void);
+static void invalidate_cypher_func_oid(Datum arg, int cache_id,
+                                       uint32 hash_value);
 static void convert_cypher_to_subquery(RangeTblEntry *rte, ParseState *pstate);
 static Name expr_get_const_name(Node *expr);
 static const char *expr_get_const_cstring(Node *expr, const char *source_str);
@@ -377,7 +383,15 @@ static bool is_func_cypher(FuncExpr *funcexpr)
 
 static Oid get_cypher_func_oid(void)
 {
-    static Oid cypher_func_oid = InvalidOid;
+    if (!cypher_func_oid_callback_registered)
+    {
+        CacheRegisterSyscacheCallback(PROCOID, invalidate_cypher_func_oid,
+                                      (Datum)0);
+        CacheRegisterSyscacheCallback(PROCNAMEARGSNSP,
+                                      invalidate_cypher_func_oid,
+                                      (Datum)0);
+        cypher_func_oid_callback_registered = true;
+    }
 
     if (!OidIsValid(cypher_func_oid))
     {
@@ -386,6 +400,12 @@ static Oid get_cypher_func_oid(void)
     }
 
     return cypher_func_oid;
+}
+
+static void invalidate_cypher_func_oid(Datum arg, int cache_id,
+                                       uint32 hash_value)
+{
+    cypher_func_oid = InvalidOid;
 }
 
 /* convert cypher() call to SELECT subquery in-place */

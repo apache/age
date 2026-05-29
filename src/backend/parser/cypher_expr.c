@@ -41,8 +41,10 @@
 #include "utils/catcache.h"
 #include "utils/float.h"
 #include "utils/hsearch.h"
+#include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/syscache.h"
 
 #include "parser/cypher_expr.h"
 #include "parser/cypher_transform_entity.h"
@@ -73,7 +75,16 @@ typedef struct function_exists_cache_entry
     bool exists;
 } function_exists_cache_entry;
 
+typedef struct function_extension_cache_entry
+{
+    Oid func_oid;
+    bool has_extension;
+    NameData extension;
+} function_extension_cache_entry;
+
 static HTAB *function_exists_cache = NULL;
+static HTAB *function_extension_cache = NULL;
+static bool function_cache_callback_registered = false;
 
 static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
                                            Node *expr);
@@ -128,6 +139,10 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found);
 static char *get_mapped_extension(Oid func_oid);
 static bool is_extension_external(char *extension);
 static char *construct_age_function_name(char *funcname);
+static void initialize_function_caches(void);
+static void invalidate_function_caches(Datum arg, int cache_id,
+                                       uint32 hash_value);
+static void initialize_function_extension_cache(void);
 static void initialize_function_exists_cache(void);
 static bool function_exists(char *funcname, char *extension);
 static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
@@ -1852,6 +1867,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
 {
     CatCList *catlist = NULL;
     Form_pg_proc procform = NULL;
+    Form_pg_proc result = NULL;
     int nargs;
     int i = 0;
     List *asp;
@@ -1901,6 +1917,8 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
 
         if (found)
         {
+            result = palloc(sizeof(FormData_pg_proc));
+            memcpy(result, procform, sizeof(FormData_pg_proc));
             break;
         }
 
@@ -1909,7 +1927,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     }
 
     /* Error out if function not found */
-    if (err_not_found && (procform == NULL))
+    if (err_not_found && (result == NULL))
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_FUNCTION),
@@ -1923,16 +1941,46 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     ReleaseSysCacheList(catlist);
     pfree_if_not_null(asp);
 
-    return procform;
+    return result;
 }
 
 static char *get_mapped_extension(Oid func_oid)
 {
     Oid extension_oid;
     char *extension = NULL;
+    function_extension_cache_entry *entry;
+    bool found;
+
+    initialize_function_extension_cache();
+
+    entry = hash_search(function_extension_cache, &func_oid, HASH_FIND, NULL);
+    if (entry != NULL)
+    {
+        if (!entry->has_extension)
+        {
+            return NULL;
+        }
+        return pstrdup(NameStr(entry->extension));
+    }
 
     extension_oid = getExtensionOfObject(ProcedureRelationId, func_oid);
     extension = get_extension_name(extension_oid);
+
+    if (function_extension_cache == NULL)
+    {
+        initialize_function_extension_cache();
+    }
+
+    entry = hash_search(function_extension_cache, &func_oid, HASH_ENTER,
+                        &found);
+    if (!found)
+    {
+        entry->has_extension = (extension != NULL);
+        if (entry->has_extension)
+        {
+            namestrcpy(&entry->extension, extension);
+        }
+    }
 
     return extension;
 }
@@ -1989,9 +2037,8 @@ static bool function_exists(char *funcname, char *extension)
         namestrcpy(&key.funcname, funcname);
         namestrcpy(&key.extension, extension);
 
-        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
-                            &cache_found);
-        if (cache_found)
+        entry = hash_search(function_exists_cache, &key, HASH_FIND, NULL);
+        if (entry != NULL)
         {
             return entry->exists;
         }
@@ -2007,8 +2054,14 @@ static bool function_exists(char *funcname, char *extension)
     if (catlist->n_members == 0)
     {
         ReleaseSysCacheList(catlist);
-        if (entry != NULL)
+        if (extension != NULL)
         {
+            if (function_exists_cache == NULL)
+            {
+                initialize_function_exists_cache();
+            }
+            entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                                &cache_found);
             entry->exists = false;
         }
         return false;
@@ -2035,8 +2088,14 @@ static bool function_exists(char *funcname, char *extension)
     /* we need to release the cache list */
     ReleaseSysCacheList(catlist);
 
-    if (entry != NULL)
+    if (extension != NULL)
     {
+        if (function_exists_cache == NULL)
+        {
+            initialize_function_exists_cache();
+        }
+        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                            &cache_found);
         entry->exists = found;
     }
 
@@ -2052,10 +2111,7 @@ static void initialize_function_exists_cache(void)
         return;
     }
 
-    if (!CacheMemoryContext)
-    {
-        CreateCacheMemoryContext();
-    }
+    initialize_function_caches();
 
     MemSet(&hash_ctl, 0, sizeof(hash_ctl));
     hash_ctl.keysize = sizeof(function_exists_cache_key);
@@ -2065,6 +2121,61 @@ static void initialize_function_exists_cache(void)
     function_exists_cache = hash_create("cypher function existence cache", 64,
                                         &hash_ctl,
                                         HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+static void initialize_function_extension_cache(void)
+{
+    HASHCTL hash_ctl;
+
+    if (function_extension_cache != NULL)
+    {
+        return;
+    }
+
+    initialize_function_caches();
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(Oid);
+    hash_ctl.entrysize = sizeof(function_extension_cache_entry);
+    hash_ctl.hcxt = CacheMemoryContext;
+
+    function_extension_cache =
+        hash_create("cypher function extension cache", 64, &hash_ctl,
+                    HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+static void initialize_function_caches(void)
+{
+    if (!CacheMemoryContext)
+    {
+        CreateCacheMemoryContext();
+    }
+
+    if (!function_cache_callback_registered)
+    {
+        CacheRegisterSyscacheCallback(PROCOID, invalidate_function_caches,
+                                      (Datum)0);
+        CacheRegisterSyscacheCallback(PROCNAMEARGSNSP,
+                                      invalidate_function_caches,
+                                      (Datum)0);
+        function_cache_callback_registered = true;
+    }
+}
+
+static void invalidate_function_caches(Datum arg, int cache_id,
+                                       uint32 hash_value)
+{
+    if (function_exists_cache != NULL)
+    {
+        hash_destroy(function_exists_cache);
+        function_exists_cache = NULL;
+    }
+
+    if (function_extension_cache != NULL)
+    {
+        hash_destroy(function_extension_cache);
+        function_extension_cache = NULL;
+    }
 }
 
 /*

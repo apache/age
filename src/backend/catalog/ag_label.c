@@ -126,7 +126,7 @@ int32 get_label_id(const char *label_name, Oid graph_oid)
 {
     label_cache_data *cache_data;
 
-    cache_data = search_label_name_graph_cache(label_name, graph_oid);
+    cache_data = search_label_name_graph_cache_cached(label_name, graph_oid);
     if (cache_data)
         return cache_data->id;
     else
@@ -137,7 +137,7 @@ Oid get_label_relation(const char *label_name, Oid graph_oid)
 {
     label_cache_data *cache_data;
 
-    cache_data = search_label_name_graph_cache(label_name, graph_oid);
+    cache_data = search_label_name_graph_cache_cached(label_name, graph_oid);
     if (cache_data)
         return cache_data->relation;
     else
@@ -153,7 +153,7 @@ char get_label_kind(const char *label_name, Oid label_graph)
 {
     label_cache_data *cache_data;
 
-    cache_data = search_label_name_graph_cache(label_name, label_graph);
+    cache_data = search_label_name_graph_cache_cached(label_name, label_graph);
     if (cache_data)
     {
         return cache_data->kind;
@@ -199,17 +199,15 @@ Datum _label_name(PG_FUNCTION_ARGS)
 
     label_id = (int32)(((uint64)AG_GETARG_GRAPHID(1)) >> ENTRY_ID_BITS);
 
-    label_cache = search_label_graph_oid_cache(graph, label_id);
-
-    label_name = NameStr(label_cache->name);
-
-    /* If label_name is not found, error out */
-    if (label_name == NULL)
+    label_cache = search_label_graph_oid_cache_cached(graph, label_id);
+    if (label_cache == NULL)
     {
         ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
                         errmsg("label with id %d does not exist in graph %u",
                                label_id, graph)));
     }
+
+    label_name = NameStr(label_cache->name);
 
     if (IS_AG_DEFAULT_LABEL(label_name))
         PG_RETURN_CSTRING("");
@@ -260,7 +258,7 @@ bool label_id_exists(Oid graph_oid, int32 label_id)
 {
     label_cache_data *cache_data;
 
-    cache_data = search_label_graph_oid_cache(graph_oid, label_id);
+    cache_data = search_label_graph_oid_cache_cached(graph_oid, label_id);
     if (cache_data)
         return true;
     else
@@ -276,7 +274,7 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
     char *relname;
     label_cache_data *label_cache;
 
-    label_cache = search_label_name_graph_cache(label_name, graph_oid);
+    label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
     relname = get_rel_name(label_cache->relation);
 

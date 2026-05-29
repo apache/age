@@ -21,6 +21,8 @@
 
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
+#include "utils/inval.h"
+#include "utils/syscache.h"
 
 #include "optimizer/cypher_pathnode.h"
 #include "optimizer/cypher_paths.h"
@@ -41,11 +43,14 @@ static Oid cypher_create_clause_func_oid = InvalidOid;
 static Oid cypher_set_clause_func_oid = InvalidOid;
 static Oid cypher_delete_clause_func_oid = InvalidOid;
 static Oid cypher_merge_clause_func_oid = InvalidOid;
+static bool cypher_clause_func_callback_registered = false;
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
                              RangeTblEntry *rte);
 static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte);
 static void init_cypher_clause_function_oids(void);
+static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
+                                                   uint32 hash_value);
 static void handle_cypher_create_clause(PlannerInfo *root, RelOptInfo *rel,
                                         Index rti, RangeTblEntry *rte);
 static void handle_cypher_set_clause(PlannerInfo *root, RelOptInfo *rel,
@@ -135,6 +140,17 @@ static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte)
 
 static void init_cypher_clause_function_oids(void)
 {
+    if (!cypher_clause_func_callback_registered)
+    {
+        CacheRegisterSyscacheCallback(PROCOID,
+                                      invalidate_cypher_clause_function_oids,
+                                      (Datum)0);
+        CacheRegisterSyscacheCallback(PROCNAMEARGSNSP,
+                                      invalidate_cypher_clause_function_oids,
+                                      (Datum)0);
+        cypher_clause_func_callback_registered = true;
+    }
+
     if (OidIsValid(cypher_create_clause_func_oid))
     {
         return;
@@ -148,6 +164,15 @@ static void init_cypher_clause_function_oids(void)
         get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     cypher_merge_clause_func_oid =
         get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+}
+
+static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
+                                                   uint32 hash_value)
+{
+    cypher_create_clause_func_oid = InvalidOid;
+    cypher_set_clause_func_oid = InvalidOid;
+    cypher_delete_clause_func_oid = InvalidOid;
+    cypher_merge_clause_func_oid = InvalidOid;
 }
 
 /* replace all possible paths with our CustomPath */

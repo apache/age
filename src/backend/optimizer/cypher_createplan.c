@@ -31,6 +31,29 @@ const CustomScanMethods cypher_delete_plan_methods = {
 const CustomScanMethods cypher_merge_plan_methods = {
     "Cypher Merge", create_cypher_merge_plan_state};
 
+static int get_custom_plan_width(CustomPath *best_path)
+{
+    if (best_path->path.pathtarget == NULL)
+        return 0;
+
+    return best_path->path.pathtarget->width;
+}
+
+static void apply_custom_plan_metadata(CustomScan *cs, CustomPath *best_path)
+{
+    cs->scan.plan.startup_cost = best_path->path.startup_cost;
+    cs->scan.plan.total_cost = best_path->path.total_cost;
+
+#if PG_VERSION_NUM >= 170000
+    cs->scan.plan.disabled_nodes = best_path->path.disabled_nodes;
+#endif
+    cs->scan.plan.plan_rows = best_path->path.rows;
+    cs->scan.plan.plan_width = get_custom_plan_width(best_path);
+
+    cs->scan.plan.parallel_aware = best_path->path.parallel_aware;
+    cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
+}
+
 Plan *plan_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
                               CustomPath *best_path, List *tlist,
                               List *clauses, List *custom_plans)
@@ -40,14 +63,7 @@ Plan *plan_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
 
     cs = makeNode(CustomScan);
 
-    cs->scan.plan.startup_cost = best_path->path.startup_cost;
-    cs->scan.plan.total_cost = best_path->path.total_cost;
-
-    cs->scan.plan.plan_rows = best_path->path.rows;
-    cs->scan.plan.plan_width = 0;
-
-    cs->scan.plan.parallel_aware = best_path->path.parallel_aware;
-    cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
+    apply_custom_plan_metadata(cs, best_path);
 
     /* Set later in set_plan_refs */
     cs->scan.plan.plan_node_id = 0;
@@ -83,14 +99,7 @@ Plan *plan_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
 
     cs = makeNode(CustomScan);
 
-    cs->scan.plan.startup_cost = best_path->path.startup_cost;
-    cs->scan.plan.total_cost = best_path->path.total_cost;
-
-    cs->scan.plan.plan_rows = best_path->path.rows;
-    cs->scan.plan.plan_width = 0;
-
-    cs->scan.plan.parallel_aware = best_path->path.parallel_aware;
-    cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
+    apply_custom_plan_metadata(cs, best_path);
 
     cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
     cs->scan.plan.targetlist = tlist;
@@ -130,14 +139,7 @@ Plan *plan_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
 
     cs = makeNode(CustomScan);
 
-    cs->scan.plan.startup_cost = best_path->path.startup_cost;
-    cs->scan.plan.total_cost = best_path->path.total_cost;
-
-    cs->scan.plan.plan_rows = best_path->path.rows;
-    cs->scan.plan.plan_width = 0;
-
-    cs->scan.plan.parallel_aware = best_path->path.parallel_aware;
-    cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
+    apply_custom_plan_metadata(cs, best_path);
 
     cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
     /*
@@ -191,14 +193,7 @@ Plan *plan_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
 
     cs = makeNode(CustomScan);
 
-    cs->scan.plan.startup_cost = best_path->path.startup_cost;
-    cs->scan.plan.total_cost = best_path->path.total_cost;
-
-    cs->scan.plan.plan_rows = best_path->path.rows;
-    cs->scan.plan.plan_width = 0;
-
-    cs->scan.plan.parallel_aware = best_path->path.parallel_aware;
-    cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
+    apply_custom_plan_metadata(cs, best_path);
 
     cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
     /*

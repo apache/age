@@ -49,10 +49,15 @@
 #include "utils/acl.h"
 #include "utils/ag_cache.h"
 #include "utils/builtins.h"
+#include "utils/catcache.h"
 #include "executor/cypher_utils.h"
 #include "utils/float.h"
+#include "utils/hsearch.h"
+#include "utils/inval.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/relcache.h"
+#include "utils/syscache.h"
 #include "utils/snapmgr.h"
 #include "utils/typcache.h"
 #include "utils/age_vle.h"
@@ -74,6 +79,18 @@ typedef struct PercentileGroupAggState
     /* Have we already done tuplesort_performsort? */
     bool sort_done;
 } PercentileGroupAggState;
+
+typedef struct btree_index_attr_cache_key
+{
+    Oid relid;
+    AttrNumber attnum;
+} btree_index_attr_cache_key;
+
+typedef struct btree_index_attr_cache_entry
+{
+    btree_index_attr_cache_key key;
+    Oid index_oid;
+} btree_index_attr_cache_entry;
 
 typedef enum /* type categories for datum_to_agtype */
 {
@@ -164,7 +181,10 @@ static bool is_array_path(agtype_value *agtv);
 static Oid get_cached_graph_oid_for_name(const char *graph_name);
 static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                         int64 graphid);
-static Oid get_cached_vertex_id_index_oid(Relation vertex_label_relation);
+static void initialize_btree_index_attr_cache(void);
+static void invalidate_btree_index_attr_cache(Datum arg, Oid relid);
+static Oid find_usable_btree_index_for_attr_uncached(Relation rel,
+                                                     AttrNumber attnum);
 static char *get_label_name(const char *graph_name, graphid element_graphid,
                             Oid *label_relation);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -217,10 +237,19 @@ void pfree_if_not_null(void *ptr)
 /* global storage of  OID for agtype and _agtype */
 static Oid g_AGTYPEOID = InvalidOid;
 static Oid g_AGTYPEARRAYOID = InvalidOid;
+static bool agtype_oid_callback_registered = false;
+static HTAB *btree_index_attr_cache = NULL;
+static bool btree_index_attr_callback_registered = false;
+
+static void initialize_agtype_oid_cache(void);
+static void invalidate_agtype_oid_cache(Datum arg, int cache_id,
+                                        uint32 hash_value);
 
 /* helper function to quickly set, if necessary, and retrieve AGTYPEOID */
 Oid get_AGTYPEOID(void)
 {
+    initialize_agtype_oid_cache();
+
     if (g_AGTYPEOID == InvalidOid)
     {
         g_AGTYPEOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
@@ -234,6 +263,8 @@ Oid get_AGTYPEOID(void)
 /* helper function to quickly set, if necessary, and retrieve AGTYPEARRAYOID */
 Oid get_AGTYPEARRAYOID(void)
 {
+    initialize_agtype_oid_cache();
+
     if (g_AGTYPEARRAYOID == InvalidOid)
     {
         g_AGTYPEARRAYOID = GetSysCacheOid2(TYPENAMENSP,Anum_pg_type_oid,
@@ -249,6 +280,24 @@ void clear_global_Oids_AGTYPE(void)
 {
     g_AGTYPEOID = InvalidOid;
     g_AGTYPEARRAYOID = InvalidOid;
+}
+
+static void initialize_agtype_oid_cache(void)
+{
+    if (agtype_oid_callback_registered)
+    {
+        return;
+    }
+
+    CacheRegisterSyscacheCallback(TYPENAMENSP, invalidate_agtype_oid_cache,
+                                  (Datum)0);
+    agtype_oid_callback_registered = true;
+}
+
+static void invalidate_agtype_oid_cache(Datum arg, int cache_id,
+                                        uint32 hash_value)
+{
+    clear_global_Oids_AGTYPE();
 }
 
 /* fast helper function to test for AGTV_NULL in an agtype */
@@ -5708,7 +5757,8 @@ static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
     /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
 
-    index_oid = get_cached_vertex_id_index_oid(graph_vertex_label);
+    index_oid = find_usable_btree_index_for_attr(
+        graph_vertex_label, Anum_ag_label_vertex_table_id);
 
     if (OidIsValid(index_oid))
     {
@@ -12191,36 +12241,93 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
     return result;
 }
 
-static Oid get_cached_vertex_id_index_oid(Relation vertex_label_relation)
-{
-    static Oid cached_relid = InvalidOid;
-    static Oid cached_index_oid = InvalidOid;
-    static uint64 cached_generation = 0;
-    static bool cached = false;
-    Oid relid = RelationGetRelid(vertex_label_relation);
-    uint64 current_generation = get_label_cache_generation();
-
-    if (cached &&
-        cached_relid == relid &&
-        cached_generation == current_generation)
-    {
-        return cached_index_oid;
-    }
-
-    cached_index_oid = find_usable_btree_index_for_attr(
-        vertex_label_relation, Anum_ag_label_vertex_table_id);
-    cached_relid = relid;
-    cached_generation = get_label_cache_generation();
-    cached = true;
-
-    return cached_index_oid;
-}
-
 /*
  * Helper function to find a valid index for a specific attribute.
  * Returns the OID of the index, or InvalidOid if none is found.
  */
 Oid find_usable_btree_index_for_attr(Relation rel, AttrNumber attnum)
+{
+    btree_index_attr_cache_key key;
+    btree_index_attr_cache_entry *entry;
+    bool found;
+
+    initialize_btree_index_attr_cache();
+
+    MemSet(&key, 0, sizeof(key));
+    key.relid = RelationGetRelid(rel);
+    key.attnum = attnum;
+
+    entry = hash_search(btree_index_attr_cache, &key, HASH_ENTER, &found);
+    if (!found)
+    {
+        entry->index_oid =
+            find_usable_btree_index_for_attr_uncached(rel, attnum);
+    }
+
+    return entry->index_oid;
+}
+
+static void initialize_btree_index_attr_cache(void)
+{
+    HASHCTL hash_ctl;
+
+    if (btree_index_attr_cache != NULL)
+    {
+        return;
+    }
+
+    if (!CacheMemoryContext)
+    {
+        CreateCacheMemoryContext();
+    }
+
+    MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(btree_index_attr_cache_key);
+    hash_ctl.entrysize = sizeof(btree_index_attr_cache_entry);
+    hash_ctl.hcxt = CacheMemoryContext;
+
+    btree_index_attr_cache =
+        hash_create("AGE btree index attribute cache", 32, &hash_ctl,
+                    HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    if (!btree_index_attr_callback_registered)
+    {
+        CacheRegisterRelcacheCallback(invalidate_btree_index_attr_cache,
+                                      (Datum)0);
+        btree_index_attr_callback_registered = true;
+    }
+}
+
+static void invalidate_btree_index_attr_cache(Datum arg, Oid relid)
+{
+    HASH_SEQ_STATUS hash_seq;
+    btree_index_attr_cache_entry *entry;
+
+    if (btree_index_attr_cache == NULL)
+    {
+        return;
+    }
+
+    if (!OidIsValid(relid))
+    {
+        hash_destroy(btree_index_attr_cache);
+        btree_index_attr_cache = NULL;
+        return;
+    }
+
+    hash_seq_init(&hash_seq, btree_index_attr_cache);
+    while ((entry = hash_seq_search(&hash_seq)) != NULL)
+    {
+        if (entry->key.relid == relid || entry->index_oid == relid)
+        {
+            hash_search(btree_index_attr_cache, &entry->key, HASH_REMOVE,
+                        NULL);
+        }
+    }
+}
+
+static Oid find_usable_btree_index_for_attr_uncached(Relation rel,
+                                                     AttrNumber attnum)
 {
     List *index_list;
     ListCell *ilc;

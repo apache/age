@@ -20,15 +20,58 @@
 #include "postgres.h"
 
 #include "catalog/namespace.h"
+#include "utils/inval.h"
+#include "utils/syscache.h"
 
 #include "catalog/ag_namespace.h"
 
+static Oid cached_ag_catalog_namespace = InvalidOid;
+static Oid cached_pg_catalog_namespace = InvalidOid;
+static bool namespace_cache_callback_registered = false;
+
+static void invalidate_namespace_oid_cache(Datum arg, int cache_id,
+                                           uint32 hash_value);
+static void initialize_namespace_oid_cache(void);
+
 Oid ag_catalog_namespace_id(void)
 {
-    return get_namespace_oid("ag_catalog", false);
+    initialize_namespace_oid_cache();
+
+    if (!OidIsValid(cached_ag_catalog_namespace))
+    {
+        cached_ag_catalog_namespace = get_namespace_oid("ag_catalog", false);
+    }
+
+    return cached_ag_catalog_namespace;
 }
 
 Oid pg_catalog_namespace_id(void)
 {
-    return get_namespace_oid("pg_catalog", false);
+    initialize_namespace_oid_cache();
+
+    if (!OidIsValid(cached_pg_catalog_namespace))
+    {
+        cached_pg_catalog_namespace = get_namespace_oid("pg_catalog", false);
+    }
+
+    return cached_pg_catalog_namespace;
+}
+
+static void initialize_namespace_oid_cache(void)
+{
+    if (namespace_cache_callback_registered)
+    {
+        return;
+    }
+
+    CacheRegisterSyscacheCallback(NAMESPACEOID, invalidate_namespace_oid_cache,
+                                  (Datum)0);
+    namespace_cache_callback_registered = true;
+}
+
+static void invalidate_namespace_oid_cache(Datum arg, int cache_id,
+                                           uint32 hash_value)
+{
+    cached_ag_catalog_namespace = InvalidOid;
+    cached_pg_catalog_namespace = InvalidOid;
 }

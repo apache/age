@@ -42,11 +42,9 @@ int64 get_nextval_internal(graph_cache_data* graph_cache,
                            label_cache_data* label_cache)
 {
     Oid obj_seq_id;
-    char* label_seq_name_str;
 
-    label_seq_name_str = NameStr(label_cache->seq_name);
-    obj_seq_id = get_relname_relid(label_seq_name_str,
-                                   graph_cache->namespace);
+    obj_seq_id = get_label_seq_relation_cached(label_cache,
+                                               graph_cache->namespace);
 
     return nextval_internal(obj_seq_id, true);
 }
@@ -151,12 +149,6 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     Relation edge_rel;
 
     Oid nsp_id;
-    Name vtx_seq_name;
-    char *vtx_seq_name_str;
-
-    Name edge_seq_name;
-    char *edge_seq_name_str;
-
     int64 lid;
 
     if (PG_ARGISNULL(0))
@@ -252,14 +244,8 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
     edge_label_id = edge_cache->id;
 
     nsp_id = graph_cache->namespace;
-    vtx_seq_name = &(vertex_cache->seq_name);
-    vtx_seq_name_str = NameStr(*vtx_seq_name);
-
-    edge_seq_name = &(edge_cache->seq_name);
-    edge_seq_name_str = NameStr(*edge_seq_name);
-
-    vtx_seq_id = get_relname_relid(vtx_seq_name_str, nsp_id);
-    edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
+    vtx_seq_id = get_label_seq_relation_cached(vertex_cache, nsp_id);
+    edge_seq_id = get_label_seq_relation_cached(edge_cache, nsp_id);
 
     props = create_empty_agtype();
 

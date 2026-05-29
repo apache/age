@@ -1990,7 +1990,7 @@ Oid get_graph_oid_for_table(Oid table_oid)
 {
     label_cache_data *lcd = NULL;
 
-    lcd = search_label_relation_cache(table_oid);
+    lcd = search_label_relation_cache_cached(table_oid);
 
     if (lcd != NULL)
     {

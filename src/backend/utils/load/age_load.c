@@ -631,8 +631,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
 
     /* Get the label relation and check permissions */
     label_relid = label_cache->relation;
-    label_seq_relid = get_relname_relid(NameStr(label_cache->seq_name),
-                                        graph_oid);
+    label_seq_relid = get_label_seq_relation_cached(label_cache, graph_oid);
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 
@@ -704,8 +703,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
 
     /* Get the label relation and check permissions */
     label_relid = label_cache->relation;
-    label_seq_relid = get_relname_relid(NameStr(label_cache->seq_name),
-                                        graph_oid);
+    label_seq_relid = get_label_seq_relation_cached(label_cache, graph_oid);
     check_table_permissions(label_relid);
     check_rls_for_load(label_relid);
 

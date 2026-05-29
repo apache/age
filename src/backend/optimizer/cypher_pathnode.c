@@ -26,6 +26,7 @@
 #include "parser/cypher_analyze.h"
 #include "executor/cypher_utils.h"
 #include "optimizer/optimizer.h"
+#include "optimizer/pathnode.h"
 #include "optimizer/subselect.h"
 #include "nodes/makefuncs.h"
 
@@ -33,6 +34,7 @@ static Const *convert_sublink_to_subplan(PlannerInfo *root,
                                          List *custom_private);
 static bool expr_has_sublink(Node *node, void *context);
 static Path *select_best_child_path(RelOptInfo *rel);
+static void initialize_cypher_dml_path(CustomPath *cp, RelOptInfo *rel);
 static void apply_child_path_costs(CustomPath *cp, Path *best_child);
 
 const CustomPathMethods cypher_create_path_methods = {
@@ -51,27 +53,8 @@ CustomPath *create_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
 
     cp = makeNode(CustomPath);
 
-    cp->path.pathtype = T_CustomScan;
-
-    cp->path.parent = rel;
-    cp->path.pathtarget = rel->reltarget;
-
-    cp->path.param_info = NULL;
-
-    /* Do not allow parallel methods */
-    cp->path.parallel_aware = false;
-    cp->path.parallel_safe = false;
-    cp->path.parallel_workers = 0;
-
-    cp->custom_paths = list_make1(select_best_child_path(rel));
-    apply_child_path_costs(cp, linitial(cp->custom_paths));
-
-    /* No output ordering for basic CREATE */
-    cp->path.pathkeys = NULL;
-
-    /* Disable all custom flags for now */
+    initialize_cypher_dml_path(cp, rel);
     cp->flags = 0;
-
     cp->custom_private = custom_private;
     cp->methods = &cypher_create_path_methods;
 
@@ -85,27 +68,8 @@ CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
 
     cp = makeNode(CustomPath);
 
-    cp->path.pathtype = T_CustomScan;
-
-    cp->path.parent = rel;
-    cp->path.pathtarget = rel->reltarget;
-
-    cp->path.param_info = NULL;
-
-    /* Do not allow parallel methods */
-    cp->path.parallel_aware = false;
-    cp->path.parallel_safe = false;
-    cp->path.parallel_workers = 0;
-
-    cp->custom_paths = list_make1(select_best_child_path(rel));
-    apply_child_path_costs(cp, linitial(cp->custom_paths));
-
-    /* No output ordering for basic SET */
-    cp->path.pathkeys = NULL;
-
-    /* Disable all custom flags for now */
+    initialize_cypher_dml_path(cp, rel);
     cp->flags = 0;
-
     cp->custom_private = custom_private;
     cp->methods = &cypher_set_path_methods;
 
@@ -123,27 +87,8 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
 
     cp = makeNode(CustomPath);
 
-    cp->path.pathtype = T_CustomScan;
-
-    cp->path.parent = rel;
-    cp->path.pathtarget = rel->reltarget;
-
-    cp->path.param_info = NULL;
-
-    /* Do not allow parallel methods */
-    cp->path.parallel_aware = false;
-    cp->path.parallel_safe = false;
-    cp->path.parallel_workers = 0;
-
-    cp->custom_paths = list_make1(select_best_child_path(rel));
-    apply_child_path_costs(cp, linitial(cp->custom_paths));
-
-    /* No output ordering for basic SET */
-    cp->path.pathkeys = NULL;
-
-    /* Disable all custom flags for now */
+    initialize_cypher_dml_path(cp, rel);
     cp->flags = 0;
-
     /* Store the metadata Delete will need in the execution phase. */
     cp->custom_private = custom_private;
     /* Tells Postgres how to turn this path to the correct CustomScan */
@@ -163,25 +108,7 @@ CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
 
     cp = makeNode(CustomPath);
 
-    cp->path.pathtype = T_CustomScan;
-
-    cp->path.parent = rel;
-    cp->path.pathtarget = rel->reltarget;
-
-    cp->path.param_info = NULL;
-
-    /* Do not allow parallel methods */
-    cp->path.parallel_aware = false;
-    cp->path.parallel_safe = false;
-    cp->path.parallel_workers = 0;
-
-    cp->custom_paths = list_make1(select_best_child_path(rel));
-    apply_child_path_costs(cp, linitial(cp->custom_paths));
-
-    /* No output ordering for basic SET */
-    cp->path.pathkeys = NULL;
-
-    /* Disable all custom flags for now */
+    initialize_cypher_dml_path(cp, rel);
     cp->flags = 0;
 
     /*
@@ -202,6 +129,30 @@ CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
     cp->methods = &cypher_merge_path_methods;
 
     return cp;
+}
+
+static void initialize_cypher_dml_path(CustomPath *cp, RelOptInfo *rel)
+{
+    Path *best_child;
+
+    cp->path.pathtype = T_CustomScan;
+
+    cp->path.parent = rel;
+    cp->path.pathtarget = rel->reltarget;
+
+    cp->path.param_info = NULL;
+
+    /* Do not allow parallel methods */
+    cp->path.parallel_aware = false;
+    cp->path.parallel_safe = false;
+    cp->path.parallel_workers = 0;
+
+    best_child = select_best_child_path(rel);
+    cp->custom_paths = list_make1(best_child);
+    apply_child_path_costs(cp, best_child);
+
+    /* Cypher DML nodes do not preserve child output ordering. */
+    cp->path.pathkeys = NULL;
 }
 
 /*
@@ -271,9 +222,7 @@ static Path *select_best_child_path(RelOptInfo *rel)
         Path *child = (Path *)lfirst(lc);
 
         if (best_child == NULL ||
-            child->total_cost < best_child->total_cost ||
-            (child->total_cost == best_child->total_cost &&
-             child->startup_cost < best_child->startup_cost))
+            compare_path_costs(child, best_child, TOTAL_COST) < 0)
             best_child = child;
     }
 
@@ -287,6 +236,10 @@ static void apply_child_path_costs(CustomPath *cp, Path *best_child)
 {
     if (best_child == NULL)
     {
+        cp->path.param_info = NULL;
+#if PG_VERSION_NUM >= 170000
+        cp->path.disabled_nodes = 0;
+#endif
         cp->path.rows = 0;
         cp->path.startup_cost = 0;
         cp->path.total_cost = 0;
@@ -298,9 +251,15 @@ static void apply_child_path_costs(CustomPath *cp, Path *best_child)
      * child paths are PostgreSQL-planned scans/subqueries.  Preserve their
      * estimates so upstream planning can see row counts, index selectivity,
      * and scan costs instead of treating every Cypher DML clause as free.
+     * Preserve the child parameterization as well so add_path() can compare
+     * required outer relids using the same information as the child path.
      * Charge one cpu_tuple_cost per input row for the mutation coordination
      * work that happens above the child plan.
      */
+    cp->path.param_info = best_child->param_info;
+#if PG_VERSION_NUM >= 170000
+    cp->path.disabled_nodes = best_child->disabled_nodes;
+#endif
     cp->path.rows = best_child->rows;
     cp->path.startup_cost = best_child->startup_cost;
     cp->path.total_cost = best_child->total_cost +

@@ -20,6 +20,7 @@
 #include "postgres.h"
 
 #include "utils/builtins.h"
+#include "utils/inval.h"
 #include "utils/sortsupport.h"
 
 #include "utils/graphid.h"
@@ -29,10 +30,17 @@ static int graphid_btree_fast_cmp(Datum x, Datum y, SortSupport ssup);
 /* global storage of  OID for graphid and _graphid */
 static Oid g_GRAPHIDOID = InvalidOid;
 static Oid g_GRAPHIDARRAYOID = InvalidOid;
+static bool graphid_oid_callback_registered = false;
+
+static void initialize_graphid_oid_cache(void);
+static void invalidate_graphid_oid_cache(Datum arg, int cache_id,
+                                         uint32 hash_value);
 
 /* helper function to quickly set, if necessary, and retrieve GRAPHIDOID */
 Oid get_GRAPHIDOID(void)
 {
+    initialize_graphid_oid_cache();
+
     if (g_GRAPHIDOID == InvalidOid)
     {
         g_GRAPHIDOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
@@ -46,6 +54,8 @@ Oid get_GRAPHIDOID(void)
 /* helper function to quickly set, if necessary, and retrieve GRAPHIDARRAYOID */
 Oid get_GRAPHIDARRAYOID(void)
 {
+    initialize_graphid_oid_cache();
+
     if (g_GRAPHIDARRAYOID == InvalidOid)
     {
         g_GRAPHIDARRAYOID = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
@@ -61,6 +71,24 @@ void clear_global_Oids_GRAPHID(void)
 {
     g_GRAPHIDOID = InvalidOid;
     g_GRAPHIDARRAYOID = InvalidOid;
+}
+
+static void initialize_graphid_oid_cache(void)
+{
+    if (graphid_oid_callback_registered)
+    {
+        return;
+    }
+
+    CacheRegisterSyscacheCallback(TYPENAMENSP, invalidate_graphid_oid_cache,
+                                  (Datum)0);
+    graphid_oid_callback_registered = true;
+}
+
+static void invalidate_graphid_oid_cache(Datum arg, int cache_id,
+                                         uint32 hash_value)
+{
+    clear_global_Oids_GRAPHID();
 }
 
 PG_FUNCTION_INFO_V1(graphid_in);

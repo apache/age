@@ -40,6 +40,8 @@
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
+#include "utils/inval.h"
+#include "utils/syscache.h"
 
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
@@ -95,6 +97,13 @@
 
 typedef Query *(*transform_method)(cypher_parsestate *cpstate,
                                    cypher_clause *clause);
+
+static Oid create_clause_func_oid = InvalidOid;
+static Oid set_clause_func_oid = InvalidOid;
+static Oid delete_clause_func_oid = InvalidOid;
+static Oid merge_clause_func_oid = InvalidOid;
+static Oid bool_or_func_oid = InvalidOid;
+static bool clause_func_oid_callback_registered = false;
 
 /* projection */
 static Query *transform_cypher_return(cypher_parsestate *cpstate,
@@ -338,7 +347,11 @@ static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
                                               RangeTblEntry *rte);
 static List *make_target_list_from_join(ParseState *pstate,
                                         RangeTblEntry *rte);
+static void initialize_clause_function_oid_cache(void);
 static Oid get_clause_function_oid(const char *function_name);
+static Oid get_bool_or_func_oid(void);
+static void invalidate_clause_function_oids(Datum arg, int cache_id,
+                                            uint32 hash_value);
 static FuncExpr *make_clause_func_expr(char *function_name,
                                        Node *clause_information);
 static void markRelsAsNulledBy(ParseState *pstate, Node *n, int jindex);
@@ -1682,19 +1695,13 @@ static Node *make_bool_or_agg(ParseState *pstate, Node *arg)
 {
     Aggref *agg;
     TargetEntry *te;
-    Oid bool_or_oid;
-    Oid argtypes[1] = { BOOLOID };
-
-    /* Look up bool_or(boolean) */
-    bool_or_oid = LookupFuncName(list_make1(makeString("bool_or")),
-                                 1, argtypes, false);
 
     /* Build the TargetEntry for the aggregate argument */
     te = makeTargetEntry((Expr *) arg, 1, NULL, false);
 
     /* Construct the Aggref */
     agg = makeNode(Aggref);
-    agg->aggfnoid = bool_or_oid;
+    agg->aggfnoid = get_bool_or_func_oid();
     agg->aggtype = BOOLOID;
     agg->aggcollid = InvalidOid;
     agg->inputcollid = InvalidOid;
@@ -8369,10 +8376,7 @@ static FuncExpr *make_clause_func_expr(char *function_name,
 
 static Oid get_clause_function_oid(const char *function_name)
 {
-    static Oid create_clause_func_oid = InvalidOid;
-    static Oid set_clause_func_oid = InvalidOid;
-    static Oid delete_clause_func_oid = InvalidOid;
-    static Oid merge_clause_func_oid = InvalidOid;
+    initialize_clause_function_oid_cache();
 
     if (!OidIsValid(create_clause_func_oid))
     {
@@ -8404,6 +8408,41 @@ static Oid get_clause_function_oid(const char *function_name)
     }
 
     return get_ag_func_oid(function_name, 1, INTERNALOID);
+}
+
+static Oid get_bool_or_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(bool_or_func_oid))
+    {
+        bool_or_func_oid = get_pg_func_oid("bool_or", 1, BOOLOID);
+    }
+
+    return bool_or_func_oid;
+}
+
+static void initialize_clause_function_oid_cache(void)
+{
+    if (!clause_func_oid_callback_registered)
+    {
+        CacheRegisterSyscacheCallback(PROCOID, invalidate_clause_function_oids,
+                                      (Datum)0);
+        CacheRegisterSyscacheCallback(PROCNAMEARGSNSP,
+                                      invalidate_clause_function_oids,
+                                      (Datum)0);
+        clause_func_oid_callback_registered = true;
+    }
+}
+
+static void invalidate_clause_function_oids(Datum arg, int cache_id,
+                                            uint32 hash_value)
+{
+    create_clause_func_oid = InvalidOid;
+    set_clause_func_oid = InvalidOid;
+    delete_clause_func_oid = InvalidOid;
+    merge_clause_func_oid = InvalidOid;
+    bool_or_func_oid = InvalidOid;
 }
 
 /*
