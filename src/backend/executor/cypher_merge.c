@@ -237,6 +237,9 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     /* store the currentCommandId for this instance */
     css->base_currentCommandId = GetCurrentCommandId(false);
 
+    css->entity_exists_index_cache =
+        create_entity_exists_index_cache("merge_entity_exists_index_cache");
+
     Increment_Estate_CommandId(estate);
 }
 
@@ -442,13 +445,12 @@ static path_entry **prebuild_path(CustomScanState *node)
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
     List *nodes = css->path->target_nodes;
-    int path_length = list_length(nodes);
     ListCell *lc = NULL;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     int counter = 0;
 
     path_entry **path_array = NULL;
-    path_array = palloc0(sizeof(path_entry *) * path_length);
+    path_array = palloc0(sizeof(path_entry *) * css->path_length);
 
     /* iterate through the path, partially prebuilding it */
     foreach (lc, nodes)
@@ -519,7 +521,9 @@ static path_entry **prebuild_path(CustomScanState *node)
 
             if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
             {
-                if (!entity_exists(estate, css->graph_oid, entry->id))
+                if (!entity_exists_with_cache(estate, css->graph_oid,
+                                              entry->id,
+                                              css->entity_exists_index_cache))
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -597,7 +601,6 @@ static path_entry **find_duplicate_path(CustomScanState *node,
 {
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
-    int path_length = list_length(css->path->target_nodes);
 
     /* if the list is NULL just return NULL */
     if (css->created_paths_list == NULL)
@@ -614,7 +617,8 @@ static path_entry **find_duplicate_path(CustomScanState *node,
         while (curr_path != NULL)
         {
             /* if we have found the entry, return it */
-            if (compare_2_paths(path_array, curr_path->entry, path_length))
+            if (compare_2_paths(path_array, curr_path->entry,
+                                css->path_length))
             {
                 return curr_path->entry;
             }
@@ -683,7 +687,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
         if (!terminal && !css->eager_buffer_filled)
         {
             css->eager_tuples = NIL;
-            css->eager_tuples_index = 0;
+            css->eager_tuples_cursor = NULL;
 
             while (true)
             {
@@ -713,8 +717,6 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                 {
                     path_entry **prebuilt_path_array = NULL;
                     path_entry **found_path_array = NULL;
-                    int path_length =
-                        list_length(css->path->target_nodes);
 
                     prebuilt_path_array = prebuild_path(node);
 
@@ -724,7 +726,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                     if (found_path_array)
                     {
                         free_path_entry_array(prebuilt_path_array,
-                                              path_length);
+                                              css->path_length);
                         process_path(css, found_path_array, false);
 
                         /* ON MATCH SET: path was found as duplicate */
@@ -768,20 +770,22 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             }
 
             css->eager_buffer_filled = true;
+            css->eager_tuples_cursor = list_head(css->eager_tuples);
         }
 
         /* Non-terminal: return the next buffered row (or NULL if empty) */
         if (!terminal && css->eager_buffer_filled)
         {
-            if (css->eager_tuples_index < list_length(css->eager_tuples))
+            if (css->eager_tuples_cursor != NULL)
             {
                 HeapTuple htup;
                 TupleTableSlot *result_slot =
                     node->ss.ps.ps_ResultTupleSlot;
 
                 htup = (HeapTuple)
-                    list_nth(css->eager_tuples, css->eager_tuples_index);
-                css->eager_tuples_index++;
+                    lfirst(css->eager_tuples_cursor);
+                css->eager_tuples_cursor =
+                    lnext(css->eager_tuples, css->eager_tuples_cursor);
 
                 ExecForceStoreHeapTuple(htup, result_slot, false);
                 return result_slot;
@@ -817,7 +821,6 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             {
                 path_entry **prebuilt_path_array = NULL;
                 path_entry **found_path_array = NULL;
-                int path_length = list_length(css->path->target_nodes);
 
                 prebuilt_path_array = prebuild_path(node);
 
@@ -826,7 +829,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
 
                 if (found_path_array)
                 {
-                    free_path_entry_array(prebuilt_path_array, path_length);
+                    free_path_entry_array(prebuilt_path_array,
+                                          css->path_length);
                     process_path(css, found_path_array, false);
 
                     /* ON MATCH SET: path was found as duplicate */
@@ -1045,7 +1049,6 @@ static void end_cypher_merge(CustomScanState *node)
         (cypher_merge_custom_scan_state *)node;
     cypher_create_path *path = css->path;
     ListCell *lc = NULL;
-    int path_length = list_length(path->target_nodes);
 
     /* increment the command counter */
     CommandCounterIncrement();
@@ -1057,6 +1060,12 @@ static void end_cypher_merge(CustomScanState *node)
     }
 
     ExecEndNode(node->ss.ps.lefttree);
+
+    if (css->entity_exists_index_cache != NULL)
+    {
+        hash_destroy(css->entity_exists_index_cache);
+        css->entity_exists_index_cache = NULL;
+    }
 
     foreach (lc, path->target_nodes)
     {
@@ -1082,7 +1091,7 @@ static void end_cypher_merge(CustomScanState *node)
         path_entry **entry = css->created_paths_list->entry;
 
         /* free up the path array elements */
-        free_path_entry_array(entry, path_length);
+        free_path_entry_array(entry, css->path_length);
 
         /* free up the array container */
         pfree_if_not_null(entry);
@@ -1146,6 +1155,7 @@ Node *create_cypher_merge_plan_state(CustomScan *cscan)
     cypher_css->flags = merge_information->flags;
     cypher_css->merge_function_attr = merge_information->merge_function_attr;
     cypher_css->path = merge_information->path;
+    cypher_css->path_length = list_length(cypher_css->path->target_nodes);
     cypher_css->created_new_path = false;
     cypher_css->found_a_path = false;
     cypher_css->graph_oid = merge_information->graph_oid;
@@ -1431,7 +1441,9 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
-            if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
+            if (!entity_exists_with_cache(estate, css->graph_oid,
+                                          DATUM_GET_GRAPHID(id),
+                                          css->entity_exists_index_cache))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),

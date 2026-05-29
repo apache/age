@@ -65,6 +65,12 @@
 #define LABEL_KIND_VERTEX 'v'
 #define LABEL_KIND_EDGE 'e'
 
+typedef struct ag_label_info
+{
+    char *name;
+    Oid relation;
+} ag_label_info;
+
 void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
                   char label_kind, Oid label_relation, const char *seq_name);
 void delete_label(Oid relation);
@@ -80,7 +86,7 @@ bool label_id_exists(Oid graph_oid, int32 label_id);
 RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
                               char *label_name);
 
-List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid);
+List *get_all_edge_labels_per_graph(Snapshot snapshot, Oid graph_oid);
 
 #define label_exists(label_name, label_graph) \
     OidIsValid(get_label_id(label_name, label_graph))

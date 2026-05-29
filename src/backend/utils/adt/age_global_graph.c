@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "access/heapam.h"
 #include "catalog/namespace.h"
 #include "commands/trigger.h"
@@ -120,6 +121,12 @@ typedef struct edge_entry
     graphid start_vertex_id;       /* start vertex */
     graphid end_vertex_id;         /* end vertex */
 } edge_entry;
+
+typedef struct graph_label_entry
+{
+    char *name;
+    Oid relation;
+} graph_label_entry;
 
 /*
  * GRAPH global context per graph. They are chained together via next.
@@ -281,12 +288,11 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                                  char label_type)
 {
     List *labels = NIL;
-    ScanKeyData scan_keys[2];
+    ScanKeyData scan_key;
     Relation ag_label;
-    TableScanDesc scan_desc;
+    SysScanDesc scan_desc;
     HeapTuple tuple;
     TupleDesc tupdesc;
-    Oid index_oid = InvalidOid;
 
     /* we need a valid snapshot */
     Assert(snapshot != NULL);
@@ -299,110 +305,43 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
     /* bail if the number of columns differs - this table has 5 */
     Assert(tupdesc->natts == Natts_ag_label);
 
-    /* 
-     * Find a usable index whose first key column is ag_label.graph 
-     * (Anum_ag_label_graph) 
-     */
-    index_oid = find_usable_btree_index_for_attr(ag_label, Anum_ag_label_graph);
+    ScanKeyInit(&scan_key, Anum_ag_label_graph, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
-    if (OidIsValid(index_oid))
+    scan_desc = systable_beginscan(ag_label, ag_label_graph_oid_index_id(),
+                                   true, snapshot, 1, &scan_key);
+
+    while (HeapTupleIsValid(tuple = systable_getnext(scan_desc)))
     {
-        Relation index_rel;
-        IndexScanDesc idx_scan_desc;
-        ScanKeyData key;
-        TupleTableSlot *slot;
+        graph_label_entry *label;
+        bool is_null;
+        Datum datum;
 
-        index_rel = index_open(index_oid, AccessShareLock);
-        slot = table_slot_create(ag_label, NULL);
-
-        /* 
-         * Setup ScanKey: ag_label.graph = graph_oid 
-         * Note: We CANNOT filter by 'kind' here because it is not in the index.
-         */
-        ScanKeyInit(&key, 1, BTEqualStrategyNumber,
-                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
-
-        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
-        index_rescan(idx_scan_desc, &key, 1, NULL, 0);
-
-        while (index_getnext_slot(idx_scan_desc, ForwardScanDirection, slot))
+        datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
+        if (is_null || DatumGetChar(datum) != label_type)
         {
-            bool shouldFree;
-            
-            tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-
-            if (HeapTupleIsValid(tuple))
-            {
-                bool is_null;
-                Datum kind_datum;
-
-                /* 
-                 * Since the index only gave us rows for the correct graph,
-                 * we must now check if the label 'kind' matches (vertex 'v' or edge 'e').
-                 */
-                kind_datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
-
-                if (!is_null && DatumGetChar(kind_datum) == label_type)
-                {
-                    Datum name_datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
-                    if (!is_null)
-                    {
-                        Name label_name_ptr;
-                        Name lval;
-
-                        label_name_ptr = DatumGetName(name_datum);
-                        lval = (Name) palloc(NAMEDATALEN);
-                        namestrcpy(lval, NameStr(*label_name_ptr));
-                        labels = lappend(labels, lval);
-                    }
-                }
-            }
-
-            if (shouldFree)
-            {
-                heap_freetuple(tuple);
-            }
-            ExecClearTuple(slot);
+            continue;
         }
 
-        ExecDropSingleTupleTableSlot(slot);
-        index_endscan(idx_scan_desc);
-        index_close(index_rel, AccessShareLock);
-    } 
-    else
-    {
-        /* setup scan keys to get all edges for the given graph oid */
-        ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
-        ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
-                    F_CHAREQ, CharGetDatum(label_type));
-
-        scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
-
-        /* get all of the label names */
-        while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+        datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
+        if (!is_null)
         {
-            Name label;
-            Name lval;
-            bool is_null = false;
+            Name label_name;
 
-            /* something is wrong if this tuple isn't valid */
-            Assert(HeapTupleIsValid(tuple));
-            /* get the label name */
-            label = DatumGetName(heap_getattr(tuple, Anum_ag_label_name, tupdesc,
-                                            &is_null));
+            label = palloc(sizeof(*label));
+            label_name = DatumGetName(datum);
+            label->name = pstrdup(NameStr(*label_name));
 
+            datum = heap_getattr(tuple, Anum_ag_label_relation, tupdesc,
+                                 &is_null);
             Assert(!is_null);
-            /* add it to our list */
-            lval = (Name) palloc(NAMEDATALEN);
-            namestrcpy(lval, NameStr(*label));
-            labels = lappend(labels, lval);
-        }
+            label->relation = DatumGetObjectId(datum);
 
-        /* close up scan */
-        table_endscan(scan_desc);
+            labels = lappend(labels, label);
+        }
     }
 
+    systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
 
     return labels;
@@ -623,34 +562,30 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
 static void load_vertex_hashtable(GRAPH_global_context *ggctx)
 {
     Oid graph_oid;
-    Oid graph_namespace_oid;
     Snapshot snapshot;
-    List *vertex_label_names = NIL;
+    List *vertex_labels = NIL;
     ListCell *lc;
 
     /* get the specific graph OID and namespace (schema) OID */
     graph_oid = ggctx->graph_oid;
-    graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
-    /* get the names of all of the vertex label tables */
-    vertex_label_names = get_ag_labels_names(snapshot, graph_oid,
-                                             LABEL_TYPE_VERTEX);
+    /* get metadata for all vertex label tables */
+    vertex_labels = get_ag_labels_names(snapshot, graph_oid, LABEL_TYPE_VERTEX);
     /* go through all vertex label tables in list */
-    foreach (lc, vertex_label_names)
+    foreach (lc, vertex_labels)
     {
         Relation graph_vertex_label;
         TableScanDesc scan_desc;
         HeapTuple tuple;
+        graph_label_entry *label_entry;
         char *vertex_label_name;
         Oid vertex_label_table_oid;
         TupleDesc tupdesc;
 
-        /* get the vertex label name */
-        vertex_label_name = lfirst(lc);
-        /* get the vertex label name's OID */
-        vertex_label_table_oid = get_relname_relid(vertex_label_name,
-                                                   graph_namespace_oid);
+        label_entry = lfirst(lc);
+        vertex_label_name = label_entry->name;
+        vertex_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
         graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL);
@@ -725,34 +660,30 @@ static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 static void load_edge_hashtable(GRAPH_global_context *ggctx)
 {
     Oid graph_oid;
-    Oid graph_namespace_oid;
     Snapshot snapshot;
-    List *edge_label_names = NIL;
+    List *edge_labels = NIL;
     ListCell *lc;
 
     /* get the specific graph OID and namespace (schema) OID */
     graph_oid = ggctx->graph_oid;
-    graph_namespace_oid = get_namespace_oid(ggctx->graph_name, false);
     /* get the active snapshot */
     snapshot = GetActiveSnapshot();
-    /* get the names of all of the edge label tables */
-    edge_label_names = get_ag_labels_names(snapshot, graph_oid,
-                                           LABEL_TYPE_EDGE);
+    /* get metadata for all edge label tables */
+    edge_labels = get_ag_labels_names(snapshot, graph_oid, LABEL_TYPE_EDGE);
     /* go through all edge label tables in list */
-    foreach (lc, edge_label_names)
+    foreach (lc, edge_labels)
     {
         Relation graph_edge_label;
         TableScanDesc scan_desc;
         HeapTuple tuple;
+        graph_label_entry *label_entry;
         char *edge_label_name;
         Oid edge_label_table_oid;
         TupleDesc tupdesc;
 
-        /* get the edge label name */
-        edge_label_name = lfirst(lc);
-        /* get the edge label name's OID */
-        edge_label_table_oid = get_relname_relid(edge_label_name,
-                                                 graph_namespace_oid);
+        label_entry = lfirst(lc);
+        edge_label_name = label_entry->name;
+        edge_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
         graph_edge_label = table_open(edge_label_table_oid, AccessShareLock);
         scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL);

@@ -145,6 +145,9 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
         estate->es_output_cid = estate->es_snapshot->curcid;
     }
 
+    css->entity_exists_index_cache =
+        create_entity_exists_index_cache("create_entity_exists_index_cache");
+
     Increment_Estate_CommandId(estate);
 }
 
@@ -231,7 +234,7 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
          * inserted and the current command Id was not used. So, only flag it
          * if there is a non empty pattern.
          */
-        if (list_length(css->pattern) > 0)
+        if (css->pattern != NIL)
         {
             /* the current command Id has been used */
             used = true;
@@ -273,6 +276,12 @@ static void end_cypher_create(CustomScanState *node)
     CommandCounterIncrement();
 
     ExecEndNode(node->ss.ps.lefttree);
+
+    if (css->entity_exists_index_cache != NULL)
+    {
+        hash_destroy(css->entity_exists_index_cache);
+        css->entity_exists_index_cache = NULL;
+    }
 
     foreach (lc, css->pattern)
     {
@@ -590,7 +599,9 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
          */
         if (!SAFE_TO_SKIP_EXISTENCE_CHECK(node->flags))
         {
-            if (!entity_exists(estate, css->graph_oid, DATUM_GET_GRAPHID(id)))
+            if (!entity_exists_with_cache(estate, css->graph_oid,
+                                          DATUM_GET_GRAPHID(id),
+                                          css->entity_exists_index_cache))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -615,4 +626,3 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
     return id;
 }
-

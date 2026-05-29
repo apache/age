@@ -29,6 +29,7 @@
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "utils/age_global_graph.h"
+#include "utils/ag_cache.h"
 #include "executor/cypher_utils.h"
 
 static void begin_cypher_delete(CustomScanState *node, EState *estate,
@@ -40,11 +41,17 @@ static void rescan_cypher_delete(CustomScanState *node);
 static void process_delete_list(CustomScanState *node);
 
 static void check_for_connected_edges(CustomScanState *node);
+static void ensure_detach_delete_rls(CustomScanState *node,
+                                     ResultRelInfo *resultRelInfo,
+                                     Oid relid, bool *rls_checked,
+                                     bool *rls_enabled, List **qualExprs,
+                                     ExprContext **econtext);
 static agtype_value *extract_entity(CustomScanState *node,
                                     TupleTableSlot *scanTupleSlot,
                                     int entity_position);
 static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
                           HeapTuple tuple);
+static void init_delete_caches(cypher_delete_custom_scan_state *css);
 
 const CustomExecMethods cypher_delete_exec_methods = {DELETE_SCAN_STATE_NAME,
                                                       begin_cypher_delete,
@@ -95,13 +102,6 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
         ExecAssignProjectionInfo(&node->ss.ps, tupdesc);
     }
 
-    /*
-     * Get all the labels that are visible to this delete clause at this point
-     * in the transaction. To be used later when the delete clause finds
-     * vertices.
-     */
-    css->edge_labels = get_all_edge_labels_per_graph(estate, css->delete_data->graph_oid);
-
     /* init vertex_id_htab */
     MemSet(&hashctl, 0, sizeof(hashctl));
     hashctl.keysize = sizeof(graphid);
@@ -111,6 +111,7 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
     css->vertex_id_htab = hash_create(DELETE_VERTEX_HTAB_NAME,
                                       DELETE_VERTEX_HTAB_SIZE, &hashctl,
                                       HASH_ELEM | HASH_FUNCTION);
+    init_delete_caches(css);
 
     /*
      * Postgres does not assign the es_output_cid in queries that do
@@ -202,9 +203,41 @@ static void end_cypher_delete(CustomScanState *node)
     /* invalidate VLE cache — graph was mutated */
     increment_graph_version(css->delete_data->graph_oid);
 
+    if (css->qual_cache != NULL)
+    {
+        hash_destroy(css->qual_cache);
+        css->qual_cache = NULL;
+    }
+
+    if (css->index_cache != NULL)
+    {
+        hash_destroy(css->index_cache);
+        css->index_cache = NULL;
+    }
+
     hash_destroy(((cypher_delete_custom_scan_state *)node)->vertex_id_htab);
 
     ExecEndNode(node->ss.ps.lefttree);
+}
+
+static void init_delete_caches(cypher_delete_custom_scan_state *css)
+{
+    HASHCTL hashctl;
+    HASHCTL idx_hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(RLSCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+    css->qual_cache = hash_create("delete_qual_cache", 8, &hashctl,
+                                  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
+    idx_hashctl.keysize = sizeof(Oid);
+    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
+    idx_hashctl.hcxt = CurrentMemoryContext;
+    css->index_cache = hash_create("delete_index_cache", 8, &idx_hashctl,
+                                   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
 /*
@@ -381,25 +414,8 @@ static void process_delete_list(CustomScanState *node)
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     EState *estate = node->ss.ps.state;
-    HTAB *qual_cache = NULL;
-    HASHCTL hashctl;
-    HTAB *index_cache = NULL;
-    HASHCTL idx_hashctl;
-
-    /* Hash table for caching compiled security quals per label */
-    MemSet(&hashctl, 0, sizeof(hashctl));
-    hashctl.keysize = sizeof(Oid);
-    hashctl.entrysize = sizeof(RLSCacheEntry);
-    hashctl.hcxt = CurrentMemoryContext;
-    qual_cache = hash_create("delete_qual_cache", 8, &hashctl,
-                             HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-
-    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
-    idx_hashctl.keysize = sizeof(Oid);
-    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
-    idx_hashctl.hcxt = CurrentMemoryContext;
-    index_cache = hash_create("delete_index_cache", 8, &idx_hashctl,
-                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+    HTAB *qual_cache = css->qual_cache;
+    HTAB *index_cache = css->index_cache;
 
     foreach(lc, css->delete_data->delete_items)
     {
@@ -410,6 +426,7 @@ static void process_delete_list(CustomScanState *node)
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple = NULL;
         char *label_name;
+        label_cache_data *label_cache;
         Integer *pos;
         int entity_position;
         Oid relid;
@@ -421,7 +438,9 @@ static void process_delete_list(CustomScanState *node)
         IndexScanDesc index_scan_desc = NULL;
         bool shouldFree = false;
         IndexCacheEntry *idx_entry;
-        bool found_idx_entry;     
+        bool found_idx_entry;
+        RLSCacheEntry *rls_entry;
+        bool found_rls_entry;
 
         item = lfirst(lc);
 
@@ -438,8 +457,17 @@ static void process_delete_list(CustomScanState *node)
         id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
         label = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "label");
         label_name = pnstrdup(label->val.string.val, label->val.string.len);
+        label_cache = search_label_graph_oid_cache(css->delete_data->graph_oid,
+                                                   GET_LABEL_ID(id->val.int_value));
+        if (label_cache == NULL)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_TABLE),
+                     errmsg("label \"%s\" does not exist", label_name)));
+        }
 
-        resultRelInfo = create_entity_result_rel_info(estate, css->delete_data->graph_name, label_name);
+        resultRelInfo = create_entity_result_rel_info_by_oid(
+            estate, label_cache->relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
 
@@ -476,6 +504,23 @@ static void process_delete_list(CustomScanState *node)
 
         index_oid = idx_entry->index_oid;
 
+        rls_entry = hash_search(qual_cache, &relid, HASH_ENTER,
+                                &found_rls_entry);
+        if (!found_rls_entry)
+        {
+            rls_entry->rls_enabled =
+                check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED;
+
+            if (rls_entry->rls_enabled)
+            {
+                rls_entry->qualExprs = setup_security_quals(resultRelInfo,
+                                                            estate, node,
+                                                            CMD_DELETE);
+                rls_entry->slot = ExecInitExtraTupleSlot(
+                    estate, RelationGetDescr(rel), &TTSOpsHeapTuple);
+            }
+        }
+
         /*
          * Setup the scan description, with the correct snapshot and scan keys.
          */
@@ -507,21 +552,12 @@ static void process_delete_list(CustomScanState *node)
             bool passed_rls = true;
 
             /* Check RLS security quals (USING policy) before delete */
-            if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+            if (rls_entry->rls_enabled)
             {
-                RLSCacheEntry *entry;
-                bool found_rls;
+                ExecStoreHeapTuple(heap_tuple, rls_entry->slot, false);
 
-                entry = hash_search(qual_cache, &relid, HASH_ENTER, &found_rls);
-                if (!found_rls)
-                {
-                    entry->qualExprs = setup_security_quals(resultRelInfo, estate, node, CMD_DELETE);
-                    entry->slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel), &TTSOpsHeapTuple);
-                }
-
-                ExecStoreHeapTuple(heap_tuple, entry->slot, false);
-
-                if (!check_security_quals(entry->qualExprs, entry->slot, econtext))
+                if (!check_security_quals(rls_entry->qualExprs,
+                                          rls_entry->slot, econtext))
                 {
                     passed_rls = false;
                 }
@@ -565,9 +601,6 @@ static void process_delete_list(CustomScanState *node)
         destroy_entity_result_rel_info(resultRelInfo);
     }
 
-    /* Clean up the cache */
-    hash_destroy(qual_cache);
-    hash_destroy(index_cache);
 }
 
 /*
@@ -581,10 +614,12 @@ static void process_edges_by_index(Oid index_oid,
                                    ResultRelInfo *resultRelInfo,
                                    Oid relid,
                                    char *label_name,
-                                   bool rls_enabled,
-                                   List *qualExprs,
-                                   ExprContext *econtext,
-                                   bool is_pass_two)
+                                   bool *rls_checked,
+                                   bool *rls_enabled,
+                                   List **qualExprs,
+                                   ExprContext **econtext,
+                                   bool is_pass_two,
+                                   bool *delete_acl_checked)
 {
     HASH_SEQ_STATUS hash_status;
     graphid *vid;
@@ -630,21 +665,31 @@ static void process_edges_by_index(Oid index_oid,
             /* If edge found - delete it (or error if not DETACH) */
             if (css->delete_data->detach)
             {
-                AclResult aclresult;
                 bool shouldFree;
                 HeapTuple tuple;
 
-                /* Check that the user has DELETE permission on the edge table */
-                aclresult = pg_class_aclcheck(relid, GetUserId(), ACL_DELETE);
-                if (aclresult != ACLCHECK_OK)
+                if (!*delete_acl_checked)
                 {
-                    aclcheck_error(aclresult, OBJECT_TABLE, label_name);
+                    AclResult aclresult;
+
+                    aclresult = pg_class_aclcheck(relid, GetUserId(),
+                                                  ACL_DELETE);
+                    if (aclresult != ACLCHECK_OK)
+                    {
+                        aclcheck_error(aclresult, OBJECT_TABLE, label_name);
+                    }
+
+                    *delete_acl_checked = true;
                 }
 
+                ensure_detach_delete_rls(&css->css, resultRelInfo, relid,
+                                         rls_checked, rls_enabled, qualExprs,
+                                         econtext);
+
                 /* Check RLS security quals (USING policy) before delete */
-                if (rls_enabled)
+                if (*rls_enabled)
                 {
-                    if (!check_security_quals(qualExprs, slot, econtext))
+                    if (!check_security_quals(*qualExprs, slot, *econtext))
                     {
                         ereport(ERROR,
                                 (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -677,6 +722,28 @@ static void process_edges_by_index(Oid index_oid,
     ExecDropSingleTupleTableSlot(slot);
 }
 
+static void ensure_detach_delete_rls(CustomScanState *node,
+                                     ResultRelInfo *resultRelInfo,
+                                     Oid relid, bool *rls_checked,
+                                     bool *rls_enabled, List **qualExprs,
+                                     ExprContext **econtext)
+{
+    if (*rls_checked)
+    {
+        return;
+    }
+
+    *rls_checked = true;
+
+    if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+    {
+        *rls_enabled = true;
+        *econtext = node->ss.ps.ps_ExprContext;
+        *qualExprs = setup_security_quals(resultRelInfo, node->ss.ps.state,
+                                          node, CMD_DELETE);
+    }
+}
+
 /*
  * Scans the edge tables and checks if the deleted vertices are connected to
  * any edge(s). For DETACH DELETE, the connected edges are deleted. Otherwise,
@@ -688,46 +755,47 @@ static void check_for_connected_edges(CustomScanState *node)
     cypher_delete_custom_scan_state *css =
         (cypher_delete_custom_scan_state *)node;
     EState *estate = css->css.ss.ps.state;
-    char *graph_name = css->delete_data->graph_name;
+
+    if (hash_get_num_entries(css->vertex_id_htab) == 0)
+    {
+        return;
+    }
+
+    /*
+     * Edge labels are only needed after at least one vertex was deleted.
+     * Edge-only DELETEs and empty inputs can skip the catalog lookup entirely.
+     */
+    if (css->edge_labels == NIL)
+    {
+        css->edge_labels = get_all_edge_labels_per_graph(estate->es_snapshot,
+                                                         css->delete_data->graph_oid);
+    }
 
     /* scans each label from css->edge_labels */
     foreach (lc, css->edge_labels)
     {
-        char *label_name = lfirst(lc);
+        ag_label_info *label_info = lfirst(lc);
+        char *label_name = label_info->name;
         ResultRelInfo *resultRelInfo;
         TableScanDesc scan_desc;
         HeapTuple tuple;
         TupleTableSlot *slot;
         Oid relid;
+        bool rls_checked = false;
         bool rls_enabled = false;
+        bool delete_acl_checked = false;
         List *qualExprs = NIL;
         ExprContext *econtext = NULL;
         Oid start_index_oid = InvalidOid;
         Oid end_index_oid = InvalidOid;
         Relation rel;
 
-        resultRelInfo = create_entity_result_rel_info(estate, graph_name,
-                                                      label_name);
+        resultRelInfo = create_entity_result_rel_info_by_oid(
+            estate, label_info->relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
         estate->es_snapshot->curcid = GetCurrentCommandId(false);
         estate->es_output_cid = GetCurrentCommandId(false);
-
-        /*
-         * For DETACH DELETE with RLS enabled, compile the security qual
-         * expressions once per label for efficient evaluation.
-         */
-        if (css->delete_data->detach)
-        {
-            /* Setup RLS security quals for this label */
-            if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
-            {
-                rls_enabled = true;
-                econtext = css->css.ss.ps.ps_ExprContext;
-                qualExprs = setup_security_quals(resultRelInfo, estate, node,
-                                                 CMD_DELETE);
-            }
-        }
 
         /* Look for indexes on start_id and end_id columns. */
         start_index_oid = find_usable_btree_index_for_attr(rel, Anum_ag_label_edge_table_start_id);
@@ -737,11 +805,15 @@ static void check_for_connected_edges(CustomScanState *node)
         {
             /* PASS 1: Find edges where the deleted vertex is the START_ID. */
             process_edges_by_index(start_index_oid, rel, estate, css, resultRelInfo,
-                                   relid, label_name, rls_enabled, qualExprs, econtext, false);
+                                   relid, label_name, &rls_checked,
+                                   &rls_enabled, &qualExprs, &econtext, false,
+                                   &delete_acl_checked);
                
             /* PASS 2: Find edges where the deleted vertex is the END_ID. */
             process_edges_by_index(end_index_oid, rel, estate, css, resultRelInfo,
-                                   relid, label_name, rls_enabled, qualExprs, econtext, true);
+                                   relid, label_name, &rls_checked,
+                                   &rls_enabled, &qualExprs, &econtext, true,
+                                   &delete_acl_checked);
         }
         else
         {
@@ -787,14 +859,24 @@ static void check_for_connected_edges(CustomScanState *node)
                 {
                     if (css->delete_data->detach)
                     {
-                        AclResult aclresult;
-
-                        /* Check that the user has DELETE permission on the edge table */
-                        aclresult = pg_class_aclcheck(relid, GetUserId(), ACL_DELETE);
-                        if (aclresult != ACLCHECK_OK)
+                        if (!delete_acl_checked)
                         {
-                            aclcheck_error(aclresult, OBJECT_TABLE, label_name);
+                            AclResult aclresult;
+
+                            aclresult = pg_class_aclcheck(relid, GetUserId(),
+                                                          ACL_DELETE);
+                            if (aclresult != ACLCHECK_OK)
+                            {
+                                aclcheck_error(aclresult, OBJECT_TABLE,
+                                               label_name);
+                            }
+
+                            delete_acl_checked = true;
                         }
+
+                        ensure_detach_delete_rls(node, resultRelInfo, relid,
+                                                 &rls_checked, &rls_enabled,
+                                                 &qualExprs, &econtext);
 
                         /* Check RLS security quals (USING policy) before delete */
                         if (rls_enabled)

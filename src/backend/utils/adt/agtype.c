@@ -47,10 +47,12 @@
 #include "parser/parse_coerce.h"
 #include "nodes/nodes.h"
 #include "utils/acl.h"
+#include "utils/ag_cache.h"
 #include "utils/builtins.h"
 #include "executor/cypher_utils.h"
 #include "utils/float.h"
 #include "utils/lsyscache.h"
+#include "utils/relcache.h"
 #include "utils/snapmgr.h"
 #include "utils/typcache.h"
 #include "utils/age_vle.h"
@@ -159,9 +161,10 @@ static bool is_object_vertex(agtype_value *agtv);
 static bool is_object_edge(agtype_value *agtv);
 static bool is_array_path(agtype_value *agtv);
 /* graph entity retrieval */
-static Datum get_vertex(const char *graph, const char *vertex_label,
+static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                         int64 graphid);
-static char *get_label_name(const char *graph_name, graphid element_graphid);
+static char *get_label_name(const char *graph_name, graphid element_graphid,
+                            Oid *label_relation);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null);
 static Numeric get_numeric_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -5676,62 +5679,27 @@ Datum column_get_datum(TupleDesc tupdesc, HeapTuple tuple, int column,
  * node or edge. The function returns a pointer to a duplicated string that
  * needs to be freed when you are finished using it.
  */
-static char *get_label_name(const char *graph_name, graphid element_graphid)
+static char *get_label_name(const char *graph_name, graphid element_graphid,
+                            Oid *label_relation)
 {
-    ScanKeyData scan_keys[2];
-    Relation ag_label;
-    SysScanDesc scan_desc;
-    HeapTuple tuple;
-    TupleDesc tupdesc;
-    char *result = NULL;
-    bool column_is_null = false;
     Oid graph_oid = get_graph_oid(graph_name);
     int32 label_id = get_graphid_label_id(element_graphid);
+    label_cache_data *label_cache;
 
-    /* scankey for first match in ag_label, column 2, graphoid, BTEQ, OidEQ */
-    ScanKeyInit(&scan_keys[0], Anum_ag_label_graph, BTEqualStrategyNumber,
-                F_OIDEQ, ObjectIdGetDatum(graph_oid));
-    /* scankey for second match in ag_label, column 3, label id, BTEQ, Int4EQ */
-    ScanKeyInit(&scan_keys[1], Anum_ag_label_id, BTEqualStrategyNumber,
-                F_INT4EQ, Int32GetDatum(label_id));
-
-    ag_label = table_open(ag_label_relation_id(), ShareLock);
-    scan_desc = systable_beginscan(ag_label, ag_label_graph_oid_index_id(), true,
-                                   NULL, 2, scan_keys);
-
-    tuple = systable_getnext(scan_desc);
-    if (!HeapTupleIsValid(tuple))
+    label_cache = search_label_graph_oid_cache(graph_oid, label_id);
+    if (label_cache == NULL)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_SCHEMA),
                  errmsg("graphid %lu does not exist", element_graphid)));
     }
 
-    /* get the tupdesc - we don't need to release this one */
-    tupdesc = RelationGetDescr(ag_label);
+    *label_relation = label_cache->relation;
 
-    /* bail if the number of columns differs */
-    if (tupdesc->natts != Natts_ag_label)
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid number of attributes for ag_catalog.ag_label")));
-    }
-
-    /* get the label name */
-    result = NameStr(*DatumGetName(heap_getattr(tuple, Anum_ag_label_name,
-                                                tupdesc, &column_is_null)));
-    /* duplicate it */
-    result = pstrdup(result);
-
-    /* end the scan and close the relation */
-    systable_endscan(scan_desc);
-    table_close(ag_label, ShareLock);
-
-    return result;
+    return pstrdup(NameStr(label_cache->name));
 }
 
-static Datum get_vertex(const char *graph, const char *vertex_label,
+static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                         int64 graphid)
 {
     ScanKeyData scan_keys[1];
@@ -5741,15 +5709,10 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     TupleDesc tupdesc;
     Datum id, properties, result;
     AclResult aclresult;
-    TupleTableSlot *slot;
+    TupleTableSlot *slot = NULL;
     Oid index_oid;
     bool should_free_tuple = false;
 
-    /* get the specific graph namespace (schema) */
-    Oid graph_namespace_oid = get_namespace_oid(graph, false);
-    /* get the specific vertex label table (schema.vertex_label) */
-    Oid vertex_label_table_oid = get_relname_relid(vertex_label,
-                                                   graph_namespace_oid);
     /* get the active snapshot */
     Snapshot snapshot = GetActiveSnapshot();
 
@@ -5762,16 +5725,17 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     }
 
     /* open the relation (table) */
-    graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
+    graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
 
-    index_oid = find_usable_btree_index_for_attr(graph_vertex_label, 1);
+    index_oid = find_usable_btree_index_for_attr(graph_vertex_label,
+                                                 Anum_ag_label_vertex_table_id);
 
     if (OidIsValid(index_oid))
     {
         IndexScanDesc index_scan_desc;
         Relation index_rel;
 
-        index_rel = index_open(index_oid, ShareLock);
+        index_rel = index_open(index_oid, AccessShareLock);
         slot = table_slot_create(graph_vertex_label, NULL);
 
         /* initialize the scan key using GRAPHIDEQ for index */
@@ -5784,13 +5748,11 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
 
         if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
         {
-            tuple = ExecCopySlotHeapTuple(slot);
-            should_free_tuple = true;
+            tuple = ExecFetchSlotHeapTuple(slot, true, &should_free_tuple);
         }
 
         index_endscan(index_scan_desc);
-        index_close(index_rel, ShareLock);
-        ExecDropSingleTupleTableSlot(slot);
+        index_close(index_rel, AccessShareLock);
     }
     else
     {
@@ -5809,7 +5771,11 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         {
             table_endscan(scan_desc);
         }
-        table_close(graph_vertex_label, ShareLock);
+        if (slot != NULL)
+        {
+            ExecDropSingleTupleTableSlot(slot);
+        }
+        table_close(graph_vertex_label, AccessShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
                  errmsg("graphid %lu does not exist", graphid)));
@@ -5826,8 +5792,12 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         {
             heap_freetuple(tuple);
         }
+        if (slot != NULL)
+        {
+            ExecDropSingleTupleTableSlot(slot);
+        }
 
-        table_close(graph_vertex_label, ShareLock);
+        table_close(graph_vertex_label, AccessShareLock);
         ereport(ERROR,
                 (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
                  errmsg("access to vertex %lu denied by row-level security policy on \"%s\"",
@@ -5840,8 +5810,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     if (tupdesc->natts != 2)
         ereport(ERROR,
                 (errcode(ERRCODE_UNDEFINED_TABLE),
-                 errmsg("Invalid number of attributes for %s.%s", graph,
-                        vertex_label )));
+                 errmsg("Invalid number of attributes for %s", vertex_label)));
 
     /* get the id */
     id = column_get_datum(tupdesc, tuple, 0, "id", GRAPHIDOID, true);
@@ -5861,8 +5830,12 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     {
         heap_freetuple(tuple);
     }
+    if (slot != NULL)
+    {
+        ExecDropSingleTupleTableSlot(slot);
+    }
 
-    table_close(graph_vertex_label, ShareLock);
+    table_close(graph_vertex_label, AccessShareLock);
     /* return the vertex datum */
     return result;
 }
@@ -5876,6 +5849,7 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     agtype_value *agtv_value = NULL;
     char *graph_name = NULL;
     char *label_name = NULL;
+    Oid label_relation = InvalidOid;
     graphid start_id;
     Datum result;
 
@@ -5921,11 +5895,12 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     start_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, start_id);
+    label_name = get_label_name(graph_name, start_id, &label_relation);
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
+    Assert(OidIsValid(label_relation));
 
-    result = get_vertex(graph_name, label_name, start_id);
+    result = get_vertex(label_name, label_relation, start_id);
 
     return result;
 }
@@ -5939,6 +5914,7 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     agtype_value *agtv_value = NULL;
     char *graph_name = NULL;
     char *label_name = NULL;
+    Oid label_relation = InvalidOid;
     graphid end_id;
     Datum result;
 
@@ -5984,11 +5960,12 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     end_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, end_id);
+    label_name = get_label_name(graph_name, end_id, &label_relation);
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
+    Assert(OidIsValid(label_relation));
 
-    result = get_vertex(graph_name, label_name, end_id);
+    result = get_vertex(label_name, label_relation, end_id);
 
     return result;
 }
@@ -12228,9 +12205,33 @@ static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
  */
 Oid find_usable_btree_index_for_attr(Relation rel, AttrNumber attnum)
 {
-List *index_list = RelationGetIndexList(rel);
+    List *index_list;
     ListCell *ilc;
     Oid index_oid = InvalidOid;
+
+    if (attnum == 1)
+    {
+        Oid pk_index_oid = RelationGetPrimaryKeyIndex(rel, true);
+
+        if (OidIsValid(pk_index_oid))
+        {
+            Relation pk_index_rel = index_open(pk_index_oid, AccessShareLock);
+
+            if (pk_index_rel->rd_index->indisvalid &&
+                pk_index_rel->rd_index->indnkeyatts >= 1 &&
+                pk_index_rel->rd_index->indkey.values[0] == attnum &&
+                pk_index_rel->rd_rel->relam == BTREE_AM_OID &&
+                RelationGetIndexPredicate(pk_index_rel) == NIL)
+            {
+                index_close(pk_index_rel, AccessShareLock);
+                return pk_index_oid;
+            }
+
+            index_close(pk_index_rel, AccessShareLock);
+        }
+    }
+
+    index_list = RelationGetIndexList(rel);
 
     foreach(ilc, index_list)
     {
@@ -12238,7 +12239,7 @@ List *index_list = RelationGetIndexList(rel);
         Relation curr_idx_rel = index_open(curr_idx_oid, AccessShareLock);
 
         if (curr_idx_rel->rd_index->indisvalid &&
-            curr_idx_rel->rd_index->indnatts >= 1 &&
+            curr_idx_rel->rd_index->indnkeyatts >= 1 &&
             curr_idx_rel->rd_index->indkey.values[0] == attnum &&
             curr_idx_rel->rd_rel->relam == BTREE_AM_OID &&
             RelationGetIndexPredicate(curr_idx_rel) == NIL) 

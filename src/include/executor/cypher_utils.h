@@ -57,6 +57,7 @@ typedef struct cypher_create_custom_scan_state
     uint32 flags;
     TupleTableSlot *slot;
     Oid graph_oid;
+    HTAB *entity_exists_index_cache;
 } cypher_create_custom_scan_state;
 
 typedef struct cypher_set_custom_scan_state
@@ -64,6 +65,9 @@ typedef struct cypher_set_custom_scan_state
     CustomScanState css;
     CustomScan *cs;
     cypher_update_information *set_list;
+    HTAB *qual_cache;
+    HTAB *index_cache;
+    Oid graph_oid;
     int flags;
 } cypher_set_custom_scan_state;
 
@@ -92,6 +96,8 @@ typedef struct cypher_delete_custom_scan_state
      * and end_id column.
      */
     HTAB *vertex_id_htab;
+    HTAB *qual_cache;
+    HTAB *index_cache;
 } cypher_delete_custom_scan_state;
 
 typedef struct cypher_merge_custom_scan_state
@@ -108,11 +114,13 @@ typedef struct cypher_merge_custom_scan_state
     bool found_a_path;
     CommandId base_currentCommandId;
     struct created_path *created_paths_list;
+    int path_length;
     List *eager_tuples;
-    int eager_tuples_index;
+    ListCell *eager_tuples_cursor;
     bool eager_buffer_filled;
     cypher_update_information *on_match_set_info;   /* NULL if not specified */
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
+    HTAB *entity_exists_index_cache;
 } cypher_merge_custom_scan_state;
 
 /* Reusable SET logic callable from MERGE executor */
@@ -125,11 +133,13 @@ TupleTableSlot *populate_edge_tts(
     TupleTableSlot *elemTupleSlot, agtype_value *id, agtype_value *startid,
     agtype_value *endid, agtype_value *properties);
 
-ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
-                                             char *label_name);
+ResultRelInfo *create_entity_result_rel_info_by_oid(EState *estate, Oid relid);
 void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info);
 
+HTAB *create_entity_exists_index_cache(const char *name);
 bool entity_exists(EState *estate, Oid graph_oid, graphid id);
+bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
+                              HTAB *index_cache);
 HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
                               TupleTableSlot *elemTupleSlot,
                               EState *estate);
@@ -150,6 +160,7 @@ bool check_rls_for_tuple(Relation rel, HeapTuple tuple, CmdType cmd);
 typedef struct RLSCacheEntry
 {
     Oid relid;                      /* hash key */
+    bool rls_enabled;
     /* Security quals (USING policies) for UPDATE/DELETE */
     List *qualExprs;
     TupleTableSlot *slot;           /* slot for old tuple (RLS check) */

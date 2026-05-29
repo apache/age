@@ -25,12 +25,14 @@
 #include "optimizer/cypher_pathnode.h"
 #include "parser/cypher_analyze.h"
 #include "executor/cypher_utils.h"
+#include "optimizer/optimizer.h"
 #include "optimizer/subselect.h"
 #include "nodes/makefuncs.h"
 
 static Const *convert_sublink_to_subplan(PlannerInfo *root,
                                          List *custom_private);
 static bool expr_has_sublink(Node *node, void *context);
+static void apply_child_path_costs(CustomPath *cp, RelOptInfo *rel);
 
 const CustomPathMethods cypher_create_path_methods = {
     CREATE_PATH_NAME, plan_cypher_create_path, NULL};
@@ -60,9 +62,7 @@ CustomPath *create_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    cp->path.rows = 0; /* Basic CREATE will not return rows */
-    cp->path.startup_cost = 0; /* Basic CREATE will not fetch any pages */
-    cp->path.total_cost = 0;
+    apply_child_path_costs(cp, rel);
 
     /* No output ordering for basic CREATE */
     cp->path.pathkeys = NULL;
@@ -96,9 +96,7 @@ CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    cp->path.rows = 0; /* Basic SET will not return rows */
-    cp->path.startup_cost = 0; /* Basic SET will not fetch any pages */
-    cp->path.total_cost = 0;
+    apply_child_path_costs(cp, rel);
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
@@ -136,9 +134,7 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    cp->path.rows = 0;
-    cp->path.startup_cost = 0;
-    cp->path.total_cost = 0;
+    apply_child_path_costs(cp, rel);
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
@@ -179,9 +175,7 @@ CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
     cp->path.parallel_safe = false;
     cp->path.parallel_workers = 0;
 
-    cp->path.rows = 0;
-    cp->path.startup_cost = 0;
-    cp->path.total_cost = 0;
+    apply_child_path_costs(cp, rel);
 
     /* No output ordering for basic SET */
     cp->path.pathkeys = NULL;
@@ -267,4 +261,42 @@ static bool expr_has_sublink(Node *node, void *context)
     }
 
     return cypher_expr_tree_walker(node, expr_has_sublink, context);
+}
+
+static void apply_child_path_costs(CustomPath *cp, RelOptInfo *rel)
+{
+    Path *best_child = NULL;
+    ListCell *lc;
+
+    foreach (lc, rel->pathlist)
+    {
+        Path *child = (Path *)lfirst(lc);
+
+        if (best_child == NULL ||
+            child->total_cost < best_child->total_cost ||
+            (child->total_cost == best_child->total_cost &&
+             child->startup_cost < best_child->startup_cost))
+            best_child = child;
+    }
+
+    if (best_child == NULL)
+    {
+        cp->path.rows = 0;
+        cp->path.startup_cost = 0;
+        cp->path.total_cost = 0;
+        return;
+    }
+
+    /*
+     * The custom DML node still performs the graph-specific mutation, but its
+     * child paths are PostgreSQL-planned scans/subqueries.  Preserve their
+     * estimates so upstream planning can see row counts, index selectivity,
+     * and scan costs instead of treating every Cypher DML clause as free.
+     * Charge one cpu_tuple_cost per input row for the mutation coordination
+     * work that happens above the child plan.
+     */
+    cp->path.rows = best_child->rows;
+    cp->path.startup_cost = best_child->startup_cost;
+    cp->path.total_cost = best_child->total_cost +
+        cpu_tuple_cost * best_child->rows;
 }

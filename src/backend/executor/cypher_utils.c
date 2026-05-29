@@ -24,17 +24,16 @@
 
 #include "postgres.h"
 
+#include "access/tableam.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
-#include "parser/parse_relation.h"
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rowsecurity.h"
 #include "utils/acl.h"
 #include "utils/rls.h"
 
 #include "catalog/ag_label.h"
-#include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
 
@@ -54,66 +53,17 @@ static void sort_policies_by_name(List *policies);
 static int row_security_policy_cmp(const ListCell *a, const ListCell *b);
 static bool check_role_for_policy(ArrayType *policy_roles, Oid user_id);
 
-/*
- * Given the graph name and the label name, create a ResultRelInfo for the table
- * those two variables represent. Open the Indices too.
- */
-ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
-                                             char *label_name)
+ResultRelInfo *create_entity_result_rel_info_by_oid(EState *estate, Oid relid)
 {
-    RangeVar *rv = NULL;
-    Relation label_relation = NULL;
-    ResultRelInfo *resultRelInfo = NULL;
-    ParseState *pstate = NULL;
-    RangeTblEntry *rte = NULL;
-    int pii = 0;
+    Relation label_relation;
+    ResultRelInfo *resultRelInfo;
 
-    /* create a new parse state for this operation */
-    pstate = make_parsestate(NULL);
-
+    label_relation = table_open(relid, RowExclusiveLock);
     resultRelInfo = palloc(sizeof(ResultRelInfo));
 
-    if (strlen(label_name) == 0)
-    {
-        rv = makeRangeVar(graph_name, AG_DEFAULT_LABEL_VERTEX, -1);
-    }
-    else
-    {
-        rv = makeRangeVar(graph_name, label_name, -1);
-    }
-
-    label_relation = parserOpenTable(pstate, rv, RowExclusiveLock);
-
-    /*
-     * Get the rte to determine the correct perminfoindex value. Some rtes
-     * may have it set up, some created here (executor) may not.
-     *
-     * Note: The RTEPermissionInfo structure was added in PostgreSQL version 16.
-     *
-     * Note: We use the list_length because exec_rt_fetch starts at 1, not 0.
-     *       Doing this gives us the last rte in the es_range_table list, which
-     *       is the rte in question.
-     *
-     *       If the rte is created here and doesn't have a perminfoindex, we
-     *       need to pass on a 0. Otherwise, later on GetResultRTEPermissionInfo
-     *       will attempt to get the rte's RTEPermissionInfo data, which doesn't
-     *       exist.
-     *
-     * TODO: Ideally, we should consider creating the RTEPermissionInfo data,
-     *       but as this is just a read of the label relation, it is likely
-     *       unnecessary.
-     */
-    rte = exec_rt_fetch(list_length(estate->es_range_table), estate);
-    pii = (rte->perminfoindex == 0) ? 0 : list_length(estate->es_range_table);
-
-    /* initialize the resultRelInfo */
-    InitResultRelInfo(resultRelInfo, label_relation, pii, NULL,
+    InitResultRelInfo(resultRelInfo, label_relation, 0, NULL,
                       estate->es_instrument);
-
-    /* open the indices */
     ExecOpenIndices(resultRelInfo, false);
-
-    free_parsestate(pstate);
 
     return resultRelInfo;
 }
@@ -196,11 +146,30 @@ TupleTableSlot *populate_edge_tts(
 }
 
 
+HTAB *create_entity_exists_index_cache(const char *name)
+{
+    HASHCTL hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(IndexCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+
+    return hash_create(name, 8, &hashctl,
+                       HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+bool entity_exists(EState *estate, Oid graph_oid, graphid id)
+{
+    return entity_exists_with_cache(estate, graph_oid, id, NULL);
+}
+
 /*
  * Find out if the entity still exists. This is for 'implicit' deletion
  * of an entity.
  */
-bool entity_exists(EState *estate, Oid graph_oid, graphid id)
+bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
+                              HTAB *index_cache)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];
@@ -239,9 +208,25 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     estate->es_snapshot->curcid = Max(saved_curcid,
                                       GetCurrentCommandId(false));
 
-    rel = table_open(label->relation, RowExclusiveLock);
+    rel = table_open(label->relation, AccessShareLock);
 
-    index_oid = find_usable_btree_index_for_attr(rel, 1);
+    if (index_cache != NULL)
+    {
+        IndexCacheEntry *entry;
+        bool found;
+
+        entry = hash_search(index_cache, &label->relation, HASH_ENTER,
+                            &found);
+        if (!found)
+        {
+            entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
+        }
+        index_oid = entry->index_oid;
+    }
+    else
+    {
+        index_oid = find_usable_btree_index_for_attr(rel, 1);
+    }
 
     if (OidIsValid(index_oid))
     {
@@ -281,7 +266,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
         table_endscan(scan_desc);
     }
 
-    table_close(rel, RowExclusiveLock);
+    table_close(rel, AccessShareLock);
 
     /* Restore the original curcid */
     estate->es_snapshot->curcid = saved_curcid;

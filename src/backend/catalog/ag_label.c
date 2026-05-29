@@ -20,6 +20,8 @@
 #include "postgres.h"
 
 #include "access/genam.h"
+#include "access/heapam.h"
+#include "access/tableam.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "executor/executor.h"
@@ -30,7 +32,6 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
-#include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
 
 /*
@@ -283,130 +284,73 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
 }
 
 /*
- * Retrieves a list of all the names of a graph.
+ * Retrieves a list of all the edge labels of a graph.
  *
  * XXX: We may want to use the cache system for this function,
  * however the cache system currently requires us to know the
  * name of the label we want.
  */
-List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
+List *get_all_edge_labels_per_graph(Snapshot snapshot, Oid graph_oid)
 {
     List *labels = NIL;
-    ScanKeyData scan_keys[2];
+    ScanKeyData scan_key;
     Relation ag_label;
-    TableScanDesc scan_desc;
+    SysScanDesc scan_desc;
     HeapTuple tuple;
-    TupleTableSlot *slot;
-    ResultRelInfo *resultRelInfo;
-    Oid index_oid;
+    TupleDesc tupdesc;
 
     /* setup the table to be scanned */
     ag_label = table_open(ag_label_relation_id(), AccessShareLock);
+    tupdesc = RelationGetDescr(ag_label);
 
-    index_oid = find_usable_btree_index_for_attr(ag_label, Anum_ag_label_graph);
+    ScanKeyInit(&scan_key, Anum_ag_label_graph, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
-    resultRelInfo = create_entity_result_rel_info(estate, "ag_catalog",
-                                                  "ag_label");
+    scan_desc = systable_beginscan(ag_label, ag_label_graph_oid_index_id(),
+                                   true, snapshot, 1, &scan_key);
 
-    if (OidIsValid(index_oid))
+    while (HeapTupleIsValid(tuple = systable_getnext(scan_desc)))
     {
-        Relation index_rel;
-        IndexScanDesc index_scan_desc;
+        ag_label_info *label_info;
+        Name label;
+        bool is_null;
+        Datum datum;
+        Oid label_relation;
 
-        slot = ExecInitExtraTupleSlot(
-            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-            &TTSOpsBufferHeapTuple);
-
-        index_rel = index_open(index_oid, AccessShareLock);
-
-        /* 
-         * Use 1 as the attribute number because 'graph' is the 1st column 
-         * in the ag_label_graph_oid_index
-         */
-        ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
-                    F_OIDEQ, ObjectIdGetDatum(graph_oid));
-
-        index_scan_desc = index_beginscan(ag_label, index_rel, estate->es_snapshot, NULL, 1, 0);
-        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
-
-        while (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
+        if (is_null || DatumGetChar(datum) != LABEL_TYPE_EDGE)
         {
-            Name label;
-            Name lval;
-            bool isNull;
-            Datum datum;
-            char kind;
-
-            /*There isn't field kind in index. So we should check it by hands*/
-            datum = slot_getattr(slot, Anum_ag_label_kind, &isNull);
-            if (isNull)
-            {
-                continue;
-            }
-
-            kind = DatumGetChar(datum);
-            
-            if (kind != LABEL_TYPE_EDGE)
-            {
-                continue;
-            }
-
-            datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
-            if (!isNull)
-            {
-                label = DatumGetName(datum);
-                lval = (Name) palloc(NAMEDATALEN);
-                namestrcpy(lval, NameStr(*label));
-                labels = lappend(labels, lval);
-            }
+            continue;
         }
 
-        index_endscan(index_scan_desc);
-        index_close(index_rel, AccessShareLock);
-    } 
-    else
-    {
-        slot = ExecInitExtraTupleSlot(
-            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-            &TTSOpsHeapTuple);
-
-        /* setup scan keys to get all edges for the given graph oid */
-        ScanKeyInit(&scan_keys[1], Anum_ag_label_graph, BTEqualStrategyNumber,
-                  F_OIDEQ, ObjectIdGetDatum(graph_oid));
-        ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
-                  F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
-
-        scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
-
-        /* scan through the results and get all the label names. */
-        while(true)
+        datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
+        if (is_null)
         {
-            Name label;
-            Name lval;
-            bool isNull;
-            Datum datum;
-
-            tuple = heap_getnext(scan_desc, ForwardScanDirection);
-
-            /* no more labels to process */
-            if (!HeapTupleIsValid(tuple))
-                break;
-
-            ExecStoreHeapTuple(tuple, slot, false);
-
-            datum = slot_getattr(slot, Anum_ag_label_name, &isNull);
-            label = DatumGetName(datum);
-
-            lval = (Name) palloc(NAMEDATALEN);
-            namestrcpy(lval, NameStr(*label));
-            labels = lappend(labels, lval);
+            continue;
         }
 
-        table_endscan(scan_desc);
+        label = DatumGetName(datum);
+
+        datum = heap_getattr(tuple, Anum_ag_label_relation, tupdesc, &is_null);
+        if (is_null)
+        {
+            continue;
+        }
+
+        label_relation = DatumGetObjectId(datum);
+        if (!OidIsValid(label_relation))
+        {
+            continue;
+        }
+
+        label_info = palloc(sizeof(ag_label_info));
+        label_info->name = pstrdup(NameStr(*label));
+        label_info->relation = label_relation;
+        labels = lappend(labels, label_info);
     }
 
-    destroy_entity_result_rel_info(resultRelInfo);
-    table_close(resultRelInfo->ri_RelationDesc, AccessShareLock);
+    systable_endscan(scan_desc);
+    table_close(ag_label, AccessShareLock);
 
     return labels;
 }

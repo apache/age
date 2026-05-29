@@ -25,6 +25,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/tableam.h"
 #include "catalog/pg_aggregate.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
@@ -404,6 +405,24 @@ add_rte_permissions(ParseState *pstate, Oid relid, AclMode permissions)
 {
     add_rte_permissions_recurse(pstate->p_rtable, pstate->p_rteperminfos,
                                 relid, permissions);
+}
+
+static Relation
+open_label_relation(cypher_parsestate *cpstate, const char *label_name,
+                    int location)
+{
+    Oid relid;
+
+    relid = get_label_relation(label_name, cpstate->graph_oid);
+    if (!OidIsValid(relid))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_TABLE),
+                 errmsg("label \"%s\" does not exist", label_name),
+                 parser_errposition(&cpstate->pstate, location)));
+    }
+
+    return table_open(relid, RowExclusiveLock);
 }
 
 /*
@@ -6512,8 +6531,7 @@ transform_create_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     /* lock the relation of the label */
-    rv = makeRangeVar(cpstate->graph_name, edge->label, -1);
-    label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+    label_relation = open_label_relation(cpstate, edge->label, edge->location);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);
@@ -6790,8 +6808,7 @@ transform_create_cypher_new_node(cypher_parsestate *cpstate,
 
     rel->flags = CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, node->label, -1);
-    label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+    label_relation = open_label_relation(cpstate, node->label, node->location);
 
     /* Store the relid */
     rel->relid = RelationGetRelid(label_relation);
@@ -8052,8 +8069,7 @@ transform_merge_cypher_edge(cypher_parsestate *cpstate, List **target_list,
     }
 
     /* lock the relation of the label */
-    rv = makeRangeVar(cpstate->graph_name, edge->label, -1);
-    label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+    label_relation = open_label_relation(cpstate, edge->label, edge->location);
 
     /*
      * TODO
@@ -8189,8 +8205,7 @@ transform_merge_cypher_node(cypher_parsestate *cpstate, List **target_list,
 
     rel->flags |= CYPHER_TARGET_NODE_FLAG_INSERT;
 
-    rv = makeRangeVar(cpstate->graph_name, node->label, -1);
-    label_relation = parserOpenTable(&cpstate->pstate, rv, RowExclusiveLock);
+    label_relation = open_label_relation(cpstate, node->label, node->location);
 
     /*
      * TODO

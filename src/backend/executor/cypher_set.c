@@ -27,6 +27,7 @@
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
 #include "utils/age_global_graph.h"
+#include "utils/ag_cache.h"
 #include "catalog/ag_graph.h"
 
 static void begin_cypher_set(CustomScanState *node, EState *estate,
@@ -39,6 +40,9 @@ static void process_update_list(CustomScanState *node);
 static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                      TupleTableSlot *elemTupleSlot,
                                      EState *estate, HeapTuple old_tuple);
+static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
+                               const char *qual_name,
+                               const char *index_name);
 
 const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       begin_cypher_set,
@@ -62,6 +66,14 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     Plan *subplan;
 
     Assert(list_length(css->cs->custom_plans) == 1);
+    css->graph_oid = get_graph_oid(css->set_list->graph_name);
+    if (!OidIsValid(css->graph_oid))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                 errmsg("graph \"%s\" does not exist",
+                        css->set_list->graph_name)));
+    }
 
     subplan = linitial(css->cs->custom_plans);
     node->ss.ps.lefttree = ExecInitNode(subplan, estate, eflags);
@@ -91,7 +103,32 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
         estate->es_output_cid = estate->es_snapshot->curcid;
     }
 
+    init_update_caches(&css->qual_cache, &css->index_cache,
+                       "set_qual_cache", "set_index_cache");
+
     Increment_Estate_CommandId(estate);
+}
+
+static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
+                               const char *qual_name,
+                               const char *index_name)
+{
+    HASHCTL hashctl;
+    HASHCTL idx_hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(RLSCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+    *qual_cache = hash_create(qual_name, 8, &hashctl,
+                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
+    idx_hashctl.keysize = sizeof(Oid);
+    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
+    idx_hashctl.hcxt = CurrentMemoryContext;
+    *index_cache = hash_create(index_name, 8, &idx_hashctl,
+                               HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
 static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
@@ -388,27 +425,36 @@ void apply_update_list(CustomScanState *node,
     int *luindex = NULL;
     int lidx = 0;
     HTAB *qual_cache = NULL;
-    HASHCTL hashctl;
     HTAB *index_cache = NULL;
-    HASHCTL idx_hashctl;
+    bool local_caches = false;
+    Oid graph_oid;
+
+    if (node->methods == &cypher_set_exec_methods)
+    {
+        cypher_set_custom_scan_state *css =
+            (cypher_set_custom_scan_state *)node;
+
+        qual_cache = css->qual_cache;
+        index_cache = css->index_cache;
+        graph_oid = css->graph_oid;
+    }
+    else
+    {
+        init_update_caches(&qual_cache, &index_cache,
+                           "update_qual_cache", "update_index_cache");
+        local_caches = true;
+        graph_oid = get_graph_oid(set_info->graph_name);
+        if (!OidIsValid(graph_oid))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                     errmsg("graph \"%s\" does not exist",
+                            set_info->graph_name)));
+        }
+    }
 
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
-
-    /* Hash table for caching compiled security quals per label */
-    MemSet(&hashctl, 0, sizeof(hashctl));
-    hashctl.keysize = sizeof(Oid);
-    hashctl.entrysize = sizeof(RLSCacheEntry);
-    hashctl.hcxt = CurrentMemoryContext;
-    qual_cache = hash_create("update_qual_cache", 8, &hashctl,
-                             HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-
-    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
-    idx_hashctl.keysize = sizeof(Oid);
-    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
-    idx_hashctl.hcxt = CurrentMemoryContext;
-    index_cache = hash_create("update_index_cache", 8, &idx_hashctl,
-                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
     /*
      * Iterate through the SET items list and store the loop index of each
@@ -441,10 +487,12 @@ void apply_update_list(CustomScanState *node,
         agtype_value *original_properties;
         agtype_value *id;
         agtype_value *label;
+        agtype_value *startid = NULL;
+        agtype_value *endid = NULL;
         agtype *original_entity;
         agtype *new_property_value = NULL;
-        TupleTableSlot *slot;
-        ResultRelInfo *resultRelInfo;
+        TupleTableSlot *slot = NULL;
+        ResultRelInfo *resultRelInfo = NULL;
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc;
         bool remove_property;
@@ -455,10 +503,12 @@ void apply_update_list(CustomScanState *node,
         char *clause_name = set_info->clause_name;
         int cid;
         Oid index_oid = InvalidOid;
-        Relation rel;
-        Oid relid;
+        Relation rel = NULL;
+        Oid relid = InvalidOid;
         IndexCacheEntry *idx_entry;
         bool found_idx_entry;
+        RLSCacheEntry *rls_entry = NULL;
+        bool found_rls_entry;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -587,81 +637,28 @@ void apply_update_list(CustomScanState *node,
             }
         }
 
-        resultRelInfo = create_entity_result_rel_info(
-            estate, set_info->graph_name, label_name);
-
-        rel = resultRelInfo->ri_RelationDesc;
-        relid = RelationGetRelid(rel);
-
-        idx_entry = hash_search(index_cache, &relid, HASH_ENTER, &found_idx_entry);
-        if (!found_idx_entry)
-        {
-            /*  Check if there is a valid  index on the 'id' column */
-            idx_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
-        }
-        index_oid = idx_entry->index_oid;
-
-        slot = ExecInitExtraTupleSlot(
-            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-            &TTSOpsHeapTuple);
-
-        /* Setup RLS policies if RLS is enabled */
-        if (check_enable_rls(resultRelInfo->ri_RelationDesc->rd_id,
-                             InvalidOid, true) == RLS_ENABLED)
-        {
-            RLSCacheEntry *entry;
-            bool found;
-
-            /* Get cached RLS state for this label, or set it up */
-            entry = hash_search(qual_cache, &relid, HASH_ENTER, &found);
-            if (!found)
-            {
-                /* Setup WITH CHECK policies */
-                setup_wcos(resultRelInfo, estate, node, CMD_UPDATE);
-                entry->withCheckOptions = resultRelInfo->ri_WithCheckOptions;
-                entry->withCheckOptionExprs = resultRelInfo->ri_WithCheckOptionExprs;
-
-                /* Setup security quals */
-                entry->qualExprs = setup_security_quals(resultRelInfo, estate,
-                                                        node, CMD_UPDATE);
-                entry->slot = ExecInitExtraTupleSlot(
-                    estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-                    &TTSOpsHeapTuple);
-            }
-            else
-            {
-                /* Use cached WCOs */
-                resultRelInfo->ri_WithCheckOptions = entry->withCheckOptions;
-                resultRelInfo->ri_WithCheckOptionExprs = entry->withCheckOptionExprs;
-            }
-        }
-
         /*
          *  Now that we have the updated properties, create a either a vertex or
-         *  edge Datum for the in-memory update, and setup the tupleTableSlot
-         *  for the on-disc update.
+         *  edge Datum for the in-memory update. The tupleTableSlot and relation
+         *  metadata for the on-disc update are only needed for the last update
+         *  targeting this entity.
          */
         if (original_entity_value->type == AGTV_VERTEX)
         {
             new_entity = make_vertex(GRAPHID_GET_DATUM(id->val.int_value),
                                      CStringGetDatum(label_name),
                                      AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
-
-            slot = populate_vertex_tts(slot, id, altered_properties);
         }
         else if (original_entity_value->type == AGTV_EDGE)
         {
-            agtype_value *startid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "start_id");
-            agtype_value *endid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "end_id");
+            startid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "start_id");
+            endid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "end_id");
 
             new_entity = make_edge(GRAPHID_GET_DATUM(id->val.int_value),
                                    GRAPHID_GET_DATUM(startid->val.int_value),
                                    GRAPHID_GET_DATUM(endid->val.int_value),
                                    CStringGetDatum(label_name),
                                    AGTYPE_P_GET_DATUM(agtype_value_to_agtype(altered_properties)));
-
-            slot = populate_edge_tts(slot, id, startid, endid,
-                                     altered_properties);
         }
         else
         {
@@ -690,6 +687,81 @@ void apply_update_list(CustomScanState *node,
 
         if (luindex[update_item->entity_position - 1] == lidx)
         {
+            label_cache_data *label_cache;
+
+            label_cache = search_label_graph_oid_cache(
+                graph_oid, GET_LABEL_ID(id->val.int_value));
+            if (label_cache == NULL)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_UNDEFINED_TABLE),
+                         errmsg("label \"%s\" does not exist", label_name)));
+            }
+
+            resultRelInfo = create_entity_result_rel_info_by_oid(
+                estate, label_cache->relation);
+
+            rel = resultRelInfo->ri_RelationDesc;
+            relid = RelationGetRelid(rel);
+
+            idx_entry = hash_search(index_cache, &relid, HASH_ENTER,
+                                    &found_idx_entry);
+            if (!found_idx_entry)
+            {
+                /* Check if there is a valid index on the 'id' column. */
+                idx_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
+            }
+            index_oid = idx_entry->index_oid;
+
+            slot = ExecInitExtraTupleSlot(
+                estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+                &TTSOpsHeapTuple);
+
+            rls_entry = hash_search(qual_cache, &relid, HASH_ENTER,
+                                    &found_rls_entry);
+            if (!found_rls_entry)
+            {
+                rls_entry->rls_enabled =
+                    check_enable_rls(resultRelInfo->ri_RelationDesc->rd_id,
+                                     InvalidOid, true) == RLS_ENABLED;
+
+                if (rls_entry->rls_enabled)
+                {
+                    /* Setup WITH CHECK policies. */
+                    setup_wcos(resultRelInfo, estate, node, CMD_UPDATE);
+                    rls_entry->withCheckOptions =
+                        resultRelInfo->ri_WithCheckOptions;
+                    rls_entry->withCheckOptionExprs =
+                        resultRelInfo->ri_WithCheckOptionExprs;
+
+                    /* Setup security quals. */
+                    rls_entry->qualExprs = setup_security_quals(resultRelInfo,
+                                                                estate, node,
+                                                                CMD_UPDATE);
+                    rls_entry->slot = ExecInitExtraTupleSlot(
+                        estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+                        &TTSOpsHeapTuple);
+                }
+            }
+            else if (rls_entry->rls_enabled)
+            {
+                /* Use cached WCOs. */
+                resultRelInfo->ri_WithCheckOptions =
+                    rls_entry->withCheckOptions;
+                resultRelInfo->ri_WithCheckOptionExprs =
+                    rls_entry->withCheckOptionExprs;
+            }
+
+            if (original_entity_value->type == AGTV_VERTEX)
+            {
+                slot = populate_vertex_tts(slot, id, altered_properties);
+            }
+            else
+            {
+                slot = populate_edge_tts(slot, id, startid, endid,
+                                         altered_properties);
+            }
+
             if (OidIsValid(index_oid))
              {
                 Relation index_rel;
@@ -722,23 +794,12 @@ void apply_update_list(CustomScanState *node,
                         HeapTuple original_tuple = heap_tuple;
                         
                         /* Check RLS security quals (USING policy) before update */
-                        if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                        if (rls_entry->rls_enabled)
                         {
-                            RLSCacheEntry *entry;
-
-                            /* Entry was already created earlier when setting up WCOs */
-                            entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
-                            if (!entry)
-                            {
-                                ereport(ERROR,
-                                        (errcode(ERRCODE_INTERNAL_ERROR),
-                                        errmsg("missing RLS cache entry for relation %u",
-                                                relid)));
-                            }
-
-                            ExecStoreHeapTuple(heap_tuple, entry->slot, false);
-                            should_update = check_security_quals(entry->qualExprs,
-                                                                entry->slot,
+                            ExecStoreHeapTuple(heap_tuple, rls_entry->slot,
+                                               false);
+                            should_update = check_security_quals(rls_entry->qualExprs,
+                                                                rls_entry->slot,
                                                                 econtext);
                         }
 
@@ -786,23 +847,11 @@ void apply_update_list(CustomScanState *node,
                     bool should_update = true;
 
                     /* Check RLS security quals (USING policy) before update */
-                    if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+                    if (rls_entry->rls_enabled)
                     {
-                        RLSCacheEntry *entry;
-
-                        /* Entry was already created earlier when setting up WCOs */
-                        entry = hash_search(qual_cache, &relid, HASH_FIND, NULL);
-                        if (!entry)
-                        {
-                            ereport(ERROR,
-                                    (errcode(ERRCODE_INTERNAL_ERROR),
-                                    errmsg("missing RLS cache entry for relation %u",
-                                            relid)));
-                        }
-
-                        ExecStoreHeapTuple(heap_tuple, entry->slot, false);
-                        should_update = check_security_quals(entry->qualExprs,
-                                                            entry->slot,
+                        ExecStoreHeapTuple(heap_tuple, rls_entry->slot, false);
+                        should_update = check_security_quals(rls_entry->qualExprs,
+                                                            rls_entry->slot,
                                                             econtext);
                     }
 
@@ -816,20 +865,23 @@ void apply_update_list(CustomScanState *node,
                 /* close the ScanDescription */
                 table_endscan(scan_desc);
             }
+
+            /* close relation */
+            ExecCloseIndices(resultRelInfo);
+            table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
         }
 
         estate->es_snapshot->curcid = cid;
-        /* close relation */        
-        ExecCloseIndices(resultRelInfo);
-        table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
 
         /* increment loop index */
         lidx++;
     }
 
-    /* Clean up the cache */
-    hash_destroy(qual_cache);
-    hash_destroy(index_cache);
+    if (local_caches)
+    {
+        hash_destroy(qual_cache);
+        hash_destroy(index_cache);
+    }
 
     /* free our lookup array */
     pfree_if_not_null(luindex);
@@ -875,7 +927,7 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
         CommandCounterIncrement();
 
         /* invalidate VLE cache — graph was mutated */
-        increment_graph_version(get_graph_oid(css->set_list->graph_name));
+        increment_graph_version(css->graph_oid);
 
         return NULL;
     }
@@ -886,7 +938,7 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
     CommandCounterIncrement();
 
     /* invalidate VLE cache — graph was mutated */
-    increment_graph_version(get_graph_oid(css->set_list->graph_name));
+    increment_graph_version(css->graph_oid);
 
     estate->es_result_relations = saved_resultRels;
 
@@ -897,6 +949,20 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 
 static void end_cypher_set(CustomScanState *node)
 {
+    cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
+
+    if (css->qual_cache != NULL)
+    {
+        hash_destroy(css->qual_cache);
+        css->qual_cache = NULL;
+    }
+
+    if (css->index_cache != NULL)
+    {
+        hash_destroy(css->index_cache);
+        css->index_cache = NULL;
+    }
+
     ExecEndNode(node->ss.ps.lefttree);
 }
 
