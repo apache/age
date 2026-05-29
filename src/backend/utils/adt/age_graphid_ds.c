@@ -100,7 +100,7 @@ ListGraphId *append_graphid(ListGraphId *container, graphid id)
     GraphIdNode *new_node = NULL;
 
     /* create the new link */
-    new_node = palloc0(sizeof(GraphIdNode));
+    new_node = palloc(sizeof(GraphIdNode));
     new_node->id = id;
     new_node->next = NULL;
 
@@ -110,7 +110,7 @@ ListGraphId *append_graphid(ListGraphId *container, graphid id)
      */
     if (container == NULL)
     {
-        container = palloc0(sizeof(ListGraphId));
+        container = palloc(sizeof(ListGraphId));
         container->head = new_node;
         container->tail = new_node;
         container->size = 1;
@@ -160,7 +160,7 @@ ListGraphId *new_graphid_stack(void)
     ListGraphId *stack = NULL;
 
     /* allocate the container for the stack */
-    stack = palloc0(sizeof(ListGraphId));
+    stack = palloc(sizeof(ListGraphId));
 
     /* set it to its initial values */
     stack->head = NULL;
@@ -214,7 +214,7 @@ void push_graphid_stack(ListGraphId *stack, graphid id)
     }
 
     /* create the new element */
-    new_node = palloc0(sizeof(GraphIdNode));
+    new_node = palloc(sizeof(GraphIdNode));
     new_node->id = id;
 
     /* insert (push) the new element on the top */

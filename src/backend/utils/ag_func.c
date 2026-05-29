@@ -51,6 +51,7 @@ typedef struct ag_func_cache_entry
 } ag_func_cache_entry;
 
 static HTAB *ag_func_oid_cache = NULL;
+static HTAB *pg_func_oid_cache = NULL;
 static bool ag_func_oid_callback_registered = false;
 
 static void initialize_ag_func_oid_cache(void);
@@ -63,7 +64,6 @@ bool is_oid_ag_func(Oid func_oid, const char *func_name)
     HeapTuple proctup;
     Form_pg_proc proc;
     Oid nspid;
-    const char *nspname;
 
     Assert(OidIsValid(func_oid));
     Assert(func_name);
@@ -80,9 +80,7 @@ bool is_oid_ag_func(Oid func_oid, const char *func_name)
     nspid = proc->pronamespace;
     ReleaseSysCache(proctup);
 
-    nspname = get_namespace_name_or_temp(nspid);
-    Assert(nspname);
-    return (strcmp(nspname, "ag_catalog") == 0);
+    return nspid == ag_catalog_namespace_id();
 }
 
 /* gets the function OID that matches with func_name and argument types */
@@ -161,6 +159,8 @@ static void initialize_ag_func_oid_cache(void)
 
     ag_func_oid_cache = hash_create("ag function oid cache", 32, &hash_ctl,
                                     HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+    pg_func_oid_cache = hash_create("pg function oid cache", 16, &hash_ctl,
+                                    HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
     if (!ag_func_oid_callback_registered)
     {
@@ -181,25 +181,44 @@ static void invalidate_ag_func_oid_cache(Datum arg, int cache_id,
         hash_destroy(ag_func_oid_cache);
         ag_func_oid_cache = NULL;
     }
+
+    if (pg_func_oid_cache != NULL)
+    {
+        hash_destroy(pg_func_oid_cache);
+        pg_func_oid_cache = NULL;
+    }
 }
 
 Oid get_pg_func_oid(const char *func_name, const int nargs, ...)
 {
-    Oid oids[FUNC_MAX_ARGS];
+    ag_func_cache_key key;
+    ag_func_cache_entry *entry;
     va_list ap;
     int i;
     oidvector *arg_types;
     Oid func_oid;
+    bool found;
 
     Assert(func_name);
     Assert(nargs >= 0 && nargs <= FUNC_MAX_ARGS);
 
+    initialize_ag_func_oid_cache();
+    MemSet(&key, 0, sizeof(key));
+    namestrcpy(&key.name, func_name);
+    key.nargs = nargs;
+
     va_start(ap, nargs);
     for (i = 0; i < nargs; i++)
-        oids[i] = va_arg(ap, Oid);
+        key.args[i] = va_arg(ap, Oid);
     va_end(ap);
 
-    arg_types = buildoidvector(oids, nargs);
+    entry = hash_search(pg_func_oid_cache, &key, HASH_FIND, NULL);
+    if (entry != NULL)
+    {
+        return entry->func_oid;
+    }
+
+    arg_types = buildoidvector(key.args, nargs);
 
     func_oid = GetSysCacheOid3(PROCNAMEARGSNSP, Anum_pg_proc_oid,
                                CStringGetDatum(func_name),
@@ -211,5 +230,16 @@ Oid get_pg_func_oid(const char *func_name, const int nargs, ...)
                         errdetail_internal("%s(%d)", func_name, nargs)));
     }
 
-    return func_oid;
+    if (pg_func_oid_cache == NULL)
+    {
+        initialize_ag_func_oid_cache();
+    }
+
+    entry = hash_search(pg_func_oid_cache, &key, HASH_ENTER, &found);
+    if (!found)
+    {
+        entry->func_oid = func_oid;
+    }
+
+    return entry->func_oid;
 }

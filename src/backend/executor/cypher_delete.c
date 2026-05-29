@@ -109,8 +109,8 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
         sizeof(graphid); /* entries are not used, but entrysize must >= keysize */
     hashctl.hash = tag_hash;
     css->vertex_id_htab = hash_create(DELETE_VERTEX_HTAB_NAME,
-                                      DELETE_VERTEX_HTAB_SIZE, &hashctl,
-                                      HASH_ELEM | HASH_FUNCTION);
+                                      DELETE_VERTEX_HTAB_INITIAL_SIZE,
+                                      &hashctl, HASH_ELEM | HASH_FUNCTION);
     init_delete_caches(css);
 
     /*
@@ -337,6 +337,7 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     TM_Result lock_result;
     TM_Result delete_result;
     Buffer buffer;
+    CommandId current_cid;
 
     /* Find the physical tuple, this variable is coming from */
     saved_resultRels = estate->es_result_relations;
@@ -395,8 +396,9 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
         CommandCounterIncrement();
 
         /* Update command id in estate */
-        estate->es_snapshot->curcid = GetCurrentCommandId(false);
-        estate->es_output_cid = GetCurrentCommandId(false);
+        current_cid = GetCurrentCommandId(false);
+        estate->es_snapshot->curcid = current_cid;
+        estate->es_output_cid = current_cid;
     }
     else if (lock_result != TM_Invisible && lock_result != TM_SelfModified)
     {
@@ -545,8 +547,12 @@ static void process_delete_list(CustomScanState *node)
         /*
          * Setup the scan description, with the correct snapshot and scan keys.
          */
-        estate->es_snapshot->curcid = GetCurrentCommandId(false);
-        estate->es_output_cid = GetCurrentCommandId(false);
+        {
+            CommandId current_cid = GetCurrentCommandId(false);
+
+            estate->es_snapshot->curcid = current_cid;
+            estate->es_output_cid = current_cid;
+        }
 
         if (OidIsValid(index_oid))
         {
@@ -836,8 +842,12 @@ static void check_for_connected_edges(CustomScanState *node)
                                                    label_info->relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
-        estate->es_snapshot->curcid = GetCurrentCommandId(false);
-        estate->es_output_cid = GetCurrentCommandId(false);
+        {
+            CommandId current_cid = GetCurrentCommandId(false);
+
+            estate->es_snapshot->curcid = current_cid;
+            estate->es_output_cid = current_cid;
+        }
 
         idx_entry = hash_search(css->index_cache, &relid, HASH_ENTER,
                                 &found_idx_entry);

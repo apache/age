@@ -386,7 +386,7 @@ graph_cache_data *search_graph_name_cache_cached(const char *name)
     if (cached_graphs[slot] != NULL)
     {
         namestrcpy(&cached_names[slot], name);
-        cached_generations[slot] = get_graph_cache_generation();
+        cached_generations[slot] = current_generation;
     }
 
     return cached_graphs[slot];
@@ -433,7 +433,7 @@ graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
     if (cached_graphs[slot] != NULL)
     {
         cached_namespaces[slot] = namespace;
-        cached_generations[slot] = get_graph_cache_generation();
+        cached_generations[slot] = current_generation;
     }
 
     return cached_graphs[slot];
@@ -1025,7 +1025,7 @@ label_cache_data *search_label_graph_oid_cache_cached(Oid graph, int32 id)
 
         cached_graphs[slot] = graph;
         cached_ids[slot] = id;
-        cached_generations[slot] = get_label_cache_generation();
+        cached_generations[slot] = current_generation;
         cached_labels[slot] = label;
     }
 
@@ -1080,7 +1080,7 @@ label_cache_data *search_label_name_graph_cache_cached(const char *name,
 
         namestrcpy(&cached_names[slot], name);
         cached_graphs[slot] = graph;
-        cached_generations[slot] = get_label_cache_generation();
+        cached_generations[slot] = current_generation;
         cached_labels[slot] = label;
     }
 
@@ -1304,7 +1304,7 @@ label_cache_data *search_label_relation_cache_cached(Oid relation)
         }
 
         cached_relations[slot] = relation;
-        cached_generations[slot] = get_label_cache_generation();
+        cached_generations[slot] = current_generation;
         cached_labels[slot] = label;
     }
 
@@ -1430,8 +1430,7 @@ Oid get_label_seq_relation_cached(const label_cache_data *label_cache,
 
     namestrcpy(&label_seq_relation_cached_names[slot], seq_name);
     label_seq_relation_cached_namespaces[slot] = namespace;
-    label_seq_relation_cached_generations[slot] =
-        label_seq_relation_cache_generation;
+    label_seq_relation_cached_generations[slot] = current_generation;
     label_seq_relation_cached_relations[slot] = seq_relid;
 
     return seq_relid;

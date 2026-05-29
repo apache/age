@@ -151,6 +151,7 @@ static Node *wrap_text_output_to_agtype(cypher_parsestate *cpstate,
                                         FuncExpr *fexpr);
 static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found);
 static char *get_mapped_extension(Oid func_oid);
+static bool function_belongs_to_extension(Oid func_oid, const char *extension);
 static bool is_extension_external(char *extension);
 static char *construct_age_function_name(char *funcname);
 static void initialize_function_caches(void);
@@ -631,6 +632,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
     List *rvars;
     List *rnonvars;
     bool useOr;
+    bool is_not_in;
     ListCell *l;
 
     if (!is_ag_node(a->rexpr, cypher_list))
@@ -660,6 +662,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
     Assert(is_ag_node(a->rexpr, cypher_list));
 
     rexpr = (cypher_list *)a->rexpr;
+    is_not_in = (strcmp(strVal(linitial(a->name)), "<>") == 0);
 
     /*
      * Handle empty list case: x IN [] is always false, x NOT IN [] is always true.
@@ -672,7 +675,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
         Const *const_result;
 
         /* If operator is <> (NOT IN), result is true; otherwise (IN) result is false */
-        if (strcmp(strVal(linitial(a->name)), "<>") == 0)
+        if (is_not_in)
         {
             bool_value = BoolGetDatum(true);
         }
@@ -688,14 +691,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
     }
 
     /* If the operator is <>, combine with AND not OR. */
-    if (strcmp(strVal(linitial(a->name)), "<>") == 0)
-    {
-        useOr = false;
-    }
-    else
-    {
-        useOr = true;
-    }
+    useOr = !is_not_in;
 
     lexpr = transform_cypher_expr_recurse(cpstate, a->lexpr);
 
@@ -1900,7 +1896,6 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     /* iterate through them and verify that they are in the search path */
     for (i = 0; i < catlist->n_members; i++)
     {
-        ListCell *nsp;
         HeapTuple proctup = &catlist->members[i]->tuple;
         procform = (Form_pg_proc) GETSTRUCT(proctup);
 
@@ -1913,16 +1908,10 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
             nargs == procform->pronargs &&
             fn->func_variadic == procform->provariadic)
         {
-            foreach(nsp, asp)
+            if (list_member_oid(asp, procform->pronamespace) &&
+                !isTempNamespace(procform->pronamespace))
             {
-                Oid oid = lfirst_oid(nsp);
-
-                if (procform->pronamespace == oid &&
-                    isTempNamespace(procform->pronamespace) == false)
-                {
-                    found = true;
-                    break;
-                }
+                found = true;
             }
         }
 
@@ -1996,6 +1985,45 @@ static char *get_mapped_extension(Oid func_oid)
     return extension;
 }
 
+static bool function_belongs_to_extension(Oid func_oid, const char *extension)
+{
+    Oid extension_oid;
+    char *extension_name = NULL;
+    function_extension_cache_entry *entry;
+    bool found;
+
+    initialize_function_extension_cache();
+
+    entry = hash_search(function_extension_cache, &func_oid, HASH_FIND, NULL);
+    if (entry != NULL)
+    {
+        return entry->has_extension &&
+               pg_strcasecmp(NameStr(entry->extension), extension) == 0;
+    }
+
+    extension_oid = getExtensionOfObject(ProcedureRelationId, func_oid);
+    extension_name = get_extension_name(extension_oid);
+
+    if (function_extension_cache == NULL)
+    {
+        initialize_function_extension_cache();
+    }
+
+    entry = hash_search(function_extension_cache, &func_oid, HASH_ENTER,
+                        &found);
+    if (!found)
+    {
+        entry->has_extension = (extension_name != NULL);
+        if (entry->has_extension)
+        {
+            namestrcpy(&entry->extension, extension_name);
+        }
+    }
+
+    return extension_name != NULL &&
+           pg_strcasecmp(extension_name, extension) == 0;
+}
+
 static bool is_extension_external(char *extension)
 {
     return ((extension != NULL) &&
@@ -2010,7 +2038,7 @@ static char *construct_age_function_name(char *funcname)
     int i;
 
     /* copy in the prefix - all AGE functions are prefixed with age_ */
-    strncpy(ag_name, "age_", 4);
+    memcpy(ag_name, "age_", 4);
 
     /*
      * All AGE function names are in lower case. So, copy in the funcname
@@ -2087,9 +2115,8 @@ static bool function_exists(char *funcname, char *extension)
     {
         HeapTuple proctup = &catlist->members[i]->tuple;
         Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
-        char *ext = get_mapped_extension(procform->oid);
 
-        if (ext != NULL && pg_strcasecmp(ext, extension) == 0)
+        if (function_belongs_to_extension(procform->oid, extension))
         {
             found = true;
             break;
@@ -2129,7 +2156,7 @@ static void initialize_function_exists_cache(void)
     hash_ctl.entrysize = sizeof(function_exists_cache_entry);
     hash_ctl.hcxt = CacheMemoryContext;
 
-    function_exists_cache = hash_create("cypher function existence cache", 64,
+    function_exists_cache = hash_create("cypher function existence cache", 16,
                                         &hash_ctl,
                                         HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
@@ -2151,7 +2178,7 @@ static void initialize_function_extension_cache(void)
     hash_ctl.hcxt = CacheMemoryContext;
 
     function_extension_cache =
-        hash_create("cypher function extension cache", 64, &hash_ctl,
+        hash_create("cypher function extension cache", 16, &hash_ctl,
                     HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 

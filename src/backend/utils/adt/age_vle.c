@@ -81,7 +81,8 @@
 #define EDGE_STATE_HTAB_NAME "Edge state "
 #define EDGE_STATE_HTAB_MIN_SIZE 16
 #define EXISTS_HTAB_NAME "known edges"
-#define EXISTS_HTAB_NAME_INITIAL_SIZE 1000
+#define EXISTS_HTAB_NAME_MIN_SIZE 16
+#define EDGE_UNIQUENESS_FAST_ARGS 16
 #define MAXIMUM_NUMBER_OF_CACHED_LOCAL_CONTEXTS 5
 
 /* edge state entry for the edge_state_hashtable */
@@ -153,6 +154,12 @@ typedef struct VLE_path_container
     graphid graphid_array_data;
 } VLE_path_container;
 
+typedef struct edge_uniqueness_argtype_cache
+{
+    int nargs;
+    Oid types[FLEXIBLE_ARRAY_MEMBER];
+} edge_uniqueness_argtype_cache;
+
 /* declarations */
 
 /* global variable to hold the per process global cached VLE_local contexts */
@@ -178,6 +185,12 @@ static edge_state_entry *get_edge_state(VLE_local_context *vlelctx,
 static void load_initial_dfs_stacks(VLE_local_context *vlelctx);
 static bool dfs_find_a_path_between(VLE_local_context *vlelctx);
 static bool dfs_find_a_path_from(VLE_local_context *vlelctx);
+static int get_edge_uniqueness_args_fast(FunctionCallInfo fcinfo,
+                                         Datum **args, Oid **types,
+                                         bool **nulls, Datum *fast_args,
+                                         Oid *fast_types, bool *fast_nulls);
+static Oid get_cached_edge_uniqueness_argtype(FunctionCallInfo fcinfo,
+                                              int argno, int nargs);
 static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx);
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id);
@@ -350,20 +363,10 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
     char *graph_name = NULL;
     char *eshn = NULL;
     long initial_size;
-    int glen;
-    int elen;
 
-    /* get the graph name and length */
+    /* get the graph name */
     graph_name = vlelctx->graph_name;
-    glen = strlen(graph_name);
-    /* get the edge state htab name length */
-    elen = strlen(EDGE_STATE_HTAB_NAME);
-    /* allocate the space and build the name */
-    eshn = palloc0(elen + glen + 1);
-    /* copy in the name */
-    strcpy(eshn, EDGE_STATE_HTAB_NAME);
-    /* add in the graph name */
-    eshn = strncat(eshn, graph_name, glen);
+    eshn = psprintf("%s%s", EDGE_STATE_HTAB_NAME, graph_name);
 
     /* initialize the edge state hashtable */
     MemSet(&edge_state_ctl, 0, sizeof(edge_state_ctl));
@@ -760,7 +763,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                              graph_oid);
 
     /* allocate and initialize local VLE context */
-    vlelctx = palloc0(sizeof(VLE_local_context));
+    vlelctx = palloc(sizeof(VLE_local_context));
 
     /* store the cache usage */
     vlelctx->use_cache = use_cache;
@@ -940,6 +943,8 @@ static Oid get_cached_vle_graph_oid(const char *graph_name,
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
     char *graph_name_cstr;
+    NameData graph_name_buf;
+    bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
         graph_name_len < NAMEDATALEN &&
@@ -950,14 +955,28 @@ static Oid get_cached_vle_graph_oid(const char *graph_name,
         return cached_graph_oid;
     }
 
-    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    if (graph_name_len < NAMEDATALEN)
+    {
+        memcpy(NameStr(graph_name_buf), graph_name, graph_name_len);
+        NameStr(graph_name_buf)[graph_name_len] = '\0';
+        graph_name_cstr = NameStr(graph_name_buf);
+    }
+    else
+    {
+        graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+        free_graph_name = true;
+    }
+
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
         namestrcpy(&cached_graph_name, graph_name_cstr);
-        cached_generation = get_graph_cache_generation();
+        cached_generation = current_generation;
     }
-    pfree(graph_name_cstr);
+    if (free_graph_name)
+    {
+        pfree(graph_name_cstr);
+    }
 
     return cached_graph_oid;
 }
@@ -1511,7 +1530,7 @@ static VLE_path_container *create_VLE_path_container(int64 path_size)
     container_size_bytes = sizeof(graphid) * (path_size + 4);
 
     /* allocate the container */
-    vpc = palloc0(container_size_bytes);
+    vpc = palloc(container_size_bytes);
 
     /* initialize the PG headers */
     SET_VARSIZE(vpc, container_size_bytes);
@@ -1521,7 +1540,6 @@ static VLE_path_container *create_VLE_path_container(int64 path_size)
     vpc->graphid_array_size = path_size;
     vpc->container_size_bytes = container_size_bytes;
 
-    /* the graphid array is already zeroed out */
     /* all of the other fields are set by the caller */
 
     return vpc;
@@ -2664,6 +2682,76 @@ Datum _ag_enforce_edge_uniqueness4(PG_FUNCTION_ARGS)
     PG_RETURN_BOOL(true);
 }
 
+static int get_edge_uniqueness_args_fast(FunctionCallInfo fcinfo,
+                                         Datum **args, Oid **types,
+                                         bool **nulls, Datum *fast_args,
+                                         Oid *fast_types, bool *fast_nulls)
+{
+    int nargs;
+    int i;
+
+    if (get_fn_expr_variadic(fcinfo->flinfo))
+    {
+        return extract_variadic_args(fcinfo, 0, true, args, types, nulls);
+    }
+
+    nargs = PG_NARGS();
+    if (nargs > EDGE_UNIQUENESS_FAST_ARGS)
+    {
+        return extract_variadic_args(fcinfo, 0, true, args, types, nulls);
+    }
+
+    for (i = 0; i < nargs; i++)
+    {
+        fast_nulls[i] = PG_ARGISNULL(i);
+        fast_types[i] = get_cached_edge_uniqueness_argtype(fcinfo, i, nargs);
+
+        if (fast_types[i] == UNKNOWNOID &&
+            get_fn_expr_arg_stable(fcinfo->flinfo, i))
+        {
+            fast_types[i] = TEXTOID;
+            fast_args[i] = fast_nulls[i] ? (Datum)0 :
+                           CStringGetTextDatum(PG_GETARG_POINTER(i));
+        }
+        else
+        {
+            fast_args[i] = PG_GETARG_DATUM(i);
+        }
+    }
+
+    *args = fast_args;
+    *types = fast_types;
+    *nulls = fast_nulls;
+
+    return nargs;
+}
+
+static Oid get_cached_edge_uniqueness_argtype(FunctionCallInfo fcinfo,
+                                              int argno, int nargs)
+{
+    edge_uniqueness_argtype_cache *cache;
+    int i;
+
+    cache = (edge_uniqueness_argtype_cache *)fcinfo->flinfo->fn_extra;
+    if (cache == NULL || cache->nargs != nargs)
+    {
+        cache = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                   offsetof(edge_uniqueness_argtype_cache,
+                                            types) +
+                                   sizeof(Oid) * nargs);
+        cache->nargs = nargs;
+
+        for (i = 0; i < nargs; i++)
+        {
+            cache->types[i] = get_fn_expr_argtype(fcinfo->flinfo, i);
+        }
+
+        fcinfo->flinfo->fn_extra = cache;
+    }
+
+    return cache->types[argno];
+}
+
 /*
  * This function checks the edges in a MATCH clause to see if they are unique or
  * not. Filters out all the paths where the edge uniques rules are not met.
@@ -2675,14 +2763,19 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
 {
     HTAB *exists_hash = NULL;
     HASHCTL exists_ctl;
+    Datum fast_args[EDGE_UNIQUENESS_FAST_ARGS];
+    Oid fast_types[EDGE_UNIQUENESS_FAST_ARGS];
+    bool fast_nulls[EDGE_UNIQUENESS_FAST_ARGS];
     Datum *args = NULL;
     bool *nulls = NULL;
     Oid *types = NULL;
     int nargs = 0;
+    int64 estimated_edges = 0;
     int i = 0;
 
     /* extract our arguments */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_edge_uniqueness_args_fast(fcinfo, &args, &types, &nulls,
+                                          fast_args, fast_types, fast_nulls);
 
     /* verify the arguments */
     for (i = 0; i < nargs; i++)
@@ -2703,6 +2796,32 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
                       errmsg("_ag_enforce_edge_uniqueness argument %d must be AGTYPE, INT8, or GRAPHIDOID",
                              i)));
         }
+
+        if (types[i] == INT8OID || types[i] == GRAPHIDOID)
+        {
+            estimated_edges++;
+        }
+        else if (types[i] == AGTYPEOID)
+        {
+            agtype *agt_i = DATUM_GET_AGTYPE_P(args[i]);
+
+            if (AGT_ROOT_IS_BINARY(agt_i) &&
+                AGT_ROOT_BINARY_FLAGS(agt_i) == AGT_FBINARY_TYPE_VLE_PATH)
+            {
+                VLE_path_container *vpc = (VLE_path_container *)agt_i;
+
+                estimated_edges += vpc->graphid_array_size / 2;
+            }
+            else
+            {
+                estimated_edges++;
+            }
+        }
+    }
+
+    if (estimated_edges < 2)
+    {
+        PG_RETURN_BOOL(true);
     }
 
     /* configure the hash table */
@@ -2712,7 +2831,8 @@ Datum _ag_enforce_edge_uniqueness(PG_FUNCTION_ARGS)
     exists_ctl.hash = tag_hash;
 
     /* create exists_hash table */
-    exists_hash = hash_create(EXISTS_HTAB_NAME, EXISTS_HTAB_NAME_INITIAL_SIZE,
+    exists_hash = hash_create(EXISTS_HTAB_NAME,
+                              Max(estimated_edges, EXISTS_HTAB_NAME_MIN_SIZE),
                               &exists_ctl, HASH_ELEM | HASH_FUNCTION);
 
     /* insert arguments into hash table */

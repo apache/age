@@ -132,7 +132,7 @@ char *get_next_default_alias(cypher_parsestate *cpstate)
                     cpstate->default_alias_num);
 
     /* allocate the space */
-    alias_name = palloc0(nlen + 1);
+    alias_name = palloc(nlen + 1);
 
     /* create the name */
     snprintf(alias_name, nlen + 1, "%s%d", AGE_DEFAULT_ALIAS_PREFIX,

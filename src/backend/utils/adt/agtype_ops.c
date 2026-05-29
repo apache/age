@@ -40,19 +40,20 @@ static char *get_string_from_agtype_value(agtype_value *agtv, int *length);
 static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text);
 static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen);
 static agtype *delete_from_array(agtype *agt, agtype* indexes);
+static bool parse_agtype_index_string(char *str, int len, long *lindex);
 
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen)
 {
     int length = llen + rlen;
-    char *buffer = result->val.string.val;
+    char *buffer;
 
     Assert(llen >= 0 && rlen >= 0);
     check_string_length(length);
     buffer = palloc(length);
 
-    strncpy(buffer, lhs, llen);
-    strncpy(buffer + llen, rhs, rlen);
+    memcpy(buffer, lhs, llen);
+    memcpy(buffer + llen, rhs, rlen);
 
     result->type = AGTV_STRING;
     result->val.string.len = length;
@@ -81,8 +82,8 @@ static char *get_string_from_agtype_value(agtype_value *agtv, int *length)
         if (is_decimal_needed(string))
         {
             char *str = palloc(*length + 2);
-            strncpy(str, string, *length);
-            strncpy(str + *length, ".0", 2);
+            memcpy(str, string, *length);
+            memcpy(str + *length, ".0", 2);
             *length += 2;
             string = str;
         }
@@ -107,6 +108,51 @@ static char *get_string_from_agtype_value(agtype_value *agtv, int *length)
         return NULL;
     }
     return NULL;
+}
+
+static bool parse_agtype_index_string(char *str, int len, long *lindex)
+{
+    int i = 0;
+    bool negative = false;
+    int64 value = 0;
+    int64 limit;
+
+    while (i < len && (str[i] == ' ' || str[i] == '\t' ||
+                       str[i] == '\n' || str[i] == '\r' ||
+                       str[i] == '\f'))
+    {
+        i++;
+    }
+
+    if (i < len && (str[i] == '-' || str[i] == '+'))
+    {
+        negative = (str[i] == '-');
+        i++;
+    }
+
+    if (i >= len)
+    {
+        return false;
+    }
+
+    limit = negative ? (int64) INT_MAX + 1 : INT_MAX;
+
+    for (; i < len; i++)
+    {
+        if (str[i] < '0' || str[i] > '9')
+        {
+            return false;
+        }
+
+        value = value * 10 + (str[i] - '0');
+        if (value > limit)
+        {
+            return false;
+        }
+    }
+
+    *lindex = negative ? -value : value;
+    return true;
 }
 
 Datum get_numeric_datum_from_agtype_value(agtype_value *agtv)
@@ -2137,10 +2183,9 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                  * extract the integer from the string,
                  * if character other than a digit is found, return null
                  */
-                char* str = NULL;
-                lindex = strtol(cur_key->val.string.val, &str, 10);
-
-                if (strcmp(str, ""))
+                if (!parse_agtype_index_string(cur_key->val.string.val,
+                                               cur_key->val.string.len,
+                                               &lindex))
                 {
                     PG_RETURN_NULL();
                 }

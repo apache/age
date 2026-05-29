@@ -1372,10 +1372,13 @@ static agtype_iterator *iterator_from_container(agtype_container *container,
 {
     agtype_iterator *it;
 
-    it = palloc0(sizeof(agtype_iterator));
+    it = palloc(sizeof(agtype_iterator));
     it->container = container;
     it->parent = parent;
     it->num_elems = AGTYPE_CONTAINER_SIZE(container);
+    it->curr_index = 0;
+    it->curr_data_offset = 0;
+    it->curr_value_offset = 0;
 
     /* Array starts just after header */
     it->children = container->children;
@@ -1395,6 +1398,7 @@ static agtype_iterator *iterator_from_container(agtype_container *container,
     case AGT_FOBJECT:
         it->data_proper = (char *)it->children +
                           it->num_elems * sizeof(agtentry) * 2;
+        it->is_scalar = false;
         it->state = AGTI_OBJECT_START;
         break;
 

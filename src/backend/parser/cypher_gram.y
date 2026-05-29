@@ -3012,7 +3012,7 @@ static FuncCall *node_to_agtype(Node * fnode, char *type, int location)
 static char *create_unique_name(char *prefix_name)
 {
     char *name = NULL;
-    char *prefix = NULL;
+    char *prefix;
     uint nlen = 0;
     unsigned long unique_number = 0;
 
@@ -3022,8 +3022,7 @@ static char *create_unique_name(char *prefix_name)
     /* was a valid prefix supplied */
     if (prefix_name == NULL || strlen(prefix_name) <= 0)
     {
-        prefix = pnstrdup(UNIQUE_NAME_NULL_PREFIX,
-                          strlen(UNIQUE_NAME_NULL_PREFIX));
+        prefix = UNIQUE_NAME_NULL_PREFIX;
     }
     else
     {
@@ -3034,16 +3033,10 @@ static char *create_unique_name(char *prefix_name)
     nlen = snprintf(NULL, 0, "%s_%lu", prefix, unique_number);
 
     /* allocate the space */
-    name = palloc0(nlen + 1);
+    name = palloc(nlen + 1);
 
     /* create the name */
     snprintf(name, nlen + 1, "%s_%lu", prefix, unique_number);
-
-    /* if we created the prefix, we need to free it */
-    if (prefix_name == NULL || strlen(prefix_name) <= 0)
-    {
-        pfree_if_not_null(prefix);
-    }
 
     return name;
 }
@@ -3051,7 +3044,8 @@ static char *create_unique_name(char *prefix_name)
 /* function to check if given string has internal alias as prefix */
 static bool has_internal_default_prefix(char *str)
 {
-    return strncmp(AGE_DEFAULT_PREFIX, str, strlen(AGE_DEFAULT_PREFIX)) == 0;
+    return strncmp(AGE_DEFAULT_PREFIX, str,
+                   sizeof(AGE_DEFAULT_PREFIX) - 1) == 0;
 }
 
 /* function to return a unique unsigned long number */

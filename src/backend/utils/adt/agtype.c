@@ -112,9 +112,27 @@ typedef enum /* type categories for datum_to_agtype */
     AGT_TYPE_OTHER /* all else */
 } agt_type_category;
 
+typedef struct agtype_variadic_argtype_cache
+{
+    int nargs;
+    Oid types[FLEXIBLE_ARRAY_MEMBER];
+} agtype_variadic_argtype_cache;
+
 static inline Datum agtype_from_cstring(char *str, int len);
 size_t check_string_length(size_t len);
 static Oid get_cached_fn_expr_argtype(FunctionCallInfo fcinfo, int argno);
+static bool get_single_variadic_arg(FunctionCallInfo fcinfo,
+                                    const char *funcname,
+                                    bool convert_unknown,
+                                    Datum *arg, Oid *type);
+static int get_variadic_args_fast(FunctionCallInfo fcinfo,
+                                  bool convert_unknown,
+                                  int max_args,
+                                  Datum **args, Oid **types, bool **nulls,
+                                  Datum *fast_args, Oid *fast_types,
+                                  bool *fast_nulls);
+static Oid get_cached_agtype_variadic_argtype(FunctionCallInfo fcinfo,
+                                              int argno, int nargs);
 static void agtype_in_agtype_annotation(void *pstate, char *annotation);
 static void agtype_in_object_start(void *pstate);
 static void agtype_in_object_end(void *pstate);
@@ -211,6 +229,8 @@ static int extract_variadic_args_min(FunctionCallInfo fcinfo,
 static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo);
 agtype_value *agtype_composite_to_agtype_value_binary(agtype *a);
 static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr);
+static bool agtype_string_contains(char *haystack, int haystack_len,
+                                   char *needle, int needle_len);
 
 
 void *repalloc_check(void *ptr, size_t len)
@@ -234,6 +254,40 @@ void pfree_if_not_null(void *ptr)
     {
         pfree(ptr);
     }
+}
+
+static bool agtype_string_contains(char *haystack, int haystack_len,
+                                   char *needle, int needle_len)
+{
+    char *match;
+    char *end;
+
+    if (needle_len == 0)
+    {
+        return true;
+    }
+
+    if (haystack_len < needle_len)
+    {
+        return false;
+    }
+
+    end = haystack + haystack_len - needle_len + 1;
+    for (match = haystack; match < end; match++)
+    {
+        match = memchr(match, needle[0], end - match);
+        if (match == NULL)
+        {
+            return false;
+        }
+
+        if (memcmp(match, needle, needle_len) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /* global storage of  OID for agtype and _agtype */
@@ -513,6 +567,139 @@ static Oid get_cached_fn_expr_argtype(FunctionCallInfo fcinfo, int argno)
     }
 
     return *(Oid *)fcinfo->flinfo->fn_extra;
+}
+
+static bool get_single_variadic_arg(FunctionCallInfo fcinfo,
+                                    const char *funcname,
+                                    bool convert_unknown,
+                                    Datum *arg, Oid *type)
+{
+    int nargs;
+    Datum *args = NULL;
+    bool *nulls = NULL;
+    Oid *types = NULL;
+
+    if (PG_NARGS() == 1 && !get_fn_expr_variadic(fcinfo->flinfo))
+    {
+        if (PG_ARGISNULL(0))
+        {
+            return false;
+        }
+
+        *arg = PG_GETARG_DATUM(0);
+        *type = get_cached_fn_expr_argtype(fcinfo, 0);
+        if (convert_unknown &&
+            *type == UNKNOWNOID &&
+            get_fn_expr_arg_stable(fcinfo->flinfo, 0))
+        {
+            *type = TEXTOID;
+            *arg = CStringGetTextDatum(PG_GETARG_POINTER(0));
+        }
+        return true;
+    }
+
+    nargs = extract_variadic_args(fcinfo, 0, convert_unknown,
+                                  &args, &types, &nulls);
+
+    if (nargs > 1)
+    {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("%s only supports one argument", funcname)));
+    }
+
+    if (nargs < 1 || nulls[0])
+    {
+        return false;
+    }
+
+    *arg = args[0];
+    *type = types[0];
+
+    return true;
+}
+
+static int get_variadic_args_fast(FunctionCallInfo fcinfo,
+                                  bool convert_unknown,
+                                  int max_args,
+                                  Datum **args, Oid **types, bool **nulls,
+                                  Datum *fast_args, Oid *fast_types,
+                                  bool *fast_nulls)
+{
+    int nargs;
+    int i;
+
+    if (!get_fn_expr_variadic(fcinfo->flinfo))
+    {
+        nargs = PG_NARGS();
+
+        if (nargs > max_args)
+        {
+            return extract_variadic_args(fcinfo, 0, convert_unknown,
+                                         args, types, nulls);
+        }
+
+        for (i = 0; i < nargs; i++)
+        {
+            fast_nulls[i] = PG_ARGISNULL(i);
+            fast_types[i] = get_cached_agtype_variadic_argtype(fcinfo, i,
+                                                               nargs);
+
+            if (convert_unknown &&
+                fast_types[i] == UNKNOWNOID &&
+                get_fn_expr_arg_stable(fcinfo->flinfo, i))
+            {
+                fast_types[i] = TEXTOID;
+
+                if (fast_nulls[i])
+                {
+                    fast_args[i] = (Datum)0;
+                }
+                else
+                {
+                    fast_args[i] = CStringGetTextDatum(PG_GETARG_POINTER(i));
+                }
+            }
+            else
+            {
+                fast_args[i] = PG_GETARG_DATUM(i);
+            }
+        }
+
+        *args = fast_args;
+        *types = fast_types;
+        *nulls = fast_nulls;
+
+        return nargs;
+    }
+
+    return extract_variadic_args(fcinfo, 0, convert_unknown,
+                                 args, types, nulls);
+}
+
+static Oid get_cached_agtype_variadic_argtype(FunctionCallInfo fcinfo,
+                                              int argno, int nargs)
+{
+    agtype_variadic_argtype_cache *cache;
+    int i;
+
+    cache = (agtype_variadic_argtype_cache *)fcinfo->flinfo->fn_extra;
+    if (cache == NULL || cache->nargs != nargs)
+    {
+        cache = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                   offsetof(agtype_variadic_argtype_cache,
+                                            types) +
+                                   sizeof(Oid) * nargs);
+        cache->nargs = nargs;
+
+        for (i = 0; i < nargs; i++)
+        {
+            cache->types[i] = get_fn_expr_argtype(fcinfo->flinfo, i);
+        }
+
+        fcinfo->flinfo->fn_extra = cache;
+    }
+
+    return cache->types[argno];
 }
 
 size_t check_string_length(size_t len)
@@ -2080,7 +2267,7 @@ void add_agtype(Datum val, bool is_null, agtype_in_state *result,
 
 agtype_value *string_to_agtype_value(char *s)
 {
-    agtype_value *agtv = palloc0(sizeof(agtype_value));
+    agtype_value *agtv = palloc(sizeof(agtype_value));
 
     agtv->type = AGTV_STRING;
     agtv->val.string.len = check_string_length(strlen(s));
@@ -2092,7 +2279,7 @@ agtype_value *string_to_agtype_value(char *s)
 /* helper function to create an agtype_value integer from an integer */
 agtype_value *integer_to_agtype_value(int64 int_value)
 {
-    agtype_value *agtv = palloc0(sizeof(agtype_value));
+    agtype_value *agtv = palloc(sizeof(agtype_value));
 
     agtv->type = AGTV_INTEGER;
     agtv->val.int_value = int_value;
@@ -2110,14 +2297,18 @@ Datum _agtype_build_path(PG_FUNCTION_ARGS)
     agtype_in_state result;
     agtype *agt_result;
     Datum *args = NULL;
+    Datum fast_args[16];
     bool *nulls = NULL;
+    bool fast_nulls[16];
     Oid *types = NULL;
+    Oid fast_types[16];
     int nargs = 0;
     int i = 0;
     bool is_zero_boundary_case = false;
 
     /* build argument values to build the object */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 16, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     if (nargs < 1)
     {
@@ -2540,11 +2731,15 @@ static agtype_value *agtype_build_map_as_agtype_value(FunctionCallInfo fcinfo)
     int i;
     agtype_in_state result;
     Datum *args;
+    Datum fast_args[16];
     bool *nulls;
+    bool fast_nulls[16];
     Oid *types;
+    Oid fast_types[16];
 
     /* build argument values to build the object */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 16, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     if (nargs < 0)
     {
@@ -2691,12 +2886,16 @@ Datum agtype_build_list(PG_FUNCTION_ARGS)
     int i;
     agtype_in_state result;
     Datum *args;
+    Datum fast_args[16];
     bool *nulls;
+    bool fast_nulls[16];
     Oid *types;
+    Oid fast_types[16];
     agtype *agt_result;
 
     /*build argument values to build the array */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 16, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     if (nargs < 0)
     {
@@ -3752,8 +3951,8 @@ agtype_value *get_agtype_value_object_value(const agtype_value *agtv_object,
         }
 
         /* they are the same length so compare the keys */
-        result = strncmp(search_key, agtv_key->val.string.val,
-                         search_key_length);
+        result = memcmp(search_key, agtv_key->val.string.val,
+                        search_key_length);
 
         /* if they don't match */
         if (result != 0)
@@ -3840,7 +4039,7 @@ static int extract_variadic_args_min(FunctionCallInfo fcinfo,
                           &args_res, &nulls_res, &nargs);
 
         /* All the elements of the array have the same type */
-        types_res = (Oid *) palloc0(nargs * sizeof(Oid));
+        types_res = (Oid *) palloc(nargs * sizeof(Oid));
         for (i = 0; i < nargs; i++)
         {
             types_res[i] = element_type;
@@ -3859,14 +4058,15 @@ static int extract_variadic_args_min(FunctionCallInfo fcinfo,
         }
 
         /* allocate result memory */
-        nulls_res = (bool *) palloc0(nargs * sizeof(bool));
-        args_res = (Datum *) palloc0(nargs * sizeof(Datum));
-        types_res = (Oid *) palloc0(nargs * sizeof(Oid));
+        nulls_res = (bool *) palloc(nargs * sizeof(bool));
+        args_res = (Datum *) palloc(nargs * sizeof(Datum));
+        types_res = (Oid *) palloc(nargs * sizeof(Oid));
 
         for (i = 0; i < nargs; i++)
         {
             nulls_res[i] = PG_ARGISNULL(i + variadic_start);
-            types_res[i] = get_fn_expr_argtype(fcinfo->flinfo, i + variadic_start);
+            types_res[i] = get_cached_agtype_variadic_argtype(
+                fcinfo, i + variadic_start, PG_NARGS());
 
             /*
              * Turn a constant (more or less literal) value that's of unknown
@@ -4164,6 +4364,8 @@ PG_FUNCTION_INFO_V1(agtype_access_operator);
  */
 Datum agtype_access_operator(PG_FUNCTION_ARGS)
 {
+    Datum fast_args[16];
+    bool fast_nulls[16];
     Datum *args = NULL;
     bool *nulls = NULL;
     Oid *types = NULL;
@@ -4172,6 +4374,7 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
     agtype_value *container_value = NULL;
     agtype *result = NULL;
     int i = 0;
+    bool using_fast_args = false;
 
     /*
      * Fast path for the common 2-argument case (object.property or
@@ -4283,8 +4486,29 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
      */
 
     /* extract our args, we need at least 2 */
-    nargs = extract_variadic_args_min(fcinfo, 0, true, &args, &types, &nulls,
-                                      2);
+    if (!get_fn_expr_variadic(fcinfo->flinfo) &&
+        PG_NARGS() <= lengthof(fast_args))
+    {
+        nargs = PG_NARGS();
+        if (nargs >= 2)
+        {
+            for (i = 0; i < nargs; i++)
+            {
+                fast_nulls[i] = PG_ARGISNULL(i);
+                fast_args[i] = PG_GETARG_DATUM(i);
+            }
+
+            args = fast_args;
+            nulls = fast_nulls;
+            using_fast_args = true;
+        }
+    }
+    else
+    {
+        nargs = extract_variadic_args_min(fcinfo, 0, true, &args, &types,
+                                          &nulls, 2);
+    }
+
     /*
      * Return NULL if -
      *
@@ -4297,9 +4521,12 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
      */
     if (args == NULL || nargs == 0 || nulls[0] == true)
     {
-        pfree_if_not_null(args);
-        pfree_if_not_null(types);
-        pfree_if_not_null(nulls);
+        if (!using_fast_args)
+        {
+            pfree_if_not_null(args);
+            pfree_if_not_null(types);
+            pfree_if_not_null(nulls);
+        }
 
         PG_RETURN_NULL();
     }
@@ -4310,9 +4537,12 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         /* if we have a NULL, return NULL */
         if (nulls[i] == true)
         {
-            pfree_if_not_null(args);
-            pfree_if_not_null(types);
-            pfree_if_not_null(nulls);
+            if (!using_fast_args)
+            {
+                pfree_if_not_null(args);
+                pfree_if_not_null(types);
+                pfree_if_not_null(nulls);
+            }
             PG_RETURN_NULL();
         }
     }
@@ -4431,9 +4661,12 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
         container = NULL;
     }
 
-    pfree_if_not_null(args);
-    pfree_if_not_null(types);
-    pfree_if_not_null(nulls);
+    if (!using_fast_args)
+    {
+        pfree_if_not_null(args);
+        pfree_if_not_null(types);
+        pfree_if_not_null(nulls);
+    }
 
     /* serialize and return the result */
     result = agtype_value_to_agtype(container_value);
@@ -4793,9 +5026,9 @@ Datum agtype_string_match_starts_with(PG_FUNCTION_ARGS)
             {
                 result = false;
             }
-            else if (strncmp(lhs_value->val.string.val,
-                             rhs_value->val.string.val,
-                             rhs_value->val.string.len) == 0)
+            else if (memcmp(lhs_value->val.string.val,
+                            rhs_value->val.string.val,
+                            rhs_value->val.string.len) == 0)
             {
                 result = true;
             }
@@ -4843,11 +5076,11 @@ Datum agtype_string_match_ends_with(PG_FUNCTION_ARGS)
             {
                 result = false;
             }
-            else if (strncmp((lhs_value->val.string.val +
-                              lhs_value->val.string.len -
-                              rhs_value->val.string.len),
-                             rhs_value->val.string.val,
-                             rhs_value->val.string.len) == 0)
+            else if (memcmp((lhs_value->val.string.val +
+                             lhs_value->val.string.len -
+                             rhs_value->val.string.len),
+                            rhs_value->val.string.val,
+                            rhs_value->val.string.len) == 0)
             {
                 result = true;
             }
@@ -4891,27 +5124,10 @@ Datum agtype_string_match_contains(PG_FUNCTION_ARGS)
 
         if (lhs_value->type == AGTV_STRING && rhs_value->type == AGTV_STRING)
         {
-            char *l;
-            char *r;
-
-            if (lhs_value->val.string.len < rhs_value->val.string.len)
-            {
-                result = false;
-            }
-
-            l = pnstrdup(lhs_value->val.string.val, lhs_value->val.string.len);
-            r = pnstrdup(rhs_value->val.string.val, rhs_value->val.string.len);
-
-            if (strstr(l, r) == NULL)
-            {
-                result = false;
-            }
-            else
-            {
-                result = true;
-            }
-            pfree_if_not_null(l);
-            pfree_if_not_null(r);
+            result = agtype_string_contains(lhs_value->val.string.val,
+                                            lhs_value->val.string.len,
+                                            rhs_value->val.string.val,
+                                            rhs_value->val.string.len);
         }
         pfree_agtype_value(lhs_value);
         pfree_agtype_value(rhs_value);
@@ -4940,7 +5156,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     agtype *agt;
     agtype_iterator *it;
     agtype_iterator_token tok;
-    agtype_value *r;
+    agtype_value r;
     uint64 seed = 0xF0F0F0F0;
 
     /* this function returns INTEGER which is 32 bits */
@@ -4951,18 +5167,16 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
 
     agt = AG_GET_ARG_AGTYPE_P(0);
 
-    r = palloc0(sizeof(agtype_value));
-
     it = agtype_iterator_init(&agt->root);
-    while ((tok = agtype_iterator_next(&it, r, false)) != WAGT_DONE)
+    while ((tok = agtype_iterator_next(&it, &r, false)) != WAGT_DONE)
     {
-        if (IS_A_AGTYPE_SCALAR(r) && AGTYPE_ITERATOR_TOKEN_IS_HASHABLE(tok))
-            agtype_hash_scalar_value_extended(r, &hash, seed);
-        else if (tok == WAGT_BEGIN_ARRAY && !r->val.array.raw_scalar)
+        if (IS_A_AGTYPE_SCALAR(&r) && AGTYPE_ITERATOR_TOKEN_IS_HASHABLE(tok))
+            agtype_hash_scalar_value_extended(&r, &hash, seed);
+        else if (tok == WAGT_BEGIN_ARRAY && !r.val.array.raw_scalar)
             seed = LEFT_ROTATE(seed, 4);
         else if (tok == WAGT_BEGIN_OBJECT)
             seed = LEFT_ROTATE(seed, 6);
-        else if (tok == WAGT_END_ARRAY && !r->val.array.raw_scalar)
+        else if (tok == WAGT_END_ARRAY && !r.val.array.raw_scalar)
             seed = RIGHT_ROTATE(seed, 4);
         else if (tok == WAGT_END_OBJECT)
             seed = RIGHT_ROTATE(seed, 4);
@@ -4970,7 +5184,6 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
         seed = LEFT_ROTATE(seed, 1);
     }
 
-    pfree_if_not_null(r);
     PG_FREE_IF_COPY(agt, 0);
 
     PG_RETURN_INT32(hash);
@@ -5067,10 +5280,8 @@ Datum agtype_typecast_numeric(PG_FUNCTION_ARGS)
     /* this allows string numbers and NaN */
     case AGTV_STRING:
         /* we need a null terminated string */
-        string = (char *) palloc0(sizeof(char)*arg_value->val.string.len + 1);
-        string = strncpy(string, arg_value->val.string.val,
-                         arg_value->val.string.len);
-        string[arg_value->val.string.len] = '\0';
+        string = pnstrdup(arg_value->val.string.val,
+                          arg_value->val.string.len);
         /* pass the string to the numeric in function for conversion */
         numd = DirectFunctionCall3(numeric_in,
                                    CStringGetDatum(string),
@@ -5158,10 +5369,8 @@ Datum agtype_typecast_int(PG_FUNCTION_ARGS)
         break;
     case AGTV_STRING:
         /* we need a null terminated string */
-        string = (char *) palloc0(sizeof(char)*arg_value->val.string.len + 1);
-        string = strncpy(string, arg_value->val.string.val,
-                         arg_value->val.string.len);
-        string[arg_value->val.string.len] = '\0';
+        string = pnstrdup(arg_value->val.string.val,
+                          arg_value->val.string.len);
 
         d = DirectFunctionCall1(int8in, CStringGetDatum(string));
         /* free the string */
@@ -5295,10 +5504,8 @@ Datum agtype_typecast_float(PG_FUNCTION_ARGS)
     /* this allows string numbers, NaN, Infinity, and -Infinity */
     case AGTV_STRING:
         /* we need a null terminated string */
-        string = (char *) palloc0(sizeof(char)*arg_value->val.string.len + 1);
-        string = strncpy(string, arg_value->val.string.val,
-                         arg_value->val.string.len);
-        string[arg_value->val.string.len] = '\0';
+        string = pnstrdup(arg_value->val.string.val,
+                          arg_value->val.string.len);
 
         d = DirectFunctionCall1(float8in, CStringGetDatum(string));
         /* free the string */
@@ -5729,6 +5936,8 @@ static Oid get_cached_graph_oid_for_name(const char *graph_name,
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
     char *graph_name_cstr;
+    NameData graph_name_buf;
+    bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
         graph_name_len < NAMEDATALEN &&
@@ -5739,14 +5948,28 @@ static Oid get_cached_graph_oid_for_name(const char *graph_name,
         return cached_graph_oid;
     }
 
-    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    if (graph_name_len < NAMEDATALEN)
+    {
+        memcpy(NameStr(graph_name_buf), graph_name, graph_name_len);
+        NameStr(graph_name_buf)[graph_name_len] = '\0';
+        graph_name_cstr = NameStr(graph_name_buf);
+    }
+    else
+    {
+        graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+        free_graph_name = true;
+    }
+
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
         namestrcpy(&cached_graph_name, graph_name_cstr);
-        cached_generation = get_graph_cache_generation();
+        cached_generation = current_generation;
     }
-    pfree(graph_name_cstr);
+    if (free_graph_name)
+    {
+        pfree(graph_name_cstr);
+    }
 
     return cached_graph_oid;
 }
@@ -6361,35 +6584,21 @@ PG_FUNCTION_INFO_V1(age_toboolean);
 
 Datum age_toboolean(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     Oid type;
     agtype_value agtv_result;
     char *string = NULL;
     bool result = false;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("toBoolean() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "toBoolean()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /*
      * toBoolean() supports bool, text, cstring, integer or the agtype bool,
      * string and integer input.
      */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == BOOLOID)
@@ -6574,36 +6783,22 @@ PG_FUNCTION_INFO_V1(age_tofloat);
 
 Datum age_tofloat(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     char *string = NULL;
     bool is_valid = false;
     Oid type;
     float8 result;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("toFloat() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "toFloat()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /*
      * toFloat() supports integer, float, numeric, text, cstring, or the
      * agtype integer, float, numeric, and string input
      */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == INT2OID)
@@ -6805,62 +7000,16 @@ PG_FUNCTION_INFO_V1(age_tointeger);
 
 Datum age_tointeger(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     char *string = NULL;
     bool is_valid = false;
     Oid type;
     int64 result;
 
-    /*
-     * Fast path: toInteger() always takes exactly 1 argument.
-     * Avoid extract_variadic_args overhead by accessing the arg directly
-     * and caching the type via fn_extra.
-     */
-    if (PG_NARGS() == 1)
+    if (!get_single_variadic_arg(fcinfo, "toInteger()", true, &arg, &type))
     {
-        if (PG_ARGISNULL(0))
-        {
-            PG_RETURN_NULL();
-        }
-
-        arg = PG_GETARG_DATUM(0);
-
-        /* cache the arg type on first call */
-        if (fcinfo->flinfo->fn_extra == NULL)
-        {
-            Oid *cached = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-                                              sizeof(Oid));
-            *cached = get_fn_expr_argtype(fcinfo->flinfo, 0);
-            fcinfo->flinfo->fn_extra = cached;
-        }
-        type = *(Oid *)fcinfo->flinfo->fn_extra;
-        nargs = 1;
-    }
-    else
-    {
-        /* fallback variadic path */
-        nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-        /* check number of args */
-        if (nargs > 1)
-        {
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                            errmsg("toInteger() only supports one argument")));
-        }
-
-        /* check for null */
-        if (nargs < 0 || nulls[0])
-        {
-            PG_RETURN_NULL();
-        }
-
-        arg = args[0];
-        type = types[0];
+        PG_RETURN_NULL();
     }
 
     if (type != AGTYPEOID)
@@ -7180,28 +7329,13 @@ PG_FUNCTION_INFO_V1(age_size);
 
 Datum age_size(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     char *string = NULL;
     Oid type;
     int64 result;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-    {
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("size() only supports one argument")));
-    }
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "size()", true, &arg, &type))
     {
         PG_RETURN_NULL();
     }
@@ -7209,9 +7343,6 @@ Datum age_size(PG_FUNCTION_ARGS)
     /*
      * size() supports cstring, text, or the agtype string or list input
      */
-    arg = args[0];
-    type = types[0];
-
     if (type == CSTRINGOID)
     {
         string = DatumGetCString(arg);
@@ -7357,23 +7488,19 @@ PG_FUNCTION_INFO_V1(age_isempty);
 
 Datum age_isempty(PG_FUNCTION_ARGS)
 {
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     char *string = NULL;
     Oid type;
     int64 result;
 
-    /* extract argument values */
-    extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    if (!get_single_variadic_arg(fcinfo, "isEmpty()", true, &arg, &type))
+    {
+        PG_RETURN_NULL();
+    }
 
     /*
      * isEmpty() supports cstring, text, or the agtype string or list input
      */
-    arg = args[0];
-    type = types[0];
-
     if (type == CSTRINGOID)
     {
         string = DatumGetCString(arg);
@@ -7559,8 +7686,6 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
     agtype_value *agtv_result = NULL;
     char *string = NULL;
 
-    agtv_result = palloc0(sizeof(agtype_value));
-
     /*
      * toString() supports: unknown, integer, float, numeric, text, cstring,
      * boolean, regtype or the agtypes: integer, float, numeric, string, and
@@ -7691,6 +7816,7 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
     }
 
     /* build the result */
+    agtv_result = palloc(sizeof(agtype_value));
     agtv_result->type = AGTV_STRING;
     agtv_result->val.string.val = string;
     agtv_result->val.string.len = strlen(string);
@@ -7851,37 +7977,19 @@ PG_FUNCTION_INFO_V1(age_reverse);
 
 Datum age_reverse(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-    {
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("reverse() only supports one argument")));
-    }
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "reverse()", true, &arg, &type))
     {
         PG_RETURN_NULL();
     }
 
     /* reverse() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8018,11 +8126,7 @@ PG_FUNCTION_INFO_V1(age_toupper);
 
 Datum age_toupper(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     char *string = NULL;
     char *result = NULL;
@@ -8030,21 +8134,12 @@ Datum age_toupper(PG_FUNCTION_ARGS)
     Oid type;
     int i;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("toUpper() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "toUpper()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /* toUpper() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8086,7 +8181,7 @@ Datum age_toupper(PG_FUNCTION_ARGS)
     }
 
     /* allocate the new string */
-    result = palloc0(string_len);
+    result = palloc(string_len);
 
     /* upcase the string */
     for (i = 0; i < string_len; i++)
@@ -8104,11 +8199,7 @@ PG_FUNCTION_INFO_V1(age_tolower);
 
 Datum age_tolower(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     char *string = NULL;
     char *result = NULL;
@@ -8116,21 +8207,12 @@ Datum age_tolower(PG_FUNCTION_ARGS)
     Oid type;
     int i;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("toLower() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "toLower()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /* toLower() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8172,7 +8254,7 @@ Datum age_tolower(PG_FUNCTION_ARGS)
     }
 
     /* allocate the new string */
-    result = palloc0(string_len);
+    result = palloc(string_len);
 
     /* downcase the string */
     for (i = 0; i < string_len; i++)
@@ -8190,33 +8272,19 @@ PG_FUNCTION_INFO_V1(age_rtrim);
 
 Datum age_rtrim(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("rTrim() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "rTrim()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /* rTrim() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8277,33 +8345,19 @@ PG_FUNCTION_INFO_V1(age_ltrim);
 
 Datum age_ltrim(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("lTrim() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "lTrim()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /* rTrim() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8364,33 +8418,19 @@ PG_FUNCTION_INFO_V1(age_trim);
 
 Datum age_trim(PG_FUNCTION_ARGS)
 {
-    int nargs;
-    Datum *args;
     Datum arg;
-    bool *nulls;
-    Oid *types;
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
-
-    /* check number of args */
-    if (nargs > 1)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                        errmsg("trim() only supports one argument")));
-
-    /* check for null */
-    if (nargs < 0 || nulls[0])
+    if (!get_single_variadic_arg(fcinfo, "trim()", true, &arg, &type))
+    {
         PG_RETURN_NULL();
+    }
 
     /* trim() supports text, cstring, or the agtype string input */
-    arg = args[0];
-    type = types[0];
-
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
@@ -8453,17 +8493,20 @@ Datum age_right(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[2];
     Datum arg;
     bool *nulls;
+    bool fast_nulls[2];
     Oid *types;
+    Oid fast_types[2];
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int64 string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 2, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 2)
@@ -8624,17 +8667,20 @@ Datum age_left(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[2];
     Datum arg;
     bool *nulls;
+    bool fast_nulls[2];
     Oid *types;
+    Oid fast_types[2];
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
     int64 string_len;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 2, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 2)
@@ -8802,9 +8848,12 @@ Datum age_substring(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[3];
     Datum arg;
     bool *nulls;
+    bool fast_nulls[3];
     Oid *types;
+    Oid fast_types[3];
     agtype_value agtv_result;
     text *text_string = NULL;
     char *string = NULL;
@@ -8814,8 +8863,8 @@ Datum age_substring(PG_FUNCTION_ARGS)
     int i;
     Oid type;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 3, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs < 2 || nargs > 3)
@@ -9020,9 +9069,12 @@ Datum age_split(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[2];
     Datum arg;
     bool *nulls;
+    bool fast_nulls[2];
     Oid *types;
+    Oid fast_types[2];
     agtype_value *agtv_result;
     text *param = NULL;
     text *text_string = NULL;
@@ -9031,8 +9083,8 @@ Datum age_split(PG_FUNCTION_ARGS)
     Oid type;
     int i;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 2, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 2)
@@ -9134,7 +9186,7 @@ Datum age_split(PG_FUNCTION_ARGS)
             string_len = VARSIZE(elements[i]) - VARHDRSZ;
 
             /* make a copy */
-            string_copy = palloc0(string_len);
+            string_copy = palloc(string_len);
             memcpy(string_copy, string, string_len);
 
             /* build the agtype string */
@@ -9168,9 +9220,12 @@ Datum age_replace(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[3];
     Datum arg;
     bool *nulls;
+    bool fast_nulls[3];
     Oid *types;
+    Oid fast_types[3];
     agtype_value agtv_result;
     text *param = NULL;
     text *text_string = NULL;
@@ -9182,8 +9237,8 @@ Datum age_replace(PG_FUNCTION_ARGS)
     Oid type;
     int i;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 3, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 3)
@@ -9470,15 +9525,18 @@ Datum age_sin(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle;
     float8 result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9517,15 +9575,18 @@ Datum age_cos(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle;
     float8 result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9564,15 +9625,18 @@ Datum age_tan(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle;
     float8 result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9611,15 +9675,18 @@ Datum age_cot(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle;
     float8 result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9658,15 +9725,18 @@ Datum age_asin(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 x;
     float8 angle;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9709,15 +9779,18 @@ Datum age_acos(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 x;
     float8 angle;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9760,15 +9833,18 @@ Datum age_atan(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 x;
     float8 angle;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9807,15 +9883,18 @@ Datum age_atan2(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[2];
     bool *nulls;
+    bool fast_nulls[2];
     Oid *types;
+    Oid fast_types[2];
     agtype_value agtv_result;
     float8 x, y;
     float8 angle;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 2, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 2)
@@ -9861,15 +9940,18 @@ Datum age_degrees(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle_degrees;
     float8 angle_radians;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9908,15 +9990,18 @@ Datum age_radians(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     float8 angle_degrees;
     float8 angle_radians;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -9955,8 +10040,11 @@ PG_FUNCTION_INFO_V1(age_round);
 Datum age_round(PG_FUNCTION_ARGS)
 {
     Datum *args = NULL;
+    Datum fast_args[2];
     bool *nulls = NULL;
+    bool fast_nulls[2];
     Oid *types = NULL;
+    Oid fast_types[2];
     int nargs = 0;
     agtype_value agtv_result;
     Numeric arg, arg_precision;
@@ -9965,8 +10053,8 @@ Datum age_round(PG_FUNCTION_ARGS)
     bool is_null = true;
     int precision = 0;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 2, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1 && nargs != 2)
@@ -10037,16 +10125,19 @@ Datum age_ceil(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric numeric_result;
     float8 float_result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10086,16 +10177,19 @@ Datum age_floor(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric numeric_result;
     float8 float_result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10136,16 +10230,19 @@ Datum age_abs(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric numeric_result;
     bool is_null = true;
     enum agtype_value_type type = AGTV_NULL;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10209,16 +10306,19 @@ Datum age_sign(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric numeric_result;
     int int_result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10259,8 +10359,11 @@ Datum age_log(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric zero;
@@ -10269,8 +10372,8 @@ Datum age_log(PG_FUNCTION_ARGS)
     bool is_null = true;
     int test;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10320,8 +10423,11 @@ Datum age_log10(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric zero;
@@ -10331,8 +10437,8 @@ Datum age_log10(PG_FUNCTION_ARGS)
     bool is_null = true;
     int test;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10435,16 +10541,19 @@ Datum age_exp(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric numeric_result;
     float8 float_result;
     bool is_null = true;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10484,8 +10593,11 @@ Datum age_sqrt(PG_FUNCTION_ARGS)
 {
     int nargs;
     Datum *args;
+    Datum fast_args[1];
     bool *nulls;
+    bool fast_nulls[1];
     Oid *types;
+    Oid fast_types[1];
     agtype_value agtv_result;
     Numeric arg;
     Numeric zero;
@@ -10494,8 +10606,8 @@ Datum age_sqrt(PG_FUNCTION_ARGS)
     bool is_null = true;
     int test;
 
-    /* extract argument values */
-    nargs = extract_variadic_args(fcinfo, 0, true, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, true, 1, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* check number of args */
     if (nargs != 1)
@@ -10593,10 +10705,11 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
     agtype_iterator *it;
     agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
-    agtype_value *r;
+    agtype_value r;
     agtype *prop_agtype;
     agtype_value *parsed_agtype_value = NULL;
     bool found;
+    int var_name_len;
 
     /* if no properties, return NULL */
     if (properties == NULL)
@@ -10611,13 +10724,14 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                         errmsg("can only update objects")));
     }
 
-    r = palloc0(sizeof(agtype_value));
+    var_name_len = strlen(var_name);
 
     prop_agtype = agtype_value_to_agtype(properties);
     it = agtype_iterator_init(&prop_agtype->root);
-    tok = agtype_iterator_next(&it, r, true);
+    tok = agtype_iterator_next(&it, &r, true);
 
-    parsed_agtype_value = push_agtype_value(&parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
+    parsed_agtype_value = push_agtype_value(&parse_state, tok,
+                                            tok < WAGT_BEGIN_ARRAY ? &r : NULL);
 
     /*
      * If the new value is NULL, this is equivalent to the remove_property
@@ -10631,16 +10745,17 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
     found = false;
     while (true)
     {
-        char *str;
+        bool key_matches;
 
-        tok = agtype_iterator_next(&it, r, true);
+        tok = agtype_iterator_next(&it, &r, true);
 
         if (tok == WAGT_DONE || tok == WAGT_END_OBJECT)
         {
             break;
         }
 
-        str = pnstrdup(r->val.string.val, r->val.string.len);
+        key_matches = (r.val.string.len == var_name_len &&
+                       memcmp(r.val.string.val, var_name, var_name_len) == 0);
 
         /*
          * Check the key value, if it is equal to the passed in
@@ -10648,15 +10763,15 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
          * in agtype. Otherwise pass the existing value to the
          * new properties agtype_value.
          */
-        if (strcmp(str, var_name))
+        if (!key_matches)
         {
             /* push the key */
             parsed_agtype_value = push_agtype_value(
-                &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
+                &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? &r : NULL);
 
             /* get the value and push the value */
-            tok = agtype_iterator_next(&it, r, true);
-            parsed_agtype_value = push_agtype_value(&parse_state, tok, r);
+            tok = agtype_iterator_next(&it, &r, true);
+            parsed_agtype_value = push_agtype_value(&parse_state, tok, &r);
         }
         else
         {
@@ -10666,16 +10781,16 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
             if(remove_property)
             {
                 /* skip the value */
-                tok = agtype_iterator_next(&it, r, true);
+                tok = agtype_iterator_next(&it, &r, true);
                 continue;
             }
 
             /* push the key */
             parsed_agtype_value = push_agtype_value(
-                &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
+                &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? &r : NULL);
 
             /* skip the existing value for the key */
-            tok = agtype_iterator_next(&it, r, true);
+            tok = agtype_iterator_next(&it, &r, true);
 
             /*
              * If the new agtype is scalar, push the agtype_value to the
@@ -10756,8 +10871,8 @@ agtype_value *alter_properties(agtype_value *original_properties,
     agtype_iterator *it;
     agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
-    agtype_value *key;
-    agtype_value *value;
+    agtype_value key;
+    agtype_value value;
     agtype_value *parsed_agtype_value = NULL;
 
     parsed_agtype_value = push_agtype_value(&parse_state, WAGT_BEGIN_OBJECT,
@@ -10777,10 +10892,8 @@ agtype_value *alter_properties(agtype_value *original_properties,
     }
 
     /* Append new properties. */
-    key = palloc0(sizeof(agtype_value));
-    value = palloc0(sizeof(agtype_value));
     it = agtype_iterator_init(&new_properties->root);
-    tok = agtype_iterator_next(&it, key, true);
+    tok = agtype_iterator_next(&it, &key, true);
 
     if (tok != WAGT_BEGIN_OBJECT)
     {
@@ -10790,19 +10903,19 @@ agtype_value *alter_properties(agtype_value *original_properties,
 
     while (true)
     {
-        tok = agtype_iterator_next(&it, key, true);
+        tok = agtype_iterator_next(&it, &key, true);
 
         if (tok == WAGT_DONE || tok == WAGT_END_OBJECT)
         {
             break;
         }
 
-        agtype_iterator_next(&it, value, true);
+        agtype_iterator_next(&it, &value, true);
 
         parsed_agtype_value = push_agtype_value(&parse_state, WAGT_KEY,
-                                                key);
+                                                &key);
         parsed_agtype_value = push_agtype_value(&parse_state, WAGT_VALUE,
-                                                value);
+                                                &value);
     }
 
     parsed_agtype_value = push_agtype_value(&parse_state, WAGT_END_OBJECT,
@@ -10838,6 +10951,7 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
     {
         int total_args = PG_NARGS();
         int actual_nargs = total_args - variadic_offset;
+        Oid argtype;
 
         /* Verify expected number of arguments */
         if (actual_nargs != expected_nargs)
@@ -10854,7 +10968,9 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
         }
 
         /* Check if the argument is already an agtype */
-        if (get_fn_expr_argtype(fcinfo->flinfo, variadic_offset) == AGTYPEOID)
+        argtype = get_cached_agtype_variadic_argtype(fcinfo, variadic_offset,
+                                                     total_args);
+        if (argtype == AGTYPEOID)
         {
             agtype_container *agtc;
 
@@ -10874,10 +10990,36 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
             return agtype_result;
         }
 
+        if (!OidIsValid(argtype))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("could not determine data type for argument %d",
+                            variadic_offset + 1)));
+        }
+
         /*
-         * Not an agtype, need to convert. Fall through to use
-         * extract_variadic_args for type conversion handling.
+         * Not an agtype, but still a fixed non-variadic call. Convert this
+         * single datum directly instead of allocating extract_variadic_args()
+         * arrays just to read one value.
          */
+        {
+            agtype_in_state state;
+            agt_type_category tcategory;
+            Oid outfuncoid;
+
+            state.parse_state = NULL;
+            state.res = NULL;
+
+            agtype_categorize_type(argtype, &tcategory, &outfuncoid);
+            datum_to_agtype(PG_GETARG_DATUM(variadic_offset), false, &state,
+                            tcategory, outfuncoid, false);
+            agtype_result = agtype_value_to_agtype(state.res);
+
+            pfree_agtype_in_state(&state);
+
+            return agtype_result;
+        }
     }
 
     /* Standard path using extract_variadic_args */
@@ -11304,7 +11446,7 @@ Datum age_percentile_aggtransfn(PG_FUNCTION_ARGS)
         /* switch to the correct aggregate context */
         old_mcxt = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
         /* create and initialize the state */
-        pgastate = palloc0(sizeof(PercentileGroupAggState));
+        pgastate = palloc(sizeof(PercentileGroupAggState));
         pgastate->percentile = percentile;
         /*
          * Percentiles need to be calculated from a sorted set. We are only
@@ -11485,9 +11627,12 @@ Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
 {
     agtype_in_state *castate;
     int nargs;
-    Datum *args;
-    bool *nulls;
-    Oid *types;
+    Datum arg;
+    Datum *args = NULL;
+    bool is_null = true;
+    bool *nulls = NULL;
+    Oid type = InvalidOid;
+    Oid *types = NULL;
     MemoryContext old_mcxt;
 
     /* verify we are in an aggregate context */
@@ -11503,8 +11648,9 @@ Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0))
     {
         /* create and initialize the state */
-        castate = palloc0(sizeof(agtype_in_state));
-        memset(castate, 0, sizeof(agtype_in_state));
+        castate = palloc(sizeof(agtype_in_state));
+        castate->parse_state = NULL;
+        castate->res = NULL;
 
         /* start the array */
         castate->res = push_agtype_value(&castate->parse_state,
@@ -11521,29 +11667,54 @@ Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
      * Insert the arg into the array, unless it is null. Nulls are
      * skipped over.
      */
-    if (PG_ARGISNULL(1))
+    if (!get_fn_expr_variadic(fcinfo->flinfo))
     {
-        nargs = 0;
+        nargs = PG_NARGS() - 1;
+        if (nargs == 1 && !PG_ARGISNULL(1))
+        {
+            arg = PG_GETARG_DATUM(1);
+            type = get_cached_fn_expr_argtype(fcinfo, 1);
+            if (type == UNKNOWNOID && get_fn_expr_arg_stable(fcinfo->flinfo, 1))
+            {
+                type = TEXTOID;
+                arg = CStringGetTextDatum(PG_GETARG_POINTER(1));
+            }
+            is_null = false;
+        }
     }
     else
     {
-        nargs = extract_variadic_args(fcinfo, 1, true, &args, &types, &nulls);
+        if (PG_ARGISNULL(1))
+        {
+            nargs = 0;
+        }
+        else
+        {
+            nargs = extract_variadic_args(fcinfo, 1, true, &args, &types,
+                                          &nulls);
+            if (nargs == 1)
+            {
+                arg = args[0];
+                type = types[0];
+                is_null = nulls[0];
+            }
+        }
     }
 
     if (nargs == 1)
     {
         /* only add non null values */
-        if (nulls[0] == false)
+        if (!is_null)
         {
             agtype_value *agtv_value = NULL;
 
             /* we need to check for agtype null and skip it, if found */
-            if (types[0] == AGTYPEOID)
+            if (type == AGTYPEOID)
             {
                 agtype *agt_arg;
 
                 /* get the agtype argument */
-                agt_arg = DATUM_GET_AGTYPE_P(args[0]);
+                agt_arg = DATUM_GET_AGTYPE_P(arg);
 
                 /* get the scalar value */
                 if (AGTYPE_CONTAINER_IS_SCALAR(&agt_arg->root))
@@ -11555,7 +11726,7 @@ Datum age_collect_aggtransfn(PG_FUNCTION_ARGS)
             /* skip the arg if agtype null */
             if (agtv_value == NULL || agtv_value->type != AGTV_NULL)
             {
-                add_agtype(args[0], nulls[0], castate, types[0], false);
+                add_agtype(arg, is_null, castate, type, false);
             }
         }
     }
@@ -11588,8 +11759,9 @@ Datum age_collect_aggfinalfn(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0))
     {
         /* create and initialize the state */
-        castate = palloc0(sizeof(agtype_in_state));
-        memset(castate, 0, sizeof(agtype_in_state));
+        castate = palloc(sizeof(agtype_in_state));
+        castate->parse_state = NULL;
+        castate->res = NULL;
         /* start the array */
         castate->res = push_agtype_value(&castate->parse_state,
                                          WAGT_BEGIN_ARRAY, NULL);
@@ -12427,8 +12599,11 @@ PG_FUNCTION_INFO_V1(age_range);
 Datum age_range(PG_FUNCTION_ARGS)
 {
     Datum *args = NULL;
+    Datum fast_args[3];
     bool *nulls = NULL;
+    bool fast_nulls[3];
     Oid *types = NULL;
+    Oid fast_types[3];
     int nargs;
     int64 start_idx = 0;
     int64 end_idx = 0;
@@ -12439,7 +12614,8 @@ Datum age_range(PG_FUNCTION_ARGS)
     int64 i = 0;
 
     /* get the arguments */
-    nargs = extract_variadic_args(fcinfo, 0, false, &args, &types, &nulls);
+    nargs = get_variadic_args_fast(fcinfo, false, 3, &args, &types, &nulls,
+                                   fast_args, fast_types, fast_nulls);
 
     /* throw an error if the number of args is not the expected number */
     if (nargs != 2 && nargs != 3)

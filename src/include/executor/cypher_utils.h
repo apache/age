@@ -46,7 +46,7 @@
     estate->es_snapshot->curcid--;
 
 #define DELETE_VERTEX_HTAB_NAME "delete_vertex_htab"
-#define DELETE_VERTEX_HTAB_SIZE 1000000
+#define DELETE_VERTEX_HTAB_INITIAL_SIZE 1024
 
 typedef struct cypher_create_custom_scan_state
 {

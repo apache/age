@@ -5175,7 +5175,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                  */
                 if (prop_var != NULL &&
                     pg_strncasecmp(node->name, AGE_DEFAULT_ALIAS_PREFIX,
-                                   strlen(AGE_DEFAULT_ALIAS_PREFIX)) == 0)
+                                   sizeof(AGE_DEFAULT_ALIAS_PREFIX) - 1) == 0)
                 {
                     prop_expr = prop_var;
                 }
@@ -5288,7 +5288,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                      */
                     if (prop_var != NULL &&
                         pg_strncasecmp(rel->name, AGE_DEFAULT_ALIAS_PREFIX,
-                                       strlen(AGE_DEFAULT_ALIAS_PREFIX)) == 0)
+                                       sizeof(AGE_DEFAULT_ALIAS_PREFIX) - 1) == 0)
                     {
                         prop_expr = prop_var;
                     }
@@ -6071,7 +6071,7 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
              */
             is_vle = (strncmp(node->name,
                               AGE_DEFAULT_PREFIX"vle_function_end_var",
-                              strlen(AGE_DEFAULT_PREFIX"vle_function_end_var"))
+                              sizeof(AGE_DEFAULT_PREFIX"vle_function_end_var") - 1)
                       == 0);
 
             /*
@@ -7259,8 +7259,10 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
     pstate->p_locked_from_parent = locked_from_parent;
     pstate->p_resolve_unknowns = resolve_unknowns;
 
-    clause = palloc0(sizeof(cypher_clause));
+    clause = palloc(sizeof(cypher_clause));
+    clause->next = NULL;
     clause->self = parseTree;
+    clause->prev = NULL;
     query = transform_cypher_clause(cpstate, clause);
 
     free_parsestate(pstate);
@@ -7653,7 +7655,7 @@ transform_merge_make_lateral_join(cypher_parsestate *cpstate, Query *query,
         {
             if (qte->resname != NULL &&
                 pg_strncasecmp(qte->resname, AGE_DEFAULT_VARNAME_PREFIX,
-                               strlen(AGE_DEFAULT_VARNAME_PREFIX)))
+                               sizeof(AGE_DEFAULT_VARNAME_PREFIX) - 1))
             {
                 qte->expr = add_volatile_wrapper(qte->expr);
             }

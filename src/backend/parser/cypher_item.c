@@ -181,8 +181,8 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
     List *names, *vars;
     ListCell *name, *var;
     List *te_list = NIL;
-    int var_prefix_len = strlen(AGE_DEFAULT_VARNAME_PREFIX);
-    int alias_prefix_len = strlen(AGE_DEFAULT_ALIAS_PREFIX);
+    int var_prefix_len = sizeof(AGE_DEFAULT_VARNAME_PREFIX) - 1;
+    int alias_prefix_len = sizeof(AGE_DEFAULT_ALIAS_PREFIX) - 1;
 
     vars = expandNSItemVars(pstate, pnsi, sublevels_up, location, &names);
 

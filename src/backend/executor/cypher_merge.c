@@ -448,14 +448,14 @@ static path_entry **prebuild_path(CustomScanState *node)
     int counter = 0;
 
     path_entry **path_array = NULL;
-    path_array = palloc0(sizeof(path_entry *) * css->path_length);
+    path_array = palloc(sizeof(path_entry *) * css->path_length);
 
     /* iterate through the path, partially prebuilding it */
     foreach (lc, nodes)
     {
         /* get the node/edge and allocate the memory needed */
         cypher_target_node *node = lfirst(lc);
-        path_entry *entry = palloc0(sizeof(path_entry));
+        path_entry *entry = palloc(sizeof(path_entry));
 
         /* if this isn't an actual passed in tuple */
         if (CYPHER_TARGET_NODE_INSERT_ENTITY(node->flags))
@@ -734,8 +734,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                     }
                     else
                     {
-                        created_path *new_path =
-                            palloc0(sizeof(created_path));
+                        created_path *new_path = palloc(sizeof(created_path));
 
                         new_path->next = css->created_paths_list;
                         new_path->entry = prebuilt_path_array;
@@ -837,7 +836,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                 }
                 else
                 {
-                    created_path *new_path = palloc0(sizeof(created_path));
+                    created_path *new_path = palloc(sizeof(created_path));
 
                     new_path->next = css->created_paths_list;
                     new_path->entry = prebuilt_path_array;

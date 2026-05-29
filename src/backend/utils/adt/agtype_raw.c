@@ -122,7 +122,7 @@ agtype_build_state *init_agtype_build_state(uint32 size, uint32 header_flag)
     int agtentry_len;
     agtype_build_state *bstate;
 
-    bstate = palloc0(sizeof(agtype_build_state));
+    bstate = palloc(sizeof(agtype_build_state));
     bstate->buffer = makeStringInfo();
     bstate->a_offset = 0;
     bstate->i = 0;

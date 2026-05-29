@@ -257,6 +257,7 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     TupleTableSlot *slot;
     Oid index_oid = InvalidOid;
     CommandId saved_curcid;
+    CommandId current_cid;
     IndexCacheEntry *cache_entry = NULL;
 
     /*
@@ -283,8 +284,8 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
      * are visible at the current curcid become invisible.
      */
     saved_curcid = estate->es_snapshot->curcid;
-    estate->es_snapshot->curcid = Max(saved_curcid,
-                                      GetCurrentCommandId(false));
+    current_cid = GetCurrentCommandId(false);
+    estate->es_snapshot->curcid = Max(saved_curcid, current_cid);
 
     if (index_cache != NULL)
     {
@@ -1108,13 +1109,13 @@ check_rls_for_tuple(Relation rel, HeapTuple tuple, CmdType cmd)
     List *permissive_policies;
     List *restrictive_policies;
     List *securityQuals = NIL;
-    ListCell *lc;
     Oid user_id;
     bool hasSubLinks = false;
     bool result = true;
     EState *estate;
     ExprContext *econtext;
     TupleTableSlot *slot;
+    ExprState *qualExpr;
 
     /* If RLS is not enabled, tuple passes */
     if (check_enable_rls(RelationGetRelid(rel), InvalidOid, true) != RLS_ENABLED)
@@ -1153,32 +1154,9 @@ check_rls_for_tuple(Relation rel, HeapTuple tuple, CmdType cmd)
     ExecStoreHeapTuple(tuple, slot, false);
     econtext->ecxt_scantuple = slot;
 
-    /* Compile and evaluate each qual */
-    foreach(lc, securityQuals)
-    {
-        Expr *qual = (Expr *) lfirst(lc);
-        ExprState *qualExpr;
-        List *qualList;
-
-        /* ExecPrepareQual expects a List */
-        if (!IsA(qual, List))
-        {
-            qualList = list_make1(qual);
-        }
-        else
-        {
-            qualList = (List *) qual;
-        }
-
-        /* Use ExecPrepareQual for standalone expression evaluation */
-        qualExpr = ExecPrepareQual(qualList, estate);
-
-        if (!ExecQual(qualExpr, econtext))
-        {
-            result = false;
-            break;
-        }
-    }
+    /* Compile the qual list once and evaluate it as an implicit AND. */
+    qualExpr = ExecPrepareQual(securityQuals, estate);
+    result = ExecQual(qualExpr, econtext);
 
     /* Clean up */
     ExecDropSingleTupleTableSlot(slot);

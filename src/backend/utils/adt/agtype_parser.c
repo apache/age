@@ -204,13 +204,16 @@ agtype_lex_context *make_agtype_lex_context(text *t, bool need_escapes)
 agtype_lex_context *make_agtype_lex_context_cstring_len(char *str, int len,
                                                         bool need_escapes)
 {
-    agtype_lex_context *lex = palloc0(sizeof(agtype_lex_context));
+    agtype_lex_context *lex = palloc(sizeof(agtype_lex_context));
 
     lex->input = lex->token_terminator = lex->line_start = str;
-    lex->line_number = 1;
     lex->input_length = len;
-    if (need_escapes)
-        lex->strval = makeStringInfo();
+    lex->token_start = NULL;
+    lex->prev_token_terminator = NULL;
+    lex->token_type = AGTYPE_TOKEN_INVALID;
+    lex->lex_level = 0;
+    lex->line_number = 1;
+    lex->strval = need_escapes ? makeStringInfo() : NULL;
     return lex;
 }
 

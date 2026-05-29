@@ -50,8 +50,8 @@
 /* defines */
 #define VERTEX_HTAB_NAME "Vertex to edge lists " /* added a space at end for */
 #define EDGE_HTAB_NAME "Edge to vertex mapping " /* the graph name to follow */
-#define VERTEX_HTAB_INITIAL_SIZE 10000
-#define EDGE_HTAB_INITIAL_SIZE 10000
+#define VERTEX_HTAB_INITIAL_SIZE 1024
+#define EDGE_HTAB_INITIAL_SIZE 1024
 
 /* Maximum number of graphs tracked for version counting */
 #define AGE_MAX_GRAPHS 128
@@ -134,7 +134,7 @@ typedef struct edge_entry
 
 typedef struct graph_label_entry
 {
-    char *name;
+    NameData name;
     Oid relation;
 } graph_label_entry;
 
@@ -265,26 +265,11 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     char *graph_name = NULL;
     char *vhn = NULL;
     char *ehn = NULL;
-    int glen;
-    int vlen;
-    int elen;
 
-    /* get the graph name and length */
+    /* get the graph name */
     graph_name = ggctx->graph_name;
-    glen = strlen(graph_name);
-    /* get the vertex htab name length */
-    vlen = strlen(VERTEX_HTAB_NAME);
-    /* get the edge htab name length */
-    elen = strlen(EDGE_HTAB_NAME);
-    /* allocate the space and build the names */
-    vhn = palloc0(vlen + glen + 1);
-    ehn = palloc0(elen + glen + 1);
-    /* copy in the names */
-    strcpy(vhn, VERTEX_HTAB_NAME);
-    strcpy(ehn, EDGE_HTAB_NAME);
-    /* add in the graph name */
-    vhn = strncat(vhn, graph_name, glen);
-    ehn = strncat(ehn, graph_name, glen);
+    vhn = psprintf("%s%s", VERTEX_HTAB_NAME, graph_name);
+    ehn = psprintf("%s%s", EDGE_HTAB_NAME, graph_name);
 
     /* initialize the vertex hashtable */
     MemSet(&vertex_ctl, 0, sizeof(vertex_ctl));
@@ -349,11 +334,8 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
         if (!is_null)
         {
-            Name label_name;
-
             label = palloc(sizeof(*label));
-            label_name = DatumGetName(datum);
-            label->name = pstrdup(NameStr(*label_name));
+            namestrcpy(&label->name, NameStr(*DatumGetName(datum)));
 
             datum = heap_getattr(tuple, Anum_ag_label_relation, tupdesc,
                                  &is_null);
@@ -611,7 +593,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
         TupleDesc tupdesc;
 
         label_entry = lfirst(lc);
-        vertex_label_name = label_entry->name;
+        vertex_label_name = NameStr(label_entry->name);
         vertex_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
         graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
@@ -718,7 +700,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
         TupleDesc tupdesc;
 
         label_entry = lfirst(lc);
-        edge_label_name = label_entry->name;
+        edge_label_name = NameStr(label_entry->name);
         edge_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
         graph_edge_label = table_open(edge_label_table_oid, AccessShareLock);
@@ -1016,7 +998,7 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
     }
 
     /* otherwise, we need to create one and possibly attach it */
-    new_ggctx = palloc0(sizeof(GRAPH_global_context));
+    new_ggctx = palloc(sizeof(GRAPH_global_context));
 
     if (global_graph_contexts_container.contexts != NULL)
     {
@@ -1038,9 +1020,13 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
     new_ggctx->graph_version = get_graph_version(graph_oid);
 
     /* set snapshot fields for SNAPSHOT fallback mode */
-    new_ggctx->xmin = GetActiveSnapshot()->xmin;
-    new_ggctx->xmax = GetActiveSnapshot()->xmax;
-    new_ggctx->curcid = GetActiveSnapshot()->curcid;
+    {
+        Snapshot snap = GetActiveSnapshot();
+
+        new_ggctx->xmin = snap->xmin;
+        new_ggctx->xmax = snap->xmax;
+        new_ggctx->curcid = snap->curcid;
+    }
 
     /* initialize our vertices list */
     new_ggctx->vertices = NULL;
@@ -1137,6 +1123,8 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
     char *graph_name_cstr;
+    NameData graph_name_buf;
+    bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
         graph_name_len < NAMEDATALEN &&
@@ -1147,14 +1135,28 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
         return cached_graph_oid;
     }
 
-    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    if (graph_name_len < NAMEDATALEN)
+    {
+        memcpy(NameStr(graph_name_buf), graph_name, graph_name_len);
+        NameStr(graph_name_buf)[graph_name_len] = '\0';
+        graph_name_cstr = NameStr(graph_name_buf);
+    }
+    else
+    {
+        graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+        free_graph_name = true;
+    }
+
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
         namestrcpy(&cached_graph_name, graph_name_cstr);
-        cached_generation = get_graph_cache_generation();
+        cached_generation = current_generation;
     }
-    pfree(graph_name_cstr);
+    if (free_graph_name)
+    {
+        pfree(graph_name_cstr);
+    }
 
     return cached_graph_oid;
 }

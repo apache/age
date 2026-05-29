@@ -69,6 +69,7 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     cypher_set_custom_scan_state *css =
         (cypher_set_custom_scan_state *)node;
     Plan *subplan;
+    ListCell *lc;
 
     Assert(list_length(css->cs->custom_plans) == 1);
     css->graph_oid = css->set_list->graph_oid;
@@ -106,6 +107,17 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
     if (estate->es_output_cid == 0)
     {
         estate->es_output_cid = estate->es_snapshot->curcid;
+    }
+
+    foreach(lc, css->set_list->set_items)
+    {
+        cypher_update_item *item = (cypher_update_item *)lfirst(lc);
+
+        if (item->prop_expr != NULL)
+        {
+            item->prop_expr_state = ExecInitExpr((Expr *)item->prop_expr,
+                                                 (PlanState *)node);
+        }
     }
 
     init_update_caches(&css->qual_cache, &css->index_cache,
@@ -464,6 +476,7 @@ void apply_update_list(CustomScanState *node,
     EState *estate = node->ss.ps.state;
     int *luindex = NULL;
     int lidx = 0;
+    int num_set_items;
     HTAB *qual_cache = NULL;
     HTAB *index_cache = NULL;
     HTAB *result_rel_info_cache = NULL;
@@ -523,8 +536,7 @@ void apply_update_list(CustomScanState *node,
         }
     }
 
-    /* allocate an array to hold the last update index of each 'entity' */
-    luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
+    num_set_items = list_length(set_info->set_items);
 
     /*
      * Iterate through the SET items list and store the loop index of each
@@ -535,15 +547,21 @@ void apply_update_list(CustomScanState *node,
      * to correctly update an 'entity' after all other previous updates to that
      * 'entity' have been done.
      */
-    foreach (lc, set_info->set_items)
+    if (num_set_items > 1)
     {
-        cypher_update_item *update_item = NULL;
+        /* allocate an array to hold the last update index of each 'entity' */
+        luindex = palloc(sizeof(int) * scanTupleSlot->tts_nvalid);
 
-        update_item = (cypher_update_item *)lfirst(lc);
-        luindex[update_item->entity_position - 1] = lidx;
+        foreach (lc, set_info->set_items)
+        {
+            cypher_update_item *update_item = NULL;
 
-        /* increment the loop index */
-        lidx++;
+            update_item = (cypher_update_item *)lfirst(lc);
+            luindex[update_item->entity_position - 1] = lidx;
+
+            /* increment the loop index */
+            lidx++;
+        }
     }
 
     /* reset loop index */
@@ -571,7 +589,6 @@ void apply_update_list(CustomScanState *node,
         Datum new_entity;
         HeapTuple heap_tuple;
         char *clause_name = set_info->clause_name;
-        int cid;
         Oid index_oid = InvalidOid;
         Relation rel = NULL;
         Oid relid = InvalidOid;
@@ -660,9 +677,8 @@ void apply_update_list(CustomScanState *node,
             bool isnull;
 
             /*
-             * Use the pre-initialized ExprState if available (set during
-             * plan init in begin_cypher_merge). Fall back to per-row init
-             * for callers that haven't pre-initialized (e.g. plain SET).
+             * Use the pre-initialized ExprState if available. Fall back to
+             * per-row init for callers that haven't pre-initialized.
              */
             if (update_item->prop_expr_state != NULL)
             {
@@ -701,7 +717,7 @@ void apply_update_list(CustomScanState *node,
 
         /* Alter the properties Agtype value. */
         if (update_item->prop_name != NULL &&
-            strcmp(update_item->prop_name, "") != 0)
+            update_item->prop_name[0] != '\0')
         {
             altered_properties = alter_property_value(original_properties,
                                                       update_item->prop_name,
@@ -771,11 +787,14 @@ void apply_update_list(CustomScanState *node,
          * If the last update index for the entity is equal to the current loop
          * index, then update this tuple.
          */
-        cid = estate->es_snapshot->curcid;
-        estate->es_snapshot->curcid = GetCurrentCommandId(false);
-
-        if (luindex[update_item->entity_position - 1] == lidx)
+        if (num_set_items == 1 ||
+            luindex[update_item->entity_position - 1] == lidx)
         {
+            int cid;
+
+            cid = estate->es_snapshot->curcid;
+            estate->es_snapshot->curcid = GetCurrentCommandId(false);
+
             resultRelInfo = get_entity_result_rel_info(
                 estate, result_rel_info_cache, label_cache->relation);
 
@@ -967,9 +986,8 @@ void apply_update_list(CustomScanState *node,
                 table_endscan(scan_desc);
             }
 
+            estate->es_snapshot->curcid = cid;
         }
-
-        estate->es_snapshot->curcid = cid;
 
         /* increment loop index */
         lidx++;
