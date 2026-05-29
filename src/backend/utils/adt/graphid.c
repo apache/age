@@ -120,9 +120,10 @@ Datum graphid_out(PG_FUNCTION_ARGS)
     graphid gid = AG_GETARG_GRAPHID(0);
     char buf[32]; /* greater than MAXINT8LEN+1 */
     char *out;
+    int len;
 
-    pg_lltoa(gid, buf);
-    out = pstrdup(buf);
+    len = pg_lltoa(gid, buf);
+    out = pnstrdup(buf, len);
 
     PG_RETURN_CSTRING(out);
 }

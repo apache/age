@@ -153,8 +153,8 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found);
 static const char *get_mapped_extension(Oid func_oid);
 static bool function_belongs_to_extension(Oid func_oid, const char *extension);
 static bool is_extension_external(const char *extension);
-static bool function_needs_graph_name_argument(const char *name);
-static char *construct_age_function_name(char *funcname);
+static bool function_needs_graph_name_argument(const char *name, int name_len);
+static char *construct_age_function_name(char *funcname, int funcname_len);
 static void initialize_function_caches(void);
 static void invalidate_function_caches(Datum arg, int cache_id,
                                        uint32 hash_value);
@@ -1623,47 +1623,55 @@ static Node *transform_cypher_typecast(cypher_parsestate *cpstate,
     if (list_length(target_typ->names) == 1)
     {
         char *typecast = strVal(linitial(target_typ->names));
+        int typecast_len = strlen(typecast);
 
         /* append the name of the requested typecast function */
-        if (pg_strcasecmp(typecast, "edge") == 0)
+        if (typecast_len == 4 && pg_strcasecmp(typecast, "edge") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_EDGE));
         }
-        else if (pg_strcasecmp(typecast, "path") == 0)
+        else if (typecast_len == 4 && pg_strcasecmp(typecast, "path") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_PATH));
         }
-        else if (pg_strcasecmp(typecast, "vertex") == 0)
+        else if (typecast_len == 6 && pg_strcasecmp(typecast, "vertex") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_VERTEX));
         }
-        else if (pg_strcasecmp(typecast, "numeric") == 0)
+        else if (typecast_len == 7 && pg_strcasecmp(typecast, "numeric") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_NUMERIC));
         }
-        else if (pg_strcasecmp(typecast, "float") == 0)
+        else if (typecast_len == 5 && pg_strcasecmp(typecast, "float") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_FLOAT));
         }
-        else if (pg_strcasecmp(typecast, "int") == 0 ||
-                 pg_strcasecmp(typecast, "integer") == 0)
+        else if ((typecast_len == 3 &&
+                  pg_strcasecmp(typecast, "int") == 0) ||
+                 (typecast_len == 7 &&
+                  pg_strcasecmp(typecast, "integer") == 0))
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_INT));
         }
-        else if (pg_strcasecmp(typecast, "pg_float8") == 0)
+        else if (typecast_len == 9 &&
+                 pg_strcasecmp(typecast, "pg_float8") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_PG_FLOAT8));
         }
-        else if (pg_strcasecmp(typecast, "pg_bigint") == 0)
+        else if (typecast_len == 9 &&
+                 pg_strcasecmp(typecast, "pg_bigint") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_PG_BIGINT));
         }
-        else if ((pg_strcasecmp(typecast, "bool") == 0 ||
-                 pg_strcasecmp(typecast, "boolean") == 0))
+        else if ((typecast_len == 4 &&
+                  pg_strcasecmp(typecast, "bool") == 0) ||
+                 (typecast_len == 7 &&
+                  pg_strcasecmp(typecast, "boolean") == 0))
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_BOOL));
         }
-        else if (pg_strcasecmp(typecast, "pg_text") == 0)
+        else if (typecast_len == 7 &&
+                 pg_strcasecmp(typecast, "pg_text") == 0)
         {
             fname = lappend(fname, makeString(FUNC_AGTYPE_TYPECAST_PG_TEXT));
         }
@@ -1883,6 +1891,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     bool asp_fetched = false;
     bool found = false;
     char *funcname = (((String*)linitial(fn->funcname))->sval);
+    int funcname_len = strlen(funcname);
 
     /* get a list of matching functions */
     catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
@@ -1906,9 +1915,10 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
          * variadic match before checking if it is in the search
          * path.
          */
-        if (pg_strcasecmp(funcname, procform->proname.data) == 0 &&
-            nargs == procform->pronargs &&
-            fn->func_variadic == procform->provariadic)
+        if (nargs == procform->pronargs &&
+            fn->func_variadic == procform->provariadic &&
+            strnlen(NameStr(procform->proname), NAMEDATALEN) == funcname_len &&
+            pg_strcasecmp(funcname, procform->proname.data) == 0)
         {
             if (!asp_fetched)
             {
@@ -1947,7 +1957,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
 
     /* we need to release the cache list */
     ReleaseSysCacheList(catlist);
-    pfree_if_not_null(asp);
+    list_free(asp);
 
     return result;
 }
@@ -2051,27 +2061,27 @@ static bool is_extension_external(const char *extension)
             (pg_strcasecmp(extension, "age") != 0));
 }
 
-static bool function_needs_graph_name_argument(const char *name)
+static bool function_needs_graph_name_argument(const char *name, int name_len)
 {
     switch (name[0])
     {
         case 'e':
-            return strcmp(name, "endNode") == 0;
+            return name_len == 7 && memcmp(name, "endNode", 7) == 0;
         case 's':
-            return strcmp(name, "startNode") == 0;
+            return name_len == 9 && memcmp(name, "startNode", 9) == 0;
         case 'v':
-            return (strcmp(name, "vle") == 0 ||
-                    strcmp(name, "vertex_stats") == 0);
+            return (name_len == 3 && memcmp(name, "vle", 3) == 0) ||
+                   (name_len == 12 &&
+                    memcmp(name, "vertex_stats", 12) == 0);
         default:
             return false;
     }
 }
 
 /* Returns age_ prefiexed lower case function name */
-static char *construct_age_function_name(char *funcname)
+static char *construct_age_function_name(char *funcname, int funcname_len)
 {
-    int pnlen = strlen(funcname);
-    char *ag_name = palloc(pnlen + 5);
+    char *ag_name = palloc(funcname_len + 5);
     int i;
 
     /* copy in the prefix - all AGE functions are prefixed with age_ */
@@ -2081,7 +2091,7 @@ static char *construct_age_function_name(char *funcname)
      * All AGE function names are in lower case. So, copy in the funcname
      * in lower case.
      */
-    for (i = 0; i < pnlen; i++)
+    for (i = 0; i < funcname_len; i++)
     {
         ag_name[i + 4] = tolower(funcname[i]);
     }
@@ -2472,7 +2482,8 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
     else
     {
         char *name = strVal(linitial(fn->funcname));
-        char *ag_name = construct_age_function_name(name);
+        int name_len = strlen(name);
+        char *ag_name = construct_age_function_name(name, name_len);
 
         if (function_exists(ag_name, "age"))
         {
@@ -2486,7 +2497,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
              * is not empty. Then prepend the graph name if necessary.
              */
             if ((targs != NIL) &&
-                function_needs_graph_name_argument(name))
+                function_needs_graph_name_argument(name, name_len))
             {
                 char *graph_name = cpstate->graph_name;
                 Datum d = string_to_agtype(graph_name);

@@ -1103,6 +1103,7 @@ static void agtype_put_escaped_value(StringInfo out, agtype_value *scalar_val,
                                      bool extend)
 {
     char *numstr;
+    int numstr_len;
 
     switch (scalar_val->type)
     {
@@ -1114,25 +1115,30 @@ static void agtype_put_escaped_value(StringInfo out, agtype_value *scalar_val,
                       scalar_val->val.string.len);
         break;
     case AGTV_NUMERIC:
-        appendStringInfoString(
-            out, DatumGetCString(DirectFunctionCall1(
-                     numeric_out, PointerGetDatum(scalar_val->val.numeric))));
+        numstr = DatumGetCString(DirectFunctionCall1(
+            numeric_out, PointerGetDatum(scalar_val->val.numeric)));
+        numstr_len = strlen(numstr);
+        appendBinaryStringInfo(out, numstr, numstr_len);
         if (extend)
         {
             appendBinaryStringInfo(out, "::numeric", 9);
         }
         break;
     case AGTV_INTEGER:
-        appendStringInfoString(
-            out, DatumGetCString(DirectFunctionCall1(
-                     int8out, Int64GetDatum(scalar_val->val.int_value))));
-        break;
-    case AGTV_FLOAT:
-        numstr = DatumGetCString(DirectFunctionCall1(
-            float8out, Float8GetDatum(scalar_val->val.float_value)));
-        appendStringInfoString(out, numstr);
+    {
+        char intbuf[24];
+        int intbuf_len;
 
-        if (is_decimal_needed(numstr))
+        intbuf_len = pg_lltoa(scalar_val->val.int_value, intbuf);
+        appendBinaryStringInfo(out, intbuf, intbuf_len);
+        break;
+    }
+    case AGTV_FLOAT:
+        numstr = float8out_internal(scalar_val->val.float_value);
+        numstr_len = strlen(numstr);
+        appendBinaryStringInfo(out, numstr, numstr_len);
+
+        if (is_decimal_needed_len(numstr, numstr_len))
             appendBinaryStringInfo(out, ".0", 2);
         break;
     case AGTV_BOOL:
@@ -1233,13 +1239,20 @@ static void escape_agtype(StringInfo buf, const char *str, int len)
 
 bool is_decimal_needed(char *numstr)
 {
+    Assert(numstr);
+
+    return is_decimal_needed_len(numstr, strlen(numstr));
+}
+
+bool is_decimal_needed_len(const char *numstr, int len)
+{
     int i;
 
     Assert(numstr);
 
     i = (numstr[0] == '-') ? 1 : 0;
 
-    while (numstr[i] != '\0')
+    while (i < len)
     {
         if (numstr[i] < '0' || numstr[i] > '9')
             return false;
@@ -1533,23 +1546,37 @@ static text *agtype_value_to_text(agtype_value *scalar_val,
     switch (scalar_val->type)
     {
     case AGTV_INTEGER:
-        result = cstring_to_text(DatumGetCString(DirectFunctionCall1(
-            int8out, Int64GetDatum(scalar_val->val.int_value))));
+    {
+        char intbuf[24];
+        int intbuf_len;
+
+        intbuf_len = pg_lltoa(scalar_val->val.int_value, intbuf);
+        result = cstring_to_text_with_len(intbuf, intbuf_len);
         break;
+    }
     case AGTV_FLOAT:
-        result = cstring_to_text(DatumGetCString(DirectFunctionCall1(
-            float8out, Float8GetDatum(scalar_val->val.float_value))));
+    {
+        char *numstr = float8out_internal(scalar_val->val.float_value);
+
+        result = cstring_to_text_with_len(numstr, strlen(numstr));
         break;
+    }
     case AGTV_STRING:
         result = cstring_to_text_with_len(scalar_val->val.string.val,
                                           scalar_val->val.string.len);
         break;
     case AGTV_NUMERIC:
-        result = cstring_to_text(DatumGetCString(DirectFunctionCall1(
-            numeric_out, PointerGetDatum(scalar_val->val.numeric))));
+    {
+        char *numstr = DatumGetCString(DirectFunctionCall1(
+            numeric_out, PointerGetDatum(scalar_val->val.numeric)));
+
+        result = cstring_to_text_with_len(numstr, strlen(numstr));
         break;
+    }
     case AGTV_BOOL:
-        result = cstring_to_text((scalar_val->val.boolean) ? "true" : "false");
+        result = scalar_val->val.boolean ?
+                 cstring_to_text_with_len("true", 4) :
+                 cstring_to_text_with_len("false", 5);
         break;
     case AGTV_NULL:
         result = NULL;
@@ -1772,6 +1799,7 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
                             bool key_scalar)
 {
     char *outputstr;
+    int outputstr_len;
     bool numeric_error;
     agtype_value agtv;
     bool scalar_agtype = false;
@@ -1811,9 +1839,11 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
         case AGT_TYPE_BOOL:
             if (key_scalar)
             {
-                outputstr = DatumGetBool(val) ? "true" : "false";
+                bool boolval = DatumGetBool(val);
+
+                outputstr = boolval ? "true" : "false";
                 agtv.type = AGTV_STRING;
-                agtv.val.string.len = strlen(outputstr);
+                agtv.val.string.len = boolval ? 4 : 5;
                 agtv.val.string.val = outputstr;
             }
             else
@@ -1856,11 +1886,20 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
             break;
         case AGT_TYPE_NUMERIC:
             outputstr = OidOutputFunctionCall(outfuncoid, val);
+            outputstr_len = 0;
+            numeric_error = false;
+            for (char *ptr = outputstr; *ptr != '\0'; ptr++)
+            {
+                if (*ptr == 'N' || *ptr == 'n')
+                    numeric_error = true;
+                outputstr_len++;
+            }
+
             if (key_scalar)
             {
                 /* always quote keys */
                 agtv.type = AGTV_STRING;
-                agtv.val.string.len = strlen(outputstr);
+                agtv.val.string.len = outputstr_len;
                 agtv.val.string.val = outputstr;
             }
             else
@@ -1870,8 +1909,6 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
                  * a string. Invalid numeric output will always have an
                  * 'N' or 'n' in it (I think).
                  */
-                numeric_error = (strchr(outputstr, 'N') != NULL ||
-                                 strchr(outputstr, 'n') != NULL);
                 if (!numeric_error)
                 {
                     Datum numd;
@@ -1887,7 +1924,7 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
                 else
                 {
                     agtv.type = AGTV_STRING;
-                    agtv.val.string.len = strlen(outputstr);
+                    agtv.val.string.len = outputstr_len;
                     agtv.val.string.val = outputstr;
                 }
             }
@@ -3450,22 +3487,7 @@ Datum agtype_to_float8(PG_FUNCTION_ARGS)
     }
     else if (agtv.type == AGTV_INTEGER)
     {
-        /*
-         * Get the string representation of the integer because it could be
-         * too large to fit in a float. Let the float routine determine
-         * what to do with it.
-         */
-        char *string = DatumGetCString(DirectFunctionCall1(int8out,
-                           Int64GetDatum(agtv.val.int_value)));
-        bool is_valid = false;
-        /* turn it into a float */
-        result = float8in_internal_null(string, NULL, "double precision",
-                                     string, &is_valid);
-
-        /* return null if it was not a invalid float */
-        if (!is_valid)
-            ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-                            errmsg("cannot cast to float8, integer value out of range")));
+        result = (float8) agtv.val.int_value;
     }
     else if (agtv.type == AGTV_NUMERIC)
     {
@@ -5398,8 +5420,7 @@ Datum agtype_typecast_bool(PG_FUNCTION_ARGS)
         PG_RETURN_POINTER(agtype_value_to_agtype(arg_value));
         break;
     case AGTV_INTEGER:
-        d = DirectFunctionCall1(int4_bool,
-                                Int64GetDatum(arg_value->val.int_value));
+        d = BoolGetDatum(arg_value->val.int_value != 0);
         break;
     /* what was given doesn't cast to a bool */
     default:
@@ -5451,9 +5472,7 @@ Datum agtype_typecast_float(PG_FUNCTION_ARGS)
     switch(arg_value->type)
     {
     case AGTV_INTEGER:
-        d = DirectFunctionCall1(int8out,
-                                Int64GetDatum(arg_value->val.int_value));
-        d = DirectFunctionCall1(float8in, d);
+        d = Float8GetDatum((float8)arg_value->val.int_value);
         break;
     case AGTV_FLOAT:
         /* it is already a float so just return it */
@@ -6576,10 +6595,14 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
         {
             if (type == CSTRINGOID)
             {
+                int len;
+
                 string = DatumGetCString(arg);
-                if (pg_strcasecmp(string, "true") == 0)
+                len = strlen(string);
+                if (len == 4 && pg_strncasecmp(string, "true", len) == 0)
                     result = true;
-                else if (pg_strcasecmp(string, "false") == 0)
+                else if (len == 5 &&
+                         pg_strncasecmp(string, "false", len) == 0)
                     result = false;
                 else
                     PG_RETURN_NULL();
@@ -6600,7 +6623,12 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
         }
         else if (type == INT2OID || type == INT4OID || type == INT8OID)
         {
-            result = DatumGetBool(DirectFunctionCall1(int4_bool, arg));
+            if (type == INT2OID)
+                result = DatumGetInt16(arg) != 0;
+            else if (type == INT4OID)
+                result = DatumGetInt32(arg) != 0;
+            else
+                result = DatumGetInt64(arg) != 0;
         }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -6638,8 +6666,7 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
         }
         else if (agtv_value->type == AGTV_INTEGER)
         {
-            result = DatumGetBool(DirectFunctionCall1(int4_bool,
-                                                      Int64GetDatum(agtv_value->val.int_value)));
+            result = agtv_value->val.int_value != 0;
         }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -6665,7 +6692,6 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
     agtype_in_state agis_result;
     agtype_value *elem;
     agtype_value bool_elem;
-    char *string = NULL;
     int count;
     int i;
 
@@ -6702,16 +6728,17 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
         switch (elem->type)
         {
         case AGTV_STRING:
-            
-            string = elem->val.string.val;
+        {
+            char *string = elem->val.string.val;
+            int len = elem->val.string.len;
 
-            if (pg_strcasecmp(string, "true") == 0)
+            if (len == 4 && pg_strncasecmp(string, "true", len) == 0)
             {
                 bool_elem.val.boolean = true;
                 agis_result.res = push_agtype_value(&agis_result.parse_state,
                                                     WAGT_ELEM, &bool_elem);
             }
-            else if (pg_strcasecmp(string, "false") == 0)
+            else if (len == 5 && pg_strncasecmp(string, "false", len) == 0)
             {
                 bool_elem.val.boolean = false;
                 agis_result.res = push_agtype_value(&agis_result.parse_state,
@@ -6723,9 +6750,10 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
                 agis_result.res = push_agtype_value(&agis_result.parse_state,
                                                     WAGT_ELEM, &bool_elem);
             }
-            
+
             break;
-        
+        }
+
         case AGTV_BOOL:
             
             bool_elem.val.boolean = elem->val.boolean;
@@ -6736,8 +6764,7 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
         
         case AGTV_INTEGER:
 
-            bool_elem.val.boolean = DatumGetBool(DirectFunctionCall1(int4_bool,
-                                                                     Int64GetDatum(elem->val.int_value)));
+            bool_elem.val.boolean = elem->val.int_value != 0;
             agis_result.res = push_agtype_value(&agis_result.parse_state,
                                                 WAGT_ELEM, &bool_elem);
 
@@ -6787,20 +6814,7 @@ Datum age_tofloat(PG_FUNCTION_ARGS)
         else if (type == INT4OID)
             result = (float8) DatumGetInt32(arg);
         else if (type == INT8OID)
-        {
-            /*
-             * Get the string representation of the integer because it could be
-             * too large to fit in a float. Let the float routine determine
-             * what to do with it.
-             */
-            string = DatumGetCString(DirectFunctionCall1(int8out, arg));
-            /* turn it into a float */
-            result = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-            /* return null if it was not a invalid float */
-            if (!is_valid)
-                PG_RETURN_NULL();
-        }
+            result = (float8) DatumGetInt64(arg);
         else if (type == FLOAT4OID)
             result = (float8) DatumGetFloat4(arg);
         else if (type == FLOAT8OID)
@@ -6841,15 +6855,7 @@ Datum age_tofloat(PG_FUNCTION_ARGS)
 
         if (agtv_value->type == AGTV_INTEGER)
         {
-            /* get the string representation of the integer */
-            string = DatumGetCString(DirectFunctionCall1(int8out,
-                         Int64GetDatum(agtv_value->val.int_value)));
-            /* turn it into a float */
-            result = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-            /* return null if it was an invalid float */
-            if (!is_valid)
-                PG_RETURN_NULL();
+            result = (float8) agtv_value->val.int_value;
         }
         else if (agtv_value->type == AGTV_FLOAT)
             result = agtv_value->val.float_value;
@@ -6863,6 +6869,7 @@ Datum age_tofloat(PG_FUNCTION_ARGS)
                               agtv_value->val.string.len);
             result = float8in_internal_null(string, NULL, "double precision",
                                             string, &is_valid);
+            pfree(string);
             if (!is_valid)
                 PG_RETURN_NULL();
         }
@@ -6890,12 +6897,8 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     agtype_in_state agis_result;
     agtype_value *elem;
     agtype_value float_elem;
-    char *string = NULL;
     int count;
     int i;
-    bool is_valid = false;
-    float8 float_num;
-    char buffer[64];
 
     /* check for null */
     if (PG_ARGISNULL(0))
@@ -6936,38 +6939,46 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
         switch (elem->type)
         {
         case AGTV_STRING:
+        {
+            bool is_valid = false;
+            char *string;
 
-            string = elem->val.string.val;
-            if (atof(string))
+            string = pnstrdup(elem->val.string.val, elem->val.string.len);
+            float_elem.val.float_value =
+                float8in_internal_null(string, NULL, "double precision",
+                                       string, &is_valid);
+            pfree(string);
+
+            if (is_valid)
             {
                 float_elem.type = AGTV_FLOAT;
-                float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &float_elem);
             }
             else
             {
                 float_elem.type = AGTV_NULL;
-                agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+                agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                    WAGT_ELEM, &float_elem);
             }
 
             break;
+        }
 
         case AGTV_FLOAT:
 
             float_elem.type = AGTV_FLOAT;
-            float_num = elem->val.float_value;
-            sprintf(buffer, "%f", float_num);
-            string = buffer;
-            float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision", string, &is_valid);
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+            float_elem.val.float_value = elem->val.float_value;
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &float_elem);
 
             break;
 
         default:
 
             float_elem.type = AGTV_NULL;
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &float_elem);
 
             break;
         }
@@ -7065,9 +7076,6 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
              * If it isn't an integer string, try converting it as a float
              * string.
              */
-            result = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-
             if (*endptr != '\0')
             {
                 float8 f;
@@ -7164,11 +7172,14 @@ Datum age_tointeger(PG_FUNCTION_ARGS)
                 if (!is_valid || isnan(f) || isinf(f) ||
                     f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
                 {
+                    pfree(string);
                     PG_RETURN_NULL();
                 }
 
                 result = (int64) f;
             }
+
+            pfree(string);
         }
         else
         {
@@ -7198,10 +7209,6 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
     agtype_value integer_elem;
     int count;
     int i;
-    char *string = NULL;
-    int integer_num;
-    float float_num;
-    int is_float;
 
     /* check for null */
     if (PG_ARGISNULL(0))
@@ -7241,62 +7248,80 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
         switch (elem->type)
         {
         case AGTV_STRING:
+        {
+            char *string;
+            char *endptr;
+            int64 value;
 
-            string = elem->val.string.val;
-            integer_elem.type = AGTV_INTEGER;
-            integer_elem.val.int_value = atoi(string);
+            string = pnstrdup(elem->val.string.val, elem->val.string.len);
+            value = strtoi64(string, &endptr, 10);
 
-            if (*string == '+' || *string == '-' || (*string >= '0' && *string <= '9'))
+            if (*endptr != '\0')
             {
-                is_float = 1;
-                while (*(++string))
+                bool is_valid = false;
+                float8 f;
+
+                f = float8in_internal_null(string, NULL, "double precision",
+                                           string, &is_valid);
+                if (!is_valid || isnan(f) || isinf(f) ||
+                    f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
                 {
-                    if(!(*string >= '0' && *string <= '9'))
-                    {
-                        if(*string == '.' && is_float)
-                        {
-                            is_float--;
-                        }
-                        else
-                        {
-                            integer_elem.type = AGTV_NULL;
-                            break;
-                        }
-                    }
+                    integer_elem.type = AGTV_NULL;
+                }
+                else
+                {
+                    integer_elem.type = AGTV_INTEGER;
+                    integer_elem.val.int_value = (int64)f;
                 }
             }
             else
             {
-
-                integer_elem.type = AGTV_NULL;
+                integer_elem.type = AGTV_INTEGER;
+                integer_elem.val.int_value = value;
             }
 
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &integer_elem);
+            pfree(string);
+
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &integer_elem);
 
             break;
+        }
 
         case AGTV_FLOAT:
+        {
+            float8 f = elem->val.float_value;
 
-            integer_elem.type = AGTV_INTEGER;
-            float_num = elem->val.float_value;
-            integer_elem.val.int_value = (int)float_num;
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &integer_elem);
+            if (isnan(f) || isinf(f) ||
+                f < (float8)PG_INT64_MIN || f > (float8)PG_INT64_MAX)
+            {
+                integer_elem.type = AGTV_NULL;
+            }
+            else
+            {
+                integer_elem.type = AGTV_INTEGER;
+                integer_elem.val.int_value = (int64)f;
+            }
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &integer_elem);
 
             break;
+        }
 
         case AGTV_INTEGER:
 
             integer_elem.type = AGTV_INTEGER;
-            integer_num = elem->val.int_value;
-            integer_elem.val.int_value = integer_num;
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &integer_elem);
+            integer_elem.val.int_value = elem->val.int_value;
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &integer_elem);
 
             break;
 
         default:
 
             integer_elem.type = AGTV_NULL;
-            agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &integer_elem);
+            agis_result.res = push_agtype_value(&agis_result.parse_state,
+                                                WAGT_ELEM, &integer_elem);
 
             break;
         }
@@ -7660,6 +7685,15 @@ Datum age_tostring(PG_FUNCTION_ARGS)
  * Helper function to take any valid type and convert it to an agtype string.
  * Returns NULL for NULL input.
  */
+static char *int64_to_palloc_string(int64 value, int *string_len)
+{
+    char *string = palloc(24);
+
+    *string_len = pg_lltoa(value, string);
+
+    return string;
+}
+
 static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
 {
     agtype_value *agtv_result = NULL;
@@ -7688,29 +7722,32 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
     {
         if (type == INT2OID)
         {
-            string = DatumGetCString(DirectFunctionCall1(int8out,
-                Int64GetDatum((int64) DatumGetInt16(arg))));
+            string = int64_to_palloc_string((int64) DatumGetInt16(arg),
+                                            &string_len);
         }
         else if (type == INT4OID)
         {
-            string = DatumGetCString(DirectFunctionCall1(int8out,
-                Int64GetDatum((int64) DatumGetInt32(arg))));
+            string = int64_to_palloc_string((int64) DatumGetInt32(arg),
+                                            &string_len);
         }
         else if (type == INT8OID)
         {
-            string = DatumGetCString(DirectFunctionCall1(int8out, arg));
+            string = int64_to_palloc_string(DatumGetInt64(arg), &string_len);
         }
         else if (type == FLOAT4OID)
         {
-            string = DatumGetCString(DirectFunctionCall1(float8out, arg));
+            string = float8out_internal((float8)DatumGetFloat4(arg));
+            string_len = strlen(string);
         }
         else if (type == FLOAT8OID)
         {
-            string = DatumGetCString(DirectFunctionCall1(float8out, arg));
+            string = float8out_internal(DatumGetFloat8(arg));
+            string_len = strlen(string);
         }
         else if (type == NUMERICOID)
         {
             string = DatumGetCString(DirectFunctionCall1(numeric_out, arg));
+            string_len = strlen(string);
         }
         else if (type == CSTRINGOID)
         {
@@ -7725,7 +7762,10 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
         }
         else if (type == BOOLOID)
         {
-            string = DatumGetBool(arg) ? "true" : "false";
+            bool value = DatumGetBool(arg);
+
+            string = value ? "true" : "false";
+            string_len = value ? 4 : 5;
         }
         else if (type == REGTYPEOID)
         {
@@ -7762,13 +7802,13 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
         }
         else if (agtv_value->type == AGTV_INTEGER)
         {
-            string = DatumGetCString(DirectFunctionCall1(int8out,
-                Int64GetDatum(agtv_value->val.int_value)));
+            string = int64_to_palloc_string(agtv_value->val.int_value,
+                                            &string_len);
         }
         else if (agtv_value->type == AGTV_FLOAT)
         {
-            string = DatumGetCString(DirectFunctionCall1(float8out,
-                Float8GetDatum(agtv_value->val.float_value)));
+            string = float8out_internal(agtv_value->val.float_value);
+            string_len = strlen(string);
         }
         else if (agtv_value->type == AGTV_STRING)
         {
@@ -7779,10 +7819,12 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
         {
             string = DatumGetCString(DirectFunctionCall1(numeric_out,
                 PointerGetDatum(agtv_value->val.numeric)));
+            string_len = strlen(string);
         }
         else if (agtv_value->type == AGTV_BOOL)
         {
-            string = (agtv_value->val.boolean) ? "true" : "false";
+            string = agtv_value->val.boolean ? "true" : "false";
+            string_len = agtv_value->val.boolean ? 4 : 5;
         }
         else
         {
@@ -7874,26 +7916,32 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
             break;
 
         case AGTV_FLOAT:
+        {
+            int len;
 
-            sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
-            string_elem.val.string.val = pstrdup(buffer);
-            string_elem.val.string.len = strlen(buffer);
+            len = sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
+            string_elem.val.string.val = pnstrdup(buffer, len);
+            string_elem.val.string.len = len;
 
             agis_result.res = push_agtype_value(&agis_result.parse_state,
                                                 WAGT_ELEM, &string_elem);
 
             break;
+        }
 
         case AGTV_INTEGER:
+        {
+            int len;
 
-            sprintf(buffer, "%ld", elem->val.int_value);
-            string_elem.val.string.val = pstrdup(buffer);
-            string_elem.val.string.len = strlen(buffer);
+            len = sprintf(buffer, "%ld", elem->val.int_value);
+            string_elem.val.string.val = pnstrdup(buffer, len);
+            string_elem.val.string.len = len;
 
             agis_result.res = push_agtype_value(&agis_result.parse_state,
                                                 WAGT_ELEM, &string_elem);
 
             break;
+        }
 
         default:
 
@@ -9092,23 +9140,19 @@ Datum age_split(PG_FUNCTION_ARGS)
         /* add the values */
         for (i = 0; i < nelements; i++)
         {
+            text *elem = DatumGetTextPP(elements[i]);
             char *string;
             int string_len;
-            char *string_copy;
             agtype_value agtv_string;
             Datum d;
 
             /* get the string element from the array */
-            string = VARDATA(elements[i]);
-            string_len = VARSIZE(elements[i]) - VARHDRSZ;
-
-            /* make a copy */
-            string_copy = palloc(string_len);
-            memcpy(string_copy, string, string_len);
+            string = VARDATA_ANY(elem);
+            string_len = VARSIZE_ANY_EXHDR(elem);
 
             /* build the agtype string */
             agtv_string.type = AGTV_STRING;
-            agtv_string.val.string.val = string_copy;
+            agtv_string.val.string.val = string;
             agtv_string.val.string.len = string_len;
 
             /* get the datum */
@@ -9251,22 +9295,7 @@ static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
         else if (type == INT4OID)
             result = (float8) DatumGetInt32(arg);
         else if (type == INT8OID)
-        {
-            /*
-             * Get the string representation of the integer because it could be
-             * too large to fit in a float. Let the float routine determine
-             * what to do with it.
-             */
-            char *string = DatumGetCString(DirectFunctionCall1(int8out, arg));
-            bool is_valid = false;
-            /* turn it into a float */
-            result = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-
-            /* return 0 if it was an invalid float */
-            if (!is_valid)
-                return 0;
-        }
+            result = (float8) DatumGetInt64(arg);
         else if (type == FLOAT4OID)
             result = (float8) DatumGetFloat4(arg);
         else if (type == FLOAT8OID)
@@ -9300,21 +9329,7 @@ static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
 
         if (agtv_value->type == AGTV_INTEGER)
         {
-            /*
-             * Get the string representation of the integer because it could be
-             * too large to fit in a float. Let the float routine determine
-             * what to do with it.
-             */
-            bool is_valid = false;
-            char *string = DatumGetCString(DirectFunctionCall1(int8out,
-                                                               Int64GetDatum(agtv_value->val.int_value)));
-            /* turn it into a float */
-            result = float8in_internal_null(string, NULL, "double precision",
-                                            string, &is_valid);
-
-            /* return null if it was not a valid float */
-            if (!is_valid)
-                return 0;
+            result = (float8) agtv_value->val.int_value;
         }
         else if (agtv_value->type == AGTV_FLOAT)
             result = agtv_value->val.float_value;

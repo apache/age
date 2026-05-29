@@ -39,7 +39,8 @@
 #include "utils/load/age_load.h"
 #include "utils/ag_cache.h"
 
-static agtype_value *csv_value_to_agtype_value(char *csv_val);
+static agtype_value *csv_value_to_agtype_value(const char *csv_val,
+                                               size_t csv_len);
 static agtype_value *trimmed_field_to_string_agtype_value(const char *field);
 static const char *trimmed_string_span(const char *str, size_t *len);
 static Oid get_or_create_graph(const Name graph_name);
@@ -230,40 +231,39 @@ agtype *create_empty_agtype(void)
  * json in order to be parsed into an agtype_value of appropriate type.
  * Finally, agtype_value_from_cstring() is called for parsing.
  */
-static agtype_value *csv_value_to_agtype_value(char *csv_val)
+static agtype_value *csv_value_to_agtype_value(const char *csv_val,
+                                               size_t csv_len)
 {
     char *new_csv_val;
+    size_t new_csv_len;
     agtype_value *res;
 
     /* Handle NULL or empty input - return null agtype value */
-    if (csv_val == NULL || csv_val[0] == '\0')
+    if (csv_val == NULL || csv_len == 0)
     {
         res = palloc(sizeof(agtype_value));
         res->type = AGTV_NULL;
         return res;
     }
 
-    if (!json_validate(cstring_to_text(csv_val), false, false))
+    if (!json_validate(cstring_to_text_with_len(csv_val, csv_len), false, false))
     {
         /* wrap the string with double-quote */
-        int oldlen;
-        int newlen;
-
-        oldlen = strlen(csv_val);
-        newlen = oldlen + 2; /* +2 for double-quotes */
-        new_csv_val = (char *)palloc(sizeof(char) * (newlen + 1));
+        new_csv_len = csv_len + 2; /* +2 for double-quotes */
+        new_csv_val = (char *)palloc(sizeof(char) * (new_csv_len + 1));
 
         new_csv_val[0] = '"';
-        strncpy(&new_csv_val[1], csv_val, oldlen);
-        new_csv_val[oldlen + 1] = '"';
-        new_csv_val[oldlen + 2] = '\0';
+        memcpy(&new_csv_val[1], csv_val, csv_len);
+        new_csv_val[csv_len + 1] = '"';
+        new_csv_val[csv_len + 2] = '\0';
     }
     else
     {
-        new_csv_val = csv_val;
+        new_csv_val = (char *)csv_val;
+        new_csv_len = csv_len;
     }
 
-    res = agtype_value_from_cstring(new_csv_val, strlen(new_csv_val));
+    res = agtype_value_from_cstring(new_csv_val, new_csv_len);
 
     /* extract from top-level row scalar array */
     if (res->type == AGTV_ARRAY && res->val.array.raw_scalar)
@@ -330,11 +330,13 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
 
         if (load_as_agtype)
         {
-            char *trimmed_value;
+            const char *trimmed_value;
+            size_t trimmed_len;
 
             /* Trim whitespace from field value */
-            trimmed_value = trim_whitespace(fields[i]);
-            value_agtype = csv_value_to_agtype_value(trimmed_value);
+            trimmed_value = trimmed_string_span(fields[i], &trimmed_len);
+            value_agtype = csv_value_to_agtype_value(trimmed_value,
+                                                     trimmed_len);
         }
         else
         {
@@ -393,11 +395,13 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
 
         if (load_as_agtype)
         {
-            char *trimmed_value;
+            const char *trimmed_value;
+            size_t trimmed_len;
 
             /* Trim whitespace from field value */
-            trimmed_value = trim_whitespace(fields[i]);
-            value_agtype = csv_value_to_agtype_value(trimmed_value);
+            trimmed_value = trimmed_string_span(fields[i], &trimmed_len);
+            value_agtype = csv_value_to_agtype_value(trimmed_value,
+                                                     trimmed_len);
         }
         else
         {

@@ -1050,8 +1050,8 @@ label_cache_data *search_label_name_graph_cache_cached(const char *name,
     {
         if (cached_labels[i] != NULL &&
             cached_graphs[i] == graph &&
-            namestrcmp(&cached_names[i], name) == 0 &&
-            cached_generations[i] == current_generation)
+            cached_generations[i] == current_generation &&
+            namestrcmp(&cached_names[i], name) == 0)
         {
             return cached_labels[i];
         }
@@ -1569,6 +1569,12 @@ static void fill_label_cache_data(label_cache_data *cache_data,
     value = heap_getattr(tuple, Anum_ag_label_relation, tuple_desc, &is_null);
     Assert(!is_null);
     cache_data->relation = DatumGetObjectId(value);
+    {
+        char *relname = get_rel_name(cache_data->relation);
+
+        namestrcpy(&cache_data->relation_name, relname);
+        pfree(relname);
+    }
     /* ag_label.seq_name */
     value = heap_getattr(tuple, Anum_ag_label_seq_name, tuple_desc, &is_null);
     Assert(!is_null);

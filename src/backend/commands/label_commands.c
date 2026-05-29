@@ -642,14 +642,16 @@ static void create_sequence_for_label(RangeVar *seq_range_var)
     /* greater than MAXINT8LEN+1 */
     char buf[32];
     DefElem *maxvalue;
+    int len;
 
     pstate = make_parsestate(NULL);
     pstate->p_sourcetext = "(generated CREATE SEQUENCE command)";
 
     seq_stmt = makeNode(CreateSeqStmt);
     seq_stmt->sequence = seq_range_var;
-    pg_lltoa(ENTRY_ID_MAX, buf);
-    maxvalue = makeDefElem("maxvalue", (Node *)makeFloat(pstrdup(buf)), -1);
+    len = pg_lltoa(ENTRY_ID_MAX, buf);
+    maxvalue = makeDefElem("maxvalue", (Node *)makeFloat(pnstrdup(buf, len)),
+                           -1);
     seq_stmt->options = list_make1(maxvalue);
     seq_stmt->ownerId = InvalidOid;
     seq_stmt->for_identity = false;

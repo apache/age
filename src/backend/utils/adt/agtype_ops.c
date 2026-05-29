@@ -29,6 +29,7 @@
 #include "utils/agtype.h"
 #include "utils/datum.h"
 #include "utils/builtins.h"
+#include "utils/float.h"
 
 static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2);
 static agtype_value *iterator_concat(agtype_iterator **it1,
@@ -62,24 +63,19 @@ static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
 
 static char *get_string_from_agtype_value(agtype_value *agtv, int *length)
 {
-    Datum number;
     char *string;
 
     switch (agtv->type)
     {
     case AGTV_INTEGER:
-        number = DirectFunctionCall1(int8out,
-                                     Int64GetDatum(agtv->val.int_value));
-        string = DatumGetCString(number);
-        *length = strlen(string);
+        string = palloc(24);
+        *length = pg_lltoa(agtv->val.int_value, string);
         return string;
     case AGTV_FLOAT:
-        number = DirectFunctionCall1(float8out,
-                                     Float8GetDatum(agtv->val.float_value));
-        string = DatumGetCString(number);
+        string = float8out_internal(agtv->val.float_value);
         *length = strlen(string);
 
-        if (is_decimal_needed(string))
+        if (is_decimal_needed_len(string, *length))
         {
             char *str = palloc(*length + 2);
             memcpy(str, string, *length);

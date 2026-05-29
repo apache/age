@@ -861,14 +861,33 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         agtv_temp->val.string.len != 0)
     {
         label_cache_data *label_cache;
+        char label_name_buf[NAMEDATALEN];
+        char *label_name;
+        bool free_label_name = false;
 
-        vlelctx->edge_label_name = pnstrdup(agtv_temp->val.string.val,
-                                            agtv_temp->val.string.len);
+        if (agtv_temp->val.string.len < NAMEDATALEN)
+        {
+            memcpy(label_name_buf, agtv_temp->val.string.val,
+                   agtv_temp->val.string.len);
+            label_name_buf[agtv_temp->val.string.len] = '\0';
+            label_name = label_name_buf;
+        }
+        else
+        {
+            label_name = pnstrdup(agtv_temp->val.string.val,
+                                  agtv_temp->val.string.len);
+            free_label_name = true;
+        }
 
         label_cache = search_label_name_graph_cache_cached(
-            vlelctx->edge_label_name, graph_oid);
+            label_name, graph_oid);
         vlelctx->edge_label_name_oid = label_cache != NULL ?
                                        label_cache->relation : InvalidOid;
+        vlelctx->edge_label_name = NULL;
+        if (free_label_name)
+        {
+            pfree(label_name);
+        }
     }
     else
     {

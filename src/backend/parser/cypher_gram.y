@@ -257,6 +257,7 @@ static Node *make_typecast_expr(Node *expr, Node *typname, int location);
 static Node *make_function_expr(List *func_name, List *exprs, int location);
 static Node *make_star_function_expr(List *func_name, List *exprs, int location);
 static Node *make_distinct_function_expr(List *func_name, List *exprs, int location);
+static bool is_count_function_name(const char *name);
 static FuncCall *node_to_agtype(Node* fnode, char *type, int location);
 
 /* setops */
@@ -2823,7 +2824,7 @@ static Node *make_function_expr(List *func_name, List *exprs, int location)
          * functions. We may want to find a better way to do this, as there
          * could be many.
          */
-        if (pg_strcasecmp(name, "count") == 0)
+        if (is_count_function_name(name))
         {
             funcname = SystemFuncName("count");
 
@@ -2878,7 +2879,7 @@ static Node *make_star_function_expr(List *func_name, List *exprs, int location)
          * functions. We may want to find a better way to do this, as there
          * could be many.
          */
-        if (pg_strcasecmp(name, "count") == 0)
+        if (is_count_function_name(name))
         {
             funcname = SystemFuncName("count");
 
@@ -2935,7 +2936,7 @@ static Node *make_distinct_function_expr(List *func_name, List *exprs, int locat
          * functions. We may want to find a better way to do this, as there
          * could be many.
          */
-        if (pg_strcasecmp(name, "count") == 0)
+        if (is_count_function_name(name))
         {
             funcname = SystemFuncName("count");
 
@@ -2970,6 +2971,11 @@ static Node *make_distinct_function_expr(List *func_name, List *exprs, int locat
     fnode->agg_order = NIL;
     fnode->agg_distinct = true;
     return (Node *)fnode;
+}
+
+static bool is_count_function_name(const char *name)
+{
+    return strlen(name) == 5 && pg_strcasecmp(name, "count") == 0;
 }
 
 /*

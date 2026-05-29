@@ -626,6 +626,7 @@ Datum boolean_to_agtype(bool b);
 void uniqueify_agtype_object(agtype_value *object);
 char *agtype_value_type_to_string(enum agtype_value_type type);
 bool is_decimal_needed(char *numstr);
+bool is_decimal_needed_len(const char *numstr, int len);
 int compare_agtype_scalar_values(agtype_value *a, agtype_value *b);
 agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                                    agtype *new_v, bool remove_property);

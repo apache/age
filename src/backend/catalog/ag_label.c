@@ -146,7 +146,13 @@ Oid get_label_relation(const char *label_name, Oid graph_oid)
 
 char *get_label_relation_name(const char *label_name, Oid graph_oid)
 {
-    return get_rel_name(get_label_relation(label_name, graph_oid));
+    label_cache_data *cache_data;
+
+    cache_data = search_label_name_graph_cache_cached(label_name, graph_oid);
+    if (cache_data)
+        return pstrdup(NameStr(cache_data->relation_name));
+    else
+        return NULL;
 }
 
 char get_label_kind(const char *label_name, Oid label_graph)
@@ -269,7 +275,7 @@ RangeVar *get_label_range_var(char *graph_name, Oid graph_oid,
 
     label_cache = search_label_name_graph_cache_cached(label_name, graph_oid);
 
-    relname = get_rel_name(label_cache->relation);
+    relname = pstrdup(NameStr(label_cache->relation_name));
 
     return makeRangeVar(graph_name, relname, 2);
 }

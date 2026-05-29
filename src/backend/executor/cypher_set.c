@@ -420,26 +420,30 @@ static void update_all_paths(CustomScanState *node, graphid id,
 {
     ExprContext *econtext = node->ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
+    TupleDesc tupleDescriptor = scanTupleSlot->tts_tupleDescriptor;
+    Datum *values = scanTupleSlot->tts_values;
+    bool *isnull = scanTupleSlot->tts_isnull;
+    int natts = tupleDescriptor->natts;
     int i;
 
-    for (i = 0; i < scanTupleSlot->tts_tupleDescriptor->natts; i++)
+    for (i = 0; i < natts; i++)
     {
         agtype *original_entity;
         agtype_value *original_entity_value;
 
         /* skip nulls */
-        if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor, i)->atttypid != AGTYPEOID)
+        if (TupleDescAttr(tupleDescriptor, i)->atttypid != AGTYPEOID)
         {
             continue;
         }
 
         /* skip non agtype values */
-        if (scanTupleSlot->tts_isnull[i])
+        if (isnull[i])
         {
             continue;
         }
 
-        original_entity = DATUM_GET_AGTYPE_P(scanTupleSlot->tts_values[i]);
+        original_entity = DATUM_GET_AGTYPE_P(values[i]);
 
         /* if the value is not a scalar type, its not a path */
         if (!AGTYPE_CONTAINER_IS_SCALAR(&original_entity->root))
@@ -458,7 +462,7 @@ static void update_all_paths(CustomScanState *node, graphid id,
                 /* the path does contain the entity replace with the new entity. */
                 agtype_value *new_path = replace_entity_in_path(original_entity_value, id, updated_entity);
 
-                scanTupleSlot->tts_values[i] = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(new_path));
+                values[i] = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(new_path));
             }
         }
     }

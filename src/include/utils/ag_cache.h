@@ -36,6 +36,7 @@ typedef struct label_cache_data
     int32 id;
     char kind;
     Oid relation;
+    NameData relation_name;
     NameData seq_name;
 } label_cache_data;
 

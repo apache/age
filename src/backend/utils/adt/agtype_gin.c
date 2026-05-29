@@ -519,14 +519,12 @@ static Datum make_scalar_key(const agtype_value *scalarVal, bool is_key)
         break;
     case AGTV_INTEGER:
     {
-        char *result;
+        int len;
 
         Assert(!is_key);
 
-        pg_lltoa(scalarVal->val.int_value, buf);
-
-        result = pstrdup(buf);
-        item = make_text_key(AGT_GIN_FLAG_NUM, result, strlen(result));
+        len = pg_lltoa(scalarVal->val.int_value, buf);
+        item = make_text_key(AGT_GIN_FLAG_NUM, buf, len);
         break;
     }
     case AGTV_FLOAT:
