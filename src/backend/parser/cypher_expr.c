@@ -1840,6 +1840,11 @@ static List *cast_agtype_args_to_target_type(cypher_parsestate *cpstate,
         Oid source_oid = exprType(expr);
         Oid target_oid = target_types[foreach_current_index(lc)];
 
+        if (source_oid == target_oid)
+        {
+            continue;
+        }
+
         /* errors out if cast not possible */
         expr = coerce_expr_flexible(&cpstate->pstate, expr, source_oid,
                                      target_oid, -1, true);

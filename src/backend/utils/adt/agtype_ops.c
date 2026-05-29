@@ -27,6 +27,7 @@
 #include <limits.h>
 
 #include "utils/agtype.h"
+#include "utils/array.h"
 #include "utils/datum.h"
 #include "utils/builtins.h"
 #include "utils/float.h"
@@ -47,6 +48,11 @@ static bool parse_agtype_index_string(char *str, int len, long *lindex);
 static void get_scalar_agtype_value_no_copy(agtype *agt, agtype_value *value,
                                             bool *needs_free);
 static void free_agtype_value_no_copy(agtype_value *value, bool needs_free);
+static agtype_value *find_agtype_value_from_agtype_value_object(
+    agtype_value *object, agtype_value *key);
+static agtype_container *get_entity_properties_container_no_copy(
+    agtype *agt, bool error_on_scalar, agtype_value *scalar_value,
+    bool *scalar_needs_free, agtype **owned_properties);
 
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen)
@@ -185,6 +191,85 @@ static void free_agtype_value_no_copy(agtype_value *value, bool needs_free)
     {
         pfree_agtype_value_content(value);
     }
+}
+
+static agtype_value *find_agtype_value_from_agtype_value_object(
+    agtype_value *object, agtype_value *key)
+{
+    if (object == NULL || key->type != AGTV_STRING)
+    {
+        return NULL;
+    }
+
+    if (object->type == AGTV_OBJECT)
+    {
+        return get_agtype_value_object_value(object, key->val.string.val,
+                                             key->val.string.len);
+    }
+
+    if (object->type == AGTV_BINARY &&
+        AGTYPE_CONTAINER_IS_OBJECT(object->val.binary.data))
+    {
+        return find_agtype_value_from_container(object->val.binary.data,
+                                                AGT_FOBJECT, key);
+    }
+
+    return NULL;
+}
+
+static agtype_container *get_entity_properties_container_no_copy(
+    agtype *agt, bool error_on_scalar, agtype_value *scalar_value,
+    bool *scalar_needs_free, agtype **owned_properties)
+{
+    agtype_value *properties = NULL;
+
+    *scalar_needs_free = false;
+    *owned_properties = NULL;
+
+    if (!AGT_ROOT_IS_SCALAR(agt) || !AGTE_IS_AGTYPE(agt->root.children[0]))
+    {
+        return &agt->root;
+    }
+
+    get_scalar_agtype_value_no_copy(agt, scalar_value, scalar_needs_free);
+
+    if (scalar_value->type == AGTV_VERTEX)
+    {
+        properties = &scalar_value->val.object.pairs[2].value;
+    }
+    else if (scalar_value->type == AGTV_EDGE)
+    {
+        properties = &scalar_value->val.object.pairs[4].value;
+    }
+    else if (scalar_value->type == AGTV_PATH)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("cannot extract properties from an agtype path")));
+    }
+    else if (error_on_scalar)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("scalar object must be a vertex or edge")));
+    }
+    else
+    {
+        properties = scalar_value;
+    }
+
+    if (properties == NULL || properties->type == AGTV_NULL)
+    {
+        return NULL;
+    }
+
+    if (properties->type == AGTV_BINARY)
+    {
+        return properties->val.binary.data;
+    }
+
+    *owned_properties = agtype_value_to_agtype(properties);
+    return &(*owned_properties)->root;
 }
 
 Datum get_numeric_datum_from_agtype_value(agtype_value *agtv)
@@ -1485,11 +1570,6 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
     agtype_value *v = NULL;
     bool aval_needs_free = false;
 
-    if (AGT_ROOT_IS_SCALAR(agt))
-    {
-        agt = agtype_value_to_agtype(extract_entity_properties(agt, false));
-    }
-
     if (AGT_ROOT_IS_SCALAR(key))
     {
         get_scalar_agtype_value_no_copy(key, aval, &aval_needs_free);
@@ -1499,6 +1579,47 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     }
 
+    if (AGT_ROOT_IS_SCALAR(agt))
+    {
+        agtype_value scalar_value;
+        agtype_value *properties = NULL;
+        bool scalar_needs_free = false;
+        bool found = false;
+
+        get_scalar_agtype_value_no_copy(agt, &scalar_value,
+                                        &scalar_needs_free);
+
+        if (scalar_value.type == AGTV_VERTEX)
+        {
+            properties = &scalar_value.val.object.pairs[2].value;
+        }
+        else if (scalar_value.type == AGTV_EDGE)
+        {
+            properties = &scalar_value.val.object.pairs[4].value;
+        }
+        else if (scalar_value.type == AGTV_PATH)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("cannot extract properties from an agtype path")));
+        }
+        else
+        {
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+            agt = agtype_value_to_agtype(extract_entity_properties(agt,
+                                                                   false));
+            goto search_container;
+        }
+
+        found = find_agtype_value_from_agtype_value_object(properties,
+                                                          aval) != NULL;
+
+        free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+        free_agtype_value_no_copy(aval, aval_needs_free);
+        PG_RETURN_BOOL(found);
+    }
+
+search_container:
     if (AGT_ROOT_IS_OBJECT(agt) &&
         aval->type == AGTV_STRING)
     {
@@ -1530,10 +1651,38 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
     agtype *keys = AG_GET_ARG_AGTYPE_P(1);
     agtype_value elem;
     agtype_iterator *it = NULL;
+    agtype_value scalar_value;
+    agtype_value *properties = NULL;
+    bool scalar_needs_free = false;
+    bool use_scalar_properties = false;
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
-        agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
+        get_scalar_agtype_value_no_copy(agt, &scalar_value,
+                                        &scalar_needs_free);
+
+        if (scalar_value.type == AGTV_VERTEX)
+        {
+            properties = &scalar_value.val.object.pairs[2].value;
+            use_scalar_properties = true;
+        }
+        else if (scalar_value.type == AGTV_EDGE)
+        {
+            properties = &scalar_value.val.object.pairs[4].value;
+            use_scalar_properties = true;
+        }
+        else if (scalar_value.type == AGTV_PATH)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("cannot extract properties from an agtype path")));
+        }
+        else
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("scalar object must be a vertex or edge")));
+        }
     }
 
     if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
@@ -1542,7 +1691,17 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
         {
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
-                if (AGT_ROOT_IS_OBJECT(agt) &&
+                if (use_scalar_properties)
+                {
+                    if (find_agtype_value_from_agtype_value_object(properties,
+                                                                   &elem))
+                    {
+                        free_agtype_value_no_copy(&scalar_value,
+                                                  scalar_needs_free);
+                        PG_RETURN_BOOL(true);
+                    }
+                }
+                else if (AGT_ROOT_IS_OBJECT(agt) &&
                     (&elem)->type == AGTV_STRING &&
                     find_agtype_value_from_container(&agt->root,
                                                          AGT_FOBJECT,
@@ -1561,6 +1720,7 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
             }
             else
             {
+                free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
                 PG_RETURN_BOOL(false);
             }
         }
@@ -1571,6 +1731,7 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
                         errmsg("invalid agtype value for right operand")));
     }
 
+    free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
     PG_RETURN_BOOL(false);
 }
 
@@ -1585,10 +1746,38 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
     agtype *keys = AG_GET_ARG_AGTYPE_P(1);
     agtype_value elem;
     agtype_iterator *it = NULL;
+    agtype_value scalar_value;
+    agtype_value *properties = NULL;
+    bool scalar_needs_free = false;
+    bool use_scalar_properties = false;
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
-        agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
+        get_scalar_agtype_value_no_copy(agt, &scalar_value,
+                                        &scalar_needs_free);
+
+        if (scalar_value.type == AGTV_VERTEX)
+        {
+            properties = &scalar_value.val.object.pairs[2].value;
+            use_scalar_properties = true;
+        }
+        else if (scalar_value.type == AGTV_EDGE)
+        {
+            properties = &scalar_value.val.object.pairs[4].value;
+            use_scalar_properties = true;
+        }
+        else if (scalar_value.type == AGTV_PATH)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("cannot extract properties from an agtype path")));
+        }
+        else
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("scalar object must be a vertex or edge")));
+        }
     }
 
     if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
@@ -1598,6 +1787,12 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
                 if ((&elem)->type == AGTV_NULL)
+                {
+                    continue;
+                }
+                else if (use_scalar_properties &&
+                         find_agtype_value_from_agtype_value_object(properties,
+                                                                    &elem))
                 {
                     continue;
                 }
@@ -1618,11 +1813,14 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
                 }
                 else
                 {
+                    free_agtype_value_no_copy(&scalar_value,
+                                              scalar_needs_free);
                     PG_RETURN_BOOL(false);
                 }
             }
             else
             {
+                free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
                 PG_RETURN_BOOL(false);
             }
         }
@@ -1633,6 +1831,7 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
                         errmsg("invalid agtype value for right operand")));
     }
 
+    free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
     PG_RETURN_BOOL(true);
 }
 
@@ -1647,6 +1846,15 @@ Datum agtype_contains(PG_FUNCTION_ARGS)
     agtype_iterator *property_it = NULL;
     agtype *properties = NULL;
     agtype *constraints = NULL;
+    agtype *owned_properties = NULL;
+    agtype *owned_constraints = NULL;
+    agtype_value properties_scalar;
+    agtype_value constraints_scalar;
+    agtype_container *properties_container;
+    agtype_container *constraints_container;
+    bool properties_needs_free = false;
+    bool constraints_needs_free = false;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -1656,31 +1864,29 @@ Datum agtype_contains(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
-    if (AGT_ROOT_IS_SCALAR(properties)
-            && AGTE_IS_AGTYPE(properties->root.children[0]))
-    {
-        properties =
-            agtype_value_to_agtype(extract_entity_properties(properties,
-                                                             false));
-    }
+    properties_container = get_entity_properties_container_no_copy(
+        properties, false, &properties_scalar, &properties_needs_free,
+        &owned_properties);
+    constraints_container = get_entity_properties_container_no_copy(
+        constraints, false, &constraints_scalar, &constraints_needs_free,
+        &owned_constraints);
 
-    if (AGT_ROOT_IS_SCALAR(constraints)
-            && AGTE_IS_AGTYPE(constraints->root.children[0]))
+    if (properties_container == NULL || constraints_container == NULL ||
+        AGTYPE_CONTAINER_IS_OBJECT(properties_container) !=
+        AGTYPE_CONTAINER_IS_OBJECT(constraints_container))
     {
-        constraints =
-            agtype_value_to_agtype(extract_entity_properties(constraints,
-                                                             false));
-    }
-
-    if (AGT_ROOT_IS_OBJECT(properties) != AGT_ROOT_IS_OBJECT(constraints))
-    {
+        free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+        free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
         PG_RETURN_BOOL(false);
     }
 
-    property_it = agtype_iterator_init(&properties->root);
-    constraint_it = agtype_iterator_init(&constraints->root);
+    property_it = agtype_iterator_init(properties_container);
+    constraint_it = agtype_iterator_init(constraints_container);
+    result = agtype_deep_contains(&property_it, &constraint_it, false);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it, false));
+    free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+    free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+    PG_RETURN_BOOL(result);
 }
 
 PG_FUNCTION_INFO_V1(agtype_contained_by_top_level);
@@ -1694,6 +1900,15 @@ Datum agtype_contained_by_top_level(PG_FUNCTION_ARGS)
 {
     agtype_iterator *constraint_it, *property_it;
     agtype *properties, *constraints;
+    agtype *owned_properties = NULL;
+    agtype *owned_constraints = NULL;
+    agtype_value properties_scalar;
+    agtype_value constraints_scalar;
+    agtype_container *properties_container;
+    agtype_container *constraints_container;
+    bool properties_needs_free = false;
+    bool constraints_needs_free = false;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -1703,26 +1918,27 @@ Datum agtype_contained_by_top_level(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
-    if (AGT_ROOT_IS_SCALAR(properties)
-            && AGTE_IS_AGTYPE(properties->root.children[0]))
+    properties_container = get_entity_properties_container_no_copy(
+        properties, false, &properties_scalar, &properties_needs_free,
+        &owned_properties);
+    constraints_container = get_entity_properties_container_no_copy(
+        constraints, false, &constraints_scalar, &constraints_needs_free,
+        &owned_constraints);
+
+    if (properties_container == NULL || constraints_container == NULL)
     {
-        properties =
-            agtype_value_to_agtype(extract_entity_properties(properties,
-                                                             false));
+        free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+        free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+        PG_RETURN_BOOL(false);
     }
 
-    if (AGT_ROOT_IS_SCALAR(constraints)
-            && AGTE_IS_AGTYPE(constraints->root.children[0]))
-    {
-        constraints =
-            agtype_value_to_agtype(extract_entity_properties(constraints,
-                                                             false));
-    }
+    constraint_it = agtype_iterator_init(constraints_container);
+    property_it = agtype_iterator_init(properties_container);
+    result = agtype_deep_contains(&constraint_it, &property_it, true);
 
-    constraint_it = agtype_iterator_init(&constraints->root);
-    property_it = agtype_iterator_init(&properties->root);
-
-    PG_RETURN_BOOL(agtype_deep_contains(&constraint_it, &property_it, true));
+    free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+    free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+    PG_RETURN_BOOL(result);
 }
 
 
@@ -1735,6 +1951,15 @@ Datum agtype_contained_by(PG_FUNCTION_ARGS)
 {
     agtype_iterator *constraint_it, *property_it;
     agtype *properties, *constraints;
+    agtype *owned_properties = NULL;
+    agtype *owned_constraints = NULL;
+    agtype_value properties_scalar;
+    agtype_value constraints_scalar;
+    agtype_container *properties_container;
+    agtype_container *constraints_container;
+    bool properties_needs_free = false;
+    bool constraints_needs_free = false;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -1744,26 +1969,27 @@ Datum agtype_contained_by(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
-    if (AGT_ROOT_IS_SCALAR(properties)
-            && AGTE_IS_AGTYPE(properties->root.children[0]))
+    properties_container = get_entity_properties_container_no_copy(
+        properties, false, &properties_scalar, &properties_needs_free,
+        &owned_properties);
+    constraints_container = get_entity_properties_container_no_copy(
+        constraints, false, &constraints_scalar, &constraints_needs_free,
+        &owned_constraints);
+
+    if (properties_container == NULL || constraints_container == NULL)
     {
-        properties =
-            agtype_value_to_agtype(extract_entity_properties(properties,
-                                                             false));
+        free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+        free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+        PG_RETURN_BOOL(false);
     }
 
-    if (AGT_ROOT_IS_SCALAR(constraints)
-            && AGTE_IS_AGTYPE(constraints->root.children[0]))
-    {
-        constraints =
-            agtype_value_to_agtype(extract_entity_properties(constraints,
-                                                             false));
-    }
+    constraint_it = agtype_iterator_init(constraints_container);
+    property_it = agtype_iterator_init(properties_container);
+    result = agtype_deep_contains(&constraint_it, &property_it, false);
 
-    constraint_it = agtype_iterator_init(&constraints->root);
-    property_it = agtype_iterator_init(&properties->root);
-
-    PG_RETURN_BOOL(agtype_deep_contains(&constraint_it, &property_it, false));
+    free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+    free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+    PG_RETURN_BOOL(result);
 }
 
 PG_FUNCTION_INFO_V1(agtype_contains_top_level);
@@ -1779,6 +2005,15 @@ Datum agtype_contains_top_level(PG_FUNCTION_ARGS)
     agtype_iterator *property_it = NULL;
     agtype *properties = NULL;
     agtype *constraints = NULL;
+    agtype *owned_properties = NULL;
+    agtype *owned_constraints = NULL;
+    agtype_value properties_scalar;
+    agtype_value constraints_scalar;
+    agtype_container *properties_container;
+    agtype_container *constraints_container;
+    bool properties_needs_free = false;
+    bool constraints_needs_free = false;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
     {
@@ -1788,31 +2023,29 @@ Datum agtype_contains_top_level(PG_FUNCTION_ARGS)
     properties = AG_GET_ARG_AGTYPE_P(0);
     constraints = AG_GET_ARG_AGTYPE_P(1);
 
-    if (AGT_ROOT_IS_SCALAR(properties)
-            && AGTE_IS_AGTYPE(properties->root.children[0]))
-    {
-        properties =
-            agtype_value_to_agtype(extract_entity_properties(properties,
-                                                             false));
-    }
+    properties_container = get_entity_properties_container_no_copy(
+        properties, false, &properties_scalar, &properties_needs_free,
+        &owned_properties);
+    constraints_container = get_entity_properties_container_no_copy(
+        constraints, false, &constraints_scalar, &constraints_needs_free,
+        &owned_constraints);
 
-    if (AGT_ROOT_IS_SCALAR(constraints)
-            && AGTE_IS_AGTYPE(constraints->root.children[0]))
+    if (properties_container == NULL || constraints_container == NULL ||
+        AGTYPE_CONTAINER_IS_OBJECT(properties_container) !=
+        AGTYPE_CONTAINER_IS_OBJECT(constraints_container))
     {
-        constraints =
-            agtype_value_to_agtype(extract_entity_properties(constraints,
-                                                             false));
-    }
-
-    if (AGT_ROOT_IS_OBJECT(properties) != AGT_ROOT_IS_OBJECT(constraints))
-    {
+        free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+        free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
         PG_RETURN_BOOL(false);
     }
 
-    property_it = agtype_iterator_init(&properties->root);
-    constraint_it = agtype_iterator_init(&constraints->root);
+    property_it = agtype_iterator_init(properties_container);
+    constraint_it = agtype_iterator_init(constraints_container);
+    result = agtype_deep_contains(&property_it, &constraint_it, true);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it, true));
+    free_agtype_value_no_copy(&properties_scalar, properties_needs_free);
+    free_agtype_value_no_copy(&constraints_scalar, constraints_needs_free);
+    PG_RETURN_BOOL(result);
 }
 
 PG_FUNCTION_INFO_V1(agtype_exists);
@@ -1852,35 +2085,37 @@ Datum agtype_exists_any(PG_FUNCTION_ARGS)
 {
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     ArrayType *keys = PG_GETARG_ARRAYTYPE_P(1);
-    int i;
-    Datum *key_datums;
-    bool *key_nulls;
-    int elem_count;
+    ArrayIterator iterator;
+    Datum key_datum;
+    bool key_null;
 
-    deconstruct_array(keys, TEXTOID, -1, false, 'i', &key_datums, &key_nulls,
-                      &elem_count);
+    iterator = array_create_iterator(keys, 0, NULL);
 
-    for (i = 0; i < elem_count; i++)
+    while (array_iterate(iterator, &key_datum, &key_null))
     {
+        text *key;
         agtype_value strVal;
 
-        if (key_nulls[i])
+        if (key_null)
         {
             continue;
         }
 
+        key = DatumGetTextPP(key_datum);
         strVal.type = AGTV_STRING;
-        strVal.val.string.val = VARDATA(key_datums[i]);
-        strVal.val.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+        strVal.val.string.val = VARDATA_ANY(key);
+        strVal.val.string.len = VARSIZE_ANY_EXHDR(key);
 
         if (find_agtype_value_from_container(&agt->root,
                                         AGT_FOBJECT | AGT_FARRAY,
                                         &strVal) != NULL)
         {
+            array_free_iterator(iterator);
             PG_RETURN_BOOL(true);
         }
     }
 
+    array_free_iterator(iterator);
     PG_RETURN_BOOL(false);
 }
 
@@ -1893,35 +2128,37 @@ Datum agtype_exists_all(PG_FUNCTION_ARGS)
 {
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
-    int i;
-    Datum *key_datums;
-    bool *key_nulls;
-    int elem_count;
+    ArrayIterator iterator;
+    Datum key_datum;
+    bool key_null;
 
-    deconstruct_array(keys, TEXTOID, -1, false, 'i', &key_datums, &key_nulls,
-                      &elem_count);
+    iterator = array_create_iterator(keys, 0, NULL);
 
-    for (i = 0; i < elem_count; i++)
+    while (array_iterate(iterator, &key_datum, &key_null))
     {
+        text *key;
         agtype_value strVal;
 
-        if (key_nulls[i])
+        if (key_null)
         {
             continue;
         }
 
+        key = DatumGetTextPP(key_datum);
         strVal.type = AGTV_STRING;
-        strVal.val.string.val = VARDATA(key_datums[i]);
-        strVal.val.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+        strVal.val.string.val = VARDATA_ANY(key);
+        strVal.val.string.len = VARSIZE_ANY_EXHDR(key);
 
         if (find_agtype_value_from_container(&agt->root,
                                         AGT_FOBJECT | AGT_FARRAY,
                                         &strVal) == NULL)
         {
+            array_free_iterator(iterator);
             PG_RETURN_BOOL(false);
         }
     }
 
+    array_free_iterator(iterator);
     PG_RETURN_BOOL(true);
 }
 
@@ -2215,7 +2452,10 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
     int i;
     bool have_object = false, have_array = false;
     agtype_value *agtvp = NULL;
+    agtype_value root_scalar_value;
     agtype_value scalar_value;
+    agtype *owned_agt = NULL;
+    bool root_scalar_needs_free = false;
     bool scalar_needs_free = false;
     agtype_value tv;
     agtype_container *container;
@@ -2226,20 +2466,39 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                        errmsg("right operand must be an array")));
     }
 
+    npath = AGT_ROOT_COUNT(path);
     if (AGT_ROOT_IS_SCALAR(agt))
     {
-        agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
+        if (!AGTE_IS_AGTYPE(agt->root.children[0]) || npath <= 0)
+        {
+            agt = agtype_value_to_agtype(extract_entity_properties(agt, true));
+            container = &agt->root;
+        }
+        else
+        {
+            container = get_entity_properties_container_no_copy(
+                agt, true, &root_scalar_value, &root_scalar_needs_free,
+                &owned_agt);
+        }
+    }
+    else
+    {
+        container = &agt->root;
     }
 
-    npath = AGT_ROOT_COUNT(path);
-    container = &agt->root;
+    if (container == NULL)
+    {
+        free_agtype_value_no_copy(&root_scalar_value, root_scalar_needs_free);
+        PG_RETURN_NULL();
+    }
 
     /* Identify whether we have object, array, or scalar at top-level */
-    if (AGT_ROOT_IS_OBJECT(agt))
+    if (AGTYPE_CONTAINER_IS_OBJECT(container))
     {
         have_object = true;
     }
-    else if (AGT_ROOT_IS_ARRAY(agt) && !AGT_ROOT_IS_SCALAR(agt))
+    else if (AGTYPE_CONTAINER_IS_ARRAY(container) &&
+             !AGTYPE_CONTAINER_IS_SCALAR(container))
     {
         have_array = true;
     }
@@ -2269,11 +2528,17 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
     {
         if (as_text)
         {
-            PG_RETURN_TEXT_P(agtype_container_to_text(container, VARSIZE(agt)));
+            text *result = agtype_container_to_text(container, VARSIZE(agt));
+
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
+            PG_RETURN_TEXT_P(result);
         }
         else
         {
             /* not text mode - just hand back the agtype */
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
             AG_RETURN_AGTYPE_P(agt);
         }
     }
@@ -2316,18 +2581,24 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                                                cur_key.val.string.len,
                                                &lindex))
                 {
+                    free_agtype_value_no_copy(&root_scalar_value,
+                                              root_scalar_needs_free);
                     free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                     PG_RETURN_NULL();
                 }
             }
             else
             {
+                free_agtype_value_no_copy(&root_scalar_value,
+                                          root_scalar_needs_free);
                 free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                 PG_RETURN_NULL();
             }
 
             if (lindex > INT_MAX || lindex < INT_MIN)
             {
+                free_agtype_value_no_copy(&root_scalar_value,
+                                          root_scalar_needs_free);
                 free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                 PG_RETURN_NULL();
             }
@@ -2351,6 +2622,8 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
 
                 if (-lindex > nelements)
                 {
+                    free_agtype_value_no_copy(&root_scalar_value,
+                                              root_scalar_needs_free);
                     free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
                     PG_RETURN_NULL();
                 }
@@ -2374,6 +2647,8 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         else
         {
             free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
             free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
             PG_RETURN_NULL();
         }
@@ -2381,6 +2656,8 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         if (agtvp == NULL)
         {
             free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
             free_agtype_value_no_copy(&cur_key, cur_key_needs_free);
             PG_RETURN_NULL();
         }
@@ -2420,18 +2697,23 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
                                                     agtvp->val.string.len);
 
             free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
             PG_RETURN_TEXT_P(result);
         }
 
         if (agtvp->type == AGTV_NULL)
         {
             free_agtype_value_no_copy(agtvp, scalar_needs_free);
+            free_agtype_value_no_copy(&root_scalar_value,
+                                      root_scalar_needs_free);
             PG_RETURN_NULL();
         }
     }
 
     res = agtype_value_to_agtype(agtvp);
     free_agtype_value_no_copy(agtvp, scalar_needs_free);
+    free_agtype_value_no_copy(&root_scalar_value, root_scalar_needs_free);
 
     if (as_text)
     {

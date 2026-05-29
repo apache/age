@@ -33,6 +33,8 @@
 static Const *convert_sublink_to_subplan(PlannerInfo *root,
                                          List *custom_private);
 static bool expr_has_sublink(Node *node, void *context);
+static CustomPath *make_cypher_dml_path(RelOptInfo *rel, List *custom_private,
+                                        const CustomPathMethods *methods);
 static Path *select_best_child_path(RelOptInfo *rel);
 static void initialize_cypher_dml_path(CustomPath *cp, RelOptInfo *rel);
 static void apply_child_path_costs(CustomPath *cp, Path *best_child);
@@ -49,31 +51,14 @@ const CustomPathMethods cypher_merge_path_methods = {
 CustomPath *create_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
                                       List *custom_private)
 {
-    CustomPath *cp;
-
-    cp = makeNode(CustomPath);
-
-    initialize_cypher_dml_path(cp, rel);
-    cp->flags = 0;
-    cp->custom_private = custom_private;
-    cp->methods = &cypher_create_path_methods;
-
-    return cp;
+    return make_cypher_dml_path(rel, custom_private,
+                                &cypher_create_path_methods);
 }
 
 CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
                                    List *custom_private)
 {
-    CustomPath *cp;
-
-    cp = makeNode(CustomPath);
-
-    initialize_cypher_dml_path(cp, rel);
-    cp->flags = 0;
-    cp->custom_private = custom_private;
-    cp->methods = &cypher_set_path_methods;
-
-    return cp;
+    return make_cypher_dml_path(rel, custom_private, &cypher_set_path_methods);
 }
 
 /*
@@ -83,18 +68,8 @@ CustomPath *create_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
 CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
                                    List *custom_private)
 {
-    CustomPath *cp;
-
-    cp = makeNode(CustomPath);
-
-    initialize_cypher_dml_path(cp, rel);
-    cp->flags = 0;
-    /* Store the metadata Delete will need in the execution phase. */
-    cp->custom_private = custom_private;
-    /* Tells Postgres how to turn this path to the correct CustomScan */
-    cp->methods = &cypher_delete_path_methods;
-
-    return cp;
+    return make_cypher_dml_path(rel, custom_private,
+                                &cypher_delete_path_methods);
 }
 
 /*
@@ -104,13 +79,6 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
 CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
                                    List *custom_private)
 {
-    CustomPath *cp;
-
-    cp = makeNode(CustomPath);
-
-    initialize_cypher_dml_path(cp, rel);
-    cp->flags = 0;
-
     /*
      * Store the metadata Merge will need in the execution phase.
      * We may have a sublink here in case the user used a list
@@ -118,15 +86,22 @@ CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
      */
     if (rel->subroot->parse->hasSubLinks)
     {
-        cp->custom_private = list_make1(convert_sublink_to_subplan(root, custom_private));
-    }
-    else
-    {
-        cp->custom_private = custom_private;
+        custom_private = list_make1(convert_sublink_to_subplan(root,
+                                                               custom_private));
     }
 
-    /* Tells Postgres how to turn this path to the correct CustomScan */
-    cp->methods = &cypher_merge_path_methods;
+    return make_cypher_dml_path(rel, custom_private, &cypher_merge_path_methods);
+}
+
+static CustomPath *make_cypher_dml_path(RelOptInfo *rel, List *custom_private,
+                                        const CustomPathMethods *methods)
+{
+    CustomPath *cp = makeNode(CustomPath);
+
+    initialize_cypher_dml_path(cp, rel);
+    cp->flags = 0;
+    cp->custom_private = custom_private;
+    cp->methods = methods;
 
     return cp;
 }

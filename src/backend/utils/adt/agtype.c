@@ -46,6 +46,7 @@
 #include "nodes/nodes.h"
 #include "utils/acl.h"
 #include "utils/ag_cache.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/catcache.h"
 #include "executor/cypher_utils.h"
@@ -196,6 +197,10 @@ static Datum agtype_array_element_impl(FunctionCallInfo fcinfo,
 static Datum process_access_operator_result(FunctionCallInfo fcinfo,
                                             agtype_value *agtv,
                                             bool as_text);
+static Datum process_access_operator_result_no_copy(FunctionCallInfo fcinfo,
+                                                    agtype_value *agtv,
+                                                    bool as_text,
+                                                    bool needs_free);
 /* typecast functions */
 static void agtype_typecast_object(agtype_in_state *state, char *annotation);
 static void agtype_typecast_array(agtype_in_state *state, char *annotation);
@@ -4285,50 +4290,187 @@ static Datum process_access_operator_result(FunctionCallInfo fcinfo,
     PG_RETURN_NULL();
 }
 
+static Datum process_access_operator_result_no_copy(FunctionCallInfo fcinfo,
+                                                    agtype_value *agtv,
+                                                    bool as_text,
+                                                    bool needs_free)
+{
+    if (agtv != NULL)
+    {
+        if (as_text)
+        {
+            text *result;
+
+            if (agtv->type == AGTV_BINARY)
+            {
+                StringInfo out = makeStringInfo();
+                agtype_container *agtc =
+                    (agtype_container *)agtv->val.binary.data;
+                char *str;
+
+                str = agtype_to_cstring_worker(out, agtc,
+                                               agtv->val.binary.len,
+                                               false, true);
+                result = cstring_to_text(str);
+            }
+            else
+            {
+                result = agtype_value_to_text(agtv, false);
+            }
+
+            free_agtype_value_no_copy(agtv, needs_free);
+
+            if (result)
+            {
+                PG_RETURN_TEXT_P(result);
+            }
+
+            PG_RETURN_NULL();
+        }
+        else
+        {
+            agtype *result = agtype_value_to_agtype(agtv);
+
+            free_agtype_value_no_copy(agtv, needs_free);
+            AG_RETURN_AGTYPE_P(result);
+        }
+    }
+
+    PG_RETURN_NULL();
+}
+
 Datum agtype_array_element_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
                                 int element, bool as_text)
 {
-    agtype_value *v;
+    agtype_value value;
+    bool value_needs_free = false;
+    uint32 size;
 
     if (!AGT_ROOT_IS_ARRAY(agtype_in))
     {
         PG_RETURN_NULL();
     }
 
-    v = execute_array_access_operator_internal(agtype_in, NULL, element);
+    size = AGT_ROOT_COUNT(agtype_in);
 
-    return process_access_operator_result(fcinfo, v, as_text);
+    if (element < 0)
+    {
+        element = size + element;
+    }
+
+    if (element < 0 || (uint32)element >= size)
+    {
+        PG_RETURN_NULL();
+    }
+
+    if (!get_ith_agtype_value_from_container_no_copy(&agtype_in->root, element,
+                                                     &value, &value_needs_free))
+    {
+        PG_RETURN_NULL();
+    }
+
+    return process_access_operator_result_no_copy(fcinfo, &value, as_text,
+                                                  value_needs_free);
 }
 
 Datum agtype_object_field_impl(FunctionCallInfo fcinfo, agtype *agtype_in,
                                char *key, int key_len, bool as_text)
 {
     agtype_value *v;
-    agtype* process_agtype;
 
     if (AGT_ROOT_IS_SCALAR(agtype_in))
     {
-        agtype_value *process_agtv = extract_entity_properties(agtype_in,
-                                                               false);
-        if (!process_agtv)
+        agtype_value scalar_value;
+        agtype_value *properties;
+        bool scalar_needs_free = false;
+
+        get_scalar_agtype_value_no_copy(agtype_in, &scalar_value,
+                                        &scalar_needs_free);
+
+        if (scalar_value.type == AGTV_VERTEX)
         {
+            properties = &scalar_value.val.object.pairs[2].value;
+        }
+        else if (scalar_value.type == AGTV_EDGE)
+        {
+            properties = &scalar_value.val.object.pairs[4].value;
+        }
+        else if (scalar_value.type == AGTV_PATH)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("cannot extract properties from an agtype path")));
+        }
+        else
+        {
+            properties = &scalar_value;
+        }
+
+        if (properties == NULL || properties->type == AGTV_NULL)
+        {
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
             PG_RETURN_NULL();
         }
 
-        process_agtype = agtype_value_to_agtype(process_agtv);
-    }
-    else
-    {
-        process_agtype = agtype_in;
+        if (properties->type != AGTV_OBJECT &&
+            (properties->type != AGTV_BINARY ||
+             !AGTYPE_CONTAINER_IS_OBJECT(properties->val.binary.data)))
+        {
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+            PG_RETURN_NULL();
+        }
+
+        v = execute_map_access_operator_internal(NULL, properties,
+                                                 key, key_len);
+        if (v == NULL || v->type == AGTV_NULL)
+        {
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+            PG_RETURN_NULL();
+        }
+
+        if (as_text)
+        {
+            text *result;
+
+            if (v->type == AGTV_BINARY)
+            {
+                StringInfo out = makeStringInfo();
+                agtype_container *agtc = (agtype_container *)v->val.binary.data;
+                char *str;
+
+                str = agtype_to_cstring_worker(out, agtc, v->val.binary.len,
+                                               false, true);
+                result = cstring_to_text(str);
+            }
+            else
+            {
+                result = agtype_value_to_text(v, false);
+            }
+
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+
+            if (result)
+            {
+                PG_RETURN_TEXT_P(result);
+            }
+
+            PG_RETURN_NULL();
+        }
+        else
+        {
+            agtype *result = agtype_value_to_agtype(v);
+
+            free_agtype_value_no_copy(&scalar_value, scalar_needs_free);
+            AG_RETURN_AGTYPE_P(result);
+        }
     }
 
-    if (!AGT_ROOT_IS_OBJECT(process_agtype))
+    if (!AGT_ROOT_IS_OBJECT(agtype_in))
     {
         PG_RETURN_NULL();
     }
 
-    v = execute_map_access_operator_internal(process_agtype, NULL,
-                                             key, key_len);
+    v = execute_map_access_operator_internal(agtype_in, NULL, key, key_len);
 
     return process_access_operator_result(fcinfo, v, as_text);
 }
@@ -9430,25 +9572,32 @@ Datum age_split(PG_FUNCTION_ARGS)
     if (PointerIsValid(DatumGetPointer(text_array)))
     {
         ArrayType *array = DatumGetArrayTypeP(text_array);
+        ArrayIterator iterator;
         agtype_in_state result;
-        Datum *elements;
-        int nelements;
+        Datum element;
+        bool is_null;
 
-        /* zero the state and deconstruct the ArrayType to TEXTOID */
+        /* zero the state and stream the ArrayType to avoid extra arrays */
         memset(&result, 0, sizeof(agtype_in_state));
-        deconstruct_array(array, TEXTOID, -1, false, 'i', &elements, NULL,
-                          &nelements);
+        iterator = array_create_iterator(array, 0, NULL);
 
         /* open the agtype array */
         result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY,
                                        NULL);
         /* add the values */
-        for (i = 0; i < nelements; i++)
+        while (array_iterate(iterator, &element, &is_null))
         {
-            text *elem = DatumGetTextPP(elements[i]);
+            text *elem;
             char *string;
             int string_len;
             agtype_value agtv_string;
+
+            if (is_null)
+            {
+                continue;
+            }
+
+            elem = DatumGetTextPP(element);
 
             /* get the string element from the array */
             string = VARDATA_ANY(elem);
@@ -9462,6 +9611,8 @@ Datum age_split(PG_FUNCTION_ARGS)
             result.res = push_agtype_value(&result.parse_state, WAGT_ELEM,
                                            &agtv_string);
         }
+
+        array_free_iterator(iterator);
 
         /* close the array */
         result.res = push_agtype_value(&result.parse_state, WAGT_END_ARRAY, NULL);

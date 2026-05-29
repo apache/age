@@ -37,6 +37,9 @@ typedef enum cypher_clause_kind
     CYPHER_CLAUSE_MERGE
 } cypher_clause_kind;
 
+typedef CustomPath *(*cypher_path_factory)(PlannerInfo *root, RelOptInfo *rel,
+                                           List *custom_private);
+
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 
 static Oid cypher_create_clause_func_oid = InvalidOid;
@@ -49,20 +52,12 @@ static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
                              RangeTblEntry *rte);
 static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte);
 static void register_cypher_clause_function_oid_callbacks(void);
-static Oid get_cypher_create_clause_func_oid(void);
-static Oid get_cypher_set_clause_func_oid(void);
-static Oid get_cypher_delete_clause_func_oid(void);
-static Oid get_cypher_merge_clause_func_oid(void);
+static void load_cypher_clause_function_oids(void);
 static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
                                                    uint32 hash_value);
-static void handle_cypher_create_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte);
-static void handle_cypher_set_clause(PlannerInfo *root, RelOptInfo *rel,
-                                     Index rti, RangeTblEntry *rte);
-static void handle_cypher_delete_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte);
-static void handle_cypher_merge_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte);
+static void replace_with_cypher_dml_path(PlannerInfo *root, RelOptInfo *rel,
+                                         RangeTblEntry *rte,
+                                         cypher_path_factory factory);
 
 void set_rel_pathlist_init(void)
 {
@@ -84,16 +79,16 @@ static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
     switch (get_cypher_clause_kind(rte))
     {
     case CYPHER_CLAUSE_CREATE:
-        handle_cypher_create_clause(root, rel, rti, rte);
+        replace_with_cypher_dml_path(root, rel, rte, create_cypher_create_path);
         break;
     case CYPHER_CLAUSE_SET:
-        handle_cypher_set_clause(root, rel, rti, rte);
+        replace_with_cypher_dml_path(root, rel, rte, create_cypher_set_path);
         break;
     case CYPHER_CLAUSE_DELETE:
-        handle_cypher_delete_clause(root, rel, rti, rte);
+        replace_with_cypher_dml_path(root, rel, rte, create_cypher_delete_path);
         break;
     case CYPHER_CLAUSE_MERGE:
-        handle_cypher_merge_clause(root, rel, rti, rte);
+        replace_with_cypher_dml_path(root, rel, rte, create_cypher_merge_path);
         break;
     case CYPHER_CLAUSE_NONE:
         break;
@@ -129,13 +124,15 @@ static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte)
 
     fe = (FuncExpr *)te->expr;
 
-    if (fe->funcid == get_cypher_create_clause_func_oid())
+    load_cypher_clause_function_oids();
+
+    if (fe->funcid == cypher_create_clause_func_oid)
         return CYPHER_CLAUSE_CREATE;
-    if (fe->funcid == get_cypher_set_clause_func_oid())
+    if (fe->funcid == cypher_set_clause_func_oid)
         return CYPHER_CLAUSE_SET;
-    if (fe->funcid == get_cypher_delete_clause_func_oid())
+    if (fe->funcid == cypher_delete_clause_func_oid)
         return CYPHER_CLAUSE_DELETE;
-    if (fe->funcid == get_cypher_merge_clause_func_oid())
+    if (fe->funcid == cypher_merge_clause_func_oid)
         return CYPHER_CLAUSE_MERGE;
     else
         return CYPHER_CLAUSE_NONE;
@@ -155,7 +152,7 @@ static void register_cypher_clause_function_oid_callbacks(void)
     }
 }
 
-static Oid get_cypher_create_clause_func_oid(void)
+static void load_cypher_clause_function_oids(void)
 {
     register_cypher_clause_function_oid_callbacks();
 
@@ -165,25 +162,11 @@ static Oid get_cypher_create_clause_func_oid(void)
             get_ag_func_oid(CREATE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
 
-    return cypher_create_clause_func_oid;
-}
-
-static Oid get_cypher_set_clause_func_oid(void)
-{
-    register_cypher_clause_function_oid_callbacks();
-
     if (!OidIsValid(cypher_set_clause_func_oid))
     {
         cypher_set_clause_func_oid =
             get_ag_func_oid(SET_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
-
-    return cypher_set_clause_func_oid;
-}
-
-static Oid get_cypher_delete_clause_func_oid(void)
-{
-    register_cypher_clause_function_oid_callbacks();
 
     if (!OidIsValid(cypher_delete_clause_func_oid))
     {
@@ -191,20 +174,11 @@ static Oid get_cypher_delete_clause_func_oid(void)
             get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
 
-    return cypher_delete_clause_func_oid;
-}
-
-static Oid get_cypher_merge_clause_func_oid(void)
-{
-    register_cypher_clause_function_oid_callbacks();
-
     if (!OidIsValid(cypher_merge_clause_func_oid))
     {
         cypher_merge_clause_func_oid =
             get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
-
-    return cypher_merge_clause_func_oid;
 }
 
 static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
@@ -216,9 +190,9 @@ static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
     cypher_merge_clause_func_oid = InvalidOid;
 }
 
-/* replace all possible paths with our CustomPath */
-static void handle_cypher_delete_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte)
+static void replace_with_cypher_dml_path(PlannerInfo *root, RelOptInfo *rel,
+                                         RangeTblEntry *rte,
+                                         cypher_path_factory factory)
 {
     TargetEntry *te;
     FuncExpr *fe;
@@ -231,84 +205,7 @@ static void handle_cypher_delete_clause(PlannerInfo *root, RelOptInfo *rel,
     /* pass the const that holds the data structure to the path. */
     custom_private = fe->args;
 
-    cp = create_cypher_delete_path(root, rel, custom_private);
-
-    /* Discard any preexisting paths */
-    rel->pathlist = NIL;
-    rel->partial_pathlist = NIL;
-
-    add_path(rel, (Path *)cp);
-}
-
-/*
- * Take the paths possible for the RelOptInfo that represents our
- * _cypher_delete_clause function replace them with our delete clause
- * path. The original paths will be children to the new delete path.
- */
-static void handle_cypher_create_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte)
-{
-    TargetEntry *te;
-    FuncExpr *fe;
-    List *custom_private;
-    CustomPath *cp;
-
-    /* Add the pattern to the CustomPath */
-    te = (TargetEntry *)llast(rte->subquery->targetList);
-    fe = (FuncExpr *)te->expr;
-    /* pass the const that holds the data structure to the path. */
-    custom_private = fe->args;
-
-    cp = create_cypher_create_path(root, rel, custom_private);
-
-    /* Discard any preexisting paths, they should be under the cp path */
-    rel->pathlist = NIL;
-    rel->partial_pathlist = NIL;
-
-    /* Add the new path to the rel. */
-    add_path(rel, (Path *)cp);
-}
-
-/* replace all possible paths with our CustomPath */
-static void handle_cypher_set_clause(PlannerInfo *root, RelOptInfo *rel,
-                                     Index rti, RangeTblEntry *rte)
-{
-    TargetEntry *te;
-    FuncExpr *fe;
-    List *custom_private;
-    CustomPath *cp;
-
-    /* Add the pattern to the CustomPath */
-    te = (TargetEntry *)llast(rte->subquery->targetList);
-    fe = (FuncExpr *)te->expr;
-    /* pass the const that holds the data structure to the path. */
-    custom_private = fe->args;
-
-    cp = create_cypher_set_path(root, rel, custom_private);
-
-    /* Discard any preexisting paths */
-    rel->pathlist = NIL;
-    rel->partial_pathlist = NIL;
-
-    add_path(rel, (Path *)cp);
-}
-
-/* replace all possible paths with our CustomPath */
-static void handle_cypher_merge_clause(PlannerInfo *root, RelOptInfo *rel,
-                                        Index rti, RangeTblEntry *rte)
-{
-    TargetEntry *te;
-    FuncExpr *fe;
-    List *custom_private;
-    CustomPath *cp;
-
-    /* Add the pattern to the CustomPath */
-    te = (TargetEntry *)llast(rte->subquery->targetList);
-    fe = (FuncExpr *)te->expr;
-    /* pass the const that holds the data structure to the path. */
-    custom_private = fe->args;
-
-    cp = create_cypher_merge_path(root, rel, custom_private);
+    cp = factory(root, rel, custom_private);
 
     /* Discard any preexisting paths */
     rel->pathlist = NIL;

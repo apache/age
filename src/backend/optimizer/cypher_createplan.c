@@ -54,9 +54,9 @@ static void apply_custom_plan_metadata(CustomScan *cs, CustomPath *best_path)
     cs->scan.plan.parallel_safe = best_path->path.parallel_safe;
 }
 
-Plan *plan_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
-                              CustomPath *best_path, List *tlist,
-                              List *clauses, List *custom_plans)
+static CustomScan *make_cypher_dml_plan(CustomPath *best_path, List *tlist,
+                                        List *custom_plans,
+                                        const CustomScanMethods *methods)
 {
     CustomScan *cs;
     Plan *subplan = linitial(custom_plans);
@@ -85,45 +85,25 @@ Plan *plan_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
     cs->custom_private = best_path->custom_private;
     cs->custom_scan_tlist = subplan->targetlist;
     cs->custom_relids = NULL;
-    cs->methods = &cypher_create_plan_methods;
+    cs->methods = methods;
 
-    return (Plan *)cs;
+    return cs;
+}
+
+Plan *plan_cypher_create_path(PlannerInfo *root, RelOptInfo *rel,
+                              CustomPath *best_path, List *tlist,
+                              List *clauses, List *custom_plans)
+{
+    return (Plan *)make_cypher_dml_plan(best_path, tlist, custom_plans,
+                                        &cypher_create_plan_methods);
 }
 
 Plan *plan_cypher_set_path(PlannerInfo *root, RelOptInfo *rel,
                            CustomPath *best_path, List *tlist,
                            List *clauses, List *custom_plans)
 {
-    CustomScan *cs;
-    Plan *subplan = linitial(custom_plans);
-
-    cs = makeNode(CustomScan);
-
-    apply_custom_plan_metadata(cs, best_path);
-
-    cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
-    cs->scan.plan.targetlist = tlist;
-    cs->scan.plan.qual = NIL;
-    cs->scan.plan.lefttree = NULL;
-    cs->scan.plan.righttree = NULL;
-    cs->scan.plan.initPlan = NIL;
-
-    cs->scan.plan.extParam = NULL;
-    cs->scan.plan.allParam = NULL;
-
-    cs->scan.scanrelid = 0;
-
-    cs->flags = best_path->flags;
-
-    cs->custom_plans = custom_plans;
-    cs->custom_exprs = NIL;
-    cs->custom_private = best_path->custom_private;
-    cs->custom_scan_tlist = subplan->targetlist;
-
-    cs->custom_relids = NULL;
-    cs->methods = &cypher_set_plan_methods;
-
-    return (Plan *)cs;
+    return (Plan *)make_cypher_dml_plan(best_path, tlist, custom_plans,
+                                        &cypher_set_plan_methods);
 }
 
 /*
@@ -134,50 +114,8 @@ Plan *plan_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
                            CustomPath *best_path, List *tlist,
                            List *clauses, List *custom_plans)
 {
-    CustomScan *cs;
-    Plan *subplan = linitial(custom_plans);
-
-    cs = makeNode(CustomScan);
-
-    apply_custom_plan_metadata(cs, best_path);
-
-    cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
-    /*
-     * the scan list of the delete node, used for its ScanTupleSlot used
-     * by its parent in the execution phase.
-     */
-    cs->scan.plan.targetlist = tlist;
-    cs->scan.plan.qual = NIL;
-    cs->scan.plan.lefttree = NULL;
-    cs->scan.plan.righttree = NULL;
-    cs->scan.plan.initPlan = NIL;
-
-    cs->scan.plan.extParam = NULL;
-    cs->scan.plan.allParam = NULL;
-
-    /*
-     * We do not want Postgres to assume we are scanning a table, postgres'
-     * optimizer will make assumptions about our targetlist that are false
-     */
-    cs->scan.scanrelid = 0;
-
-    cs->flags = best_path->flags;
-
-    /* child plan nodes are here, Postgres processed them for us. */
-    cs->custom_plans = custom_plans;
-    cs->custom_exprs = NIL;
-    /* transfer delete metadata needed by the DELETE clause. */
-    cs->custom_private = best_path->custom_private;
-    /*
-     * the scan list of the delete node's children, used for ScanTupleSlot
-     * in execution.
-     */
-    cs->custom_scan_tlist = subplan->targetlist;
-
-    cs->custom_relids = NULL;
-    cs->methods = &cypher_delete_plan_methods;
-
-    return (Plan *)cs;
+    return (Plan *)make_cypher_dml_plan(best_path, tlist, custom_plans,
+                                        &cypher_delete_plan_methods);
 }
 
 /*
@@ -188,48 +126,6 @@ Plan *plan_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
                            CustomPath *best_path, List *tlist,
                            List *clauses, List *custom_plans)
 {
-    CustomScan *cs;
-    Plan *subplan = linitial(custom_plans);
-
-    cs = makeNode(CustomScan);
-
-    apply_custom_plan_metadata(cs, best_path);
-
-    cs->scan.plan.plan_node_id = 0; /* Set later in set_plan_refs */
-    /*
-     * the scan list of the merge node, used for its ScanTupleSlot used
-     * by its parent in the execution phase.
-     */
-    cs->scan.plan.targetlist = tlist;
-    cs->scan.plan.qual = NIL;
-    cs->scan.plan.lefttree = NULL;
-    cs->scan.plan.righttree = NULL;
-    cs->scan.plan.initPlan = NIL;
-
-    cs->scan.plan.extParam = NULL;
-    cs->scan.plan.allParam = NULL;
-
-    /*
-     * We do not want Postgres to assume we are scanning a table, postgres'
-     * optimizer will make assumptions about our targetlist that are false
-     */
-    cs->scan.scanrelid = 0;
-
-    cs->flags = best_path->flags;
-
-    /* child plan nodes are here, Postgres processed them for us. */
-    cs->custom_plans = custom_plans;
-    cs->custom_exprs = NIL;
-    /* transfer delete metadata needed by the MERGE clause. */
-    cs->custom_private = best_path->custom_private;
-    /*
-     * the scan list of the merge node's children, used for ScanTupleSlot
-     * in execution.
-     */
-    cs->custom_scan_tlist = subplan->targetlist;
-
-    cs->custom_relids = NULL;
-    cs->methods = &cypher_merge_plan_methods;
-
-    return (Plan *)cs;
+    return (Plan *)make_cypher_dml_plan(best_path, tlist, custom_plans,
+                                        &cypher_merge_plan_methods);
 }
