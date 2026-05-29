@@ -6314,7 +6314,21 @@ static char *get_label_name(const char *graph_name, int graph_name_len,
 {
     Oid graph_oid = get_cached_graph_oid_for_name(graph_name, graph_name_len);
     int32 label_id = get_graphid_label_id(element_graphid);
+    static Oid cached_graph_oid = InvalidOid;
+    static int32 cached_label_id = -1;
+    static uint64 cached_generation = 0;
+    static NameData cached_label_name;
+    static Oid cached_label_relation = InvalidOid;
+    uint64 current_generation = get_label_cache_generation();
     label_cache_data *label_cache;
+
+    if (cached_graph_oid == graph_oid &&
+        cached_label_id == label_id &&
+        cached_generation == current_generation)
+    {
+        *label_relation = cached_label_relation;
+        return NameStr(cached_label_name);
+    }
 
     label_cache = search_label_graph_oid_cache_cached(graph_oid, label_id);
 
@@ -6326,8 +6340,13 @@ static char *get_label_name(const char *graph_name, int graph_name_len,
     }
 
     *label_relation = label_cache->relation;
+    cached_graph_oid = graph_oid;
+    cached_label_id = label_id;
+    cached_generation = current_generation;
+    namestrcpy(&cached_label_name, NameStr(label_cache->name));
+    cached_label_relation = label_cache->relation;
 
-    return NameStr(label_cache->name);
+    return NameStr(cached_label_name);
 }
 
 static Oid get_cached_graph_oid_for_name(const char *graph_name,

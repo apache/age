@@ -184,6 +184,9 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                                   FuncCallContext *funcctx);
 static Oid get_cached_vle_graph_oid(const char *graph_name,
                                     int graph_name_len);
+static Oid get_cached_vle_label_relation(Oid graph_oid,
+                                         const char *label_name,
+                                         int label_name_len);
 static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx);
 static void free_VLE_local_context(VLE_local_context *vlelctx);
 /* VLE graph traversal functions */
@@ -1019,34 +1022,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     if (agtv_object->type == AGTV_STRING &&
         agtv_object->val.string.len != 0)
     {
-        label_cache_data *label_cache;
-        char label_name_buf[NAMEDATALEN];
-        char *label_name;
-        bool free_label_name = false;
-
-        if (agtv_object->val.string.len < NAMEDATALEN)
-        {
-            memcpy(label_name_buf, agtv_object->val.string.val,
-                   agtv_object->val.string.len);
-            label_name_buf[agtv_object->val.string.len] = '\0';
-            label_name = label_name_buf;
-        }
-        else
-        {
-            label_name = pnstrdup(agtv_object->val.string.val,
-                                  agtv_object->val.string.len);
-            free_label_name = true;
-        }
-
-        label_cache = search_label_name_graph_cache_cached(
-            label_name, graph_oid);
-        vlelctx->edge_label_name_oid = label_cache != NULL ?
-                                       label_cache->relation : InvalidOid;
+        vlelctx->edge_label_name_oid = get_cached_vle_label_relation(
+            graph_oid, agtv_object->val.string.val,
+            agtv_object->val.string.len);
         vlelctx->edge_label_name = NULL;
-        if (free_label_name)
-        {
-            pfree(label_name);
-        }
     }
     else
     {
@@ -1191,6 +1170,64 @@ static Oid get_cached_vle_graph_oid(const char *graph_name,
     }
 
     return cached_graph_oid;
+}
+
+static Oid get_cached_vle_label_relation(Oid graph_oid,
+                                         const char *label_name,
+                                         int label_name_len)
+{
+    static NameData cached_label_name;
+    static Oid cached_graph_oid = InvalidOid;
+    static Oid cached_relation_oid = InvalidOid;
+    static uint64 cached_generation = 0;
+    uint64 current_generation = get_label_cache_generation();
+    char *label_name_cstr;
+    NameData label_name_buf;
+    bool free_label_name = false;
+    label_cache_data *label_cache;
+
+    if (OidIsValid(cached_relation_oid) &&
+        cached_graph_oid == graph_oid &&
+        cached_generation == current_generation &&
+        label_name_len < NAMEDATALEN &&
+        strncmp(NameStr(cached_label_name), label_name, label_name_len) == 0 &&
+        NameStr(cached_label_name)[label_name_len] == '\0')
+    {
+        return cached_relation_oid;
+    }
+
+    if (label_name_len < NAMEDATALEN)
+    {
+        memcpy(NameStr(label_name_buf), label_name, label_name_len);
+        NameStr(label_name_buf)[label_name_len] = '\0';
+        label_name_cstr = NameStr(label_name_buf);
+    }
+    else
+    {
+        label_name_cstr = pnstrdup(label_name, label_name_len);
+        free_label_name = true;
+    }
+
+    label_cache = search_label_name_graph_cache_cached(label_name_cstr,
+                                                       graph_oid);
+    cached_graph_oid = graph_oid;
+    cached_relation_oid = label_cache != NULL ?
+        label_cache->relation : InvalidOid;
+    cached_generation = current_generation;
+    if (label_name_len < NAMEDATALEN)
+    {
+        cached_label_name = label_name_buf;
+    }
+    else
+    {
+        namestrcpy(&cached_label_name, label_name_cstr);
+    }
+    if (free_label_name)
+    {
+        pfree(label_name_cstr);
+    }
+
+    return cached_relation_oid;
 }
 
 /*

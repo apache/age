@@ -31,8 +31,8 @@
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
 
-#define LAST_GRAPH_CACHE_SIZE 4
-#define LAST_LABEL_CACHE_SIZE 4
+#define LAST_GRAPH_CACHE_SIZE 8
+#define LAST_LABEL_CACHE_SIZE 8
 
 typedef struct graph_name_cache_entry
 {
@@ -343,11 +343,19 @@ uint64 get_graph_cache_generation(void)
     return graph_cache_generation;
 }
 
+void invalidate_graph_cache(void)
+{
+    initialize_caches();
+
+    graph_cache_generation++;
+}
+
 graph_cache_data *search_graph_name_cache_cached(const char *name)
 {
     static NameData cached_names[LAST_GRAPH_CACHE_SIZE];
     static uint64 cached_generations[LAST_GRAPH_CACHE_SIZE] = {0};
     static graph_cache_data *cached_graphs[LAST_GRAPH_CACHE_SIZE] = {NULL};
+    static bool cached_valid[LAST_GRAPH_CACHE_SIZE] = {false};
     static int next_slot = 0;
     uint64 current_generation = get_graph_cache_generation();
     int slot;
@@ -357,7 +365,7 @@ graph_cache_data *search_graph_name_cache_cached(const char *name)
 
     for (i = 0; i < LAST_GRAPH_CACHE_SIZE; i++)
     {
-        if (cached_graphs[i] != NULL &&
+        if (cached_valid[i] &&
             cached_generations[i] == current_generation &&
             namestrcmp(&cached_names[i], name) == 0)
         {
@@ -368,7 +376,7 @@ graph_cache_data *search_graph_name_cache_cached(const char *name)
     slot = -1;
     for (i = 0; i < LAST_GRAPH_CACHE_SIZE; i++)
     {
-        if (cached_graphs[i] == NULL ||
+        if (!cached_valid[i] ||
             cached_generations[i] != current_generation)
         {
             slot = i;
@@ -383,11 +391,9 @@ graph_cache_data *search_graph_name_cache_cached(const char *name)
     }
 
     cached_graphs[slot] = search_graph_name_cache(name);
-    if (cached_graphs[slot] != NULL)
-    {
-        namestrcpy(&cached_names[slot], name);
-        cached_generations[slot] = current_generation;
-    }
+    namestrcpy(&cached_names[slot], name);
+    cached_generations[slot] = current_generation;
+    cached_valid[slot] = true;
 
     return cached_graphs[slot];
 }
@@ -397,6 +403,7 @@ graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
     static Oid cached_namespaces[LAST_GRAPH_CACHE_SIZE] = {InvalidOid};
     static uint64 cached_generations[LAST_GRAPH_CACHE_SIZE] = {0};
     static graph_cache_data *cached_graphs[LAST_GRAPH_CACHE_SIZE] = {NULL};
+    static bool cached_valid[LAST_GRAPH_CACHE_SIZE] = {false};
     static int next_slot = 0;
     uint64 current_generation = get_graph_cache_generation();
     int slot;
@@ -404,7 +411,7 @@ graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
 
     for (i = 0; i < LAST_GRAPH_CACHE_SIZE; i++)
     {
-        if (cached_graphs[i] != NULL &&
+        if (cached_valid[i] &&
             cached_generations[i] == current_generation &&
             cached_namespaces[i] == namespace)
         {
@@ -415,7 +422,7 @@ graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
     slot = -1;
     for (i = 0; i < LAST_GRAPH_CACHE_SIZE; i++)
     {
-        if (cached_graphs[i] == NULL ||
+        if (!cached_valid[i] ||
             cached_generations[i] != current_generation)
         {
             slot = i;
@@ -430,11 +437,9 @@ graph_cache_data *search_graph_namespace_cache_cached(Oid namespace)
     }
 
     cached_graphs[slot] = search_graph_namespace_cache(namespace);
-    if (cached_graphs[slot] != NULL)
-    {
-        cached_namespaces[slot] = namespace;
-        cached_generations[slot] = current_generation;
-    }
+    cached_namespaces[slot] = namespace;
+    cached_generations[slot] = current_generation;
+    cached_valid[slot] = true;
 
     return cached_graphs[slot];
 }
@@ -980,20 +985,30 @@ uint64 get_label_cache_generation(void)
     return label_cache_generation;
 }
 
+void invalidate_label_cache(void)
+{
+    initialize_caches();
+
+    label_cache_generation++;
+    label_seq_relation_cache_generation++;
+}
+
 label_cache_data *search_label_graph_oid_cache_cached(Oid graph, int32 id)
 {
     static Oid cached_graphs[LAST_LABEL_CACHE_SIZE] = {InvalidOid};
     static int32 cached_ids[LAST_LABEL_CACHE_SIZE] = {-1, -1, -1, -1};
     static uint64 cached_generations[LAST_LABEL_CACHE_SIZE] = {0};
     static label_cache_data *cached_labels[LAST_LABEL_CACHE_SIZE] = {NULL};
+    static bool cached_valid[LAST_LABEL_CACHE_SIZE] = {false};
     static int next_slot = 0;
     uint64 current_generation = get_label_cache_generation();
     label_cache_data *label;
+    int slot;
     int i;
 
     for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        if (cached_labels[i] != NULL &&
+        if (cached_valid[i] &&
             cached_graphs[i] == graph &&
             cached_ids[i] == id &&
             cached_generations[i] == current_generation)
@@ -1003,31 +1018,28 @@ label_cache_data *search_label_graph_oid_cache_cached(Oid graph, int32 id)
     }
 
     label = search_label_graph_oid_cache(graph, id);
-    if (label != NULL)
+    slot = -1;
+    for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        int slot = -1;
-
-        for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
+        if (!cached_valid[i] ||
+            cached_generations[i] != current_generation)
         {
-            if (cached_labels[i] == NULL ||
-                cached_generations[i] != current_generation)
-            {
-                slot = i;
-                break;
-            }
+            slot = i;
+            break;
         }
-
-        if (slot < 0)
-        {
-            slot = next_slot;
-            next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
-        }
-
-        cached_graphs[slot] = graph;
-        cached_ids[slot] = id;
-        cached_generations[slot] = current_generation;
-        cached_labels[slot] = label;
     }
+
+    if (slot < 0)
+    {
+        slot = next_slot;
+        next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
+    }
+
+    cached_graphs[slot] = graph;
+    cached_ids[slot] = id;
+    cached_generations[slot] = current_generation;
+    cached_labels[slot] = label;
+    cached_valid[slot] = true;
 
     return label;
 }
@@ -1039,16 +1051,18 @@ label_cache_data *search_label_name_graph_cache_cached(const char *name,
     static Oid cached_graphs[LAST_LABEL_CACHE_SIZE] = {InvalidOid};
     static uint64 cached_generations[LAST_LABEL_CACHE_SIZE] = {0};
     static label_cache_data *cached_labels[LAST_LABEL_CACHE_SIZE] = {NULL};
+    static bool cached_valid[LAST_LABEL_CACHE_SIZE] = {false};
     static int next_slot = 0;
     uint64 current_generation = get_label_cache_generation();
     label_cache_data *label;
+    int slot;
     int i;
 
     Assert(name);
 
     for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        if (cached_labels[i] != NULL &&
+        if (cached_valid[i] &&
             cached_graphs[i] == graph &&
             cached_generations[i] == current_generation &&
             namestrcmp(&cached_names[i], name) == 0)
@@ -1058,31 +1072,28 @@ label_cache_data *search_label_name_graph_cache_cached(const char *name,
     }
 
     label = search_label_name_graph_cache(name, graph);
-    if (label != NULL)
+    slot = -1;
+    for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        int slot = -1;
-
-        for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
+        if (!cached_valid[i] ||
+            cached_generations[i] != current_generation)
         {
-            if (cached_labels[i] == NULL ||
-                cached_generations[i] != current_generation)
-            {
-                slot = i;
-                break;
-            }
+            slot = i;
+            break;
         }
-
-        if (slot < 0)
-        {
-            slot = next_slot;
-            next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
-        }
-
-        namestrcpy(&cached_names[slot], name);
-        cached_graphs[slot] = graph;
-        cached_generations[slot] = current_generation;
-        cached_labels[slot] = label;
     }
+
+    if (slot < 0)
+    {
+        slot = next_slot;
+        next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
+    }
+
+    namestrcpy(&cached_names[slot], name);
+    cached_graphs[slot] = graph;
+    cached_generations[slot] = current_generation;
+    cached_labels[slot] = label;
+    cached_valid[slot] = true;
 
     return label;
 }
@@ -1267,14 +1278,16 @@ label_cache_data *search_label_relation_cache_cached(Oid relation)
     static Oid cached_relations[LAST_LABEL_CACHE_SIZE] = {InvalidOid};
     static uint64 cached_generations[LAST_LABEL_CACHE_SIZE] = {0};
     static label_cache_data *cached_labels[LAST_LABEL_CACHE_SIZE] = {NULL};
+    static bool cached_valid[LAST_LABEL_CACHE_SIZE] = {false};
     static int next_slot = 0;
     uint64 current_generation = get_label_cache_generation();
     label_cache_data *label;
+    int slot;
     int i;
 
     for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        if (cached_labels[i] != NULL &&
+        if (cached_valid[i] &&
             cached_relations[i] == relation &&
             cached_generations[i] == current_generation)
         {
@@ -1283,30 +1296,27 @@ label_cache_data *search_label_relation_cache_cached(Oid relation)
     }
 
     label = search_label_relation_cache(relation);
-    if (label != NULL)
+    slot = -1;
+    for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
     {
-        int slot = -1;
-
-        for (i = 0; i < LAST_LABEL_CACHE_SIZE; i++)
+        if (!cached_valid[i] ||
+            cached_generations[i] != current_generation)
         {
-            if (cached_labels[i] == NULL ||
-                cached_generations[i] != current_generation)
-            {
-                slot = i;
-                break;
-            }
+            slot = i;
+            break;
         }
-
-        if (slot < 0)
-        {
-            slot = next_slot;
-            next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
-        }
-
-        cached_relations[slot] = relation;
-        cached_generations[slot] = current_generation;
-        cached_labels[slot] = label;
     }
+
+    if (slot < 0)
+    {
+        slot = next_slot;
+        next_slot = (next_slot + 1) % LAST_LABEL_CACHE_SIZE;
+    }
+
+    cached_relations[slot] = relation;
+    cached_generations[slot] = current_generation;
+    cached_labels[slot] = label;
+    cached_valid[slot] = true;
 
     return label;
 }

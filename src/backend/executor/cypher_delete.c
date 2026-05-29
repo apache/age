@@ -220,6 +220,12 @@ static void end_cypher_delete(CustomScanState *node)
         css->result_rel_info_cache = NULL;
     }
 
+    if (css->label_relation_cache != NULL)
+    {
+        destroy_label_relation_cache(css->label_relation_cache);
+        css->label_relation_cache = NULL;
+    }
+
     if (css->vertex_id_htab != NULL)
     {
         hash_destroy(css->vertex_id_htab);
@@ -250,6 +256,8 @@ static void init_delete_caches(cypher_delete_custom_scan_state *css)
 
     css->result_rel_info_cache =
         create_entity_result_rel_info_cache("delete_result_rel_info_cache");
+    css->label_relation_cache =
+        create_label_relation_cache("delete_label_relation_cache");
 }
 
 static HTAB *create_delete_vertex_htab(void)
@@ -525,9 +533,9 @@ static void process_delete_list(CustomScanState *node)
         TableScanDesc scan_desc = NULL;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple = NULL;
-        label_cache_data *label_cache;
         int entity_position;
         Oid relid;
+        Oid label_relation;
         Relation rel;
         int id_attr_num;
         Oid index_oid = InvalidOid;
@@ -539,6 +547,7 @@ static void process_delete_list(CustomScanState *node)
         bool found_idx_entry;
         RLSCacheEntry *rls_entry;
         bool found_rls_entry;
+        int32 label_id;
 
         entity_position = delete_item_positions[i];
 
@@ -548,20 +557,21 @@ static void process_delete_list(CustomScanState *node)
 
         extract_entity(node, scanTupleSlot, entity_position, &entity_type,
                        &entity_id);
+        label_id = GET_LABEL_ID(entity_id);
 
-        label_cache = search_label_graph_oid_cache_cached(
-            css->delete_data->graph_oid, GET_LABEL_ID(entity_id));
-        if (label_cache == NULL)
+        if (!get_label_relation_from_cache(css->label_relation_cache,
+                                           css->delete_data->graph_oid,
+                                           label_id, &label_relation, NULL))
         {
             ereport(ERROR,
                     (errcode(ERRCODE_UNDEFINED_TABLE),
-                     errmsg("label id %lu does not exist",
-                            GET_LABEL_ID(entity_id))));
+                     errmsg("label id %d does not exist",
+                            label_id)));
         }
 
         resultRelInfo = get_entity_result_rel_info(estate,
                                                    css->result_rel_info_cache,
-                                                   label_cache->relation);
+                                                   label_relation);
         rel = resultRelInfo->ri_RelationDesc;
         relid = RelationGetRelid(rel);
 

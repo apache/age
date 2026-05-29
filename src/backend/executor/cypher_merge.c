@@ -263,6 +263,8 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
 
     css->entity_exists_index_cache =
         create_entity_exists_index_cache("merge_entity_exists_index_cache");
+    css->entity_exists_label_relation_cache =
+        create_label_relation_cache("merge_entity_exists_label_relation_cache");
 
     Increment_Estate_CommandId(estate);
 }
@@ -601,7 +603,8 @@ static path_entry **prebuild_path(CustomScanState *node)
             {
                 if (!entity_exists_with_cache(estate, css->graph_oid,
                                               entry->id,
-                                              css->entity_exists_index_cache))
+                                              css->entity_exists_index_cache,
+                                              css->entity_exists_label_relation_cache))
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -1222,6 +1225,12 @@ static void end_cypher_merge(CustomScanState *node)
         css->entity_exists_index_cache = NULL;
     }
 
+    if (css->entity_exists_label_relation_cache != NULL)
+    {
+        destroy_label_relation_cache(css->entity_exists_label_relation_cache);
+        css->entity_exists_label_relation_cache = NULL;
+    }
+
     if (css->update_qual_cache != NULL)
     {
         hash_destroy(css->update_qual_cache);
@@ -1238,6 +1247,12 @@ static void end_cypher_merge(CustomScanState *node)
     {
         destroy_entity_result_rel_info_cache(css->update_result_rel_info_cache);
         css->update_result_rel_info_cache = NULL;
+    }
+
+    if (css->update_label_relation_cache != NULL)
+    {
+        destroy_label_relation_cache(css->update_label_relation_cache);
+        css->update_label_relation_cache = NULL;
     }
 
     foreach (lc, path->target_nodes)
@@ -1644,7 +1659,8 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         {
             if (!entity_exists_with_cache(estate, css->graph_oid,
                                           DATUM_GET_GRAPHID(id),
-                                          css->entity_exists_index_cache))
+                                          css->entity_exists_index_cache,
+                                          css->entity_exists_label_relation_cache))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),

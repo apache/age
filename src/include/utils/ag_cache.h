@@ -46,7 +46,9 @@ graph_cache_data *search_graph_name_cache_cached(const char *name);
 graph_cache_data *search_graph_namespace_cache(Oid namespace);
 graph_cache_data *search_graph_namespace_cache_cached(Oid namespace);
 uint64 get_graph_cache_generation(void);
+void invalidate_graph_cache(void);
 uint64 get_label_cache_generation(void);
+void invalidate_label_cache(void);
 label_cache_data *search_label_oid_cache(Oid oid);
 label_cache_data *search_label_name_graph_cache(const char *name, Oid graph);
 label_cache_data *search_label_name_graph_cache_cached(const char *name,

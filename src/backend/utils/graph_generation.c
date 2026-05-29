@@ -22,6 +22,7 @@
 #include "access/genam.h"
 #include "access/table.h"
 #include "commands/graph_commands.h"
+#include "nodes/makefuncs.h"
 #include "utils/load/age_load.h"
 
 
@@ -209,11 +210,12 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                                                         graph_oid);
     if (vertex_cache == NULL)
     {
-        DirectFunctionCall2(create_vlabel,
-                            CStringGetDatum(graph_name->data),
-                            CStringGetDatum(vtx_name_str));
-        vertex_cache = search_label_name_graph_cache_cached(vtx_name_str,
-                                                            graph_oid);
+        List *parent = list_make1(makeRangeVar(
+            graph_name_str, pstrdup(AG_DEFAULT_LABEL_VERTEX), -1));
+        Oid label_relid = create_label(graph_name_str, vtx_name_str,
+                                       LABEL_TYPE_VERTEX, parent);
+
+        vertex_cache = search_label_relation_cache_cached(label_relid);
         if (vertex_cache == NULL)
         {
             ereport(ERROR,
@@ -221,16 +223,19 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                      errmsg("vertex label \"%s\" was not found after creation",
                             vtx_name_str)));
         }
+        ereport(NOTICE,
+                (errmsg("VLabel \"%s\" has been created", vtx_name_str)));
     }
 
     edge_cache = search_label_name_graph_cache_cached(edge_name_str, graph_oid);
     if (edge_cache == NULL)
     {
-        DirectFunctionCall2(create_elabel,
-                            CStringGetDatum(graph_name->data),
-                            CStringGetDatum(edge_label_name->data));
-        edge_cache = search_label_name_graph_cache_cached(edge_name_str,
-                                                          graph_oid);
+        List *parent = list_make1(makeRangeVar(
+            graph_name_str, pstrdup(AG_DEFAULT_LABEL_EDGE), -1));
+        Oid label_relid = create_label(graph_name_str, edge_name_str,
+                                       LABEL_TYPE_EDGE, parent);
+
+        edge_cache = search_label_relation_cache_cached(label_relid);
         if (edge_cache == NULL)
         {
             ereport(ERROR,
@@ -238,6 +243,8 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
                      errmsg("edge label \"%s\" was not found after creation",
                             edge_name_str)));
         }
+        ereport(NOTICE,
+                (errmsg("ELabel \"%s\" has been created", edge_name_str)));
     }
 
     vtx_label_id = vertex_cache->id;

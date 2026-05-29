@@ -90,6 +90,8 @@ void insert_label(const char *label_name, Oid graph_oid, int32 label_id,
      */
     CatalogTupleInsert(ag_label, tuple);
 
+    invalidate_label_cache();
+
     table_close(ag_label, RowExclusiveLock);
 }
 
@@ -117,6 +119,8 @@ void delete_label(Oid relation)
     }
 
     CatalogTupleDelete(ag_label, &tuple->t_self);
+
+    invalidate_label_cache();
 
     systable_endscan(scan_desc);
     table_close(ag_label, RowExclusiveLock);

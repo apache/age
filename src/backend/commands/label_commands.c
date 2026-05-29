@@ -85,9 +85,9 @@ static void create_index_on_column(char *schema_name,
                                    char *rel_name,
                                    char *colname,
                                    bool unique);
-static void create_label_with_graph_cache(char *graph_name, char *label_name,
-                                          char label_type, List *parents,
-                                          graph_cache_data *cache_data);
+static Oid create_label_with_graph_cache(char *graph_name, char *label_name,
+                                         char label_type, List *parents,
+                                         graph_cache_data *cache_data);
 
 PG_FUNCTION_INFO_V1(age_is_valid_label_name);
 
@@ -312,11 +312,10 @@ Datum create_elabel(PG_FUNCTION_ARGS)
 
 /*
  * For the new label, create an entry in ag_catalog.ag_label, create a
- * new table and sequence. Returns the oid from the new tuple in
- * ag_catalog.ag_label.
+ * new table and sequence. Returns the new label relation OID.
  */
-void create_label(char *graph_name, char *label_name, char label_type,
-                  List *parents)
+Oid create_label(char *graph_name, char *label_name, char label_type,
+                 List *parents)
 {
     graph_cache_data *cache_data;
 
@@ -333,13 +332,13 @@ void create_label(char *graph_name, char *label_name, char label_type,
                         errmsg("graph \"%s\" does not exist", graph_name)));
     }
 
-    create_label_with_graph_cache(graph_name, label_name, label_type, parents,
-                                  cache_data);
+    return create_label_with_graph_cache(graph_name, label_name, label_type,
+                                         parents, cache_data);
 }
 
-static void create_label_with_graph_cache(char *graph_name, char *label_name,
-                                          char label_type, List *parents,
-                                          graph_cache_data *cache_data)
+static Oid create_label_with_graph_cache(char *graph_name, char *label_name,
+                                         char label_type, List *parents,
+                                         graph_cache_data *cache_data)
 {
     Oid graph_oid;
     Oid nsp_id;
@@ -382,6 +381,8 @@ static void create_label_with_graph_cache(char *graph_name, char *label_name,
                  relation_id, seq_name);
 
     CommandCounterIncrement();
+
+    return relation_id;
 }
 
 /* 

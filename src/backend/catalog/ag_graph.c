@@ -59,6 +59,8 @@ void insert_graph(const Name graph_name, const Oid nsp_id)
      */
     CatalogTupleInsert(ag_graph, tuple);
 
+    invalidate_graph_cache();
+
     table_close(ag_graph, RowExclusiveLock);
 }
 
@@ -86,6 +88,8 @@ void delete_graph(const Name graph_name)
     }
 
     CatalogTupleDelete(ag_graph, &tuple->t_self);
+
+    invalidate_graph_cache();
 
     systable_endscan(scan_desc);
     table_close(ag_graph, RowExclusiveLock);
@@ -134,6 +138,8 @@ void update_graph_name(const Name graph_name, const Name new_name)
 
     /* update the current tuple with the new tuple */
     CatalogTupleUpdate(ag_graph, &cur_tuple->t_self, new_tuple);
+
+    invalidate_graph_cache();
 
     /* end scan and close ag_graph */
     systable_endscan(scan_desc);

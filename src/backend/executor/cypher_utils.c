@@ -35,6 +35,7 @@
 #include "utils/rls.h"
 
 #include "catalog/ag_label.h"
+#include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
 
@@ -43,6 +44,13 @@ typedef struct EntityResultRelInfoCacheEntry
     Oid relid;
     ResultRelInfo *resultRelInfo;
 } EntityResultRelInfoCacheEntry;
+
+typedef struct LabelRelationCacheEntry
+{
+    int32 label_id;
+    Oid relation;
+    char *label_name;
+} LabelRelationCacheEntry;
 
 /* RLS helper function declarations */
 static void get_policies_for_relation(Relation relation, CmdType cmd,
@@ -127,6 +135,71 @@ void destroy_entity_result_rel_info_cache(HTAB *result_rel_info_cache)
     }
 
     hash_destroy(result_rel_info_cache);
+}
+
+HTAB *create_label_relation_cache(const char *name)
+{
+    HASHCTL hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(int32);
+    hashctl.entrysize = sizeof(LabelRelationCacheEntry);
+    hashctl.hcxt = CurrentMemoryContext;
+
+    return hash_create(name, 8, &hashctl,
+                       HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+bool get_label_relation_from_cache(HTAB *label_relation_cache, Oid graph_oid,
+                                   int32 label_id, Oid *relation,
+                                   char **label_name)
+{
+    LabelRelationCacheEntry *entry;
+    bool found;
+
+    entry = hash_search(label_relation_cache, &label_id, HASH_ENTER, &found);
+    if (!found)
+    {
+        label_cache_data *label;
+        char *cached_label_name;
+
+        label = search_label_graph_oid_cache_cached(graph_oid, label_id);
+        if (label == NULL)
+        {
+            hash_search(label_relation_cache, &label_id, HASH_REMOVE, NULL);
+            return false;
+        }
+
+        cached_label_name = NameStr(label->name);
+        entry->relation = label->relation;
+        entry->label_name = IS_AG_DEFAULT_LABEL(cached_label_name) ?
+            "" : pstrdup(cached_label_name);
+    }
+
+    *relation = entry->relation;
+    if (label_name != NULL)
+    {
+        *label_name = entry->label_name;
+    }
+
+    return true;
+}
+
+void destroy_label_relation_cache(HTAB *label_relation_cache)
+{
+    HASH_SEQ_STATUS hash_seq;
+    LabelRelationCacheEntry *entry;
+
+    hash_seq_init(&hash_seq, label_relation_cache);
+    while ((entry = hash_seq_search(&hash_seq)) != NULL)
+    {
+        if (entry->label_name != NULL && entry->label_name[0] != '\0')
+        {
+            pfree(entry->label_name);
+        }
+    }
+
+    hash_destroy(label_relation_cache);
 }
 
 TupleTableSlot *populate_vertex_tts(
@@ -238,7 +311,7 @@ void destroy_index_cache(HTAB *index_cache, bool close_relations)
 
 bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 {
-    return entity_exists_with_cache(estate, graph_oid, id, NULL);
+    return entity_exists_with_cache(estate, graph_oid, id, NULL, NULL);
 }
 
 /*
@@ -246,7 +319,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
  * of an entity.
  */
 bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
-                              HTAB *index_cache)
+                              HTAB *index_cache, HTAB *label_relation_cache)
 {
     label_cache_data *label;
     ScanKeyData scan_keys[1];
@@ -259,12 +332,31 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     CommandId saved_curcid;
     CommandId current_cid;
     IndexCacheEntry *cache_entry = NULL;
+    Oid relid;
+    int32 label_id;
 
     /*
      * Extract the label id from the graph id and get the table name
      * the entity is part of.
      */
-    label = search_label_graph_oid_cache_cached(graph_oid, GET_LABEL_ID(id));
+    label_id = GET_LABEL_ID(id);
+    if (label_relation_cache != NULL)
+    {
+        if (!get_label_relation_from_cache(label_relation_cache, graph_oid,
+                                           label_id, &relid, NULL))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        label = search_label_graph_oid_cache_cached(graph_oid, label_id);
+        if (label == NULL)
+        {
+            return false;
+        }
+        relid = label->relation;
+    }
 
     /* Setup the scan key to be the graphid */
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
@@ -291,12 +383,12 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     {
         bool found;
 
-        cache_entry = hash_search(index_cache, &label->relation, HASH_ENTER,
+        cache_entry = hash_search(index_cache, &relid, HASH_ENTER,
                                   &found);
         if (!found)
         {
             init_index_cache_entry(cache_entry);
-            cache_entry->rel = table_open(label->relation, AccessShareLock);
+            cache_entry->rel = table_open(relid, AccessShareLock);
             rel = cache_entry->rel;
             cache_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
             cache_entry->index_oid_cached = true;
@@ -310,7 +402,7 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     }
     else
     {
-        rel = table_open(label->relation, AccessShareLock);
+        rel = table_open(relid, AccessShareLock);
         index_oid = find_usable_btree_index_for_attr(rel, 1);
         slot = NULL;
     }

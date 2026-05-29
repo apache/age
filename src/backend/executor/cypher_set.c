@@ -133,6 +133,8 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
                        &css->result_rel_info_cache,
                        "set_qual_cache", "set_index_cache",
                        "set_result_rel_info_cache");
+    css->label_relation_cache =
+        create_label_relation_cache("set_label_relation_cache");
 
     Increment_Estate_CommandId(estate);
 }
@@ -584,6 +586,7 @@ bool apply_update_list(CustomScanState *node,
     HTAB *qual_cache = NULL;
     HTAB *index_cache = NULL;
     HTAB *result_rel_info_cache = NULL;
+    HTAB *label_relation_cache = NULL;
     bool local_caches = false;
     bool graph_mutated = false;
     Oid graph_oid;
@@ -596,6 +599,7 @@ bool apply_update_list(CustomScanState *node,
         qual_cache = css->qual_cache;
         index_cache = css->index_cache;
         result_rel_info_cache = css->result_rel_info_cache;
+        label_relation_cache = css->label_relation_cache;
         graph_oid = css->graph_oid;
     }
     else if (node->methods == &cypher_merge_exec_methods)
@@ -605,7 +609,8 @@ bool apply_update_list(CustomScanState *node,
 
         if (css->update_qual_cache == NULL ||
             css->update_index_cache == NULL ||
-            css->update_result_rel_info_cache == NULL)
+            css->update_result_rel_info_cache == NULL ||
+            css->update_label_relation_cache == NULL)
         {
             init_update_caches(&css->update_qual_cache,
                                &css->update_index_cache,
@@ -613,11 +618,14 @@ bool apply_update_list(CustomScanState *node,
                                "merge_update_qual_cache",
                                "merge_update_index_cache",
                                "merge_update_result_rel_info_cache");
+            css->update_label_relation_cache =
+                create_label_relation_cache("merge_update_label_relation_cache");
         }
 
         qual_cache = css->update_qual_cache;
         index_cache = css->update_index_cache;
         result_rel_info_cache = css->update_result_rel_info_cache;
+        label_relation_cache = css->update_label_relation_cache;
         graph_oid = css->graph_oid;
     }
     else
@@ -626,6 +634,8 @@ bool apply_update_list(CustomScanState *node,
                            &result_rel_info_cache,
                            "update_qual_cache", "update_index_cache",
                            "update_result_rel_info_cache");
+        label_relation_cache =
+            create_label_relation_cache("update_label_relation_cache");
         local_caches = true;
         graph_oid = set_info->graph_oid;
         if (!OidIsValid(graph_oid))
@@ -657,7 +667,6 @@ bool apply_update_list(CustomScanState *node,
         agtype_value original_entity_value;
         agtype_value *original_properties;
         agtype_value *id;
-        label_cache_data *label_cache;
         agtype_value *startid = NULL;
         agtype_value *endid = NULL;
         agtype *original_entity;
@@ -680,6 +689,7 @@ bool apply_update_list(CustomScanState *node,
         RLSCacheEntry *rls_entry = NULL;
         bool found_rls_entry;
         bool original_entity_needs_free = false;
+        int32 label_id;
 
         update_item = (cypher_update_item *)lfirst(lc);
 
@@ -731,19 +741,14 @@ bool apply_update_list(CustomScanState *node,
             original_properties =
                 AGTYPE_EDGE_GET_PROPERTIES(&original_entity_value);
         }
-        label_cache = search_label_graph_oid_cache_cached(
-            graph_oid, GET_LABEL_ID(id->val.int_value));
-        if (label_cache == NULL)
+        label_id = GET_LABEL_ID(id->val.int_value);
+        if (!get_label_relation_from_cache(label_relation_cache, graph_oid,
+                                           label_id, &relid, &label_name))
         {
             ereport(ERROR,
                     (errcode(ERRCODE_UNDEFINED_TABLE),
-                     errmsg("label id %lu does not exist",
-                            GET_LABEL_ID(id->val.int_value))));
-        }
-        label_name = NameStr(label_cache->name);
-        if (IS_AG_DEFAULT_LABEL(label_name))
-        {
-            label_name = "";
+                     errmsg("label id %d does not exist",
+                            label_id)));
         }
 
         /*
@@ -886,7 +891,7 @@ bool apply_update_list(CustomScanState *node,
             estate->es_snapshot->curcid = GetCurrentCommandId(false);
 
             resultRelInfo = get_entity_result_rel_info(
-                estate, result_rel_info_cache, label_cache->relation);
+                estate, result_rel_info_cache, relid);
 
             rel = resultRelInfo->ri_RelationDesc;
             relid = RelationGetRelid(rel);
@@ -1095,6 +1100,7 @@ bool apply_update_list(CustomScanState *node,
         hash_destroy(qual_cache);
         destroy_index_cache(index_cache, false);
         destroy_entity_result_rel_info_cache(result_rel_info_cache);
+        destroy_label_relation_cache(label_relation_cache);
     }
 
     return graph_mutated;
@@ -1225,6 +1231,12 @@ static void end_cypher_set(CustomScanState *node)
     {
         destroy_entity_result_rel_info_cache(css->result_rel_info_cache);
         css->result_rel_info_cache = NULL;
+    }
+
+    if (css->label_relation_cache != NULL)
+    {
+        destroy_label_relation_cache(css->label_relation_cache);
+        css->label_relation_cache = NULL;
     }
 
     ExecEndNode(node->ss.ps.lefttree);

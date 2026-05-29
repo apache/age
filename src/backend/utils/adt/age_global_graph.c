@@ -138,6 +138,13 @@ typedef struct graph_label_entry
     Oid relation;
 } graph_label_entry;
 
+typedef struct graph_label_list
+{
+    graph_label_entry *entries;
+    int count;
+    int capacity;
+} graph_label_list;
+
 /*
  * GRAPH global context per graph. They are chained together via next.
  * Be aware that the global pointer will point to the root BUT that
@@ -155,6 +162,8 @@ typedef struct GRAPH_global_context
     CommandId curcid;              /* snapshot fallback: command id */
     int64 num_loaded_vertices;     /* number of loaded vertices in this graph */
     int64 num_loaded_edges;        /* number of loaded edges in this graph */
+    graph_label_list vertex_labels; /* loaded vertex labels for shared names */
+    graph_label_list edge_labels;   /* loaded edge labels for shared names */
     ListGraphId *vertices;         /* vertices for vertex hashtable cleanup */
     struct GRAPH_global_context *next; /* next graph */
 } GRAPH_global_context;
@@ -192,23 +201,28 @@ static void get_global_graph_scalar_arg_no_copy(char *funcname,
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx,
-                                  Snapshot snapshot, List *vertex_labels);
+                                  Snapshot snapshot,
+                                  graph_label_list *vertex_labels);
 static void load_edge_hashtable(GRAPH_global_context *ggctx,
-                                Snapshot snapshot, List *edge_labels);
+                                Snapshot snapshot,
+                                graph_label_list *edge_labels);
 static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
-                                List **vertex_labels, List **edge_labels);
-static void free_ag_label_names(List *labels);
+                                graph_label_list *vertex_labels,
+                                graph_label_list *edge_labels);
+static void append_graph_label(graph_label_list *labels, Name label_name,
+                               Oid relation);
+static void free_ag_label_names(graph_label_list *labels);
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
                               ItemPointerData tid, graphid start_vertex_id,
                               graphid end_vertex_id, Oid edge_label_table_oid,
-                              char *edge_label_name);
+                              const char *edge_label_name);
 static bool insert_vertex_edge(GRAPH_global_context *ggctx,
                                graphid start_vertex_id, graphid end_vertex_id,
-                               graphid edge_id, char *edge_label_name);
+                               graphid edge_id, const char *edge_label_name);
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
-                                char *vertex_label_name,
+                                const char *vertex_label_name,
                                 ItemPointerData tid);
 static Datum fetch_entry_properties(Oid relid, ItemPointerData tid,
                                     AttrNumber property_attr,
@@ -313,7 +327,8 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 
 /* helper function to get label names for the specified graph */
 static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
-                                List **vertex_labels, List **edge_labels)
+                                graph_label_list *vertex_labels,
+                                graph_label_list *edge_labels)
 {
     ScanKeyData scan_key;
     Relation ag_label;
@@ -340,10 +355,11 @@ static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
 
     while (HeapTupleIsValid(tuple = systable_getnext(scan_desc)))
     {
-        graph_label_entry *label;
         bool is_null;
         Datum datum;
         char label_type;
+        Name label_name;
+        Oid label_relation;
 
         datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
         if (is_null)
@@ -360,21 +376,20 @@ static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                 continue;
             }
 
-            label = palloc(sizeof(*label));
-            namestrcpy(&label->name, NameStr(*DatumGetName(datum)));
+            label_name = DatumGetName(datum);
 
             datum = heap_getattr(tuple, Anum_ag_label_relation, tupdesc,
                                  &is_null);
             Assert(!is_null);
-            label->relation = DatumGetObjectId(datum);
+            label_relation = DatumGetObjectId(datum);
 
             if (label_type == LABEL_TYPE_VERTEX)
             {
-                *vertex_labels = lappend(*vertex_labels, label);
+                append_graph_label(vertex_labels, label_name, label_relation);
             }
             else
             {
-                *edge_labels = lappend(*edge_labels, label);
+                append_graph_label(edge_labels, label_name, label_relation);
             }
         }
     }
@@ -383,16 +398,40 @@ static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
     table_close(ag_label, AccessShareLock);
 }
 
-static void free_ag_label_names(List *labels)
+static void append_graph_label(graph_label_list *labels, Name label_name,
+                               Oid relation)
 {
-    ListCell *lc;
+    graph_label_entry *label;
 
-    foreach(lc, labels)
+    if (labels->count >= labels->capacity)
     {
-        pfree(lfirst(lc));
+        int new_capacity = labels->capacity == 0 ? 8 : labels->capacity * 2;
+
+        if (labels->entries == NULL)
+        {
+            labels->entries = palloc(sizeof(*labels->entries) * new_capacity);
+        }
+        else
+        {
+            labels->entries = repalloc(labels->entries,
+                                       sizeof(*labels->entries) *
+                                       new_capacity);
+        }
+
+        labels->capacity = new_capacity;
     }
 
-    list_free(labels);
+    label = &labels->entries[labels->count++];
+    namestrcpy(&label->name, NameStr(*label_name));
+    label->relation = relation;
+}
+
+static void free_ag_label_names(graph_label_list *labels)
+{
+    pfree_if_not_null(labels->entries);
+    labels->entries = NULL;
+    labels->count = 0;
+    labels->capacity = 0;
 }
 
 /*
@@ -402,7 +441,7 @@ static void free_ag_label_names(List *labels)
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
                               ItemPointerData tid, graphid start_vertex_id,
                               graphid end_vertex_id, Oid edge_label_table_oid,
-                              char *edge_label_name)
+                              const char *edge_label_name)
 {
     edge_entry *ee = NULL;
     bool found = false;
@@ -451,7 +490,7 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
     ee->start_vertex_id = start_vertex_id;
     ee->end_vertex_id = end_vertex_id;
     ee->edge_label_table_oid = edge_label_table_oid;
-    ee->edge_label_name = pstrdup(edge_label_name);
+    ee->edge_label_name = (char *)edge_label_name;
 
     /* increment the number of loaded edges */
     ggctx->num_loaded_edges++;
@@ -465,7 +504,7 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
  */
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
-                                char *vertex_label_name,
+                                const char *vertex_label_name,
                                 ItemPointerData tid)
 {
     vertex_entry *ve = NULL;
@@ -508,7 +547,7 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
     ve->vertex_id = vertex_id;
     /* set the label table oid for this vertex */
     ve->vertex_label_table_oid = vertex_label_table_oid;
-    ve->vertex_label_name = pstrdup(vertex_label_name);
+    ve->vertex_label_name = (char *)vertex_label_name;
     /* set the TID for lazy property fetch */
     ve->tid = tid;
     /* set the NIL edge list */
@@ -531,7 +570,7 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
  */
 static bool insert_vertex_edge(GRAPH_global_context *ggctx,
                                graphid start_vertex_id, graphid end_vertex_id,
-                               graphid edge_id, char *edge_label_name)
+                               graphid edge_id, const char *edge_label_name)
 {
     vertex_entry *value = NULL;
     bool start_found = false;
@@ -612,12 +651,13 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
 
 /* helper routine to load all vertices into the GRAPH global vertex hashtable */
 static void load_vertex_hashtable(GRAPH_global_context *ggctx,
-                                  Snapshot snapshot, List *vertex_labels)
+                                  Snapshot snapshot,
+                                  graph_label_list *vertex_labels)
 {
-    ListCell *lc;
+    int i;
 
     /* go through all vertex label tables in list */
-    foreach (lc, vertex_labels)
+    for (i = 0; i < vertex_labels->count; i++)
     {
         Relation graph_vertex_label;
         TableScanDesc scan_desc;
@@ -627,7 +667,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx,
         Oid vertex_label_table_oid;
         TupleDesc tupdesc;
 
-        label_entry = lfirst(lc);
+        label_entry = &vertex_labels->entries[i];
         vertex_label_name = NameStr(label_entry->name);
         vertex_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
@@ -649,13 +689,6 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx,
             graphid vertex_id;
             bool isnull;
             bool inserted = false;
-
-            /* something is wrong if this isn't true */
-            if (!HeapTupleIsValid(tuple))
-            {
-                elog(ERROR, "load_vertex_hashtable: !HeapTupleIsValid");
-            }
-            Assert(HeapTupleIsValid(tuple));
 
             vertex_id = DatumGetInt64(heap_getattr(tuple,
                                                    Anum_ag_label_vertex_table_id,
@@ -696,24 +729,19 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx,
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 {
     Snapshot snapshot = GetActiveSnapshot();
-    List *vertex_labels = NIL;
-    List *edge_labels = NIL;
 
     /* initialize statistics */
     ggctx->num_loaded_vertices = 0;
     ggctx->num_loaded_edges = 0;
 
-    get_ag_labels_names(snapshot, ggctx->graph_oid, &vertex_labels,
-                        &edge_labels);
+    get_ag_labels_names(snapshot, ggctx->graph_oid, &ggctx->vertex_labels,
+                        &ggctx->edge_labels);
 
     /* insert all of our vertices */
-    load_vertex_hashtable(ggctx, snapshot, vertex_labels);
+    load_vertex_hashtable(ggctx, snapshot, &ggctx->vertex_labels);
 
     /* insert all of our edges */
-    load_edge_hashtable(ggctx, snapshot, edge_labels);
-
-    free_ag_label_names(vertex_labels);
-    free_ag_label_names(edge_labels);
+    load_edge_hashtable(ggctx, snapshot, &ggctx->edge_labels);
 }
 
 /*
@@ -721,12 +749,13 @@ static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
  * hashtables.
  */
 static void load_edge_hashtable(GRAPH_global_context *ggctx,
-                                Snapshot snapshot, List *edge_labels)
+                                Snapshot snapshot,
+                                graph_label_list *edge_labels)
 {
-    ListCell *lc;
+    int i;
 
     /* go through all edge label tables in list */
-    foreach (lc, edge_labels)
+    for (i = 0; i < edge_labels->count; i++)
     {
         Relation graph_edge_label;
         TableScanDesc scan_desc;
@@ -736,7 +765,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx,
         Oid edge_label_table_oid;
         TupleDesc tupdesc;
 
-        label_entry = lfirst(lc);
+        label_entry = &edge_labels->entries[i];
         edge_label_name = NameStr(label_entry->name);
         edge_label_table_oid = label_entry->relation;
         /* open the relation (table) and begin the scan */
@@ -760,13 +789,6 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx,
             graphid edge_vertex_end_id;
             bool isnull;
             bool inserted = false;
-
-            /* something is wrong if this isn't true */
-            if (!HeapTupleIsValid(tuple))
-            {
-                elog(ERROR, "load_edge_hashtable: !HeapTupleIsValid");
-            }
-            Assert(HeapTupleIsValid(tuple));
 
             edge_id = DatumGetInt64(heap_getattr(tuple,
                                                  Anum_ag_label_edge_table_id,
@@ -812,6 +834,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx,
                  ereport(WARNING,
                          (errcode(ERRCODE_DATA_EXCEPTION),
                           errmsg("ignored duplicate edge")));
+                 continue;
             }
 
             /* insert the edge into the start and end vertices edge lists */
@@ -905,6 +928,9 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
     /* free the vertices list */
     free_ListGraphId(ggctx->vertices);
     ggctx->vertices = NULL;
+
+    free_ag_label_names(&ggctx->vertex_labels);
+    free_ag_label_names(&ggctx->edge_labels);
 
     /* free the hashtables */
     hash_destroy(ggctx->vertex_hashtable);
@@ -1037,6 +1063,7 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
 
     /* otherwise, we need to create one and possibly attach it */
     new_ggctx = palloc(sizeof(GRAPH_global_context));
+    MemSet(new_ggctx, 0, sizeof(GRAPH_global_context));
 
     if (global_graph_contexts_container.contexts != NULL)
     {

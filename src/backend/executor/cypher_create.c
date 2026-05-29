@@ -145,6 +145,8 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
 
     css->entity_exists_index_cache =
         create_entity_exists_index_cache("create_entity_exists_index_cache");
+    css->entity_exists_label_relation_cache =
+        create_label_relation_cache("create_entity_exists_label_relation_cache");
 
     Increment_Estate_CommandId(estate);
 }
@@ -271,6 +273,12 @@ static void end_cypher_create(CustomScanState *node)
     {
         destroy_entity_exists_index_cache(css->entity_exists_index_cache);
         css->entity_exists_index_cache = NULL;
+    }
+
+    if (css->entity_exists_label_relation_cache != NULL)
+    {
+        destroy_label_relation_cache(css->entity_exists_label_relation_cache);
+        css->entity_exists_label_relation_cache = NULL;
     }
 
     foreach (lc, css->pattern)
@@ -607,7 +615,8 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         {
             if (!entity_exists_with_cache(estate, css->graph_oid,
                                           DATUM_GET_GRAPHID(id),
-                                          css->entity_exists_index_cache))
+                                          css->entity_exists_index_cache,
+                                          css->entity_exists_label_relation_cache))
             {
                 ereport(ERROR,
                     (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),

@@ -21,6 +21,7 @@
 #define AG_CYPHER_PARSE_NODE_H
 
 #include "nodes/cypher_nodes.h"
+#include "utils/ag_cache.h"
 
 /*
  * Every internal alias or variable name should be prefixed
@@ -39,6 +40,7 @@ typedef struct cypher_parsestate
     Param *params;
     int default_alias_num;
     List *entities;
+    List *label_cache_entries;
     List *property_constraint_quals;
     bool subquery_where_flag; /* flag for knowing we are in a subquery where */
     /*
@@ -67,5 +69,7 @@ void setup_errpos_ecb(errpos_ecb_state *ecb_state, ParseState *pstate,
                       int query_loc);
 void cancel_errpos_ecb(errpos_ecb_state *ecb_state);
 char *get_next_default_alias(cypher_parsestate *cpstate);
+label_cache_data *get_label_cache_data(cypher_parsestate *cpstate,
+                                       const char *label_name);
 
 #endif

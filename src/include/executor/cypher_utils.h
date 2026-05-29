@@ -58,6 +58,7 @@ typedef struct cypher_create_custom_scan_state
     TupleTableSlot *slot;
     Oid graph_oid;
     HTAB *entity_exists_index_cache;
+    HTAB *entity_exists_label_relation_cache;
     HTAB *result_rel_info_cache;
     bool graph_mutated;
 } cypher_create_custom_scan_state;
@@ -71,6 +72,7 @@ typedef struct cypher_set_custom_scan_state
     HTAB *qual_cache;
     HTAB *index_cache;
     HTAB *result_rel_info_cache;
+    HTAB *label_relation_cache;
     Oid graph_oid;
     int flags;
     int *path_update_attrs;
@@ -106,6 +108,7 @@ typedef struct cypher_delete_custom_scan_state
     HTAB *qual_cache;
     HTAB *index_cache;
     HTAB *result_rel_info_cache;
+    HTAB *label_relation_cache;
     bool graph_mutated;
 } cypher_delete_custom_scan_state;
 
@@ -139,7 +142,9 @@ typedef struct cypher_merge_custom_scan_state
     HTAB *update_qual_cache;
     HTAB *update_index_cache;
     HTAB *update_result_rel_info_cache;
+    HTAB *update_label_relation_cache;
     HTAB *entity_exists_index_cache;
+    HTAB *entity_exists_label_relation_cache;
     HTAB *result_rel_info_cache;
 } cypher_merge_custom_scan_state;
 
@@ -162,12 +167,19 @@ ResultRelInfo *get_entity_result_rel_info(EState *estate,
                                           Oid relid);
 void destroy_entity_result_rel_info_cache(HTAB *result_rel_info_cache);
 
+HTAB *create_label_relation_cache(const char *name);
+bool get_label_relation_from_cache(HTAB *label_relation_cache, Oid graph_oid,
+                                   int32 label_id, Oid *relation,
+                                   char **label_name);
+void destroy_label_relation_cache(HTAB *label_relation_cache);
+
 HTAB *create_entity_exists_index_cache(const char *name);
 void destroy_entity_exists_index_cache(HTAB *index_cache);
 void destroy_index_cache(HTAB *index_cache, bool close_relations);
 bool entity_exists(EState *estate, Oid graph_oid, graphid id);
 bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
-                              HTAB *index_cache);
+                              HTAB *index_cache,
+                              HTAB *label_relation_cache);
 HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
                               TupleTableSlot *elemTupleSlot,
                               EState *estate);

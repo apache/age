@@ -27,6 +27,7 @@
 #include "catalog/pg_authid.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/parsenodes.h"
 #include "parser/parse_relation.h"
 #include "utils/acl.h"
@@ -732,22 +733,29 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
  */
 static Oid get_or_create_graph(const Name graph_name)
 {
-    Oid graph_oid;
+    graph_cache_data *graph_cache;
     char *graph_name_str;
 
     graph_name_str = NameStr(*graph_name);
-    graph_oid = get_graph_oid(graph_name_str);
-
-    if (OidIsValid(graph_oid))
+    graph_cache = search_graph_name_cache_cached(graph_name_str);
+    if (graph_cache != NULL)
     {
-        return graph_oid;
+        return graph_cache->oid;
     }
 
-    graph_oid = create_graph_internal(graph_name);
+    create_graph_internal(graph_name);
+    graph_cache = search_graph_name_cache_cached(graph_name_str);
+    if (graph_cache == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_UNDEFINED_SCHEMA),
+                 errmsg("graph \"%s\" was not found after creation",
+                        graph_name_str)));
+    }
     ereport(NOTICE,
             (errmsg("graph \"%s\" has been created", NameStr(*graph_name))));
-    
-    return graph_oid;
+
+    return graph_cache->oid;
 }
 
 /*
@@ -784,14 +792,14 @@ static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
         /* Create a label */
         RangeVar *rv;
         List *parent;
+        Oid label_relid;
         char *default_label = (label_kind == LABEL_KIND_VERTEX)
                                ? AG_DEFAULT_LABEL_VERTEX : AG_DEFAULT_LABEL_EDGE;
-        rv = get_label_range_var(graph_name, graph_oid, default_label);
+        rv = makeRangeVar(graph_name, pstrdup(default_label), -1);
         parent = list_make1(rv);
 
-        create_label(graph_name, label_name, label_kind, parent);
-        label_cache = search_label_name_graph_cache_cached(label_name,
-                                                           graph_oid);
+        label_relid = create_label(graph_name, label_name, label_kind, parent);
+        label_cache = search_label_relation_cache_cached(label_relid);
         if (label_cache == NULL)
         {
             ereport(ERROR,

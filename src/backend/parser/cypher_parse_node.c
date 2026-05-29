@@ -29,6 +29,16 @@
 #include "parser/cypher_parse_node.h"
 
 static void errpos_ecb(void *arg);
+static cypher_parsestate *get_root_cypher_parsestate(
+    cypher_parsestate *cpstate);
+
+typedef struct label_cache_entry
+{
+    const char *label_name;
+    Oid graph_oid;
+    uint64 generation;
+    label_cache_data *label_cache;
+} label_cache_entry;
 
 /* NOTE: sync the logic with make_parsestate() */
 cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
@@ -142,4 +152,56 @@ char *get_next_default_alias(cypher_parsestate *cpstate)
     cpstate->default_alias_num++;
 
     return alias_name;
+}
+
+label_cache_data *get_label_cache_data(cypher_parsestate *cpstate,
+                                       const char *label_name)
+{
+    cypher_parsestate *root_cpstate = get_root_cypher_parsestate(cpstate);
+    ListCell *lc;
+    uint64 generation = get_label_cache_generation();
+    label_cache_data *label_cache;
+    label_cache_entry *entry;
+
+    foreach (lc, root_cpstate->label_cache_entries)
+    {
+        entry = lfirst(lc);
+
+        if (entry->graph_oid == cpstate->graph_oid &&
+            entry->generation == generation &&
+            strcmp(entry->label_name, label_name) == 0)
+        {
+            return entry->label_cache;
+        }
+    }
+
+    label_cache = search_label_name_graph_cache_cached(label_name,
+                                                       root_cpstate->graph_oid);
+    if (label_cache == NULL)
+    {
+        return NULL;
+    }
+
+    entry = palloc(sizeof(*entry));
+    entry->label_name = pstrdup(label_name);
+    entry->graph_oid = root_cpstate->graph_oid;
+    entry->generation = generation;
+    entry->label_cache = label_cache;
+    root_cpstate->label_cache_entries =
+        lappend(root_cpstate->label_cache_entries, entry);
+
+    return label_cache;
+}
+
+static cypher_parsestate *get_root_cypher_parsestate(
+    cypher_parsestate *cpstate)
+{
+    ParseState *pstate = (ParseState *)cpstate;
+
+    while (pstate->parentParseState != NULL)
+    {
+        pstate = pstate->parentParseState;
+    }
+
+    return (cypher_parsestate *)pstate;
 }
