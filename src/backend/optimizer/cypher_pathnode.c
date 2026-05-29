@@ -217,6 +217,11 @@ static Path *select_best_child_path(RelOptInfo *rel)
     Path *best_child = NULL;
     ListCell *lc;
 
+    if (rel->cheapest_total_path != NULL)
+    {
+        return rel->cheapest_total_path;
+    }
+
     foreach (lc, rel->pathlist)
     {
         Path *child = (Path *)lfirst(lc);

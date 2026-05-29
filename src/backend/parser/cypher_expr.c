@@ -142,7 +142,7 @@ static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
 static Node *transform_external_ext_FuncCall(cypher_parsestate *cpstate,
                                              FuncCall *fn, List *targs,
                                              Form_pg_proc procform,
-                                             char *extension);
+                                             const char *extension);
 static List *cast_agtype_args_to_target_type(cypher_parsestate *cpstate,
                                              Form_pg_proc procform,
                                              List *fargs,
@@ -150,9 +150,10 @@ static List *cast_agtype_args_to_target_type(cypher_parsestate *cpstate,
 static Node *wrap_text_output_to_agtype(cypher_parsestate *cpstate,
                                         FuncExpr *fexpr);
 static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found);
-static char *get_mapped_extension(Oid func_oid);
+static const char *get_mapped_extension(Oid func_oid);
 static bool function_belongs_to_extension(Oid func_oid, const char *extension);
-static bool is_extension_external(char *extension);
+static bool is_extension_external(const char *extension);
+static bool function_needs_graph_name_argument(const char *name);
 static char *construct_age_function_name(char *funcname);
 static void initialize_function_caches(void);
 static void invalidate_function_caches(Datum arg, int cache_id,
@@ -1753,7 +1754,7 @@ static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
 static Node *transform_external_ext_FuncCall(cypher_parsestate *cpstate,
                                              FuncCall *fn, List *targs,
                                              Form_pg_proc procform,
-                                             char *extension)
+                                             const char *extension)
 {
     ParseState *pstate = &cpstate->pstate;
     FuncExpr *fexpr = NULL;
@@ -1772,6 +1773,7 @@ static Node *transform_external_ext_FuncCall(cypher_parsestate *cpstate,
     fexpr = (FuncExpr *)ParseFuncOrColumn(pstate, fn->funcname, targs,
                                           last_srf, fn, false,
                                           fn->location);
+    pfree(procform);
 
     /*
      * This will cast TEXT output to AGTYPE. It will error out if this is
@@ -1877,7 +1879,8 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     Form_pg_proc result = NULL;
     int nargs;
     int i = 0;
-    List *asp;
+    List *asp = NIL;
+    bool asp_fetched = false;
     bool found = false;
     char *funcname = (((String*)linitial(fn->funcname))->sval);
 
@@ -1890,7 +1893,6 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
         return NULL;
     }
 
-    asp = fetch_search_path(false);
     nargs = list_length(fn->args);
 
     /* iterate through them and verify that they are in the search path */
@@ -1908,6 +1910,12 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
             nargs == procform->pronargs &&
             fn->func_variadic == procform->provariadic)
         {
+            if (!asp_fetched)
+            {
+                asp = fetch_search_path(false);
+                asp_fetched = true;
+            }
+
             if (list_member_oid(asp, procform->pronamespace) &&
                 !isTempNamespace(procform->pronamespace))
             {
@@ -1944,7 +1952,7 @@ static Form_pg_proc get_procform(FuncCall *fn, bool err_not_found)
     return result;
 }
 
-static char *get_mapped_extension(Oid func_oid)
+static const char *get_mapped_extension(Oid func_oid)
 {
     Oid extension_oid;
     char *extension = NULL;
@@ -1960,7 +1968,7 @@ static char *get_mapped_extension(Oid func_oid)
         {
             return NULL;
         }
-        return pstrdup(NameStr(entry->extension));
+        return NameStr(entry->extension);
     }
 
     extension_oid = getExtensionOfObject(ProcedureRelationId, func_oid);
@@ -1982,7 +1990,12 @@ static char *get_mapped_extension(Oid func_oid)
         }
     }
 
-    return extension;
+    if (extension != NULL)
+    {
+        pfree(extension);
+    }
+
+    return entry->has_extension ? NameStr(entry->extension) : NULL;
 }
 
 static bool function_belongs_to_extension(Oid func_oid, const char *extension)
@@ -1990,6 +2003,7 @@ static bool function_belongs_to_extension(Oid func_oid, const char *extension)
     Oid extension_oid;
     char *extension_name = NULL;
     function_extension_cache_entry *entry;
+    bool belongs;
     bool found;
 
     initialize_function_extension_cache();
@@ -2020,14 +2034,37 @@ static bool function_belongs_to_extension(Oid func_oid, const char *extension)
         }
     }
 
-    return extension_name != NULL &&
-           pg_strcasecmp(extension_name, extension) == 0;
+    belongs = (extension_name != NULL &&
+               pg_strcasecmp(extension_name, extension) == 0);
+
+    if (extension_name != NULL)
+    {
+        pfree(extension_name);
+    }
+
+    return belongs;
 }
 
-static bool is_extension_external(char *extension)
+static bool is_extension_external(const char *extension)
 {
     return ((extension != NULL) &&
             (pg_strcasecmp(extension, "age") != 0));
+}
+
+static bool function_needs_graph_name_argument(const char *name)
+{
+    switch (name[0])
+    {
+        case 'e':
+            return strcmp(name, "endNode") == 0;
+        case 's':
+            return strcmp(name, "startNode") == 0;
+        case 'v':
+            return (strcmp(name, "vle") == 0 ||
+                    strcmp(name, "vertex_stats") == 0);
+        default:
+            return false;
+    }
 }
 
 /* Returns age_ prefiexed lower case function name */
@@ -2069,22 +2106,18 @@ static bool function_exists(char *funcname, char *extension)
     bool cache_found;
     int i = 0;
 
+    initialize_function_exists_cache();
+    MemSet(&key, 0, sizeof(key));
+    namestrcpy(&key.funcname, funcname);
     if (extension != NULL)
     {
-        initialize_function_exists_cache();
-        MemSet(&key, 0, sizeof(key));
-        namestrcpy(&key.funcname, funcname);
         namestrcpy(&key.extension, extension);
-
-        entry = hash_search(function_exists_cache, &key, HASH_FIND, NULL);
-        if (entry != NULL)
-        {
-            return entry->exists;
-        }
     }
-    else
+
+    entry = hash_search(function_exists_cache, &key, HASH_FIND, NULL);
+    if (entry != NULL)
     {
-        entry = NULL;
+        return entry->exists;
     }
 
     /* get a list of matching functions */
@@ -2093,21 +2126,17 @@ static bool function_exists(char *funcname, char *extension)
     if (catlist->n_members == 0)
     {
         ReleaseSysCacheList(catlist);
-        if (extension != NULL)
-        {
-            if (function_exists_cache == NULL)
-            {
-                initialize_function_exists_cache();
-            }
-            entry = hash_search(function_exists_cache, &key, HASH_ENTER,
-                                &cache_found);
-            entry->exists = false;
-        }
+        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                            &cache_found);
+        entry->exists = false;
         return false;
     }
     else if (extension == NULL)
     {
         ReleaseSysCacheList(catlist);
+        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                            &cache_found);
+        entry->exists = true;
         return true;
     }
 
@@ -2126,16 +2155,9 @@ static bool function_exists(char *funcname, char *extension)
     /* we need to release the cache list */
     ReleaseSysCacheList(catlist);
 
-    if (extension != NULL)
-    {
-        if (function_exists_cache == NULL)
-        {
-            initialize_function_exists_cache();
-        }
-        entry = hash_search(function_exists_cache, &key, HASH_ENTER,
-                            &cache_found);
-        entry->exists = found;
-    }
+    entry = hash_search(function_exists_cache, &key, HASH_ENTER,
+                        &cache_found);
+    entry->exists = found;
 
     return found;
 }
@@ -2464,10 +2486,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
              * is not empty. Then prepend the graph name if necessary.
              */
             if ((targs != NIL) &&
-                (strcmp("startNode", name) == 0 ||
-                strcmp("endNode", name) == 0 ||
-                strcmp("vle", name) == 0 ||
-                strcmp("vertex_stats", name) == 0))
+                function_needs_graph_name_argument(name))
             {
                 char *graph_name = cpstate->graph_name;
                 Datum d = string_to_agtype(graph_name);
@@ -2484,7 +2503,9 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
         else
         {
             Form_pg_proc procform = get_procform(fn, false);
-            char *extension;
+            const char *extension;
+
+            pfree(ag_name);
 
             if (procform == NULL)
             {
@@ -2514,6 +2535,7 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
              */
             else
             {
+                pfree(procform);
                 fname = fn->funcname;
             }
         }

@@ -40,6 +40,8 @@
 #include "utils/ag_cache.h"
 
 static agtype_value *csv_value_to_agtype_value(char *csv_val);
+static agtype_value *trimmed_field_to_string_agtype_value(const char *field);
+static const char *trimmed_string_span(const char *str, size_t *len);
 static Oid get_or_create_graph(const Name graph_name);
 static label_cache_data *get_or_create_label(Oid graph_oid, char *graph_name,
                                              char *label_name,
@@ -51,6 +53,8 @@ static void check_rls_for_load(Oid relid);
 
 #define AGE_BASE_CSV_DIRECTORY "/tmp/age/"
 #define AGE_CSV_FILE_EXTENSION ".csv"
+#define AGE_BASE_CSV_DIRECTORY_LEN (sizeof(AGE_BASE_CSV_DIRECTORY) - 1)
+#define AGE_CSV_FILE_EXTENSION_LEN (sizeof(AGE_CSV_FILE_EXTENSION) - 1)
 
 /*
  * Trim leading and trailing whitespace from a string.
@@ -60,39 +64,48 @@ static void check_rls_for_load(Oid relid);
 char *trim_whitespace(const char *str)
 {
     const char *start;
-    const char *end;
     size_t len;
+
+    start = trimmed_string_span(str, &len);
+    return pnstrdup(start, len);
+}
+
+static const char *trimmed_string_span(const char *str, size_t *len)
+{
+    const char *start;
+    const char *p;
+    const char *last_non_space = NULL;
 
     if (str == NULL)
     {
-        return pstrdup("");
+        *len = 0;
+        return "";
     }
 
-    /* Find first non-whitespace character */
     start = str;
-    while (*start && (*start == ' ' || *start == '\t' ||
-                      *start == '\n' || *start == '\r'))
+    while (*start == ' ' || *start == '\t' ||
+           *start == '\n' || *start == '\r')
     {
         start++;
     }
 
-    /* If string is all whitespace, return empty string */
-    if (*start == '\0')
+    for (p = start; *p != '\0'; p++)
     {
-        return pstrdup("");
+        if (*p != ' ' && *p != '\t' &&
+            *p != '\n' && *p != '\r')
+        {
+            last_non_space = p;
+        }
     }
 
-    /* Find last non-whitespace character */
-    end = str + strlen(str) - 1;
-    while (end > start && (*end == ' ' || *end == '\t' ||
-                           *end == '\n' || *end == '\r'))
+    if (last_non_space == NULL)
     {
-        end--;
+        *len = 0;
+        return "";
     }
 
-    /* Copy the trimmed string */
-    len = end - start + 1;
-    return pnstrdup(start, len);
+    *len = last_non_space - start + 1;
+    return start;
 }
 
 static char *build_safe_filename(char *name)
@@ -128,16 +141,16 @@ static char *build_safe_filename(char *name)
     }
 
     if (strncmp(resolved, AGE_BASE_CSV_DIRECTORY,
-                strlen(AGE_BASE_CSV_DIRECTORY)) != 0)
+                AGE_BASE_CSV_DIRECTORY_LEN) != 0)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("You can only load files located in [%s].",
                                AGE_BASE_CSV_DIRECTORY)));
     }
 
-    length = strlen(resolved) - 4;
+    length = strlen(resolved) - AGE_CSV_FILE_EXTENSION_LEN;
     if (strncmp(resolved+length, AGE_CSV_FILE_EXTENSION,
-                strlen(AGE_CSV_FILE_EXTENSION)) != 0)
+                AGE_CSV_FILE_EXTENSION_LEN) != 0)
     {
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("You can only load files with extension [%s].",
@@ -261,6 +274,23 @@ static agtype_value *csv_value_to_agtype_value(char *csv_val)
     return res;
 }
 
+static agtype_value *trimmed_field_to_string_agtype_value(const char *field)
+{
+    const char *start;
+    size_t len;
+    agtype_value *agtv;
+
+    agtv = palloc(sizeof(agtype_value));
+    agtv->type = AGTV_STRING;
+
+    start = trimmed_string_span(field, &len);
+    len = check_string_length(len);
+    agtv->val.string.len = len;
+    agtv->val.string.val = pnstrdup(start, len);
+
+    return agtv;
+}
+
 agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                 int64 vertex_id, bool load_as_agtype)
 {
@@ -287,8 +317,6 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
 
     for (i = 0; i<fields_len; i++)
     {
-        char *trimmed_value;
-
         /* Skip empty header fields (e.g., from trailing commas) */
         if (header[i] == NULL || header[i][0] == '\0')
         {
@@ -300,27 +328,17 @@ agtype *create_agtype_from_list(char **header, char **fields, size_t fields_len,
                                        WAGT_KEY,
                                        key_agtype);
 
-        /* Trim whitespace from field value */
-        trimmed_value = trim_whitespace(fields[i]);
-
         if (load_as_agtype)
         {
+            char *trimmed_value;
+
+            /* Trim whitespace from field value */
+            trimmed_value = trim_whitespace(fields[i]);
             value_agtype = csv_value_to_agtype_value(trimmed_value);
         }
         else
         {
-            /* Handle empty field values */
-            if (trimmed_value[0] == '\0')
-            {
-                value_agtype = palloc(sizeof(agtype_value));
-                value_agtype->type = AGTV_STRING;
-                value_agtype->val.string.len = 0;
-                value_agtype->val.string.val = pstrdup("");
-            }
-            else
-            {
-                value_agtype = string_to_agtype_value(trimmed_value);
-            }
+            value_agtype = trimmed_field_to_string_agtype_value(fields[i]);
         }
 
         result.res = push_agtype_value(&result.parse_state,
@@ -362,8 +380,6 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
 
     for (i = start_index; i < fields_len; i++)
     {
-        char *trimmed_value;
-
         /* Skip empty header fields (e.g., from trailing commas) */
         if (header[i] == NULL || header[i][0] == '\0')
         {
@@ -375,27 +391,17 @@ agtype* create_agtype_from_list_i(char **header, char **fields,
                                        WAGT_KEY,
                                        key_agtype);
 
-        /* Trim whitespace from field value */
-        trimmed_value = trim_whitespace(fields[i]);
-
         if (load_as_agtype)
         {
+            char *trimmed_value;
+
+            /* Trim whitespace from field value */
+            trimmed_value = trim_whitespace(fields[i]);
             value_agtype = csv_value_to_agtype_value(trimmed_value);
         }
         else
         {
-            /* Handle empty field values */
-            if (trimmed_value[0] == '\0')
-            {
-                value_agtype = palloc(sizeof(agtype_value));
-                value_agtype->type = AGTV_STRING;
-                value_agtype->val.string.len = 0;
-                value_agtype->val.string.val = pstrdup("");
-            }
-            else
-            {
-                value_agtype = string_to_agtype_value(trimmed_value);
-            }
+            value_agtype = trimmed_field_to_string_agtype_value(fields[i]);
         }
 
         result.res = push_agtype_value(&result.parse_state,
@@ -617,7 +623,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
-    if (strcmp(label_name_str, "") == 0)
+    if (label_name_str[0] == '\0')
     {
         label_name_str = AG_DEFAULT_LABEL_VERTEX;
     }
@@ -689,7 +695,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
-    if (strcmp(label_name_str, "") == 0)
+    if (label_name_str[0] == '\0')
     {
         label_name_str = AG_DEFAULT_LABEL_EDGE;
     }
@@ -843,7 +849,7 @@ void init_batch_insert(batch_insert_state **batch_state, Oid relid)
     ExecOpenIndices(resultRelInfo, false);
 
     /* Initialize the batch insert state */
-    *batch_state = (batch_insert_state *) palloc0(sizeof(batch_insert_state));
+    *batch_state = (batch_insert_state *) palloc(sizeof(batch_insert_state));
     (*batch_state)->slots = palloc(sizeof(TupleTableSlot *) * BATCH_SIZE);
     (*batch_state)->estate = estate;
     (*batch_state)->resultRelInfo = resultRelInfo;

@@ -5511,38 +5511,50 @@ static char *get_accessor_function_name(enum transform_entity_type type,
 {
     if (type == ENT_VERTEX)
     {
-        /* id */
-        if (!strcmp(AG_VERTEX_COLNAME_ID, name))
+        switch (name[0])
         {
-            return AG_VERTEX_ACCESS_FUNCTION_ID;
-        }
-        /* props */
-        else if (!strcmp(AG_VERTEX_COLNAME_PROPERTIES, name))
-        {
-            return AG_VERTEX_ACCESS_FUNCTION_PROPERTIES;
+            case 'i':
+                if (strcmp(AG_VERTEX_COLNAME_ID, name) == 0)
+                {
+                    return AG_VERTEX_ACCESS_FUNCTION_ID;
+                }
+                break;
+            case 'p':
+                if (strcmp(AG_VERTEX_COLNAME_PROPERTIES, name) == 0)
+                {
+                    return AG_VERTEX_ACCESS_FUNCTION_PROPERTIES;
+                }
+                break;
         }
     }
     if (type == ENT_EDGE)
     {
-        /* id */
-        if (!strcmp(AG_EDGE_COLNAME_ID, name))
+        switch (name[0])
         {
-            return AG_EDGE_ACCESS_FUNCTION_ID;
-        }
-        /* start id */
-        else if (!strcmp(AG_EDGE_COLNAME_START_ID, name))
-        {
-            return AG_EDGE_ACCESS_FUNCTION_START_ID;
-        }
-        /* end id */
-        else if (!strcmp(AG_EDGE_COLNAME_END_ID, name))
-        {
-            return AG_EDGE_ACCESS_FUNCTION_END_ID;
-        }
-        /* props */
-        else if (!strcmp(AG_VERTEX_COLNAME_PROPERTIES, name))
-        {
-            return AG_VERTEX_ACCESS_FUNCTION_PROPERTIES;
+            case 'e':
+                if (strcmp(AG_EDGE_COLNAME_END_ID, name) == 0)
+                {
+                    return AG_EDGE_ACCESS_FUNCTION_END_ID;
+                }
+                break;
+            case 'i':
+                if (strcmp(AG_EDGE_COLNAME_ID, name) == 0)
+                {
+                    return AG_EDGE_ACCESS_FUNCTION_ID;
+                }
+                break;
+            case 'p':
+                if (strcmp(AG_EDGE_COLNAME_PROPERTIES, name) == 0)
+                {
+                    return AG_EDGE_ACCESS_FUNCTION_PROPERTIES;
+                }
+                break;
+            case 's':
+                if (strcmp(AG_EDGE_COLNAME_START_ID, name) == 0)
+                {
+                    return AG_EDGE_ACCESS_FUNCTION_START_ID;
+                }
+                break;
         }
     }
 
@@ -8365,21 +8377,35 @@ static Oid get_clause_function_oid(const char *function_name)
             get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
 
-    if (strcmp(function_name, CREATE_CLAUSE_FUNCTION_NAME) == 0)
+    if (strncmp(function_name, "_cypher_", sizeof("_cypher_") - 1) == 0)
     {
-        return create_clause_func_oid;
-    }
-    if (strcmp(function_name, SET_CLAUSE_FUNCTION_NAME) == 0)
-    {
-        return set_clause_func_oid;
-    }
-    if (strcmp(function_name, DELETE_CLAUSE_FUNCTION_NAME) == 0)
-    {
-        return delete_clause_func_oid;
-    }
-    if (strcmp(function_name, MERGE_CLAUSE_FUNCTION_NAME) == 0)
-    {
-        return merge_clause_func_oid;
+        switch (function_name[sizeof("_cypher_") - 1])
+        {
+            case 'c':
+                if (strcmp(function_name, CREATE_CLAUSE_FUNCTION_NAME) == 0)
+                {
+                    return create_clause_func_oid;
+                }
+                break;
+            case 'd':
+                if (strcmp(function_name, DELETE_CLAUSE_FUNCTION_NAME) == 0)
+                {
+                    return delete_clause_func_oid;
+                }
+                break;
+            case 'm':
+                if (strcmp(function_name, MERGE_CLAUSE_FUNCTION_NAME) == 0)
+                {
+                    return merge_clause_func_oid;
+                }
+                break;
+            case 's':
+                if (strcmp(function_name, SET_CLAUSE_FUNCTION_NAME) == 0)
+                {
+                    return set_clause_func_oid;
+                }
+                break;
+        }
     }
 
     return get_ag_func_oid(function_name, 1, INTERNALOID);

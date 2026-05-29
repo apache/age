@@ -644,6 +644,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     agtype_value *agtv_temp = NULL;
     agtype_value *agtv_object = NULL;
     agtype *agt_edge_property_constraint = NULL;
+    agtype *agt_arg = NULL;
     Datum d_edge_property_constraint = 0;
     char *graph_name = NULL;
     Oid graph_oid = InvalidOid;
@@ -876,29 +877,46 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
 
     /* get the left range index */
-    if (PG_ARGISNULL(4) || is_agtype_null(AG_GET_ARG_AGTYPE_P(4)))
+    if (PG_ARGISNULL(4))
     {
         vlelctx->lidx = 1;
     }
     else
     {
-        agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(4),
-                                     AGTV_INTEGER, true);
-        vlelctx->lidx = agtv_temp->val.int_value;
+        agt_arg = AG_GET_ARG_AGTYPE_P(4);
+        if (is_agtype_null(agt_arg))
+        {
+            vlelctx->lidx = 1;
+        }
+        else
+        {
+            agtv_temp = get_agtype_value("age_vle", agt_arg, AGTV_INTEGER,
+                                         true);
+            vlelctx->lidx = agtv_temp->val.int_value;
+        }
     }
 
     /* get the right range index. NULL means infinite */
-    if (PG_ARGISNULL(5) || is_agtype_null(AG_GET_ARG_AGTYPE_P(5)))
+    if (PG_ARGISNULL(5))
     {
         vlelctx->uidx_infinite = true;
         vlelctx->uidx = 0;
     }
     else
     {
-        agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(5),
-                                     AGTV_INTEGER, true);
-        vlelctx->uidx = agtv_temp->val.int_value;
-        vlelctx->uidx_infinite = false;
+        agt_arg = AG_GET_ARG_AGTYPE_P(5);
+        if (is_agtype_null(agt_arg))
+        {
+            vlelctx->uidx_infinite = true;
+            vlelctx->uidx = 0;
+        }
+        else
+        {
+            agtv_temp = get_agtype_value("age_vle", agt_arg, AGTV_INTEGER,
+                                         true);
+            vlelctx->uidx = agtv_temp->val.int_value;
+            vlelctx->uidx_infinite = false;
+        }
     }
     /* get edge direction */
     agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(6),
@@ -947,10 +965,10 @@ static Oid get_cached_vle_graph_oid(const char *graph_name,
     bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
+        cached_generation == current_generation &&
         graph_name_len < NAMEDATALEN &&
         strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
-        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
-        cached_generation == current_generation)
+        NameStr(cached_graph_name)[graph_name_len] == '\0')
     {
         return cached_graph_oid;
     }
@@ -970,7 +988,14 @@ static Oid get_cached_vle_graph_oid(const char *graph_name,
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name_cstr);
+        if (graph_name_len < NAMEDATALEN)
+        {
+            cached_graph_name = graph_name_buf;
+        }
+        else
+        {
+            namestrcpy(&cached_graph_name, graph_name_cstr);
+        }
         cached_generation = current_generation;
     }
     if (free_graph_name)

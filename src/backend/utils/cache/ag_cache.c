@@ -1164,7 +1164,7 @@ static void *label_name_graph_cache_hash_search(Name name, Oid graph,
     label_name_graph_cache_key key;
 
     /* initialize the hash key for label_name_graph_cache_hash */
-    namestrcpy(&key.name, name->data);
+    key.name = *name;
     key.graph = graph;
 
     return hash_search(label_name_graph_cache_hash, &key, action, found);
@@ -1495,7 +1495,7 @@ static void *label_seq_name_graph_cache_hash_search(Name name, Oid graph,
     label_seq_name_graph_cache_key key;
 
     /* initialize the hash key for label_seq_name_graph_cache_hash */
-    namestrcpy(&key.name, name->data);
+    key.name = *name;
     key.graph = graph;
 
     return hash_search(label_seq_name_graph_cache_hash, &key, action, found);

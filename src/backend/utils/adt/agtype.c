@@ -142,7 +142,7 @@ static void agtype_in_object_field_start(void *pstate, char *fname,
                                          bool isnull);
 static void agtype_put_escaped_value(StringInfo out, agtype_value *scalar_val,
                                      bool extend);
-static void escape_agtype(StringInfo buf, const char *str);
+static void escape_agtype(StringInfo buf, const char *str, int len);
 bool is_decimal_needed(char *numstr);
 static void agtype_in_scalar(void *pstate, char *token,
                              agtype_token_type tokentype,
@@ -231,6 +231,7 @@ agtype_value *agtype_composite_to_agtype_value_binary(agtype *a);
 static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr);
 static bool agtype_string_contains(char *haystack, int haystack_len,
                                    char *needle, int needle_len);
+static agtype *text_to_agtype_string_value(text *txt);
 
 
 void *repalloc_check(void *ptr, size_t len)
@@ -1109,8 +1110,8 @@ static void agtype_put_escaped_value(StringInfo out, agtype_value *scalar_val,
         appendBinaryStringInfo(out, "null", 4);
         break;
     case AGTV_STRING:
-        escape_agtype(out, pnstrdup(scalar_val->val.string.val,
-                                    scalar_val->val.string.len));
+        escape_agtype(out, scalar_val->val.string.val,
+                      scalar_val->val.string.len);
         break;
     case AGTV_NUMERIC:
         appendStringInfoString(
@@ -1188,12 +1189,13 @@ static void agtype_put_escaped_value(StringInfo out, agtype_value *scalar_val,
 /*
  * Produce an agtype string literal, properly escaping characters in the text.
  */
-static void escape_agtype(StringInfo buf, const char *str)
+static void escape_agtype(StringInfo buf, const char *str, int len)
 {
     const char *p;
+    const char *end = str + len;
 
     appendStringInfoCharMacro(buf, '"');
-    for (p = str; *p; p++)
+    for (p = str; p < end; p++)
     {
         switch (*p)
         {
@@ -2274,6 +2276,17 @@ agtype_value *string_to_agtype_value(char *s)
     agtv->val.string.val = pnstrdup(s, agtv->val.string.len);
 
     return agtv;
+}
+
+static agtype *text_to_agtype_string_value(text *txt)
+{
+    agtype_value agtv;
+
+    agtv.type = AGTV_STRING;
+    agtv.val.string.len = check_string_length(VARSIZE_ANY_EXHDR(txt));
+    agtv.val.string.val = VARDATA_ANY(txt);
+
+    return agtype_value_to_agtype(&agtv);
 }
 
 /* helper function to create an agtype_value integer from an integer */
@@ -3524,10 +3537,7 @@ PG_FUNCTION_INFO_V1(text_to_agtype);
 Datum text_to_agtype(PG_FUNCTION_ARGS)
 {
     agtype *result = NULL;
-    agtype_value agtv;
     text *text_value = NULL;
-    char *string = NULL;
-    int len = 0;
 
     if (PG_ARGISNULL(0))
     {
@@ -3536,21 +3546,7 @@ Datum text_to_agtype(PG_FUNCTION_ARGS)
 
     /* get the text value */
     text_value = PG_GETARG_TEXT_PP(0);
-    /* convert it to a string */
-    string = text_to_cstring(text_value);
-    /* get the length */
-    len = strlen(string);
-
-    /* create a temporary agtype string */
-    agtv.type = AGTV_STRING;
-    agtv.val.string.len = len;
-    agtv.val.string.val = pstrdup(string);
-
-    /* free the string */
-    pfree_if_not_null(string);
-
-    /* convert to agtype */
-    result = agtype_value_to_agtype(&agtv);
+    result = text_to_agtype_string_value(text_value);
 
     /* free the input arg if necessary */
     PG_FREE_IF_COPY(text_value, 0);
@@ -4865,6 +4861,7 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
     agtype_value *agtv_arg, agtv_item, agtv_elem;
     uint32 array_size = 0;
     bool result = false;
+    bool is_vpc;
     uint32 i = 0;
 
     /* return null if the array is null */
@@ -4881,55 +4878,13 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("object of IN must be a list")));
     }
+    is_vpc = AGT_ROOT_IS_VPC(agt_arg);
+
     /* If we have vpc as arg, get the agtype_value AGTV_ARRAY of edges */
-    if (AGT_ROOT_IS_VPC(agt_arg))
+    if (is_vpc)
     {
         agtv_arg = agtv_materialize_vle_edges(agt_arg);
         array_size = agtv_arg->val.array.num_elems;
-
-        /* return null if the item to find is null */
-        if (PG_ARGISNULL(1))
-        {
-            PG_RETURN_NULL();
-        }
-        /* get the item to search for */
-        agt_item = AG_GET_ARG_AGTYPE_P(1);
-
-        /* init item iterator */
-        it_item = agtype_iterator_init(&agt_item->root);
-
-        /* get value of item */
-        agtype_iterator_next(&it_item, &agtv_item, false);
-        if (agtv_item.type == AGTV_ARRAY && agtv_item.val.array.raw_scalar)
-        {
-            agtype_iterator_next(&it_item, &agtv_item, false);
-            /* check for AGTYPE NULL */
-            if (agtv_item.type == AGTV_NULL)
-            {
-                PG_RETURN_NULL();
-            }
-        }
-
-        /* iterate through the array, but stop if we find it */
-        for (i = 0; i < array_size && !result; i++)
-        {
-            agtv_elem = agtv_arg->val.array.elems[i];
-
-            /* if both are containers, compare containers */
-            if (!IS_A_AGTYPE_SCALAR(&agtv_item) && !IS_A_AGTYPE_SCALAR(&agtv_elem))
-            {
-                result = (compare_agtype_containers_orderability(
-                            &agt_item->root, agtv_elem.val.binary.data) == 0);
-            }
-            /* if both are scalars and of the same type, compare scalars */
-            else if (IS_A_AGTYPE_SCALAR(&agtv_item) &&
-                    IS_A_AGTYPE_SCALAR(&agtv_elem) &&
-                    agtv_item.type == agtv_elem.type)
-            {
-                result = (compare_agtype_scalar_values(&agtv_item, &agtv_elem) ==
-                        0);
-            }
-        }
     }
     /* Else we need to iterate agtype_container */
     else
@@ -4953,49 +4908,56 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         }
 
         array_size = AGT_ROOT_COUNT(agt_arg);
+    }
 
-        /* return null if the item to find is null */
-        if (PG_ARGISNULL(1))
+    /* return null if the item to find is null */
+    if (PG_ARGISNULL(1))
+    {
+        PG_RETURN_NULL();
+    }
+    /* get the item to search for */
+    agt_item = AG_GET_ARG_AGTYPE_P(1);
+
+    /* init item iterator */
+    it_item = agtype_iterator_init(&agt_item->root);
+
+    /* get value of item */
+    agtype_iterator_next(&it_item, &agtv_item, false);
+    if (agtv_item.type == AGTV_ARRAY && agtv_item.val.array.raw_scalar)
+    {
+        agtype_iterator_next(&it_item, &agtv_item, false);
+        /* check for AGTYPE NULL */
+        if (agtv_item.type == AGTV_NULL)
         {
             PG_RETURN_NULL();
         }
-        /* get the item to search for */
-        agt_item = AG_GET_ARG_AGTYPE_P(1);
+    }
 
-        /* init item iterator */
-        it_item = agtype_iterator_init(&agt_item->root);
-
-        /* get value of item */
-        agtype_iterator_next(&it_item, &agtv_item, false);
-        if (agtv_item.type == AGTV_ARRAY && agtv_item.val.array.raw_scalar)
+    /* iterate through the array, but stop if we find it */
+    for (i = 0; i < array_size && !result; i++)
+    {
+        if (is_vpc)
         {
-            agtype_iterator_next(&it_item, &agtv_item, false);
-            /* check for AGTYPE NULL */
-            if (agtv_item.type == AGTV_NULL)
-            {
-                PG_RETURN_NULL();
-            }
+            agtv_elem = agtv_arg->val.array.elems[i];
+        }
+        else
+        {
+            agtype_iterator_next(&it_array, &agtv_elem, true);
         }
 
-        /* iterate through the array, but stop if we find it */
-        for (i = 0; i < array_size && !result; i++)
+        /* if both are containers, compare containers */
+        if (!IS_A_AGTYPE_SCALAR(&agtv_item) && !IS_A_AGTYPE_SCALAR(&agtv_elem))
         {
-            /* get next element */
-            agtype_iterator_next(&it_array, &agtv_elem, true);
-            /* if both are containers, compare containers */
-            if (!IS_A_AGTYPE_SCALAR(&agtv_item) && !IS_A_AGTYPE_SCALAR(&agtv_elem))
-            {
-                result = (compare_agtype_containers_orderability(
-                            &agt_item->root, agtv_elem.val.binary.data) == 0);
-            }
-            /* if both are scalars and of the same type, compare scalars */
-            else if (IS_A_AGTYPE_SCALAR(&agtv_item) &&
-                    IS_A_AGTYPE_SCALAR(&agtv_elem) &&
-                    agtv_item.type == agtv_elem.type)
-            {
-                result = (compare_agtype_scalar_values(&agtv_item, &agtv_elem) ==
-                        0);
-            }
+            result = (compare_agtype_containers_orderability(
+                        &agt_item->root, agtv_elem.val.binary.data) == 0);
+        }
+        /* if both are scalars and of the same type, compare scalars */
+        else if (IS_A_AGTYPE_SCALAR(&agtv_item) &&
+                IS_A_AGTYPE_SCALAR(&agtv_elem) &&
+                agtv_item.type == agtv_elem.type)
+        {
+            result = (compare_agtype_scalar_values(&agtv_item, &agtv_elem) ==
+                    0);
         }
     }
 
@@ -5940,10 +5902,10 @@ static Oid get_cached_graph_oid_for_name(const char *graph_name,
     bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
+        cached_generation == current_generation &&
         graph_name_len < NAMEDATALEN &&
         strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
-        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
-        cached_generation == current_generation)
+        NameStr(cached_graph_name)[graph_name_len] == '\0')
     {
         return cached_graph_oid;
     }
@@ -5963,7 +5925,14 @@ static Oid get_cached_graph_oid_for_name(const char *graph_name,
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name_cstr);
+        if (graph_name_len < NAMEDATALEN)
+        {
+            cached_graph_name = graph_name_buf;
+        }
+        else
+        {
+            namestrcpy(&cached_graph_name, graph_name_cstr);
+        }
         cached_generation = current_generation;
     }
     if (free_graph_name)
@@ -6606,16 +6575,28 @@ Datum age_toboolean(PG_FUNCTION_ARGS)
         else if (type == CSTRINGOID || type == TEXTOID)
         {
             if (type == CSTRINGOID)
+            {
                 string = DatumGetCString(arg);
+                if (pg_strcasecmp(string, "true") == 0)
+                    result = true;
+                else if (pg_strcasecmp(string, "false") == 0)
+                    result = false;
+                else
+                    PG_RETURN_NULL();
+            }
             else
-                string = text_to_cstring(DatumGetTextPP(arg));
+            {
+                text *txt = DatumGetTextPP(arg);
+                int len = VARSIZE_ANY_EXHDR(txt);
 
-            if (pg_strcasecmp(string, "true") == 0)
-                result = true;
-            else if (pg_strcasecmp(string, "false") == 0)
-                result = false;
-            else
-                PG_RETURN_NULL();
+                string = VARDATA_ANY(txt);
+                if (len == 4 && pg_strncasecmp(string, "true", len) == 0)
+                    result = true;
+                else if (len == 5 && pg_strncasecmp(string, "false", len) == 0)
+                    result = false;
+                else
+                    PG_RETURN_NULL();
+            }
         }
         else if (type == INT2OID || type == INT4OID || type == INT8OID)
         {
@@ -7350,8 +7331,7 @@ Datum age_size(PG_FUNCTION_ARGS)
     }
     else if (type == TEXTOID)
     {
-        string = text_to_cstring(DatumGetTextPP(arg));
-        result = strlen(string);
+        result = VARSIZE_ANY_EXHDR(DatumGetTextPP(arg));
     }
     else if (type == AGTYPEOID)
     {
@@ -7508,8 +7488,7 @@ Datum age_isempty(PG_FUNCTION_ARGS)
     }
     else if (type == TEXTOID)
     {
-        string = text_to_cstring(DatumGetTextPP(arg));
-        result = strlen(string);
+        result = VARSIZE_ANY_EXHDR(DatumGetTextPP(arg));
     }
     else if (type == AGTYPEOID)
     {
@@ -7685,6 +7664,7 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
 {
     agtype_value *agtv_result = NULL;
     char *string = NULL;
+    int string_len = -1;
 
     /*
      * toString() supports: unknown, integer, float, numeric, text, cstring,
@@ -7700,7 +7680,8 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
     {
         char *str = DatumGetPointer(arg);
 
-        string = pnstrdup(str, strlen(str));
+        string = str;
+        string_len = strlen(str);
     }
     /* if it is not an AGTYPEOID */
     else if (type != AGTYPEOID)
@@ -7737,7 +7718,10 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
         }
         else if (type == TEXTOID)
         {
-            string = text_to_cstring(DatumGetTextPP(arg));
+            text *txt = DatumGetTextPP(arg);
+
+            string = VARDATA_ANY(txt);
+            string_len = VARSIZE_ANY_EXHDR(txt);
         }
         else if (type == BOOLOID)
         {
@@ -7788,8 +7772,8 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
         }
         else if (agtv_value->type == AGTV_STRING)
         {
-            string = pnstrdup(agtv_value->val.string.val,
-                              agtv_value->val.string.len);
+            string = agtv_value->val.string.val;
+            string_len = agtv_value->val.string.len;
         }
         else if (agtv_value->type == AGTV_NUMERIC)
         {
@@ -7819,7 +7803,7 @@ static agtype_value *tostring_helper(Datum arg, Oid type, char *msghdr)
     agtv_result = palloc(sizeof(agtype_value));
     agtv_result->type = AGTV_STRING;
     agtv_result->val.string.val = string;
-    agtv_result->val.string.len = strlen(string);
+    agtv_result->val.string.len = string_len >= 0 ? string_len : strlen(string);
 
     return agtv_result;
 }
@@ -7978,10 +7962,7 @@ PG_FUNCTION_INFO_V1(age_reverse);
 Datum age_reverse(PG_FUNCTION_ARGS)
 {
     Datum arg;
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
-    int string_len;
     Oid type;
 
     if (!get_single_variadic_arg(fcinfo, "reverse()", true, &arg, &type))
@@ -8110,16 +8091,7 @@ Datum age_reverse(PG_FUNCTION_ARGS)
     text_string = DatumGetTextPP(DirectFunctionCall1(text_reverse,
                                                      PointerGetDatum(text_string)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_toupper);
@@ -8143,14 +8115,21 @@ Datum age_toupper(PG_FUNCTION_ARGS)
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
+        {
             string = DatumGetCString(arg);
+            string_len = strlen(string);
+        }
         else if (type == TEXTOID)
-            string = text_to_cstring(DatumGetTextPP(arg));
+        {
+            text *txt = DatumGetTextPP(arg);
+
+            string = VARDATA_ANY(txt);
+            string_len = VARSIZE_ANY_EXHDR(txt);
+        }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("toUpper() unsupported argument type %d",
                                    type)));
-        string_len = strlen(string);
     }
     else
     {
@@ -8216,14 +8195,21 @@ Datum age_tolower(PG_FUNCTION_ARGS)
     if (type != AGTYPEOID)
     {
         if (type == CSTRINGOID)
+        {
             string = DatumGetCString(arg);
+            string_len = strlen(string);
+        }
         else if (type == TEXTOID)
-            string = text_to_cstring(DatumGetTextPP(arg));
+        {
+            text *txt = DatumGetTextPP(arg);
+
+            string = VARDATA_ANY(txt);
+            string_len = VARSIZE_ANY_EXHDR(txt);
+        }
         else
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                             errmsg("toLower() unsupported argument type %d",
                                    type)));
-        string_len = strlen(string);
     }
     else
     {
@@ -8273,10 +8259,7 @@ PG_FUNCTION_INFO_V1(age_rtrim);
 Datum age_rtrim(PG_FUNCTION_ARGS)
 {
     Datum arg;
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
-    int string_len;
     Oid type;
 
     if (!get_single_variadic_arg(fcinfo, "rTrim()", true, &arg, &type))
@@ -8329,16 +8312,7 @@ Datum age_rtrim(PG_FUNCTION_ARGS)
     text_string = DatumGetTextPP(DirectFunctionCall1(rtrim1,
                                                      PointerGetDatum(text_string)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_ltrim);
@@ -8346,10 +8320,7 @@ PG_FUNCTION_INFO_V1(age_ltrim);
 Datum age_ltrim(PG_FUNCTION_ARGS)
 {
     Datum arg;
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
-    int string_len;
     Oid type;
 
     if (!get_single_variadic_arg(fcinfo, "lTrim()", true, &arg, &type))
@@ -8402,16 +8373,7 @@ Datum age_ltrim(PG_FUNCTION_ARGS)
     text_string = DatumGetTextPP(DirectFunctionCall1(ltrim1,
                                                      PointerGetDatum(text_string)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_trim);
@@ -8419,10 +8381,7 @@ PG_FUNCTION_INFO_V1(age_trim);
 Datum age_trim(PG_FUNCTION_ARGS)
 {
     Datum arg;
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
-    int string_len;
     Oid type;
 
     if (!get_single_variadic_arg(fcinfo, "trim()", true, &arg, &type))
@@ -8475,16 +8434,7 @@ Datum age_trim(PG_FUNCTION_ARGS)
     text_string = DatumGetTextPP(DirectFunctionCall1(btrim1,
                                                      PointerGetDatum(text_string)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_right);
@@ -8499,9 +8449,7 @@ Datum age_right(PG_FUNCTION_ARGS)
     bool fast_nulls[2];
     Oid *types;
     Oid fast_types[2];
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
     int64 string_len;
     Oid type;
 
@@ -8649,16 +8597,7 @@ Datum age_right(PG_FUNCTION_ARGS)
                                                      PointerGetDatum(text_string),
                                                      Int64GetDatum(string_len)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_left);
@@ -8673,9 +8612,7 @@ Datum age_left(PG_FUNCTION_ARGS)
     bool fast_nulls[2];
     Oid *types;
     Oid fast_types[2];
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
     int64 string_len;
     Oid type;
 
@@ -8830,16 +8767,7 @@ Datum age_left(PG_FUNCTION_ARGS)
                                                      PointerGetDatum(text_string),
                                                      Int64GetDatum(string_len)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_substring);
@@ -8854,9 +8782,7 @@ Datum age_substring(PG_FUNCTION_ARGS)
     bool fast_nulls[3];
     Oid *types;
     Oid fast_types[3];
-    agtype_value agtv_result;
     text *text_string = NULL;
-    char *string = NULL;
     int64 param;
     int string_start = 0;
     int string_len = 0;
@@ -9051,16 +8977,7 @@ Datum age_substring(PG_FUNCTION_ARGS)
                                                          Int64GetDatum(string_start),
                                                          Int64GetDatum(string_len)));
     }
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_string);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_string));
 }
 
 PG_FUNCTION_INFO_V1(age_split);
@@ -9226,14 +9143,11 @@ Datum age_replace(PG_FUNCTION_ARGS)
     bool fast_nulls[3];
     Oid *types;
     Oid fast_types[3];
-    agtype_value agtv_result;
     text *param = NULL;
     text *text_string = NULL;
     text *text_search = NULL;
     text *text_replace = NULL;
     text *text_result = NULL;
-    char *string = NULL;
-    int string_len;
     Oid type;
     int i;
 
@@ -9311,16 +9225,7 @@ Datum age_replace(PG_FUNCTION_ARGS)
         replace_text, C_COLLATION_OID, PointerGetDatum(text_string),
         PointerGetDatum(text_search), PointerGetDatum(text_replace)));
 
-    /* convert it back to a cstring */
-    string = text_to_cstring(text_result);
-    string_len = strlen(string);
-
-    /* build the result */
-    agtv_result.type = AGTV_STRING;
-    agtv_result.val.string.val = string;
-    agtv_result.val.string.len = string_len;
-
-    PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_result));
+    PG_RETURN_POINTER(text_to_agtype_string_value(text_result));
 }
 
 /*
@@ -11905,17 +11810,17 @@ agtype_value *get_agtype_value(char *funcname, agtype *agt_arg,
                         funcname)));
     }
 
+    /* get the agtype value */
+    agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+
     /* is it AGTV_NULL? */
-    if (error && is_agtype_null(agt_arg))
+    if (error && agtv_value->type == AGTV_NULL)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("%s: agtype argument must not be AGTV_NULL",
                         funcname)));
     }
-
-    /* get the agtype value */
-    agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
 
     /* is it the correct type? */
     if (error && agtv_value->type != type)
@@ -12877,9 +12782,11 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
         }
         else if (type == TEXTOID)
         {
+            text *txt = DatumGetTextPP(arg);
+
             agtv_result.type = AGTV_STRING;
-            agtv_result.val.string.val = text_to_cstring(DatumGetTextPP(arg));
-            agtv_result.val.string.len = strlen(agtv_result.val.string.val);
+            agtv_result.val.string.val = VARDATA_ANY(txt);
+            agtv_result.val.string.len = VARSIZE_ANY_EXHDR(txt);
         }
         else
         {

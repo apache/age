@@ -66,6 +66,7 @@ typedef struct cypher_set_custom_scan_state
     CustomScanState css;
     CustomScan *cs;
     cypher_update_information *set_list;
+    int set_item_count;
     HTAB *qual_cache;
     HTAB *index_cache;
     HTAB *result_rel_info_cache;
@@ -123,6 +124,8 @@ typedef struct cypher_merge_custom_scan_state
     bool eager_buffer_filled;
     cypher_update_information *on_match_set_info;   /* NULL if not specified */
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
+    int on_match_set_item_count;
+    int on_create_set_item_count;
     HTAB *update_qual_cache;
     HTAB *update_index_cache;
     HTAB *update_result_rel_info_cache;
@@ -132,7 +135,8 @@ typedef struct cypher_merge_custom_scan_state
 
 /* Reusable SET logic callable from MERGE executor */
 void apply_update_list(CustomScanState *node,
-                       cypher_update_information *set_info);
+                       cypher_update_information *set_info,
+                       int num_set_items);
 
 TupleTableSlot *populate_vertex_tts(TupleTableSlot *elemTupleSlot,
                                     agtype_value *id, agtype_value *properties);

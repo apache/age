@@ -890,15 +890,22 @@ static void check_for_connected_edges(CustomScanState *node)
         else
         {
             scan_desc = table_beginscan(rel, estate->es_snapshot, 0, NULL);
-            slot = ExecInitExtraTupleSlot(
-                estate, RelationGetDescr(rel),
-                &TTSOpsHeapTuple);
+            slot = idx_entry->slot;
+            if (slot == NULL)
+            {
+                slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel),
+                                              &TTSOpsHeapTuple);
+                idx_entry->slot = slot;
+            }
+            else
+            {
+                ExecClearTuple(slot);
+            }
 
             /* for each row */
             while (true)
             {
                 graphid startid;
-                graphid endid;
                 bool isNull;
                 bool found_startid = false;
                 bool found_endid = false;
@@ -915,14 +922,16 @@ static void check_for_connected_edges(CustomScanState *node)
 
                 startid = GRAPHID_GET_DATUM(slot_getattr(
                     slot, Anum_ag_label_edge_table_start_id, &isNull));
-                endid = GRAPHID_GET_DATUM(
-                    slot_getattr(slot, Anum_ag_label_edge_table_end_id, &isNull));
 
                 hash_search(css->vertex_id_htab, (void *)&startid, HASH_FIND,
                             &found_startid);
 
                 if (!found_startid)
                 {
+                    graphid endid;
+
+                    endid = GRAPHID_GET_DATUM(slot_getattr(
+                        slot, Anum_ag_label_edge_table_end_id, &isNull));
                     hash_search(css->vertex_id_htab, (void *)&endid, HASH_FIND,
                                 &found_endid);
                 }
@@ -983,6 +992,7 @@ static void check_for_connected_edges(CustomScanState *node)
                 }
             }
 
+            ExecClearTuple(slot);
             table_endscan(scan_desc);
         }
 

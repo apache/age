@@ -109,6 +109,8 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
         estate->es_output_cid = estate->es_snapshot->curcid;
     }
 
+    css->set_item_count = list_length(css->set_list->set_items);
+
     foreach(lc, css->set_list->set_items)
     {
         cypher_update_item *item = (cypher_update_item *)lfirst(lc);
@@ -468,7 +470,8 @@ static void update_all_paths(CustomScanState *node, graphid id,
  * cypher_update_information describing which properties to set.
  */
 void apply_update_list(CustomScanState *node,
-                       cypher_update_information *set_info)
+                       cypher_update_information *set_info,
+                       int num_set_items)
 {
     ExprContext *econtext = node->ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
@@ -476,7 +479,6 @@ void apply_update_list(CustomScanState *node,
     EState *estate = node->ss.ps.state;
     int *luindex = NULL;
     int lidx = 0;
-    int num_set_items;
     HTAB *qual_cache = NULL;
     HTAB *index_cache = NULL;
     HTAB *result_rel_info_cache = NULL;
@@ -536,7 +538,8 @@ void apply_update_list(CustomScanState *node,
         }
     }
 
-    num_set_items = list_length(set_info->set_items);
+    if (num_set_items <= 0)
+        num_set_items = list_length(set_info->set_items);
 
     /*
      * Iterate through the SET items list and store the loop index of each
@@ -1008,7 +1011,7 @@ static void process_update_list(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
 
-    apply_update_list(node, css->set_list);
+    apply_update_list(node, css->set_list, css->set_item_count);
 }
 
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)

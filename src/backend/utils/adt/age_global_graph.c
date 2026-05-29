@@ -1127,10 +1127,10 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
     bool free_graph_name = false;
 
     if (OidIsValid(cached_graph_oid) &&
+        cached_generation == current_generation &&
         graph_name_len < NAMEDATALEN &&
         strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
-        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
-        cached_generation == current_generation)
+        NameStr(cached_graph_name)[graph_name_len] == '\0')
     {
         return cached_graph_oid;
     }
@@ -1150,7 +1150,14 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
     cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name_cstr);
+        if (graph_name_len < NAMEDATALEN)
+        {
+            cached_graph_name = graph_name_buf;
+        }
+        else
+        {
+            namestrcpy(&cached_graph_name, graph_name_cstr);
+        }
         cached_generation = current_generation;
     }
     if (free_graph_name)
