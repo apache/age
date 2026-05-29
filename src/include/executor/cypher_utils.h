@@ -123,6 +123,9 @@ typedef struct cypher_merge_custom_scan_state
     bool eager_buffer_filled;
     cypher_update_information *on_match_set_info;   /* NULL if not specified */
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
+    HTAB *update_qual_cache;
+    HTAB *update_index_cache;
+    HTAB *update_result_rel_info_cache;
     HTAB *entity_exists_index_cache;
     HTAB *result_rel_info_cache;
 } cypher_merge_custom_scan_state;
@@ -147,6 +150,7 @@ void destroy_entity_result_rel_info_cache(HTAB *result_rel_info_cache);
 
 HTAB *create_entity_exists_index_cache(const char *name);
 void destroy_entity_exists_index_cache(HTAB *index_cache);
+void destroy_index_cache(HTAB *index_cache, bool close_relations);
 bool entity_exists(EState *estate, Oid graph_oid, graphid id);
 bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
                               HTAB *index_cache);
@@ -189,6 +193,8 @@ typedef struct IndexCacheEntry {
     Oid start_index_oid;
     bool end_index_oid_cached;
     Oid end_index_oid;
+    TupleTableSlot *slot;
+    TupleTableSlot *update_slot;
 } IndexCacheEntry;
 
 static inline void init_index_cache_entry(IndexCacheEntry *entry)
@@ -200,6 +206,8 @@ static inline void init_index_cache_entry(IndexCacheEntry *entry)
     entry->start_index_oid = InvalidOid;
     entry->end_index_oid_cached = false;
     entry->end_index_oid = InvalidOid;
+    entry->slot = NULL;
+    entry->update_slot = NULL;
 }
 
 #endif

@@ -507,7 +507,7 @@ static path_entry **prebuild_path(CustomScanState *node)
             }
 
             /* extract the id agtype field */
-            agtv_id = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_vertex, "id");
+            agtv_id = AGTYPE_VERTEX_GET_ID(agtv_vertex);
 
             /* set the necessary entry fields - actual & id */
             entry->actual = true;
@@ -1065,6 +1065,24 @@ static void end_cypher_merge(CustomScanState *node)
         css->entity_exists_index_cache = NULL;
     }
 
+    if (css->update_qual_cache != NULL)
+    {
+        hash_destroy(css->update_qual_cache);
+        css->update_qual_cache = NULL;
+    }
+
+    if (css->update_index_cache != NULL)
+    {
+        destroy_index_cache(css->update_index_cache, false);
+        css->update_index_cache = NULL;
+    }
+
+    if (css->update_result_rel_info_cache != NULL)
+    {
+        destroy_entity_result_rel_info_cache(css->update_result_rel_info_cache);
+        css->update_result_rel_info_cache = NULL;
+    }
+
     foreach (lc, path->target_nodes)
     {
         cypher_target_node *cypher_node = (cypher_target_node *)lfirst(lc);
@@ -1422,7 +1440,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         }
 
         /* extract the id agtype field */
-        id_value = GET_AGTYPE_VALUE_OBJECT_VALUE(v, "id");
+        id_value = AGTYPE_VERTEX_GET_ID(v);
 
         /* extract the graphid and cast to a Datum */
         id = GRAPHID_GET_DATUM(id_value->val.int_value);

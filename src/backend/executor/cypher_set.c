@@ -45,6 +45,9 @@ static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
                                HTAB **result_rel_info_cache,
                                const char *qual_name, const char *index_name,
                                const char *result_rel_info_name);
+static void init_update_lookup_caches(HTAB **qual_cache, HTAB **index_cache,
+                                      const char *qual_name,
+                                      const char *index_name);
 
 const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       begin_cypher_set,
@@ -118,6 +121,16 @@ static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
                                const char *qual_name, const char *index_name,
                                const char *result_rel_info_name)
 {
+    init_update_lookup_caches(qual_cache, index_cache, qual_name, index_name);
+
+    *result_rel_info_cache =
+        create_entity_result_rel_info_cache(result_rel_info_name);
+}
+
+static void init_update_lookup_caches(HTAB **qual_cache, HTAB **index_cache,
+                                      const char *qual_name,
+                                      const char *index_name)
+{
     HASHCTL hashctl;
     HASHCTL idx_hashctl;
 
@@ -134,9 +147,6 @@ static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
     idx_hashctl.hcxt = CurrentMemoryContext;
     *index_cache = hash_create(index_name, 8, &idx_hashctl,
                                HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-
-    *result_rel_info_cache =
-        create_entity_result_rel_info_cache(result_rel_info_name);
 }
 
 static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
@@ -289,7 +299,22 @@ static bool check_path(agtype_value *path, graphid updated_id)
     {
         agtype_value *elem = &path->val.array.elems[i];
 
-        agtype_value *id = GET_AGTYPE_VALUE_OBJECT_VALUE(elem, "id");
+        agtype_value *id;
+
+        if (elem->type != AGTV_VERTEX && elem->type != AGTV_EDGE)
+        {
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                            errmsg("unsupported agtype found in a path")));
+        }
+
+        if (elem->type == AGTV_VERTEX)
+        {
+            id = AGTYPE_VERTEX_GET_ID(elem);
+        }
+        else
+        {
+            id = AGTYPE_EDGE_GET_ID(elem);
+        }
 
         if (updated_id == id->val.int_value)
         {
@@ -340,7 +365,14 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
         }
 
         /* extract the id field */
-        id = GET_AGTYPE_VALUE_OBJECT_VALUE(elem, "id");
+        if (elem->type == AGTV_VERTEX)
+        {
+            id = AGTYPE_VERTEX_GET_ID(elem);
+        }
+        else
+        {
+            id = AGTYPE_EDGE_GET_ID(elem);
+        }
 
         /*
          * Either replace or keep the entity in the new path, depending on the id
@@ -446,6 +478,28 @@ void apply_update_list(CustomScanState *node,
         qual_cache = css->qual_cache;
         index_cache = css->index_cache;
         result_rel_info_cache = css->result_rel_info_cache;
+        graph_oid = css->graph_oid;
+    }
+    else if (node->methods == &cypher_merge_exec_methods)
+    {
+        cypher_merge_custom_scan_state *css =
+            (cypher_merge_custom_scan_state *)node;
+
+        if (css->update_qual_cache == NULL ||
+            css->update_index_cache == NULL ||
+            css->update_result_rel_info_cache == NULL)
+        {
+            init_update_caches(&css->update_qual_cache,
+                               &css->update_index_cache,
+                               &css->update_result_rel_info_cache,
+                               "merge_update_qual_cache",
+                               "merge_update_index_cache",
+                               "merge_update_result_rel_info_cache");
+        }
+
+        qual_cache = css->update_qual_cache;
+        index_cache = css->update_index_cache;
+        result_rel_info_cache = css->update_result_rel_info_cache;
         graph_oid = css->graph_oid;
     }
     else
@@ -558,7 +612,18 @@ void apply_update_list(CustomScanState *node,
         }
 
         /* get the id and label metadata for later */
-        id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
+        if (original_entity_value->type == AGTV_VERTEX)
+        {
+            id = AGTYPE_VERTEX_GET_ID(original_entity_value);
+            original_properties =
+                AGTYPE_VERTEX_GET_PROPERTIES(original_entity_value);
+        }
+        else
+        {
+            id = AGTYPE_EDGE_GET_ID(original_entity_value);
+            original_properties =
+                AGTYPE_EDGE_GET_PROPERTIES(original_entity_value);
+        }
         label_cache = search_label_graph_oid_cache_cached(
             graph_oid, GET_LABEL_ID(id->val.int_value));
         if (label_cache == NULL)
@@ -573,10 +638,6 @@ void apply_update_list(CustomScanState *node,
         {
             label_name = "";
         }
-
-        /* get the properties we need to update */
-        original_properties = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value,
-                                                            "properties");
 
         /*
          * Determine if the property should be removed. This will be because
@@ -679,8 +740,8 @@ void apply_update_list(CustomScanState *node,
         }
         else if (original_entity_value->type == AGTV_EDGE)
         {
-            startid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "start_id");
-            endid = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "end_id");
+            startid = AGTYPE_EDGE_GET_START_ID(original_entity_value);
+            endid = AGTYPE_EDGE_GET_END_ID(original_entity_value);
 
             new_entity = make_edge(GRAPHID_GET_DATUM(id->val.int_value),
                                    GRAPHID_GET_DATUM(startid->val.int_value),
@@ -735,10 +796,6 @@ void apply_update_list(CustomScanState *node,
             }
             index_oid = idx_entry->index_oid;
 
-            slot = ExecInitExtraTupleSlot(
-                estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
-                &TTSOpsHeapTuple);
-
             rls_entry = hash_search(qual_cache, &relid, HASH_ENTER,
                                     &found_rls_entry);
             if (!found_rls_entry)
@@ -774,6 +831,18 @@ void apply_update_list(CustomScanState *node,
                     rls_entry->withCheckOptionExprs;
             }
 
+            slot = idx_entry->update_slot;
+            if (slot == NULL)
+            {
+                slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel),
+                                              &TTSOpsHeapTuple);
+                idx_entry->update_slot = slot;
+            }
+            else
+            {
+                ExecClearTuple(slot);
+            }
+
             if (original_entity_value->type == AGTV_VERTEX)
             {
                 slot = populate_vertex_tts(slot, id, altered_properties);
@@ -799,7 +868,17 @@ void apply_update_list(CustomScanState *node,
                 ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
                             GRAPHID_GET_DATUM(id->val.int_value));
 
-                index_slot = table_slot_create(rel, NULL);
+                index_slot = idx_entry->slot;
+                if (index_slot == NULL)
+                {
+                    index_slot = table_slot_create(rel, NULL);
+                    idx_entry->slot = index_slot;
+                }
+                else
+                {
+                    ExecClearTuple(index_slot);
+                }
+
                 idx_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
                 index_rescan(idx_scan_desc, scan_keys, 1, NULL, 0);
 
@@ -839,7 +918,7 @@ void apply_update_list(CustomScanState *node,
                     }
                 }
 
-                ExecDropSingleTupleTableSlot(index_slot);
+                ExecClearTuple(index_slot);
                 index_endscan(idx_scan_desc);
                 index_close(index_rel, RowExclusiveLock);
             } 
@@ -899,7 +978,7 @@ void apply_update_list(CustomScanState *node,
     if (local_caches)
     {
         hash_destroy(qual_cache);
-        hash_destroy(index_cache);
+        destroy_index_cache(index_cache, false);
         destroy_entity_result_rel_info_cache(result_rel_info_cache);
     }
 
@@ -979,7 +1058,7 @@ static void end_cypher_set(CustomScanState *node)
 
     if (css->index_cache != NULL)
     {
-        hash_destroy(css->index_cache);
+        destroy_index_cache(css->index_cache, false);
         css->index_cache = NULL;
     }
 

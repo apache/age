@@ -189,13 +189,6 @@ Datum _label_name(PG_FUNCTION_ARGS)
     }
 
     graph = PG_GETARG_OID(0);
-    
-    /* Check if the graph OID is valid */
-    if (!graph_namespace_exists(graph))
-    {
-        ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
-                        errmsg("graph with oid %u does not exist", graph)));
-    }
 
     label_id = (int32)(((uint64)AG_GETARG_GRAPHID(1)) >> ENTRY_ID_BITS);
 

@@ -580,7 +580,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
         }
 
         /* extract the id agtype field */
-        id_value = GET_AGTYPE_VALUE_OBJECT_VALUE(v, "id");
+        id_value = AGTYPE_VERTEX_GET_ID(v);
 
         /* extract the graphid and cast to a Datum */
         id = GRAPHID_GET_DATUM(id_value->val.int_value);

@@ -617,11 +617,11 @@ static void initialize_label_caches(void)
     ag_cache_scan_key_init(&label_name_graph_scan_keys[0], Anum_ag_label_name,
                            F_NAMEEQ);
     ag_cache_scan_key_init(&label_name_graph_scan_keys[1], Anum_ag_label_graph,
-                           F_INT4EQ);
+                           F_OIDEQ);
 
     /* ag_label.graph, ag_label.id */
     ag_cache_scan_key_init(&label_graph_oid_scan_keys[0], Anum_ag_label_graph,
-                           F_INT4EQ);
+                           F_OIDEQ);
     ag_cache_scan_key_init(&label_graph_oid_scan_keys[1], Anum_ag_label_id,
                            F_INT4EQ);
 

@@ -85,6 +85,20 @@ typedef struct function_extension_cache_entry
 static HTAB *function_exists_cache = NULL;
 static HTAB *function_extension_cache = NULL;
 static bool function_cache_callback_registered = false;
+static Oid agtype_access_operator_oid = InvalidOid;
+static Oid agtype_access_slice_oid = InvalidOid;
+static Oid agtype_in_operator_oid = InvalidOid;
+static Oid agtype_add_oid = InvalidOid;
+static Oid agtype_build_empty_list_oid = InvalidOid;
+static Oid agtype_build_list_oid = InvalidOid;
+static Oid agtype_build_empty_map_oid = InvalidOid;
+static Oid agtype_build_map_oid = InvalidOid;
+static Oid agtype_build_map_nonull_oid = InvalidOid;
+static Oid age_properties_oid = InvalidOid;
+static Oid agtype_string_match_starts_with_oid = InvalidOid;
+static Oid agtype_string_match_ends_with_oid = InvalidOid;
+static Oid agtype_string_match_contains_oid = InvalidOid;
+static Oid text_to_agtype_oid = InvalidOid;
 
 static Node *transform_cypher_expr_recurse(cypher_parsestate *cpstate,
                                            Node *expr);
@@ -144,6 +158,20 @@ static void invalidate_function_caches(Datum arg, int cache_id,
                                        uint32 hash_value);
 static void initialize_function_extension_cache(void);
 static void initialize_function_exists_cache(void);
+static Oid get_agtype_access_operator_oid(void);
+static Oid get_agtype_access_slice_oid(void);
+static Oid get_agtype_in_operator_oid(void);
+static Oid get_agtype_add_oid(void);
+static Oid get_agtype_build_empty_list_oid(void);
+static Oid get_agtype_build_list_oid(void);
+static Oid get_agtype_build_empty_map_oid(void);
+static Oid get_agtype_build_map_oid(void);
+static Oid get_agtype_build_map_nonull_oid(void);
+static Oid get_age_properties_oid(void);
+static Oid get_agtype_string_match_starts_with_oid(void);
+static Oid get_agtype_string_match_ends_with_oid(void);
+static Oid get_agtype_string_match_contains_oid(void);
+static Oid get_text_to_agtype_oid(void);
 static bool function_exists(char *funcname, char *extension);
 static Node *coerce_expr_flexible(ParseState *pstate, Node *expr,
                                   Oid source_oid, Oid target_oid,
@@ -619,8 +647,7 @@ static Node *transform_AEXPR_IN(cypher_parsestate *cpstate, A_Expr *a)
         args = lappend(args, transform_cypher_expr_recurse(cpstate, a->lexpr));
 
         /* get the agtype_in_operator function */
-        func_in_oid = get_ag_func_oid("agtype_in_operator", 2, AGTYPEOID,
-                                    AGTYPEOID);
+        func_in_oid = get_agtype_in_operator_oid();
 
         func_in_expr = makeFuncExpr(func_in_oid, AGTYPEOID, args, InvalidOid,
                                     InvalidOid, COERCE_EXPLICIT_CALL);
@@ -876,8 +903,7 @@ static Node *transform_cypher_param(cypher_parsestate *cpstate,
     }
 
     /* get the agtype_access_operator function */
-    func_access_oid = get_ag_func_oid("agtype_access_operator", 1,
-                                      AGTYPEARRAYOID);
+    func_access_oid = get_agtype_access_operator_oid();
 
     args = lappend(args, copyObject(cpstate->params));
 
@@ -918,7 +944,7 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
      */
     transformed_map_var = transform_cypher_expr_recurse(cpstate,
                                                         (Node *)cmp->map_var);
-    foid_age_properties = get_ag_func_oid("age_properties", 1, AGTYPEOID);
+    foid_age_properties = get_age_properties_oid();
     fexpr_orig_map = makeFuncExpr(foid_age_properties, AGTYPEOID,
                                   list_make1(transformed_map_var), InvalidOid,
                                   InvalidOid, COERCE_EXPLICIT_CALL);
@@ -962,8 +988,7 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
                 key_agtype = makeConst(AGTYPEOID, -1, InvalidOid, -1,
                                        string_to_agtype(elem->key), false,
                                        false);
-                foid_access_op = get_ag_func_oid("agtype_access_operator", 1,
-                                                 AGTYPEARRAYOID);
+                foid_access_op = get_agtype_access_operator_oid();
                 args_access_op = make_agtype_array_expr(
                     list_make2(fexpr_orig_map, key_agtype));
                 fexpr_access_op = makeFuncExpr(foid_access_op, AGTYPEOID,
@@ -1020,8 +1045,7 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
 
     if (keyvals)
     {
-        foid_agtype_build_map = get_ag_func_oid("agtype_build_map_nonull", 1,
-                                                ANYOID);
+        foid_agtype_build_map = get_agtype_build_map_nonull_oid();
         fexpr_new_map = makeFuncExpr(foid_agtype_build_map, AGTYPEOID, keyvals,
                                      InvalidOid, InvalidOid,
                                      COERCE_EXPLICIT_CALL);
@@ -1083,21 +1107,21 @@ static Node *transform_cypher_map(cypher_parsestate *cpstate, cypher_map *cm)
 
     if (nkeyvals == 0)
     {
-        abm_func_oid = get_ag_func_oid("agtype_build_map", 0);
+        abm_func_oid = get_agtype_build_empty_map_oid();
     }
     else if (!cm->keep_null)
     {
-        abm_func_oid = get_ag_func_oid("agtype_build_map_nonull", 1, ANYOID);
+        abm_func_oid = get_agtype_build_map_nonull_oid();
     }
     else
     {
-        abm_func_oid = get_ag_func_oid("agtype_build_map", 1, ANYOID);
+        abm_func_oid = get_agtype_build_map_oid();
     }
 
     /* get the concat function oid, if necessary */
     if (nkeyvals > 100)
     {
-        aa_func_oid = get_ag_func_oid("agtype_add", 2, AGTYPEOID, AGTYPEOID);
+        aa_func_oid = get_agtype_add_oid();
     }
 
     /* get the key/val list */
@@ -1213,17 +1237,17 @@ static Node *transform_cypher_list(cypher_parsestate *cpstate, cypher_list *cl)
     nelems = list_length(cl->elems);
     if (nelems == 0)
     {
-        abl_func_oid = get_ag_func_oid("agtype_build_list", 0);
+        abl_func_oid = get_agtype_build_empty_list_oid();
     }
     else
     {
-        abl_func_oid = get_ag_func_oid("agtype_build_list", 1, ANYOID);
+        abl_func_oid = get_agtype_build_list_oid();
     }
 
     /* get the concat function oid, if necessary */
     if (nelems > 100)
     {
-        aa_func_oid = get_ag_func_oid("agtype_add", 2, AGTYPEOID, AGTYPEOID);
+        aa_func_oid = get_agtype_add_oid();
     }
 
     /* iterate through the list of elements */
@@ -1385,11 +1409,9 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
     /* validate that we have an indirection with at least 1 entry */
     Assert(a_ind != NULL && list_length(a_ind->indirection));
     /* get the agtype_access_operator function */
-    func_access_oid = get_ag_func_oid("agtype_access_operator", 1,
-                                      AGTYPEARRAYOID);
+    func_access_oid = get_agtype_access_operator_oid();
     /* get the agtype_access_slice function */
-    func_slice_oid = get_ag_func_oid("agtype_access_slice", 3, AGTYPEOID,
-                                     AGTYPEOID, AGTYPEOID);
+    func_slice_oid = get_agtype_access_slice_oid();
 
     /*
      * If the indirection argument is a ColumnRef, we want to pull out the
@@ -1551,26 +1573,23 @@ static Node *transform_cypher_string_match(cypher_parsestate *cpstate,
     FuncExpr *func_expr;
     Oid func_access_oid;
     List *args = NIL;
-    const char *func_name;
 
     switch (csm_node->operation)
     {
     case CSMO_STARTS_WITH:
-        func_name = "agtype_string_match_starts_with";
+        func_access_oid = get_agtype_string_match_starts_with_oid();
         break;
     case CSMO_ENDS_WITH:
-        func_name = "agtype_string_match_ends_with";
+        func_access_oid = get_agtype_string_match_ends_with_oid();
         break;
     case CSMO_CONTAINS:
-        func_name = "agtype_string_match_contains";
+        func_access_oid = get_agtype_string_match_contains_oid();
         break;
 
     default:
         ereport(ERROR,
                 (errmsg_internal("unknown Cypher string match operation")));
     }
-
-    func_access_oid = get_ag_func_oid(func_name, 2, AGTYPEOID, AGTYPEOID);
 
     expr = transform_cypher_expr_recurse(cpstate, csm_node->lhs);
     args = lappend(args, expr);
@@ -1832,11 +1851,8 @@ static List *cast_agtype_args_to_target_type(cypher_parsestate *cpstate,
 static Node *wrap_text_output_to_agtype(cypher_parsestate *cpstate,
                                         FuncExpr *fexpr)
 {
-    ParseState *pstate = &cpstate->pstate;
-    Node *last_srf = pstate->p_last_srf;
-    Node *retval = NULL;
-    List *fname = NIL;
-    FuncCall *fnode = NULL;
+    Oid func_oid;
+    FuncExpr *retval;
 
     if (fexpr->funcresulttype != TEXTOID)
     {
@@ -1845,18 +1861,13 @@ static Node *wrap_text_output_to_agtype(cypher_parsestate *cpstate,
                  errmsg("can only wrap text to agtype")));
     }
 
-    /* make a function call node to cast text to agtype */
-    fname = list_make2(makeString("ag_catalog"), makeString("text_to_agtype"));
-
-    /* the input function is the arg to the new function (wrapper) */
-    fnode = makeFuncCall(fname, list_make1(fexpr), COERCE_SQL_SYNTAX, -1);
-
-    /* ... and hand off to ParseFuncOrColumn to create it */
-    retval = ParseFuncOrColumn(pstate, fname, list_make1(fexpr), last_srf,
-                               fnode, false, -1);
+    func_oid = get_text_to_agtype_oid();
+    retval = makeFuncExpr(func_oid, AGTYPEOID, list_make1(fexpr), InvalidOid,
+                          InvalidOid, COERCE_SQL_SYNTAX);
+    retval->location = fexpr->location;
 
     /* return the wrapped function */
-    return retval;
+    return (Node *)retval;
 }
 
 /* 
@@ -2176,6 +2187,204 @@ static void invalidate_function_caches(Datum arg, int cache_id,
         hash_destroy(function_extension_cache);
         function_extension_cache = NULL;
     }
+
+    agtype_access_operator_oid = InvalidOid;
+    agtype_access_slice_oid = InvalidOid;
+    agtype_in_operator_oid = InvalidOid;
+    agtype_add_oid = InvalidOid;
+    agtype_build_empty_list_oid = InvalidOid;
+    agtype_build_list_oid = InvalidOid;
+    agtype_build_empty_map_oid = InvalidOid;
+    agtype_build_map_oid = InvalidOid;
+    agtype_build_map_nonull_oid = InvalidOid;
+    age_properties_oid = InvalidOid;
+    agtype_string_match_starts_with_oid = InvalidOid;
+    agtype_string_match_ends_with_oid = InvalidOid;
+    agtype_string_match_contains_oid = InvalidOid;
+    text_to_agtype_oid = InvalidOid;
+}
+
+static Oid get_agtype_access_operator_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_access_operator_oid))
+    {
+        agtype_access_operator_oid =
+            get_ag_func_oid("agtype_access_operator", 1, AGTYPEARRAYOID);
+    }
+
+    return agtype_access_operator_oid;
+}
+
+static Oid get_agtype_access_slice_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_access_slice_oid))
+    {
+        agtype_access_slice_oid =
+            get_ag_func_oid("agtype_access_slice", 3, AGTYPEOID, AGTYPEOID,
+                            AGTYPEOID);
+    }
+
+    return agtype_access_slice_oid;
+}
+
+static Oid get_agtype_in_operator_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_in_operator_oid))
+    {
+        agtype_in_operator_oid =
+            get_ag_func_oid("agtype_in_operator", 2, AGTYPEOID, AGTYPEOID);
+    }
+
+    return agtype_in_operator_oid;
+}
+
+static Oid get_agtype_add_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_add_oid))
+    {
+        agtype_add_oid =
+            get_ag_func_oid("agtype_add", 2, AGTYPEOID, AGTYPEOID);
+    }
+
+    return agtype_add_oid;
+}
+
+static Oid get_agtype_build_empty_list_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_build_empty_list_oid))
+    {
+        agtype_build_empty_list_oid =
+            get_ag_func_oid("agtype_build_list", 0);
+    }
+
+    return agtype_build_empty_list_oid;
+}
+
+static Oid get_agtype_build_list_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_build_list_oid))
+    {
+        agtype_build_list_oid =
+            get_ag_func_oid("agtype_build_list", 1, ANYOID);
+    }
+
+    return agtype_build_list_oid;
+}
+
+static Oid get_agtype_build_empty_map_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_build_empty_map_oid))
+    {
+        agtype_build_empty_map_oid = get_ag_func_oid("agtype_build_map", 0);
+    }
+
+    return agtype_build_empty_map_oid;
+}
+
+static Oid get_agtype_build_map_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_build_map_oid))
+    {
+        agtype_build_map_oid =
+            get_ag_func_oid("agtype_build_map", 1, ANYOID);
+    }
+
+    return agtype_build_map_oid;
+}
+
+static Oid get_agtype_build_map_nonull_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_build_map_nonull_oid))
+    {
+        agtype_build_map_nonull_oid =
+            get_ag_func_oid("agtype_build_map_nonull", 1, ANYOID);
+    }
+
+    return agtype_build_map_nonull_oid;
+}
+
+static Oid get_age_properties_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(age_properties_oid))
+    {
+        age_properties_oid = get_ag_func_oid("age_properties", 1, AGTYPEOID);
+    }
+
+    return age_properties_oid;
+}
+
+static Oid get_agtype_string_match_starts_with_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_string_match_starts_with_oid))
+    {
+        agtype_string_match_starts_with_oid =
+            get_ag_func_oid("agtype_string_match_starts_with", 2, AGTYPEOID,
+                            AGTYPEOID);
+    }
+
+    return agtype_string_match_starts_with_oid;
+}
+
+static Oid get_agtype_string_match_ends_with_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_string_match_ends_with_oid))
+    {
+        agtype_string_match_ends_with_oid =
+            get_ag_func_oid("agtype_string_match_ends_with", 2, AGTYPEOID,
+                            AGTYPEOID);
+    }
+
+    return agtype_string_match_ends_with_oid;
+}
+
+static Oid get_agtype_string_match_contains_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(agtype_string_match_contains_oid))
+    {
+        agtype_string_match_contains_oid =
+            get_ag_func_oid("agtype_string_match_contains", 2, AGTYPEOID,
+                            AGTYPEOID);
+    }
+
+    return agtype_string_match_contains_oid;
+}
+
+static Oid get_text_to_agtype_oid(void)
+{
+    initialize_function_caches();
+
+    if (!OidIsValid(text_to_agtype_oid))
+    {
+        text_to_agtype_oid = get_ag_func_oid("text_to_agtype", 1, TEXTOID);
+    }
+
+    return text_to_agtype_oid;
 }
 
 /*

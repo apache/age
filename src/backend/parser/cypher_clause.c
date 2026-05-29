@@ -103,6 +103,13 @@ static Oid set_clause_func_oid = InvalidOid;
 static Oid delete_clause_func_oid = InvalidOid;
 static Oid merge_clause_func_oid = InvalidOid;
 static Oid bool_or_func_oid = InvalidOid;
+static Oid materialize_vle_edges_func_oid = InvalidOid;
+static Oid build_path_func_oid = InvalidOid;
+static Oid build_edge_func_oid = InvalidOid;
+static Oid build_vertex_func_oid = InvalidOid;
+static Oid label_name_func_oid = InvalidOid;
+static Oid volatile_wrapper_func_oid = InvalidOid;
+static Oid age_properties_func_oid = InvalidOid;
 static bool clause_func_oid_callback_registered = false;
 
 /* projection */
@@ -350,6 +357,14 @@ static List *make_target_list_from_join(ParseState *pstate,
 static void initialize_clause_function_oid_cache(void);
 static Oid get_clause_function_oid(const char *function_name);
 static Oid get_bool_or_func_oid(void);
+static Oid get_materialize_vle_edges_func_oid(void);
+static Oid get_build_path_func_oid(void);
+static Oid get_build_edge_func_oid(void);
+static Oid get_build_vertex_func_oid(void);
+static Oid get_label_name_func_oid(void);
+static Oid get_volatile_wrapper_func_oid(void);
+static Oid get_age_properties_func_oid(void);
+static Node *make_age_properties_func_expr(Node *arg);
 static void invalidate_clause_function_oids(Datum arg, int cache_id,
                                             uint32 hash_value);
 static FuncExpr *make_clause_func_expr(char *function_name,
@@ -4934,7 +4949,7 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
          * edges. For a VLE edge variable we need to return a list of edges,
          * not a path.
          */
-        func_oid = get_ag_func_oid("age_materialize_vle_edges", 1, AGTYPEOID);
+        func_oid = get_materialize_vle_edges_func_oid();
 
         /* build the expr node for the function */
         fexpr = makeFuncExpr(func_oid, AGTYPEOID, args, InvalidOid, InvalidOid,
@@ -5170,26 +5185,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                  */
                 else if (prop_var != NULL)
                 {
-                    /*
-                     * Remember that prop_var is already transformed. We need
-                     * to built the transform manually.
-                     */
-                    FuncCall *fc = NULL;
-                    List *targs = NIL;
-                    List *fname = NIL;
-
-                    targs = lappend(targs, prop_var);
-                    fname = list_make2(makeString("ag_catalog"),
-                                       makeString("age_properties"));
-                    fc = makeFuncCall(fname, targs, COERCE_SQL_SYNTAX, -1);
-
-                    /*
-                     * Hand off to ParseFuncOrColumn to create the function
-                     * expression for properties(prop_var)
-                     */
-                    prop_expr = ParseFuncOrColumn(pstate, fname, targs,
-                                                  pstate->p_last_srf, fc, false,
-                                                  -1);
+                    prop_expr = make_age_properties_func_expr(prop_var);
                 }
 
                 if (is_ag_node(node->props, cypher_map))
@@ -5302,26 +5298,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                      */
                     else if (prop_var != NULL)
                     {
-                        /*
-                         * Remember that prop_var is already transformed. We need
-                         * to built the transform manually.
-                         */
-                        FuncCall *fc = NULL;
-                        List *targs = NIL;
-                        List *fname = NIL;
-
-                        targs = lappend(targs, prop_var);
-                        fname = list_make2(makeString("ag_catalog"),
-                                           makeString("age_properties"));
-                        fc = makeFuncCall(fname, targs, COERCE_SQL_SYNTAX, -1);
-
-                        /*
-                         * Hand off to ParseFuncOrColumn to create the function
-                         * expression for properties(prop_var)
-                         */
-                        prop_expr = ParseFuncOrColumn(pstate, fname, targs,
-                                                      pstate->p_last_srf, fc,
-                                                      false, -1);
+                        prop_expr = make_age_properties_func_expr(prop_var);
                     }
 
                     if (is_ag_node(rel->props, cypher_map))
@@ -5495,7 +5472,7 @@ transform_match_create_path_variable(cypher_parsestate *cpstate,
     }
 
     /* get the oid for the path creation function */
-    build_path_oid = get_ag_func_oid("_agtype_build_path", 1, ANYOID);
+    build_path_oid = get_build_path_func_oid();
 
     /*
      * If we have a NULL in the path, there is an invalid label, so there aren't
@@ -6188,8 +6165,7 @@ static Node *make_edge_expr(cypher_parsestate *cpstate,
     FuncExpr *func_expr;
     FuncExpr *label_name_func_expr;
 
-    func_oid = get_ag_func_oid("_agtype_build_edge", 5, GRAPHIDOID, GRAPHIDOID,
-                               GRAPHIDOID, CSTRINGOID, AGTYPEOID);
+    func_oid = get_build_edge_func_oid();
 
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_EDGE_COLNAME_ID, -1);
 
@@ -6197,8 +6173,7 @@ static Node *make_edge_expr(cypher_parsestate *cpstate,
 
     end_id = scanNSItemForColumn(pstate, pnsi, 0, AG_EDGE_COLNAME_END_ID, -1);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
-                                          GRAPHIDOID);
+    label_name_func_oid = get_label_name_func_oid();
 
     graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
                                 ObjectIdGetDatum(cpstate->graph_oid), false,
@@ -6237,13 +6212,11 @@ static Node *make_vertex_expr(cypher_parsestate *cpstate,
 
     Assert(pnsi != NULL);
 
-    func_oid = get_ag_func_oid("_agtype_build_vertex", 3, GRAPHIDOID,
-                               CSTRINGOID, AGTYPEOID);
+    func_oid = get_build_vertex_func_oid();
 
     id = scanNSItemForColumn(pstate, pnsi, 0, AG_VERTEX_COLNAME_ID, -1);
 
-    label_name_func_oid = get_ag_func_oid("_label_name", 2, OIDOID,
-                                          GRAPHIDOID);
+    label_name_func_oid = get_label_name_func_oid();
 
     graph_oid_const = makeConst(OIDOID, -1, InvalidOid, sizeof(Oid),
                                 ObjectIdGetDatum(cpstate->graph_oid), false,
@@ -7226,7 +7199,7 @@ static Expr *add_volatile_wrapper(Expr *node)
         ereport(ERROR, (errmsg_internal("add_volatile_wrapper: NULL expr")));
     }
 
-    oid = get_ag_func_oid("agtype_volatile_wrapper", 1, ANYOID);
+    oid = get_volatile_wrapper_func_oid();
 
     /* if the passed Expr node is already wrapped, just return it */
     if (IsA(node, FuncExpr) && oid == ((FuncExpr*)node)->funcid)
@@ -8422,6 +8395,105 @@ static Oid get_bool_or_func_oid(void)
     return bool_or_func_oid;
 }
 
+static Oid get_materialize_vle_edges_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(materialize_vle_edges_func_oid))
+    {
+        materialize_vle_edges_func_oid =
+            get_ag_func_oid("age_materialize_vle_edges", 1, AGTYPEOID);
+    }
+
+    return materialize_vle_edges_func_oid;
+}
+
+static Oid get_build_path_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(build_path_func_oid))
+    {
+        build_path_func_oid = get_ag_func_oid("_agtype_build_path", 1, ANYOID);
+    }
+
+    return build_path_func_oid;
+}
+
+static Oid get_build_edge_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(build_edge_func_oid))
+    {
+        build_edge_func_oid =
+            get_ag_func_oid("_agtype_build_edge", 5, GRAPHIDOID, GRAPHIDOID,
+                            GRAPHIDOID, CSTRINGOID, AGTYPEOID);
+    }
+
+    return build_edge_func_oid;
+}
+
+static Oid get_build_vertex_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(build_vertex_func_oid))
+    {
+        build_vertex_func_oid =
+            get_ag_func_oid("_agtype_build_vertex", 3, GRAPHIDOID, CSTRINGOID,
+                            AGTYPEOID);
+    }
+
+    return build_vertex_func_oid;
+}
+
+static Oid get_label_name_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(label_name_func_oid))
+    {
+        label_name_func_oid =
+            get_ag_func_oid("_label_name", 2, OIDOID, GRAPHIDOID);
+    }
+
+    return label_name_func_oid;
+}
+
+static Oid get_volatile_wrapper_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(volatile_wrapper_func_oid))
+    {
+        volatile_wrapper_func_oid =
+            get_ag_func_oid("agtype_volatile_wrapper", 1, ANYOID);
+    }
+
+    return volatile_wrapper_func_oid;
+}
+
+static Oid get_age_properties_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(age_properties_func_oid))
+    {
+        age_properties_func_oid =
+            get_ag_func_oid("age_properties", 1, AGTYPEOID);
+    }
+
+    return age_properties_func_oid;
+}
+
+static Node *make_age_properties_func_expr(Node *arg)
+{
+    return (Node *)makeFuncExpr(get_age_properties_func_oid(), AGTYPEOID,
+                                list_make1(arg), InvalidOid, InvalidOid,
+                                COERCE_SQL_SYNTAX);
+}
+
 static void initialize_clause_function_oid_cache(void)
 {
     if (!clause_func_oid_callback_registered)
@@ -8443,6 +8515,13 @@ static void invalidate_clause_function_oids(Datum arg, int cache_id,
     delete_clause_func_oid = InvalidOid;
     merge_clause_func_oid = InvalidOid;
     bool_or_func_oid = InvalidOid;
+    materialize_vle_edges_func_oid = InvalidOid;
+    build_path_func_oid = InvalidOid;
+    build_edge_func_oid = InvalidOid;
+    build_vertex_func_oid = InvalidOid;
+    label_name_func_oid = InvalidOid;
+    volatile_wrapper_func_oid = InvalidOid;
+    age_properties_func_oid = InvalidOid;
 }
 
 /*

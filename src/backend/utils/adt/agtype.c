@@ -114,6 +114,7 @@ typedef enum /* type categories for datum_to_agtype */
 
 static inline Datum agtype_from_cstring(char *str, int len);
 size_t check_string_length(size_t len);
+static Oid get_cached_fn_expr_argtype(FunctionCallInfo fcinfo, int argno);
 static void agtype_in_agtype_annotation(void *pstate, char *annotation);
 static void agtype_in_object_start(void *pstate);
 static void agtype_in_object_end(void *pstate);
@@ -178,15 +179,16 @@ static bool is_object_vertex(agtype_value *agtv);
 static bool is_object_edge(agtype_value *agtv);
 static bool is_array_path(agtype_value *agtv);
 /* graph entity retrieval */
-static Oid get_cached_graph_oid_for_name(const char *graph_name);
+static Oid get_cached_graph_oid_for_name(const char *graph_name,
+                                         int graph_name_len);
 static Datum get_vertex(const char *vertex_label, Oid vertex_label_table_oid,
                         int64 graphid);
 static void initialize_btree_index_attr_cache(void);
 static void invalidate_btree_index_attr_cache(Datum arg, Oid relid);
 static Oid find_usable_btree_index_for_attr_uncached(Relation rel,
                                                      AttrNumber attnum);
-static char *get_label_name(const char *graph_name, graphid element_graphid,
-                            Oid *label_relation);
+static char *get_label_name(const char *graph_name, int graph_name_len,
+                            graphid element_graphid, Oid *label_relation);
 static float8 get_float_compatible_arg(Datum arg, Oid type, char *funcname,
                                        bool *is_null);
 static Numeric get_numeric_compatible_arg(Datum arg, Oid type, char *funcname,
@@ -496,6 +498,21 @@ static inline Datum agtype_from_cstring(char *str, int len)
 
     pfree_agtype_value(agtv);
     PG_RETURN_POINTER(agt);
+}
+
+static Oid get_cached_fn_expr_argtype(FunctionCallInfo fcinfo, int argno)
+{
+    Oid *cached_type;
+
+    if (fcinfo->flinfo->fn_extra == NULL)
+    {
+        cached_type = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+                                         sizeof(Oid));
+        *cached_type = get_fn_expr_argtype(fcinfo->flinfo, argno);
+        fcinfo->flinfo->fn_extra = cached_type;
+    }
+
+    return *(Oid *)fcinfo->flinfo->fn_extra;
 }
 
 size_t check_string_length(size_t len)
@@ -3449,7 +3466,7 @@ Datum agtype_to_int4_array(PG_FUNCTION_ARGS)
     int i;
 
     /* get the input data type */
-    arg_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+    arg_type = get_cached_fn_expr_argtype(fcinfo, 0);
 
     /* verify the input is agtype */
     if (arg_type != AGTYPEOID)
@@ -5683,10 +5700,10 @@ Datum age_end_id(PG_FUNCTION_ARGS)
  * node or edge. The returned pointer is owned by the label cache and must not
  * be modified or freed.
  */
-static char *get_label_name(const char *graph_name, graphid element_graphid,
-                            Oid *label_relation)
+static char *get_label_name(const char *graph_name, int graph_name_len,
+                            graphid element_graphid, Oid *label_relation)
 {
-    Oid graph_oid = get_cached_graph_oid_for_name(graph_name);
+    Oid graph_oid = get_cached_graph_oid_for_name(graph_name, graph_name_len);
     int32 label_id = get_graphid_label_id(element_graphid);
     label_cache_data *label_cache;
 
@@ -5704,26 +5721,32 @@ static char *get_label_name(const char *graph_name, graphid element_graphid,
     return NameStr(label_cache->name);
 }
 
-static Oid get_cached_graph_oid_for_name(const char *graph_name)
+static Oid get_cached_graph_oid_for_name(const char *graph_name,
+                                         int graph_name_len)
 {
     static NameData cached_graph_name;
     static Oid cached_graph_oid = InvalidOid;
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
+    char *graph_name_cstr;
 
     if (OidIsValid(cached_graph_oid) &&
-        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        graph_name_len < NAMEDATALEN &&
+        strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
+        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
         cached_generation == current_generation)
     {
         return cached_graph_oid;
     }
 
-    cached_graph_oid = get_graph_oid(graph_name);
+    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name);
+        namestrcpy(&cached_graph_name, graph_name_cstr);
         cached_generation = get_graph_cache_generation();
     }
+    pfree(graph_name_cstr);
 
     return cached_graph_oid;
 }
@@ -5889,7 +5912,8 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     agtype *agt_arg = NULL;
     agtype_value *agtv_object = NULL;
     agtype_value *agtv_value = NULL;
-    char *graph_name = NULL;
+    char *graph_name;
+    int graph_name_len;
     char *label_name = NULL;
     Oid label_relation = InvalidOid;
     graphid start_id;
@@ -5908,8 +5932,8 @@ Datum age_startnode(PG_FUNCTION_ARGS)
     Assert(AGT_ROOT_IS_SCALAR(agt_arg));
     agtv_object = get_ith_agtype_value_from_container(&agt_arg->root, 0);
     Assert(agtv_object->type == AGTV_STRING);
-    graph_name = pnstrdup(agtv_object->val.string.val,
-                          agtv_object->val.string.len);
+    graph_name = agtv_object->val.string.val;
+    graph_name_len = agtv_object->val.string.len;
 
     /* get the edge */
     agt_arg = AG_GET_ARG_AGTYPE_P(1);
@@ -5929,15 +5953,19 @@ Datum age_startnode(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("startNode() argument must be an edge or null")));
 
-    /* get the graphid for start_id */
-    agtv_value = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_object, "start_id");
+    /*
+     * Get the graphid for start_id. Edge objects have deterministic field
+     * ordering, so use direct access instead of a keyed lookup.
+     */
+    agtv_value = AGTYPE_EDGE_GET_START_ID(agtv_object);
     /* it must not be null and must be an integer */
     Assert(agtv_value != NULL);
-    Assert(agtv_value->type = AGTV_INTEGER);
+    Assert(agtv_value->type == AGTV_INTEGER);
     start_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, start_id, &label_relation);
+    label_name = get_label_name(graph_name, graph_name_len, start_id,
+                                &label_relation);
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
     Assert(OidIsValid(label_relation));
@@ -5954,7 +5982,8 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     agtype *agt_arg = NULL;
     agtype_value *agtv_object = NULL;
     agtype_value *agtv_value = NULL;
-    char *graph_name = NULL;
+    char *graph_name;
+    int graph_name_len;
     char *label_name = NULL;
     Oid label_relation = InvalidOid;
     graphid end_id;
@@ -5973,8 +6002,8 @@ Datum age_endnode(PG_FUNCTION_ARGS)
     Assert(AGT_ROOT_IS_SCALAR(agt_arg));
     agtv_object = get_ith_agtype_value_from_container(&agt_arg->root, 0);
     Assert(agtv_object->type == AGTV_STRING);
-    graph_name = pnstrdup(agtv_object->val.string.val,
-                          agtv_object->val.string.len);
+    graph_name = agtv_object->val.string.val;
+    graph_name_len = agtv_object->val.string.len;
 
     /* get the edge */
     agt_arg = AG_GET_ARG_AGTYPE_P(1);
@@ -5994,15 +6023,19 @@ Datum age_endnode(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("endNode() argument must be an edge or null")));
 
-    /* get the graphid for the end_id */
-    agtv_value = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_object, "end_id");
+    /*
+     * Get the graphid for end_id. Edge objects have deterministic field
+     * ordering, so use direct access instead of a keyed lookup.
+     */
+    agtv_value = AGTYPE_EDGE_GET_END_ID(agtv_object);
     /* it must not be null and must be an integer */
     Assert(agtv_value != NULL);
-    Assert(agtv_value->type = AGTV_INTEGER);
+    Assert(agtv_value->type == AGTV_INTEGER);
     end_id = agtv_value->val.int_value;
 
     /* get the label */
-    label_name = get_label_name(graph_name, end_id, &label_relation);
+    label_name = get_label_name(graph_name, graph_name_len, end_id,
+                                &label_relation);
     /* it must not be null and must be a string */
     Assert(label_name != NULL);
     Assert(OidIsValid(label_relation));
@@ -6161,7 +6194,7 @@ Datum age_tail(PG_FUNCTION_ARGS)
     }
 
     /* get the data type */
-    arg_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+    arg_type = get_cached_fn_expr_argtype(fcinfo, 0);
 
     /* check the data type */
     if (arg_type != AGTYPEOID)
@@ -7292,10 +7325,10 @@ Datum age_type(PG_FUNCTION_ARGS)
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                         errmsg("type() argument must be an edge or null")));
 
-    agtv_result = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_object, "label");
+    agtv_result = AGTYPE_EDGE_GET_LABEL(agtv_object);
 
     Assert(agtv_result != NULL);
-    Assert(agtv_result->type = AGTV_STRING);
+    Assert(agtv_result->type == AGTV_STRING);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
 }
@@ -7489,7 +7522,7 @@ Datum age_tostring(PG_FUNCTION_ARGS)
 
     /* get the argument and type */
     arg = PG_GETARG_DATUM(0);
-    type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+    type = get_cached_fn_expr_argtype(fcinfo, 0);
 
     /* verify that if the type is UNKNOWNOID it can be converted */
     if (type == UNKNOWNOID && !get_fn_expr_arg_stable(fcinfo->flinfo, 0))
@@ -7929,7 +7962,7 @@ Datum age_reverse(PG_FUNCTION_ARGS)
             agtv_value = push_agtype_value(&parse_state, WAGT_END_ARRAY, NULL);
 
             Assert(agtv_value != NULL);
-            Assert(agtv_value->type = AGTV_ARRAY);
+            Assert(agtv_value->type == AGTV_ARRAY);
 
             PG_RETURN_POINTER(agtype_value_to_agtype(agtv_value));
 
@@ -11937,11 +11970,17 @@ Datum age_keys(PG_FUNCTION_ARGS)
         if (agtv_result->type == AGTV_EDGE ||
             agtv_result->type == AGTV_VERTEX)
         {
-            agtv_result = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_result,
-                                                        "properties");
+            if (agtv_result->type == AGTV_VERTEX)
+            {
+                agtv_result = AGTYPE_VERTEX_GET_PROPERTIES(agtv_result);
+            }
+            else
+            {
+                agtv_result = AGTYPE_EDGE_GET_PROPERTIES(agtv_result);
+            }
 
             Assert(agtv_result != NULL);
-            Assert(agtv_result->type = AGTV_OBJECT);
+            Assert(agtv_result->type == AGTV_OBJECT);
         }
         else
         {
@@ -11971,7 +12010,7 @@ Datum age_keys(PG_FUNCTION_ARGS)
     agtv_result = push_agtype_value(&parse_state, WAGT_END_ARRAY, NULL);
 
     Assert(agtv_result != NULL);
-    Assert(agtv_result->type = AGTV_ARRAY);
+    Assert(agtv_result->type == AGTV_ARRAY);
 
     PG_RETURN_POINTER(agtype_value_to_agtype(agtv_result));
 }
@@ -12083,7 +12122,7 @@ Datum age_labels(PG_FUNCTION_ARGS)
     }
 
     /* get the label from the vertex */
-    agtv_label = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "label");
+    agtv_label = AGTYPE_VERTEX_GET_LABEL(agtv_temp);
     /* it cannot be NULL */
     Assert(agtv_label != NULL);
 
@@ -12605,7 +12644,7 @@ Datum agtype_volatile_wrapper(PG_FUNCTION_ARGS)
     }
 
     /* get the type of the input argument */
-    type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+    type = get_cached_fn_expr_argtype(fcinfo, 0);
 
     /* if it is NOT an AGTYPE, we need convert it to one, if possible */
     if (type != AGTYPEOID)

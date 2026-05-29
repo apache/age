@@ -175,10 +175,14 @@ static GRAPH_global_context_container global_graph_contexts_container = {0};
 /* declarations */
 /* GRAPH global context functions */
 static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx);
+static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
+    const char *graph_name, int graph_name_len, Oid graph_oid);
 static bool delete_specific_GRAPH_global_context_by_oid(Oid graph_oid);
-static bool delete_specific_GRAPH_global_contexts(char *graph_name);
+static bool delete_specific_GRAPH_global_contexts_len(const char *graph_name,
+                                                      int graph_name_len);
 static bool delete_GRAPH_global_contexts(void);
-static Oid get_cached_global_graph_oid(const char *graph_name);
+static Oid get_cached_global_graph_oid_len(const char *graph_name,
+                                           int graph_name_len);
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx);
@@ -909,6 +913,21 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
                                                    Oid graph_oid)
 {
+    return manage_GRAPH_global_contexts_internal(graph_name, strlen(graph_name),
+                                                graph_oid);
+}
+
+GRAPH_global_context *manage_GRAPH_global_contexts_len(const char *graph_name,
+                                                       int graph_name_len,
+                                                       Oid graph_oid)
+{
+    return manage_GRAPH_global_contexts_internal(graph_name, graph_name_len,
+                                                graph_oid);
+}
+
+static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
+    const char *graph_name, int graph_name_len, Oid graph_oid)
+{
     GRAPH_global_context *new_ggctx = NULL;
     GRAPH_global_context *curr_ggctx = NULL;
     GRAPH_global_context *prev_ggctx = NULL;
@@ -1012,7 +1031,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     global_graph_contexts_container.contexts = new_ggctx;
 
     /* set the graph name and oid */
-    new_ggctx->graph_name = pstrdup(graph_name);
+    new_ggctx->graph_name = pnstrdup(graph_name, graph_name_len);
     new_ggctx->graph_oid = graph_oid;
 
     /* set the graph version counter for cache invalidation */
@@ -1095,7 +1114,8 @@ static bool delete_GRAPH_global_contexts(void)
  * Helper function to delete a specific global graph context used by the
  * process.
  */
-static bool delete_specific_GRAPH_global_contexts(char *graph_name)
+static bool delete_specific_GRAPH_global_contexts_len(const char *graph_name,
+                                                      int graph_name_len)
 {
     Oid graph_oid = InvalidOid;
 
@@ -1104,32 +1124,37 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
         return false;
     }
 
-    /* get the graph oid */
-    graph_oid = get_cached_global_graph_oid(graph_name);
+    graph_oid = get_cached_global_graph_oid_len(graph_name, graph_name_len);
 
     return delete_specific_GRAPH_global_context_by_oid(graph_oid);
 }
 
-static Oid get_cached_global_graph_oid(const char *graph_name)
+static Oid get_cached_global_graph_oid_len(const char *graph_name,
+                                           int graph_name_len)
 {
     static NameData cached_graph_name;
     static Oid cached_graph_oid = InvalidOid;
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
+    char *graph_name_cstr;
 
     if (OidIsValid(cached_graph_oid) &&
-        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        graph_name_len < NAMEDATALEN &&
+        strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
+        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
         cached_generation == current_generation)
     {
         return cached_graph_oid;
     }
 
-    cached_graph_oid = get_graph_oid(graph_name);
+    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name);
+        namestrcpy(&cached_graph_name, graph_name_cstr);
         cached_generation = get_graph_cache_generation();
     }
+    pfree(graph_name_cstr);
 
     return cached_graph_oid;
 }
@@ -1509,12 +1534,8 @@ Datum age_delete_global_graphs(PG_FUNCTION_ARGS)
     }
     else if (agtv_temp->type == AGTV_STRING)
     {
-        char *graph_name = NULL;
-
-        graph_name = pnstrdup(agtv_temp->val.string.val,
-                              agtv_temp->val.string.len);
-
-        success = delete_specific_GRAPH_global_contexts(graph_name);
+        success = delete_specific_GRAPH_global_contexts_len(
+            agtv_temp->val.string.val, agtv_temp->val.string.len);
     }
     else
     {
@@ -1538,7 +1559,6 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     agtype_value *agtv_temp = NULL;
     agtype_value agtv_integer;
     agtype_in_state result;
-    char *graph_name = NULL;
     Oid graph_oid = InvalidOid;
     graphid vid = 0;
     int64 self_loops = 0;
@@ -1568,23 +1588,20 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     agtv_vertex = get_agtype_value("vertex_stats", AG_GET_ARG_AGTYPE_P(1),
                                    AGTV_VERTEX, true);
 
-    graph_name = pnstrdup(agtv_temp->val.string.val,
-                          agtv_temp->val.string.len);
-
     /* get the graph oid */
-    graph_oid = get_cached_global_graph_oid(graph_name);
+    graph_oid = get_cached_global_graph_oid_len(agtv_temp->val.string.val,
+                                                agtv_temp->val.string.len);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
      */
-    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
-
-    /* free the graph name */
-    pfree_if_not_null(graph_name);
+    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
+                                             agtv_temp->val.string.len,
+                                             graph_oid);
 
     /* get the id */
-    agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_vertex, "id");
+    agtv_temp = AGTYPE_VERTEX_GET_ID(agtv_vertex);
     vid = agtv_temp->val.int_value;
 
     /* get the vertex entry */
@@ -1602,7 +1619,7 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
 
     /* store the label */
-    agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_vertex, "label");
+    agtv_temp = AGTYPE_VERTEX_GET_LABEL(agtv_vertex);
     result.res = push_agtype_value(&result.parse_state, WAGT_KEY,
                                    string_to_agtype_value("label"));
     result.res = push_agtype_value(&result.parse_state, WAGT_VALUE, agtv_temp);
@@ -1653,7 +1670,6 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     agtype_value *agtv_temp = NULL;
     agtype_value agtv_integer;
     agtype_in_state result;
-    char *graph_name = NULL;
     Oid graph_oid = InvalidOid;
 
     /* the graph name is required, but this generally isn't user supplied */
@@ -1668,11 +1684,9 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
     agtv_temp = get_agtype_value("graph_stats", AG_GET_ARG_AGTYPE_P(0),
                                  AGTV_STRING, true);
 
-    graph_name = pnstrdup(agtv_temp->val.string.val,
-                          agtv_temp->val.string.len);
-
     /* get the graph oid */
-    graph_oid = get_cached_global_graph_oid(graph_name);
+    graph_oid = get_cached_global_graph_oid_len(agtv_temp->val.string.val,
+                                                agtv_temp->val.string.len);
 
     /*
      * Remove any context for this graph. This is done to allow graph_stats to
@@ -1684,10 +1698,9 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
      */
-    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
-
-    /* free the graph name */
-    pfree_if_not_null(graph_name);
+    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
+                                             agtv_temp->val.string.len,
+                                             graph_oid);
 
     /* zero the state */
     memset(&result, 0, sizeof(agtype_in_state));

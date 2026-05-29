@@ -212,13 +212,22 @@ HTAB *create_entity_exists_index_cache(const char *name)
 
 void destroy_entity_exists_index_cache(HTAB *index_cache)
 {
+    destroy_index_cache(index_cache, true);
+}
+
+void destroy_index_cache(HTAB *index_cache, bool close_relations)
+{
     HASH_SEQ_STATUS hash_seq;
     IndexCacheEntry *entry;
 
     hash_seq_init(&hash_seq, index_cache);
     while ((entry = hash_seq_search(&hash_seq)) != NULL)
     {
-        if (entry->rel != NULL)
+        if (entry->slot != NULL)
+        {
+            ExecDropSingleTupleTableSlot(entry->slot);
+        }
+        if (close_relations && entry->rel != NULL)
         {
             table_close(entry->rel, AccessShareLock);
         }
@@ -248,6 +257,7 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
     TupleTableSlot *slot;
     Oid index_oid = InvalidOid;
     CommandId saved_curcid;
+    IndexCacheEntry *cache_entry = NULL;
 
     /*
      * Extract the label id from the graph id and get the table name
@@ -278,29 +288,30 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
 
     if (index_cache != NULL)
     {
-        IndexCacheEntry *entry;
         bool found;
 
-        entry = hash_search(index_cache, &label->relation, HASH_ENTER,
-                            &found);
+        cache_entry = hash_search(index_cache, &label->relation, HASH_ENTER,
+                                  &found);
         if (!found)
         {
-            init_index_cache_entry(entry);
-            entry->rel = table_open(label->relation, AccessShareLock);
-            rel = entry->rel;
-            entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
-            entry->index_oid_cached = true;
+            init_index_cache_entry(cache_entry);
+            cache_entry->rel = table_open(label->relation, AccessShareLock);
+            rel = cache_entry->rel;
+            cache_entry->index_oid = find_usable_btree_index_for_attr(rel, 1);
+            cache_entry->index_oid_cached = true;
         }
         else
         {
-            rel = entry->rel;
+            rel = cache_entry->rel;
         }
-        index_oid = entry->index_oid;
+        index_oid = cache_entry->index_oid;
+        slot = cache_entry->slot;
     }
     else
     {
         rel = table_open(label->relation, AccessShareLock);
         index_oid = find_usable_btree_index_for_attr(rel, 1);
+        slot = NULL;
     }
 
     if (OidIsValid(index_oid))
@@ -308,7 +319,18 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
         IndexScanDesc index_scan_desc;
         Relation index_rel;
 
-        slot = table_slot_create(rel, NULL);
+        if (slot == NULL)
+        {
+            slot = table_slot_create(rel, NULL);
+            if (cache_entry != NULL)
+            {
+                cache_entry->slot = slot;
+            }
+        }
+        else
+        {
+            ExecClearTuple(slot);
+        }
 
         index_rel = index_open(index_oid, AccessShareLock);
 
@@ -322,7 +344,11 @@ bool entity_exists_with_cache(EState *estate, Oid graph_oid, graphid id,
 
         index_endscan(index_scan_desc);
         index_close(index_rel, AccessShareLock);
-        ExecDropSingleTupleTableSlot(slot);
+        ExecClearTuple(slot);
+        if (index_cache == NULL)
+        {
+            ExecDropSingleTupleTableSlot(slot);
+        }
     } 
     else
     {        

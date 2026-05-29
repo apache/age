@@ -211,7 +211,7 @@ static void end_cypher_delete(CustomScanState *node)
 
     if (css->index_cache != NULL)
     {
-        hash_destroy(css->index_cache);
+        destroy_index_cache(css->index_cache, false);
         css->index_cache = NULL;
     }
 
@@ -462,7 +462,14 @@ static void process_delete_list(CustomScanState *node)
         original_entity_value = extract_entity(node, scanTupleSlot,
                                                entity_position);
 
-        id = GET_AGTYPE_VALUE_OBJECT_VALUE(original_entity_value, "id");
+        if (original_entity_value->type == AGTV_VERTEX)
+        {
+            id = AGTYPE_VERTEX_GET_ID(original_entity_value);
+        }
+        else
+        {
+            id = AGTYPE_EDGE_GET_ID(original_entity_value);
+        }
         label_cache = search_label_graph_oid_cache_cached(
             css->delete_data->graph_oid, GET_LABEL_ID(id->val.int_value));
         if (label_cache == NULL)
@@ -543,7 +550,16 @@ static void process_delete_list(CustomScanState *node)
 
         if (OidIsValid(index_oid))
         {
-            slot = table_slot_create(rel, NULL);
+            slot = idx_entry->slot;
+            if (slot == NULL)
+            {
+                slot = table_slot_create(rel, NULL);
+                idx_entry->slot = slot;
+            }
+            else
+            {
+                ExecClearTuple(slot);
+            }
 
             index_rel = index_open(index_oid, RowExclusiveLock);
             index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
@@ -603,7 +619,7 @@ static void process_delete_list(CustomScanState *node)
 
         if (OidIsValid(index_oid))
         {
-            ExecDropSingleTupleTableSlot(slot);
+            ExecClearTuple(slot);
             index_endscan(index_scan_desc);
             index_close(index_rel, RowExclusiveLock);
         }
@@ -624,6 +640,7 @@ static void process_edges_by_index(Oid index_oid,
                                    Relation rel,
                                    EState *estate,
                                    cypher_delete_custom_scan_state *css,
+                                   IndexCacheEntry *idx_entry,
                                    ResultRelInfo *resultRelInfo,
                                    Oid relid,
                                    char *label_name,
@@ -641,7 +658,16 @@ static void process_edges_by_index(Oid index_oid,
     ScanKeyData key;
     TupleTableSlot *slot;
 
-    slot = table_slot_create(rel, NULL);
+    slot = idx_entry->slot;
+    if (slot == NULL)
+    {
+        slot = table_slot_create(rel, NULL);
+        idx_entry->slot = slot;
+    }
+    else
+    {
+        ExecClearTuple(slot);
+    }
 
     index_rel = index_open(index_oid, RowExclusiveLock);
     scan = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
@@ -732,7 +758,7 @@ static void process_edges_by_index(Oid index_oid,
     }
     index_endscan(scan);
     index_close(index_rel, RowExclusiveLock);
-    ExecDropSingleTupleTableSlot(slot);
+    ExecClearTuple(slot);
 }
 
 static void ensure_detach_delete_rls(CustomScanState *node,
@@ -838,14 +864,16 @@ static void check_for_connected_edges(CustomScanState *node)
         if (OidIsValid(start_index_oid) && OidIsValid(end_index_oid))
         {
             /* PASS 1: Find edges where the deleted vertex is the START_ID. */
-            process_edges_by_index(start_index_oid, rel, estate, css, resultRelInfo,
-                                   relid, label_name, &rls_checked,
+            process_edges_by_index(start_index_oid, rel, estate, css,
+                                   idx_entry, resultRelInfo, relid,
+                                   label_name, &rls_checked,
                                    &rls_enabled, &qualExprs, &econtext, false,
                                    &delete_acl_checked);
                
             /* PASS 2: Find edges where the deleted vertex is the END_ID. */
-            process_edges_by_index(end_index_oid, rel, estate, css, resultRelInfo,
-                                   relid, label_name, &rls_checked,
+            process_edges_by_index(end_index_oid, rel, estate, css,
+                                   idx_entry, resultRelInfo, relid,
+                                   label_name, &rls_checked,
                                    &rls_enabled, &qualExprs, &econtext, true,
                                    &delete_acl_checked);
         }

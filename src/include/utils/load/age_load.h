@@ -31,8 +31,13 @@
 #include "commands/graph_commands.h"
 #include "utils/ag_cache.h"
 
-#define BATCH_SIZE 1000
-#define MAX_BUFFERED_BYTES 65535  /* 64KB, same as pg COPY */
+/*
+ * Keep enough rows buffered for heap_multi_insert() to amortize executor,
+ * index, and command-counter overhead during CSV loads.  The byte cap prevents
+ * very wide property maps from accumulating unbounded memory.
+ */
+#define BATCH_SIZE 4096
+#define MAX_BUFFERED_BYTES (4 * 1024 * 1024)
 
 typedef struct batch_insert_state
 {

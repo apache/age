@@ -159,12 +159,16 @@ typedef struct VLE_path_container
 static VLE_local_context *global_vle_local_contexts = NULL;
 
 /* agtype functions */
+static agtype_value *get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo,
+                                              int argno,
+                                              const char *type_error_msg);
 static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
                              HTAB *relation_cache);
 /* VLE local context functions */
 static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                                   FuncCallContext *funcctx);
-static Oid get_cached_vle_graph_oid(const char *graph_name);
+static Oid get_cached_vle_graph_oid(const char *graph_name,
+                                    int graph_name_len);
 static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx);
 static void free_VLE_local_context(VLE_local_context *vlelctx);
 /* VLE graph traversal functions */
@@ -485,6 +489,47 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee,
     }
 }
 
+static agtype_value *get_vle_vertex_or_id_arg(FunctionCallInfo fcinfo,
+                                              int argno,
+                                              const char *type_error_msg)
+{
+    agtype *agt_arg;
+    agtype_value *agtv_value;
+
+    if (PG_ARGISNULL(argno))
+    {
+        return NULL;
+    }
+
+    agt_arg = AG_GET_ARG_AGTYPE_P(argno);
+
+    if (!AGTYPE_CONTAINER_IS_SCALAR(&agt_arg->root))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("age_vle: agtype argument must be a scalar")));
+    }
+
+    agtv_value = get_ith_agtype_value_from_container(&agt_arg->root, 0);
+    if (agtv_value->type == AGTV_NULL)
+    {
+        return NULL;
+    }
+
+    if (agtv_value->type == AGTV_VERTEX)
+    {
+        agtv_value = AGTYPE_VERTEX_GET_ID(agtv_value);
+    }
+    else if (agtv_value->type != AGTV_INTEGER)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("%s", type_error_msg)));
+    }
+
+    return agtv_value;
+}
+
 /*
  * Helper function to free up the memory used by the VLE_local_context.
  *
@@ -617,8 +662,11 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         use_cache = true;
     }
 
-    /* fetch the VLE_local_context if it is cached */
-    vlelctx = get_cached_VLE_local_context(vle_grammar_node_id);
+    /* fetch the VLE_local_context only when this call can reuse one */
+    if (use_cache)
+    {
+        vlelctx = get_cached_VLE_local_context(vle_grammar_node_id);
+    }
 
     /* if we are caching VLE_local_contexts and this grammar node is cached */
     if (use_cache && vlelctx != NULL)
@@ -631,7 +679,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
          */
 
         /* get and update the start vertex id */
-        if (PG_ARGISNULL(1) || is_agtype_null(AG_GET_ARG_AGTYPE_P(1)))
+        agtv_temp = get_vle_vertex_or_id_arg(
+            fcinfo, 1,
+            "start vertex argument must be a vertex or the integer id");
+        if (agtv_temp == NULL)
         {
             /* if there are no more vertices to process, return NULL */
             if (vlelctx->next_vertex == NULL)
@@ -644,40 +695,19 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
         }
         else
         {
-            agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(1),
-                                         AGTV_VERTEX, false);
-            if (agtv_temp != NULL && agtv_temp->type == AGTV_VERTEX)
-            {
-                agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "id");
-            }
-            else if (agtv_temp == NULL || agtv_temp->type != AGTV_INTEGER)
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                         errmsg("start vertex argument must be a vertex or the integer id")));
-            }
             vlelctx->vsid = agtv_temp->val.int_value;
         }
 
         /* get and update the end vertex id */
-        if (PG_ARGISNULL(2) || is_agtype_null(AG_GET_ARG_AGTYPE_P(2)))
+        agtv_temp = get_vle_vertex_or_id_arg(
+            fcinfo, 2,
+            "end vertex argument must be a vertex or the integer id");
+        if (agtv_temp == NULL)
         {
             vlelctx->veid = 0;
         }
         else
         {
-            agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(2),
-                                         AGTV_VERTEX, false);
-            if (agtv_temp != NULL && agtv_temp->type == AGTV_VERTEX)
-            {
-                agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "id");
-            }
-            else if (agtv_temp == NULL || agtv_temp->type != AGTV_INTEGER)
-            {
-                ereport(ERROR,
-                        (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                         errmsg("end vertex argument must be a vertex or the integer id")));
-            }
             vlelctx->veid = agtv_temp->val.int_value;
         }
         vlelctx->is_dirty = true;
@@ -714,16 +744,20 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     /* get the graph name - this is a required argument */
     agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(0),
                                  AGTV_STRING, true);
+    /* get the graph oid before copying the graph name into VLE state */
+    graph_oid = get_cached_vle_graph_oid(agtv_temp->val.string.val,
+                                         agtv_temp->val.string.len);
+
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
-    /* get the graph oid */
-    graph_oid = get_cached_vle_graph_oid(graph_name);
 
     /*
      * Create or retrieve the GRAPH global context for this graph. This function
      * will also purge off invalidated contexts.
     */
-    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
+    ggctx = manage_GRAPH_global_contexts_len(agtv_temp->val.string.val,
+                                             agtv_temp->val.string.len,
+                                             graph_oid);
 
     /* allocate and initialize local VLE context */
     vlelctx = palloc0(sizeof(VLE_local_context));
@@ -757,7 +791,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
      * which path function is used. If a start vertex isn't provided, we
      * retrieve them incrementally from the vertices list.
      */
-    if (PG_ARGISNULL(1) || is_agtype_null(AG_GET_ARG_AGTYPE_P(1)))
+    agtv_temp = get_vle_vertex_or_id_arg(
+        fcinfo, 1,
+        "start vertex argument must be a vertex or the integer id");
+    if (agtv_temp == NULL)
     {
         /* set _TO */
         vlelctx->path_function = VLE_FUNCTION_PATHS_TO;
@@ -769,18 +806,6 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
     else
     {
-        agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(1),
-                                     AGTV_VERTEX, false);
-        if (agtv_temp != NULL && agtv_temp->type == AGTV_VERTEX)
-        {
-            agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "id");
-        }
-        else if (agtv_temp == NULL || agtv_temp->type != AGTV_INTEGER)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("start vertex argument must be a vertex or the integer id")));
-        }
         vlelctx->vsid = agtv_temp->val.int_value;
     }
 
@@ -788,7 +813,10 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
      * Get the end vertex id - this is an optional parameter and determines
      * which path function is used.
      */
-    if (PG_ARGISNULL(2) || is_agtype_null(AG_GET_ARG_AGTYPE_P(2)))
+    agtv_temp = get_vle_vertex_or_id_arg(
+        fcinfo, 2,
+        "end vertex argument must be a vertex or the integer id");
+    if (agtv_temp == NULL)
     {
         if (vlelctx->path_function == VLE_FUNCTION_PATHS_TO)
         {
@@ -802,18 +830,6 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     }
     else
     {
-        agtv_temp = get_agtype_value("age_vle", AG_GET_ARG_AGTYPE_P(2),
-                                     AGTV_VERTEX, false);
-        if (agtv_temp != NULL && agtv_temp->type == AGTV_VERTEX)
-        {
-            agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "id");
-        }
-        else if (agtv_temp == NULL || agtv_temp->type != AGTV_INTEGER)
-        {
-            ereport(ERROR,
-                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("end vertex argument must be a vertex or the integer id")));
-        }
         vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
         vlelctx->veid = agtv_temp->val.int_value;
     }
@@ -823,7 +839,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
                                  AGTV_EDGE, true);
 
     /* get the edge prototype's property conditions */
-    agtv_object = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "properties");
+    agtv_object = AGTYPE_EDGE_GET_PROPERTIES(agtv_temp);
     agt_edge_property_constraint = agtype_value_to_agtype(agtv_object);
 
     /* store the properties as an agtype */
@@ -836,7 +852,7 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     vlelctx->edge_property_constraint_hash = datum_image_hash(d_edge_property_constraint, false, -1);
 
     /* get the edge prototype's label name */
-    agtv_temp = GET_AGTYPE_VALUE_OBJECT_VALUE(agtv_temp, "label");
+    agtv_temp = AGTYPE_EDGE_GET_LABEL(agtv_temp);
     if (agtv_temp->type == AGTV_STRING &&
         agtv_temp->val.string.len != 0)
     {
@@ -916,26 +932,32 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     return vlelctx;
 }
 
-static Oid get_cached_vle_graph_oid(const char *graph_name)
+static Oid get_cached_vle_graph_oid(const char *graph_name,
+                                    int graph_name_len)
 {
     static NameData cached_graph_name;
     static Oid cached_graph_oid = InvalidOid;
     static uint64 cached_generation = 0;
     uint64 current_generation = get_graph_cache_generation();
+    char *graph_name_cstr;
 
     if (OidIsValid(cached_graph_oid) &&
-        namestrcmp(&cached_graph_name, graph_name) == 0 &&
+        graph_name_len < NAMEDATALEN &&
+        strncmp(NameStr(cached_graph_name), graph_name, graph_name_len) == 0 &&
+        NameStr(cached_graph_name)[graph_name_len] == '\0' &&
         cached_generation == current_generation)
     {
         return cached_graph_oid;
     }
 
-    cached_graph_oid = get_graph_oid(graph_name);
+    graph_name_cstr = pnstrdup(graph_name, graph_name_len);
+    cached_graph_oid = get_graph_oid(graph_name_cstr);
     if (OidIsValid(cached_graph_oid))
     {
-        namestrcpy(&cached_graph_name, graph_name);
+        namestrcpy(&cached_graph_name, graph_name_cstr);
         cached_generation = get_graph_cache_generation();
     }
+    pfree(graph_name_cstr);
 
     return cached_graph_oid;
 }
@@ -1316,6 +1338,8 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     GraphIdNode *edge_out = NULL;
     GraphIdNode *edge_self = NULL;
     HTAB *relation_cache = NULL;
+    graphid source_vertex_id = 0;
+    int64 path_stack_size;
 
     /* get the vertex entry */
     ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
@@ -1328,6 +1352,11 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     /* point to stacks */
     vertex_stack = vlelctx->dfs_vertex_stack;
     edge_stack = vlelctx->dfs_edge_stack;
+    path_stack_size = gid_stack_size(vlelctx->dfs_path_stack);
+    if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
+    {
+        source_vertex_id = get_vertex_entry_id(ve);
+    }
 
     /* set to the first edge for each edge list for the specified direction */
     if (vlelctx->edge_direction == CYPHER_REL_DIR_RIGHT ||
@@ -1358,7 +1387,6 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
         edge_entry *ee = NULL;
         edge_state_entry *ese = NULL;
         graphid edge_id;
-        int64 path_stack_size;
 
         /* get the edge_id from the next available edge*/
         if (edge_out != NULL)
@@ -1378,7 +1406,6 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
          * This is a fast existence check, relative to the hash search, for when
          * the path stack is small. If the edge is in the path, we skip it.
          */
-        path_stack_size = gid_stack_size(vlelctx->dfs_path_stack);
         if (path_stack_size < 10 &&
             is_edge_in_path(vlelctx, edge_id, path_stack_size))
         {
@@ -1438,7 +1465,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                  */
                  if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
                  {
-                     gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
+                     gid_stack_push(vertex_stack, source_vertex_id);
                  }
                  gid_stack_push(edge_stack, edge_id);
             }
@@ -1640,7 +1667,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
 {
     GRAPH_global_context *ggctx = NULL;
     agtype_in_state edges_result;
-    HTAB *relation_cache;
+    HTAB *relation_cache = NULL;
     Oid graph_oid = InvalidOid;
     graphid *graphid_array = NULL;
     int64 graphid_array_size = 0;
@@ -1662,8 +1689,11 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     MemSet(&edges_result, 0, sizeof(agtype_in_state));
     edges_result.res = push_agtype_value(&edges_result.parse_state,
                                          WAGT_BEGIN_ARRAY, NULL);
-    relation_cache = create_entry_property_relation_cache(
-        "vle edge materialization relation cache");
+    if (graphid_array_size > 2)
+    {
+        relation_cache = create_entry_property_relation_cache(
+            "vle edge materialization relation cache");
+    }
 
     for (index = 1; index < graphid_array_size - 1; index += 2)
     {

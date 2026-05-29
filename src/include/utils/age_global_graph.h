@@ -40,6 +40,9 @@ typedef struct GRAPH_global_context GRAPH_global_context;
 /* GRAPH global context functions */
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
                                                    Oid graph_oid);
+GRAPH_global_context *manage_GRAPH_global_contexts_len(const char *graph_name,
+                                                       int graph_name_len,
+                                                       Oid graph_oid);
 GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid);
 bool is_ggctx_invalid(GRAPH_global_context *ggctx);
 /* GRAPH retrieval functions */
