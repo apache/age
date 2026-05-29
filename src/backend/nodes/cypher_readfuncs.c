@@ -253,6 +253,10 @@ void read_cypher_update_information(struct ExtensibleNode *node)
     READ_STRING_FIELD(graph_name);
     READ_UINT_FIELD(graph_oid);
     READ_STRING_FIELD(clause_name);
+
+    local_node->last_update_indexes = NULL;
+    local_node->last_update_index_count = 0;
+    local_node->last_update_indexes_valid = false;
 }
 
 /*
@@ -287,6 +291,10 @@ void read_cypher_delete_information(struct ExtensibleNode *node)
     READ_STRING_FIELD(graph_name);
     READ_UINT_FIELD(graph_oid);
     READ_BOOL_FIELD(detach);
+
+    local_node->delete_item_positions = NULL;
+    local_node->delete_item_count = 0;
+    local_node->delete_item_positions_valid = false;
 }
 
 /*

@@ -48,7 +48,11 @@ static bool cypher_clause_func_callback_registered = false;
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
                              RangeTblEntry *rte);
 static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte);
-static void init_cypher_clause_function_oids(void);
+static void register_cypher_clause_function_oid_callbacks(void);
+static Oid get_cypher_create_clause_func_oid(void);
+static Oid get_cypher_set_clause_func_oid(void);
+static Oid get_cypher_delete_clause_func_oid(void);
+static Oid get_cypher_merge_clause_func_oid(void);
 static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,
                                                    uint32 hash_value);
 static void handle_cypher_create_clause(PlannerInfo *root, RelOptInfo *rel,
@@ -124,21 +128,20 @@ static cypher_clause_kind get_cypher_clause_kind(RangeTblEntry *rte)
         return CYPHER_CLAUSE_NONE;
 
     fe = (FuncExpr *)te->expr;
-    init_cypher_clause_function_oids();
 
-    if (fe->funcid == cypher_create_clause_func_oid)
+    if (fe->funcid == get_cypher_create_clause_func_oid())
         return CYPHER_CLAUSE_CREATE;
-    if (fe->funcid == cypher_set_clause_func_oid)
+    if (fe->funcid == get_cypher_set_clause_func_oid())
         return CYPHER_CLAUSE_SET;
-    if (fe->funcid == cypher_delete_clause_func_oid)
+    if (fe->funcid == get_cypher_delete_clause_func_oid())
         return CYPHER_CLAUSE_DELETE;
-    if (fe->funcid == cypher_merge_clause_func_oid)
+    if (fe->funcid == get_cypher_merge_clause_func_oid())
         return CYPHER_CLAUSE_MERGE;
     else
         return CYPHER_CLAUSE_NONE;
 }
 
-static void init_cypher_clause_function_oids(void)
+static void register_cypher_clause_function_oid_callbacks(void)
 {
     if (!cypher_clause_func_callback_registered)
     {
@@ -150,20 +153,58 @@ static void init_cypher_clause_function_oids(void)
                                       (Datum)0);
         cypher_clause_func_callback_registered = true;
     }
+}
 
-    if (OidIsValid(cypher_create_clause_func_oid))
+static Oid get_cypher_create_clause_func_oid(void)
+{
+    register_cypher_clause_function_oid_callbacks();
+
+    if (!OidIsValid(cypher_create_clause_func_oid))
     {
-        return;
+        cypher_create_clause_func_oid =
+            get_ag_func_oid(CREATE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
 
-    cypher_create_clause_func_oid =
-        get_ag_func_oid(CREATE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
-    cypher_set_clause_func_oid =
-        get_ag_func_oid(SET_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
-    cypher_delete_clause_func_oid =
-        get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
-    cypher_merge_clause_func_oid =
-        get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    return cypher_create_clause_func_oid;
+}
+
+static Oid get_cypher_set_clause_func_oid(void)
+{
+    register_cypher_clause_function_oid_callbacks();
+
+    if (!OidIsValid(cypher_set_clause_func_oid))
+    {
+        cypher_set_clause_func_oid =
+            get_ag_func_oid(SET_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return cypher_set_clause_func_oid;
+}
+
+static Oid get_cypher_delete_clause_func_oid(void)
+{
+    register_cypher_clause_function_oid_callbacks();
+
+    if (!OidIsValid(cypher_delete_clause_func_oid))
+    {
+        cypher_delete_clause_func_oid =
+            get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return cypher_delete_clause_func_oid;
+}
+
+static Oid get_cypher_merge_clause_func_oid(void)
+{
+    register_cypher_clause_function_oid_callbacks();
+
+    if (!OidIsValid(cypher_merge_clause_func_oid))
+    {
+        cypher_merge_clause_func_oid =
+            get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return cypher_merge_clause_func_oid;
 }
 
 static void invalidate_cypher_clause_function_oids(Datum arg, int cache_id,

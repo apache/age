@@ -38,6 +38,8 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen);
 static char *get_string_from_agtype_value(agtype_value *agtv, int *length);
+static text *agtype_container_to_text(agtype_container *container,
+                                      int estimated_len);
 static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text);
 static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen);
 static agtype *delete_from_array(agtype *agt, agtype* indexes);
@@ -104,6 +106,17 @@ static char *get_string_from_agtype_value(agtype_value *agtv, int *length)
         return NULL;
     }
     return NULL;
+}
+
+static text *agtype_container_to_text(agtype_container *container,
+                                      int estimated_len)
+{
+    StringInfoData out;
+
+    initStringInfo(&out);
+    agtype_to_cstring(&out, container, estimated_len);
+
+    return cstring_to_text_with_len(out.data, out.len);
 }
 
 static bool parse_agtype_index_string(char *str, int len, long *lindex)
@@ -2139,8 +2152,7 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
     {
         if (as_text)
         {
-            PG_RETURN_TEXT_P(cstring_to_text(agtype_to_cstring(NULL, container,
-                                                               VARSIZE(agt))));
+            PG_RETURN_TEXT_P(agtype_container_to_text(container, VARSIZE(agt)));
         }
         else
         {
@@ -2277,9 +2289,7 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
 
     if (as_text)
     {
-        PG_RETURN_TEXT_P(cstring_to_text(agtype_to_cstring(NULL,
-                                                           &res->root,
-                                                           VARSIZE(res))));
+        PG_RETURN_TEXT_P(agtype_container_to_text(&res->root, VARSIZE(res)));
     }
     else
     {

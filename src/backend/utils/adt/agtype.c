@@ -33,8 +33,6 @@
 #include "utils/jsonfuncs.h"
 #include <math.h>
 
-#include <float.h>
-
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "catalog/namespace.h"
@@ -2527,20 +2525,22 @@ Datum make_path(List *path)
     agtype *agt_result;
     ListCell *lc;
     agtype_in_state result;
+    int path_len;
     int i = 1;
 
     memset(&result, 0, sizeof(agtype_in_state));
 
     result.res = push_agtype_value(&result.parse_state, WAGT_BEGIN_ARRAY, NULL);
+    path_len = list_length(path);
 
-    if (list_length(path) < 1)
+    if (path_len < 1)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("paths require at least 1 vertex")));
     }
 
-    if (list_length(path) % 2 != 1)
+    if (path_len % 2 != 1)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2551,8 +2551,6 @@ Datum make_path(List *path)
     foreach (lc, path)
     {
         agtype *agt = DATUM_GET_AGTYPE_P(PointerGetDatum(lfirst(lc)));
-        agtype_value *elem;
-        elem = get_ith_agtype_value_from_container(&agt->root, 0);
 
         if (!agt)
         {
@@ -2560,13 +2558,15 @@ Datum make_path(List *path)
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                      errmsg("argument must not be null")));
         }
-        else if (i % 2 == 1 && elem->type != AGTV_VERTEX)
+        else if (i % 2 == 1 && (!AGTE_IS_AGTYPE(agt->root.children[0]) ||
+                                agt->root.children[1] != AGT_HEADER_VERTEX))
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                      errmsg("argument %i must be a vertex", i)));
         }
-        else if (i % 2 == 0 && elem->type != AGTV_EDGE)
+        else if (i % 2 == 0 && (!AGTE_IS_AGTYPE(agt->root.children[0]) ||
+                                agt->root.children[1] != AGT_HEADER_EDGE))
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2579,7 +2579,6 @@ Datum make_path(List *path)
         {
             pfree_if_not_null(agt);
         }
-        pfree_agtype_value(elem);
 
         i++;
     }
@@ -7919,8 +7918,8 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
         {
             int len;
 
-            len = sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
-            string_elem.val.string.val = pnstrdup(buffer, len);
+            string_elem.val.string.val = float8out_internal(elem->val.float_value);
+            len = strlen(string_elem.val.string.val);
             string_elem.val.string.len = len;
 
             agis_result.res = push_agtype_value(&agis_result.parse_state,
@@ -7933,7 +7932,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
         {
             int len;
 
-            len = sprintf(buffer, "%ld", elem->val.int_value);
+            len = pg_lltoa(elem->val.int_value, buffer);
             string_elem.val.string.val = pnstrdup(buffer, len);
             string_elem.val.string.len = len;
 
@@ -9144,7 +9143,6 @@ Datum age_split(PG_FUNCTION_ARGS)
             char *string;
             int string_len;
             agtype_value agtv_string;
-            Datum d;
 
             /* get the string element from the array */
             string = VARDATA_ANY(elem);
@@ -9155,11 +9153,8 @@ Datum age_split(PG_FUNCTION_ARGS)
             agtv_string.val.string.val = string;
             agtv_string.val.string.len = string_len;
 
-            /* get the datum */
-            d = PointerGetDatum(agtype_value_to_agtype(&agtv_string));
-
-            /* add the value */
-            add_agtype(d, false, &result, AGTYPEOID, false);
+            result.res = push_agtype_value(&result.parse_state, WAGT_ELEM,
+                                           &agtv_string);
         }
 
         /* close the array */

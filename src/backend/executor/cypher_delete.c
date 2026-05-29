@@ -49,9 +49,13 @@ static void ensure_detach_delete_rls(CustomScanState *node,
 static agtype_value *extract_entity(CustomScanState *node,
                                     TupleTableSlot *scanTupleSlot,
                                     int entity_position);
-static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
+static bool delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
                           HeapTuple tuple);
 static void init_delete_caches(cypher_delete_custom_scan_state *css);
+static HTAB *create_delete_vertex_htab(void);
+static int *ensure_delete_item_positions(EState *estate,
+                                         cypher_delete_information *delete_data,
+                                         int *delete_item_count);
 
 const CustomExecMethods cypher_delete_exec_methods = {DELETE_SCAN_STATE_NAME,
                                                       begin_cypher_delete,
@@ -79,7 +83,6 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
     cypher_delete_custom_scan_state *css =
         (cypher_delete_custom_scan_state *)node;
     Plan *subplan;
-    HASHCTL hashctl;
 
     Assert(list_length(css->cs->custom_plans) == 1);
 
@@ -102,15 +105,6 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
         ExecAssignProjectionInfo(&node->ss.ps, tupdesc);
     }
 
-    /* init vertex_id_htab */
-    MemSet(&hashctl, 0, sizeof(hashctl));
-    hashctl.keysize = sizeof(graphid);
-    hashctl.entrysize =
-        sizeof(graphid); /* entries are not used, but entrysize must >= keysize */
-    hashctl.hash = tag_hash;
-    css->vertex_id_htab = hash_create(DELETE_VERTEX_HTAB_NAME,
-                                      DELETE_VERTEX_HTAB_INITIAL_SIZE,
-                                      &hashctl, HASH_ELEM | HASH_FUNCTION);
     init_delete_caches(css);
 
     /*
@@ -201,7 +195,10 @@ static void end_cypher_delete(CustomScanState *node)
     check_for_connected_edges(node);
 
     /* invalidate VLE cache — graph was mutated */
-    increment_graph_version(css->delete_data->graph_oid);
+    if (css->graph_mutated)
+    {
+        increment_graph_version(css->delete_data->graph_oid);
+    }
 
     if (css->qual_cache != NULL)
     {
@@ -221,7 +218,11 @@ static void end_cypher_delete(CustomScanState *node)
         css->result_rel_info_cache = NULL;
     }
 
-    hash_destroy(((cypher_delete_custom_scan_state *)node)->vertex_id_htab);
+    if (css->vertex_id_htab != NULL)
+    {
+        hash_destroy(css->vertex_id_htab);
+        css->vertex_id_htab = NULL;
+    }
 
     ExecEndNode(node->ss.ps.lefttree);
 }
@@ -247,6 +248,61 @@ static void init_delete_caches(cypher_delete_custom_scan_state *css)
 
     css->result_rel_info_cache =
         create_entity_result_rel_info_cache("delete_result_rel_info_cache");
+}
+
+static HTAB *create_delete_vertex_htab(void)
+{
+    HASHCTL hashctl;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(graphid);
+    hashctl.entrysize =
+        sizeof(graphid); /* entries are not used, but entrysize must >= keysize */
+    hashctl.hash = tag_hash;
+
+    return hash_create(DELETE_VERTEX_HTAB_NAME,
+                       DELETE_VERTEX_HTAB_INITIAL_SIZE,
+                       &hashctl, HASH_ELEM | HASH_FUNCTION);
+}
+
+static int *ensure_delete_item_positions(EState *estate,
+                                         cypher_delete_information *delete_data,
+                                         int *delete_item_count)
+{
+    ListCell *lc;
+    int count;
+    int index = 0;
+
+    if (delete_data->delete_item_positions_valid)
+    {
+        *delete_item_count = delete_data->delete_item_count;
+        return delete_data->delete_item_positions;
+    }
+
+    count = list_length(delete_data->delete_items);
+
+    if (delete_data->delete_item_positions != NULL)
+    {
+        pfree(delete_data->delete_item_positions);
+    }
+
+    delete_data->delete_item_positions = count > 0 ?
+        MemoryContextAlloc(estate->es_query_cxt, sizeof(int) * count) : NULL;
+    delete_data->delete_item_count = count;
+
+    foreach(lc, delete_data->delete_items)
+    {
+        cypher_delete_item *item = lfirst(lc);
+
+        delete_data->delete_item_positions[index++] =
+            item->entity_position->ival;
+    }
+
+    Assert(index == count);
+    delete_data->delete_item_positions_valid = true;
+
+    *delete_item_count = count;
+    return delete_data->delete_item_positions;
 }
 
 /*
@@ -328,7 +384,7 @@ static agtype_value *extract_entity(CustomScanState *node,
  * Try and delete the entity that is describe by the HeapTuple in the table
  * described by the resultRelInfo.
  */
-static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
+static bool delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
                           HeapTuple tuple)
 {
     ResultRelInfo **saved_resultRels;
@@ -338,6 +394,7 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     TM_Result delete_result;
     Buffer buffer;
     CommandId current_cid;
+    bool deleted = false;
 
     /* Find the physical tuple, this variable is coming from */
     saved_resultRels = estate->es_result_relations;
@@ -371,6 +428,7 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
         switch (delete_result)
         {
         case TM_Ok:
+            deleted = true;
             break;
         case TM_SelfModified:
             ereport(
@@ -411,6 +469,8 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     ReleaseBuffer(buffer);
 
     estate->es_result_relations = saved_resultRels;
+
+    return deleted;
 }
 
 /*
@@ -421,23 +481,26 @@ static void process_delete_list(CustomScanState *node)
 {
     cypher_delete_custom_scan_state *css =
         (cypher_delete_custom_scan_state *)node;
-    ListCell *lc;
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *scanTupleSlot = econtext->ecxt_scantuple;
     EState *estate = node->ss.ps.state;
     HTAB *qual_cache = css->qual_cache;
     HTAB *index_cache = css->index_cache;
+    int delete_item_count;
+    int *delete_item_positions;
+    int i;
 
-    foreach(lc, css->delete_data->delete_items)
+    delete_item_positions = ensure_delete_item_positions(
+        estate, css->delete_data, &delete_item_count);
+
+    for (i = 0; i < delete_item_count; i++)
     {
-        cypher_delete_item *item;
         agtype_value *original_entity_value, *id;
         ScanKeyData scan_keys[1];
         TableScanDesc scan_desc = NULL;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple = NULL;
         label_cache_data *label_cache;
-        Integer *pos;
         int entity_position;
         Oid relid;
         Relation rel;
@@ -452,10 +515,7 @@ static void process_delete_list(CustomScanState *node)
         RLSCacheEntry *rls_entry;
         bool found_rls_entry;
 
-        item = lfirst(lc);
-
-        pos = item->entity_position;
-        entity_position = pos->ival;
+        entity_position = delete_item_positions[i];
 
         /* skip if the entity is null */
         if (scanTupleSlot->tts_isnull[entity_position - 1])
@@ -601,20 +661,28 @@ static void process_delete_list(CustomScanState *node)
 
             if (passed_rls)
             {
-                /*
-                 * For vertices, we insert the vertex ID in the hashtable
-                 * vertex_id_htab. This hashtable is used later to process
-                 * connected edges.
-                 */
-                if (original_entity_value->type == AGTV_VERTEX)
-                {
-                    bool found;
-                    hash_search(css->vertex_id_htab, (void *)&(id->val.int_value),
-                                HASH_ENTER, &found);
-                }
-
                 /* At this point, we are ready to delete the node/vertex. */
-                delete_entity(estate, resultRelInfo, heap_tuple);
+                if (delete_entity(estate, resultRelInfo, heap_tuple))
+                {
+                    css->graph_mutated = true;
+                    /*
+                     * For vertices, store successfully deleted IDs for the
+                     * later connected-edge pass.
+                     */
+                    if (original_entity_value->type == AGTV_VERTEX)
+                    {
+                        bool found;
+
+                        if (css->vertex_id_htab == NULL)
+                        {
+                            css->vertex_id_htab = create_delete_vertex_htab();
+                        }
+
+                        hash_search(css->vertex_id_htab,
+                                    (void *)&(id->val.int_value),
+                                    HASH_ENTER, &found);
+                    }
+                }
             }
 
             if (shouldFree)
@@ -745,7 +813,10 @@ static void process_edges_by_index(Oid index_oid,
                 }
                 
                 tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-                delete_entity(estate, resultRelInfo, tuple);
+                if (delete_entity(estate, resultRelInfo, tuple))
+                {
+                    css->graph_mutated = true;
+                }
                 
                 if (shouldFree) 
                 {
@@ -801,7 +872,8 @@ static void check_for_connected_edges(CustomScanState *node)
         (cypher_delete_custom_scan_state *)node;
     EState *estate = css->css.ss.ps.state;
 
-    if (hash_get_num_entries(css->vertex_id_htab) == 0)
+    if (css->vertex_id_htab == NULL ||
+        hash_get_num_entries(css->vertex_id_htab) == 0)
     {
         return;
     }
@@ -978,7 +1050,10 @@ static void check_for_connected_edges(CustomScanState *node)
                             }
                         }
 
-                        delete_entity(estate, resultRelInfo, tuple);
+                        if (delete_entity(estate, resultRelInfo, tuple))
+                        {
+                            css->graph_mutated = true;
+                        }
                     }
                     else
                     {

@@ -463,6 +463,9 @@ typedef struct cypher_update_information
     char *graph_name;
     uint32 graph_oid;
     char *clause_name;
+    int *last_update_indexes;
+    int last_update_index_count;
+    bool last_update_indexes_valid;
 } cypher_update_information;
 
 typedef struct cypher_update_item
@@ -488,6 +491,9 @@ typedef struct cypher_delete_information
     char *graph_name;
     uint32 graph_oid;
     bool detach;
+    int *delete_item_positions;
+    int delete_item_count;
+    bool delete_item_positions_valid;
 } cypher_delete_information;
 
 typedef struct cypher_delete_item

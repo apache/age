@@ -167,7 +167,7 @@ static Const *convert_sublink_to_subplan(PlannerInfo *root, List *custom_private
     char *serialized_data = NULL;
     Const *c = NULL;
     ListCell *lc = NULL;
-    StringInfo str = makeStringInfo();
+    bool changed = false;
 
     c = linitial(custom_private);
     serialized_data = (char *)c->constvalue;
@@ -184,14 +184,22 @@ static Const *convert_sublink_to_subplan(PlannerInfo *root, List *custom_private
         if (expr_has_sublink(prop_expr, NULL))
         {
             node->prop_expr = (Expr *) SS_process_sublinks(root, prop_expr, false);
+            changed = true;
         }
     }
 
-    /* Serialize the information again and return it. */
-    outNode(str, (Node *)merge_information);
+    if (!changed)
+        return c;
 
-    return makeConst(INTERNALOID, -1, InvalidOid, str->len,
-                     PointerGetDatum(str->data), false, false);
+    /* Serialize the information again and return it. */
+    {
+        StringInfo str = makeStringInfo();
+
+        outNode(str, (Node *)merge_information);
+
+        return makeConst(INTERNALOID, -1, InvalidOid, str->len,
+                         PointerGetDatum(str->data), false, false);
+    }
 }
 
 /*

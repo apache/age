@@ -37,7 +37,7 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node);
 static void end_cypher_set(CustomScanState *node);
 static void rescan_cypher_set(CustomScanState *node);
 
-static void process_update_list(CustomScanState *node);
+static bool process_update_list(CustomScanState *node);
 static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
                                      TupleTableSlot *elemTupleSlot,
                                      EState *estate, HeapTuple old_tuple);
@@ -48,6 +48,13 @@ static void init_update_caches(HTAB **qual_cache, HTAB **index_cache,
 static void init_update_lookup_caches(HTAB **qual_cache, HTAB **index_cache,
                                       const char *qual_name,
                                       const char *index_name);
+static void ensure_path_update_attrs(CustomScanState *node,
+                                     TupleDesc tupleDescriptor,
+                                     int **attrs, int *attr_count);
+static int *ensure_last_update_indexes(EState *estate,
+                                       cypher_update_information *set_info,
+                                       int num_set_items,
+                                       int natts);
 
 const CustomExecMethods cypher_set_exec_methods = {SET_SCAN_STATE_NAME,
                                                       begin_cypher_set,
@@ -285,19 +292,22 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
  * When the CREATE clause is the last cypher clause, consume all input from the
  * previous clause(s) in the first call of exec_cypher_create.
  */
-static void process_all_tuples(CustomScanState *node)
+static bool process_all_tuples(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
     TupleTableSlot *slot;
     EState *estate = css->css.ss.ps.state;
+    bool graph_mutated = false;
 
     do
     {
-        process_update_list(node);
+        graph_mutated |= process_update_list(node);
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
         Increment_Estate_CommandId(estate)
     } while (!TupIsNull(slot));
+
+    return graph_mutated;
 }
 
 /*
@@ -347,22 +357,13 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
                                             graphid updated_id,
                                             agtype *updated_entity)
 {
-    agtype_iterator *it;
-    agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
-    agtype_value *r;
     agtype_value *parsed_agtype_value = NULL;
-    agtype *prop_agtype;
+    agtype_value *updated_entity_value = NULL;
     int i;
 
-    r = palloc(sizeof(agtype_value));
-
-    prop_agtype = agtype_value_to_agtype(path);
-    it = agtype_iterator_init(&prop_agtype->root);
-    tok = agtype_iterator_next(&it, r, true);
-
-    parsed_agtype_value = push_agtype_value(&parse_state, tok,
-                                            tok < WAGT_BEGIN_ARRAY ? r : NULL);
+    parsed_agtype_value = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY,
+                                            NULL);
 
     /* Iterate through the path, replace entities as necessary. */
     for (i = 0; i < path->val.array.num_elems; i++)
@@ -394,8 +395,15 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
          */
         if (updated_id == id->val.int_value)
         {
+            if (updated_entity_value == NULL)
+            {
+                updated_entity_value =
+                    get_ith_agtype_value_from_container(&updated_entity->root,
+                                                        0);
+            }
+
             parsed_agtype_value = push_agtype_value(&parse_state, WAGT_ELEM,
-                get_ith_agtype_value_from_container(&updated_entity->root, 0));
+                                                    updated_entity_value);
         }
         else
         {
@@ -423,27 +431,28 @@ static void update_all_paths(CustomScanState *node, graphid id,
     TupleDesc tupleDescriptor = scanTupleSlot->tts_tupleDescriptor;
     Datum *values = scanTupleSlot->tts_values;
     bool *isnull = scanTupleSlot->tts_isnull;
-    int natts = tupleDescriptor->natts;
+    int *attrs = NULL;
+    int attr_count = 0;
     int i;
 
-    for (i = 0; i < natts; i++)
+    ensure_path_update_attrs(node, tupleDescriptor, &attrs, &attr_count);
+    if (attr_count == 0)
+    {
+        return;
+    }
+
+    for (i = 0; i < attr_count; i++)
     {
         agtype *original_entity;
         agtype_value *original_entity_value;
+        int attr = attrs[i];
 
-        /* skip nulls */
-        if (TupleDescAttr(tupleDescriptor, i)->atttypid != AGTYPEOID)
+        if (isnull[attr])
         {
             continue;
         }
 
-        /* skip non agtype values */
-        if (isnull[i])
-        {
-            continue;
-        }
-
-        original_entity = DATUM_GET_AGTYPE_P(values[i]);
+        original_entity = DATUM_GET_AGTYPE_P(values[attr]);
 
         /* if the value is not a scalar type, its not a path */
         if (!AGTYPE_CONTAINER_IS_SCALAR(&original_entity->root))
@@ -462,10 +471,80 @@ static void update_all_paths(CustomScanState *node, graphid id,
                 /* the path does contain the entity replace with the new entity. */
                 agtype_value *new_path = replace_entity_in_path(original_entity_value, id, updated_entity);
 
-                values[i] = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(new_path));
+                values[attr] = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(new_path));
             }
         }
     }
+}
+
+static void ensure_path_update_attrs(CustomScanState *node,
+                                     TupleDesc tupleDescriptor,
+                                     int **attrs, int *attr_count)
+{
+    int **cached_attrs = NULL;
+    int *cached_count = NULL;
+    bool *cached_valid = NULL;
+    int i;
+
+    if (node->methods == &cypher_set_exec_methods)
+    {
+        cypher_set_custom_scan_state *css =
+            (cypher_set_custom_scan_state *)node;
+
+        cached_attrs = &css->path_update_attrs;
+        cached_count = &css->path_update_attr_count;
+        cached_valid = &css->path_update_attrs_valid;
+    }
+    else if (node->methods == &cypher_merge_exec_methods)
+    {
+        cypher_merge_custom_scan_state *css =
+            (cypher_merge_custom_scan_state *)node;
+
+        cached_attrs = &css->path_update_attrs;
+        cached_count = &css->path_update_attr_count;
+        cached_valid = &css->path_update_attrs_valid;
+    }
+
+    if (cached_valid == NULL)
+    {
+        *attrs = NULL;
+        *attr_count = 0;
+        return;
+    }
+
+    if (!*cached_valid)
+    {
+        int count = 0;
+
+        for (i = 0; i < tupleDescriptor->natts; i++)
+        {
+            if (TupleDescAttr(tupleDescriptor, i)->atttypid == AGTYPEOID)
+            {
+                count++;
+            }
+        }
+
+        if (count > 0)
+        {
+            int index = 0;
+
+            *cached_attrs = MemoryContextAlloc(node->ss.ps.state->es_query_cxt,
+                                               sizeof(int) * count);
+            for (i = 0; i < tupleDescriptor->natts; i++)
+            {
+                if (TupleDescAttr(tupleDescriptor, i)->atttypid == AGTYPEOID)
+                {
+                    (*cached_attrs)[index++] = i;
+                }
+            }
+        }
+
+        *cached_count = count;
+        *cached_valid = true;
+    }
+
+    *attrs = *cached_attrs;
+    *attr_count = *cached_count;
 }
 
 /*
@@ -473,7 +552,7 @@ static void update_all_paths(CustomScanState *node, graphid id,
  * Takes the CustomScanState for expression context and a
  * cypher_update_information describing which properties to set.
  */
-void apply_update_list(CustomScanState *node,
+bool apply_update_list(CustomScanState *node,
                        cypher_update_information *set_info,
                        int num_set_items)
 {
@@ -487,6 +566,7 @@ void apply_update_list(CustomScanState *node,
     HTAB *index_cache = NULL;
     HTAB *result_rel_info_cache = NULL;
     bool local_caches = false;
+    bool graph_mutated = false;
     Oid graph_oid;
 
     if (node->methods == &cypher_set_exec_methods)
@@ -545,34 +625,11 @@ void apply_update_list(CustomScanState *node,
     if (num_set_items <= 0)
         num_set_items = list_length(set_info->set_items);
 
-    /*
-     * Iterate through the SET items list and store the loop index of each
-     * 'entity' update. As there is only one entry for each entity, this will
-     * have the effect of overwriting the previous loop index stored - if this
-     * 'entity' is used more than once. This will create an array of the last
-     * loop index for the update of that particular 'entity'. This will allow us
-     * to correctly update an 'entity' after all other previous updates to that
-     * 'entity' have been done.
-     */
     if (num_set_items > 1)
     {
-        /* allocate an array to hold the last update index of each 'entity' */
-        luindex = palloc(sizeof(int) * scanTupleSlot->tts_nvalid);
-
-        foreach (lc, set_info->set_items)
-        {
-            cypher_update_item *update_item = NULL;
-
-            update_item = (cypher_update_item *)lfirst(lc);
-            luindex[update_item->entity_position - 1] = lidx;
-
-            /* increment the loop index */
-            lidx++;
-        }
+        luindex = ensure_last_update_indexes(estate, set_info, num_set_items,
+                                             scanTupleSlot->tts_tupleDescriptor->natts);
     }
-
-    /* reset loop index */
-    lidx = 0;
 
     /* iterate through SET set items */
     foreach (lc, set_info->set_items)
@@ -935,6 +992,7 @@ void apply_update_list(CustomScanState *node,
                         {
                             heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
                                                             original_tuple);
+                            graph_mutated |= HeapTupleIsValid(heap_tuple);
                         }
 
                         if (shouldFree)
@@ -987,6 +1045,7 @@ void apply_update_list(CustomScanState *node,
                     {
                         heap_tuple = update_entity_tuple(resultRelInfo, slot, estate,
                                                         heap_tuple);
+                        graph_mutated |= HeapTupleIsValid(heap_tuple);
                     }
                 }
                 /* close the ScanDescription */
@@ -1007,15 +1066,55 @@ void apply_update_list(CustomScanState *node,
         destroy_entity_result_rel_info_cache(result_rel_info_cache);
     }
 
-    /* free our lookup array */
-    pfree_if_not_null(luindex);
+    return graph_mutated;
 }
 
-static void process_update_list(CustomScanState *node)
+static int *ensure_last_update_indexes(EState *estate,
+                                       cypher_update_information *set_info,
+                                       int num_set_items,
+                                       int natts)
+{
+    ListCell *lc;
+    int lidx = 0;
+
+    if (set_info->last_update_indexes_valid &&
+        set_info->last_update_index_count == natts)
+    {
+        return set_info->last_update_indexes;
+    }
+
+    if (set_info->last_update_indexes != NULL)
+    {
+        pfree(set_info->last_update_indexes);
+    }
+
+    set_info->last_update_indexes =
+        MemoryContextAlloc(estate->es_query_cxt, sizeof(int) * natts);
+    set_info->last_update_index_count = natts;
+
+    /*
+     * Store the last update index for each entity position once per plan
+     * execution. This used to be rebuilt for every input row.
+     */
+    foreach (lc, set_info->set_items)
+    {
+        cypher_update_item *update_item = (cypher_update_item *)lfirst(lc);
+
+        set_info->last_update_indexes[update_item->entity_position - 1] = lidx;
+        lidx++;
+    }
+
+    Assert(lidx == num_set_items);
+    set_info->last_update_indexes_valid = true;
+
+    return set_info->last_update_indexes;
+}
+
+static bool process_update_list(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
 
-    apply_update_list(node, css->set_list, css->set_item_count);
+    return apply_update_list(node, css->set_list, css->set_item_count);
 }
 
 static TupleTableSlot *exec_cypher_set(CustomScanState *node)
@@ -1043,26 +1142,30 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 
     if (CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
+        bool graph_mutated;
+
         estate->es_result_relations = saved_resultRels;
 
-        process_all_tuples(node);
+        graph_mutated = process_all_tuples(node);
 
         /* increment the command counter to reflect the updates */
         CommandCounterIncrement();
 
-        /* invalidate VLE cache — graph was mutated */
-        increment_graph_version(css->graph_oid);
+        if (graph_mutated)
+        {
+            increment_graph_version(css->graph_oid);
+        }
 
         return NULL;
     }
 
-    process_update_list(node);
+    if (process_update_list(node))
+    {
+        increment_graph_version(css->graph_oid);
+    }
 
     /* increment the command counter to reflect the updates */
     CommandCounterIncrement();
-
-    /* invalidate VLE cache — graph was mutated */
-    increment_graph_version(css->graph_oid);
 
     estate->es_result_relations = saved_resultRels;
 

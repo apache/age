@@ -59,6 +59,7 @@ typedef struct cypher_create_custom_scan_state
     Oid graph_oid;
     HTAB *entity_exists_index_cache;
     HTAB *result_rel_info_cache;
+    bool graph_mutated;
 } cypher_create_custom_scan_state;
 
 typedef struct cypher_set_custom_scan_state
@@ -72,6 +73,9 @@ typedef struct cypher_set_custom_scan_state
     HTAB *result_rel_info_cache;
     Oid graph_oid;
     int flags;
+    int *path_update_attrs;
+    int path_update_attr_count;
+    bool path_update_attrs_valid;
 } cypher_set_custom_scan_state;
 
 typedef struct cypher_delete_custom_scan_state
@@ -102,6 +106,7 @@ typedef struct cypher_delete_custom_scan_state
     HTAB *qual_cache;
     HTAB *index_cache;
     HTAB *result_rel_info_cache;
+    bool graph_mutated;
 } cypher_delete_custom_scan_state;
 
 typedef struct cypher_merge_custom_scan_state
@@ -115,9 +120,11 @@ typedef struct cypher_merge_custom_scan_state
     Oid graph_oid;
     AttrNumber merge_function_attr;
     bool created_new_path;
+    bool graph_mutated;
     bool found_a_path;
     CommandId base_currentCommandId;
     struct created_path *created_paths_list;
+    HTAB *created_paths_hash;
     int path_length;
     List *eager_tuples;
     ListCell *eager_tuples_cursor;
@@ -126,6 +133,9 @@ typedef struct cypher_merge_custom_scan_state
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
     int on_match_set_item_count;
     int on_create_set_item_count;
+    int *path_update_attrs;
+    int path_update_attr_count;
+    bool path_update_attrs_valid;
     HTAB *update_qual_cache;
     HTAB *update_index_cache;
     HTAB *update_result_rel_info_cache;
@@ -134,7 +144,7 @@ typedef struct cypher_merge_custom_scan_state
 } cypher_merge_custom_scan_state;
 
 /* Reusable SET logic callable from MERGE executor */
-void apply_update_list(CustomScanState *node,
+bool apply_update_list(CustomScanState *node,
                        cypher_update_information *set_info,
                        int num_set_items);
 

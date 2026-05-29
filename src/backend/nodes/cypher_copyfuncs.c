@@ -123,6 +123,10 @@ void copy_cypher_update_information(ExtensibleNode *newnode, const ExtensibleNod
     COPY_STRING_FIELD(graph_name);
     COPY_SCALAR_FIELD(graph_oid);
     COPY_STRING_FIELD(clause_name);
+
+    extended_newnode->last_update_indexes = NULL;
+    extended_newnode->last_update_index_count = 0;
+    extended_newnode->last_update_indexes_valid = false;
 }
 
 /* copy function for cypher_update_item */
@@ -151,6 +155,10 @@ void copy_cypher_delete_information(ExtensibleNode *newnode, const ExtensibleNod
     COPY_STRING_FIELD(graph_name);
     COPY_SCALAR_FIELD(graph_oid);
     COPY_SCALAR_FIELD(detach);
+
+    extended_newnode->delete_item_positions = NULL;
+    extended_newnode->delete_item_count = 0;
+    extended_newnode->delete_item_positions_valid = false;
 }
 
 /* copy function for cypher_delete_item */

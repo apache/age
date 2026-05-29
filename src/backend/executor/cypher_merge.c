@@ -58,9 +58,16 @@ typedef struct path_entry
 typedef struct created_path
 {
     struct created_path *next;  /* next link in linked list of path_entrys */
+    struct created_path *hash_next; /* next link in the path_hash bucket */
     struct path_entry **entry;  /* path_entry array for this link */
     uint32 path_hash;           /* cheap precheck before full path compare */
 } created_path;
+
+typedef struct created_path_hash_entry
+{
+    uint32 path_hash;
+    created_path *paths;
+} created_path_hash_entry;
 
 static void begin_cypher_merge(CustomScanState *node, EState *estate,
                                int eflags);
@@ -83,6 +90,9 @@ static void process_path(cypher_merge_custom_scan_state *css,
                          path_entry **path_array, bool should_insert);
 static void mark_tts_isnull(TupleTableSlot *slot);
 static void mark_scan_slot_valid(TupleTableSlot *slot);
+static void apply_merge_update_list(cypher_merge_custom_scan_state *css,
+                                    cypher_update_information *set_info,
+                                    int num_set_items);
 
 const CustomExecMethods cypher_merge_exec_methods = {MERGE_SCAN_STATE_NAME,
                                                      begin_cypher_merge,
@@ -99,7 +109,20 @@ static bool compare_2_paths(path_entry **lhs, path_entry **rhs,
 static path_entry **find_duplicate_path(CustomScanState *node,
                                         path_entry **path_array,
                                         uint32 path_hash);
+static void remember_created_path(cypher_merge_custom_scan_state *css,
+                                  path_entry **path_array,
+                                  uint32 path_hash);
 static void free_path_entry_array(path_entry **path_array, int length);
+
+static void apply_merge_update_list(cypher_merge_custom_scan_state *css,
+                                    cypher_update_information *set_info,
+                                    int num_set_items)
+{
+    if (apply_update_list(&css->css, set_info, num_set_items))
+    {
+        css->graph_mutated = true;
+    }
+}
 
 /*
  * Initializes the MERGE Execution Node at the beginning of the execution
@@ -329,6 +352,9 @@ static void process_path(cypher_merge_custom_scan_state *css,
             scantuple->tts_isnull[tuple_position] = false;
         }
     }
+
+    list_free(css->path_values);
+    css->path_values = NIL;
 }
 
 /*
@@ -364,8 +390,8 @@ static void process_simple_merge(CustomScanState *node)
         if (css->on_create_set_info)
         {
             mark_scan_slot_valid(econtext->ecxt_scantuple);
-            apply_update_list(&css->css, css->on_create_set_info,
-                              css->on_create_set_item_count);
+            apply_merge_update_list(css, css->on_create_set_info,
+                                    css->on_create_set_item_count);
         }
     }
     else
@@ -378,8 +404,8 @@ static void process_simple_merge(CustomScanState *node)
             econtext->ecxt_scantuple =
                 node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
 
-            apply_update_list(&css->css, css->on_match_set_info,
-                              css->on_match_set_item_count);
+            apply_merge_update_list(css, css->on_match_set_info,
+                                    css->on_match_set_item_count);
         }
     }
 }
@@ -643,7 +669,7 @@ static bool compare_2_paths(path_entry **lhs, path_entry **rhs, int path_length)
     return true;
 }
 
-/* helper function to find a duplicate path in the created_paths_list */
+/* helper function to find a duplicate path in the created path cache */
 static path_entry **find_duplicate_path(CustomScanState *node,
                                          path_entry **path_array,
                                          uint32 path_hash)
@@ -651,21 +677,38 @@ static path_entry **find_duplicate_path(CustomScanState *node,
     cypher_merge_custom_scan_state *css =
         (cypher_merge_custom_scan_state *)node;
 
-    /* if the list is NULL just return NULL */
     if (css->created_paths_list == NULL)
     {
         return NULL;
     }
-    /* otherwise, check to see if the path already exists */
+
+    if (css->created_paths_hash != NULL)
+    {
+        created_path_hash_entry *entry;
+
+        entry = hash_search(css->created_paths_hash, &path_hash, HASH_FIND,
+                            NULL);
+        if (entry == NULL)
+        {
+            return NULL;
+        }
+
+        for (created_path *curr_path = entry->paths; curr_path != NULL;
+             curr_path = curr_path->hash_next)
+        {
+            if (compare_2_paths(path_array, curr_path->entry,
+                                css->path_length))
+            {
+                return curr_path->entry;
+            }
+        }
+    }
     else
     {
-        /* set to the top of the list */
         created_path *curr_path = css->created_paths_list;
 
-        /* iterate through our list of created paths */
         while (curr_path != NULL)
         {
-            /* if we have found the entry, return it */
             if (curr_path->path_hash == path_hash &&
                 compare_2_paths(path_array, curr_path->entry,
                                 css->path_length))
@@ -673,13 +716,50 @@ static path_entry **find_duplicate_path(CustomScanState *node,
                 return curr_path->entry;
             }
 
-            /* otherwise, get the next path */
             curr_path = curr_path->next;
         }
     }
 
-    /* if we didn't find it, return NULL */
     return NULL;
+}
+
+static void remember_created_path(cypher_merge_custom_scan_state *css,
+                                  path_entry **path_array,
+                                  uint32 path_hash)
+{
+    created_path *new_path;
+    created_path_hash_entry *entry;
+    bool found;
+
+    if (css->created_paths_hash == NULL)
+    {
+        HASHCTL hashctl;
+
+        MemSet(&hashctl, 0, sizeof(hashctl));
+        hashctl.keysize = sizeof(uint32);
+        hashctl.entrysize = sizeof(created_path_hash_entry);
+        hashctl.hcxt = css->css.ss.ps.state->es_query_cxt;
+        css->created_paths_hash = hash_create("merge_created_paths_hash", 32,
+                                              &hashctl,
+                                              HASH_ELEM | HASH_BLOBS |
+                                              HASH_CONTEXT);
+    }
+
+    new_path = palloc(sizeof(created_path));
+    new_path->next = css->created_paths_list;
+    new_path->entry = path_array;
+    new_path->path_hash = path_hash;
+    css->created_paths_list = new_path;
+
+    entry = hash_search(css->created_paths_hash, &path_hash, HASH_ENTER,
+                        &found);
+    if (!found)
+    {
+        entry->paths = NULL;
+    }
+
+    new_path->hash_next = entry->paths;
+    entry->paths = new_path;
 }
 
 /*
@@ -786,35 +866,31 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
 
                         /* ON MATCH SET: path was found as duplicate */
                         if (css->on_match_set_info)
-                            apply_update_list(&css->css,
-                                              css->on_match_set_info,
-                                              css->on_match_set_item_count);
+                            apply_merge_update_list(css,
+                                                    css->on_match_set_info,
+                                                    css->on_match_set_item_count);
                     }
                     else
                     {
-                        created_path *new_path = palloc(sizeof(created_path));
-
-                        new_path->next = css->created_paths_list;
-                        new_path->entry = prebuilt_path_array;
-                        new_path->path_hash = path_hash;
-                        css->created_paths_list = new_path;
+                        remember_created_path(css, prebuilt_path_array,
+                                              path_hash);
 
                         process_path(css, prebuilt_path_array, true);
                         mark_scan_slot_valid(econtext->ecxt_scantuple);
 
                         /* ON CREATE SET: path was just created */
                         if (css->on_create_set_info)
-                            apply_update_list(&css->css,
-                                              css->on_create_set_info,
-                                              css->on_create_set_item_count);
+                            apply_merge_update_list(css,
+                                                    css->on_create_set_info,
+                                                    css->on_create_set_item_count);
                     }
                 }
                 else
                 {
                     /* ON MATCH SET: path already existed from lateral join */
                     if (css->on_match_set_info)
-                        apply_update_list(&css->css, css->on_match_set_info,
-                                          css->on_match_set_item_count);
+                        apply_merge_update_list(css, css->on_match_set_info,
+                                                css->on_match_set_item_count);
                 }
 
                 /* Project the result and save a copy */
@@ -898,33 +974,29 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
 
                     /* ON MATCH SET: path was found as duplicate */
                     if (css->on_match_set_info)
-                        apply_update_list(&css->css, css->on_match_set_info,
-                                          css->on_match_set_item_count);
+                        apply_merge_update_list(css, css->on_match_set_info,
+                                                css->on_match_set_item_count);
                 }
                 else
                 {
-                    created_path *new_path = palloc(sizeof(created_path));
-
-                    new_path->next = css->created_paths_list;
-                    new_path->entry = prebuilt_path_array;
-                    new_path->path_hash = path_hash;
-                    css->created_paths_list = new_path;
+                    remember_created_path(css, prebuilt_path_array,
+                                          path_hash);
 
                     process_path(css, prebuilt_path_array, true);
                     mark_scan_slot_valid(econtext->ecxt_scantuple);
 
                     /* ON CREATE SET: path was just created */
                     if (css->on_create_set_info)
-                        apply_update_list(&css->css, css->on_create_set_info,
-                                          css->on_create_set_item_count);
+                        apply_merge_update_list(css, css->on_create_set_info,
+                                                css->on_create_set_item_count);
                 }
             }
             else
             {
                 /* ON MATCH SET: path already existed from lateral join */
                 if (css->on_match_set_info)
-                    apply_update_list(&css->css, css->on_match_set_info,
-                                      css->on_match_set_item_count);
+                    apply_merge_update_list(css, css->on_match_set_info,
+                                            css->on_match_set_item_count);
             }
 
         } while (true);
@@ -1003,8 +1075,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             {
                 econtext->ecxt_scantuple =
                     node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple;
-                apply_update_list(&css->css, css->on_match_set_info,
-                                  css->on_match_set_item_count);
+                apply_merge_update_list(css, css->on_match_set_info,
+                                        css->on_match_set_item_count);
             }
 
             econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
@@ -1082,8 +1154,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
 
             /* ON CREATE SET: path was just created */
             if (css->on_create_set_info)
-                apply_update_list(&css->css, css->on_create_set_info,
-                                  css->on_create_set_item_count);
+                apply_merge_update_list(css, css->on_create_set_info,
+                                        css->on_create_set_item_count);
 
             /* mark the create_new_path flag to true. */
             css->created_new_path = true;
@@ -1122,8 +1194,8 @@ static void end_cypher_merge(CustomScanState *node)
     /* increment the command counter */
     CommandCounterIncrement();
 
-    /* invalidate VLE cache if merge created anything */
-    if (css->created_new_path)
+    /* invalidate VLE cache if MERGE changed the graph */
+    if (css->graph_mutated)
     {
         increment_graph_version(css->graph_oid);
     }
@@ -1170,6 +1242,12 @@ static void end_cypher_merge(CustomScanState *node)
     {
         destroy_entity_result_rel_info_cache(css->result_rel_info_cache);
         css->result_rel_info_cache = NULL;
+    }
+
+    if (css->created_paths_hash != NULL)
+    {
+        hash_destroy(css->created_paths_hash);
+        css->created_paths_hash = NULL;
     }
 
     /* free up our created paths lists */
@@ -1400,6 +1478,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
             css->base_currentCommandId == GetCurrentCommandId(false))
         {
             insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+            css->graph_mutated = true;
 
             /*
              * Increment the currentCommandId since we processed an update. We
@@ -1413,6 +1492,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
         {
             insert_entity_tuple_cid(resultRelInfo, elemTupleSlot, estate,
                                     css->base_currentCommandId);
+            css->graph_mutated = true;
         }
 
         /* restore the old result relation info */
@@ -1741,6 +1821,7 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
         css->base_currentCommandId == GetCurrentCommandId(false))
     {
         insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+        css->graph_mutated = true;
 
         /*
          * Increment the currentCommandId since we processed an update. We
@@ -1754,6 +1835,7 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
     {
         insert_entity_tuple_cid(resultRelInfo, elemTupleSlot, estate,
                                     css->base_currentCommandId);
+        css->graph_mutated = true;
     }
 
     /* restore the old result relation info */

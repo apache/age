@@ -185,11 +185,14 @@ static Oid get_cached_global_graph_oid_len(const char *graph_name,
                                            int graph_name_len);
 static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
-static void load_vertex_hashtable(GRAPH_global_context *ggctx);
-static void load_edge_hashtable(GRAPH_global_context *ggctx);
+static void load_vertex_hashtable(GRAPH_global_context *ggctx,
+                                  Snapshot snapshot, List *vertex_labels);
+static void load_edge_hashtable(GRAPH_global_context *ggctx,
+                                Snapshot snapshot, List *edge_labels);
 static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
-static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
-                                 char label_type);
+static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
+                                List **vertex_labels, List **edge_labels);
+static void free_ag_label_names(List *labels);
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
                               ItemPointerData tid, graphid start_vertex_id,
                               graphid end_vertex_id, Oid edge_label_table_oid,
@@ -206,6 +209,8 @@ static Datum fetch_entry_properties(Oid relid, ItemPointerData tid,
                                     HTAB *relation_cache,
                                     const char *stale_msg);
 static Relation get_entry_property_relation(Oid relid, HTAB *relation_cache);
+static bool is_ggctx_invalid_with_snapshot(GRAPH_global_context *ggctx,
+                                           Snapshot *snapshot);
 /* definitions */
 
 /*
@@ -220,6 +225,14 @@ static Relation get_entry_property_relation(Oid relid, HTAB *relation_cache);
  * invalidation from unrelated transactions on the server.
  */
 bool is_ggctx_invalid(GRAPH_global_context *ggctx)
+{
+    Snapshot snapshot = NULL;
+
+    return is_ggctx_invalid_with_snapshot(ggctx, &snapshot);
+}
+
+static bool is_ggctx_invalid_with_snapshot(GRAPH_global_context *ggctx,
+                                           Snapshot *snapshot)
 {
     /* use version counter if DSM or SHMEM mode is active */
     if (version_mode == VERSION_MODE_DSM || version_mode == VERSION_MODE_SHMEM)
@@ -244,13 +257,14 @@ bool is_ggctx_invalid(GRAPH_global_context *ggctx)
     }
 
     /* SNAPSHOT fallback: original behavior — check snapshot ids */
+    if (*snapshot == NULL)
     {
-        Snapshot snap = GetActiveSnapshot();
-
-        return (ggctx->xmin != snap->xmin ||
-                ggctx->xmax != snap->xmax ||
-                ggctx->curcid != snap->curcid);
+        *snapshot = GetActiveSnapshot();
     }
+
+    return (ggctx->xmin != (*snapshot)->xmin ||
+            ggctx->xmax != (*snapshot)->xmax ||
+            ggctx->curcid != (*snapshot)->curcid);
 }
 /*
  * Helper function to create the global vertex and edge hashtables. One
@@ -291,11 +305,10 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     pfree_if_not_null(ehn);
 }
 
-/* helper function to get a List of all label names for the specified graph */
-static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
-                                 char label_type)
+/* helper function to get label names for the specified graph */
+static void get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
+                                List **vertex_labels, List **edge_labels)
 {
-    List *labels = NIL;
     ScanKeyData scan_key;
     Relation ag_label;
     SysScanDesc scan_desc;
@@ -324,16 +337,23 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         graph_label_entry *label;
         bool is_null;
         Datum datum;
+        char label_type;
 
         datum = heap_getattr(tuple, Anum_ag_label_kind, tupdesc, &is_null);
-        if (is_null || DatumGetChar(datum) != label_type)
+        if (is_null)
         {
             continue;
         }
 
-        datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
-        if (!is_null)
+        label_type = DatumGetChar(datum);
+        if (label_type == LABEL_TYPE_VERTEX || label_type == LABEL_TYPE_EDGE)
         {
+            datum = heap_getattr(tuple, Anum_ag_label_name, tupdesc, &is_null);
+            if (is_null)
+            {
+                continue;
+            }
+
             label = palloc(sizeof(*label));
             namestrcpy(&label->name, NameStr(*DatumGetName(datum)));
 
@@ -342,14 +362,31 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
             Assert(!is_null);
             label->relation = DatumGetObjectId(datum);
 
-            labels = lappend(labels, label);
+            if (label_type == LABEL_TYPE_VERTEX)
+            {
+                *vertex_labels = lappend(*vertex_labels, label);
+            }
+            else
+            {
+                *edge_labels = lappend(*edge_labels, label);
+            }
         }
     }
 
     systable_endscan(scan_desc);
     table_close(ag_label, AccessShareLock);
+}
 
-    return labels;
+static void free_ag_label_names(List *labels)
+{
+    ListCell *lc;
+
+    foreach(lc, labels)
+    {
+        pfree(lfirst(lc));
+    }
+
+    list_free(labels);
 }
 
 /*
@@ -568,19 +605,11 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
 }
 
 /* helper routine to load all vertices into the GRAPH global vertex hashtable */
-static void load_vertex_hashtable(GRAPH_global_context *ggctx)
+static void load_vertex_hashtable(GRAPH_global_context *ggctx,
+                                  Snapshot snapshot, List *vertex_labels)
 {
-    Oid graph_oid;
-    Snapshot snapshot;
-    List *vertex_labels = NIL;
     ListCell *lc;
 
-    /* get the specific graph OID and namespace (schema) OID */
-    graph_oid = ggctx->graph_oid;
-    /* get the active snapshot */
-    snapshot = GetActiveSnapshot();
-    /* get metadata for all vertex label tables */
-    vertex_labels = get_ag_labels_names(snapshot, graph_oid, LABEL_TYPE_VERTEX);
     /* go through all vertex label tables in list */
     foreach (lc, vertex_labels)
     {
@@ -660,34 +689,36 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
  */
 static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
 {
+    Snapshot snapshot = GetActiveSnapshot();
+    List *vertex_labels = NIL;
+    List *edge_labels = NIL;
+
     /* initialize statistics */
     ggctx->num_loaded_vertices = 0;
     ggctx->num_loaded_edges = 0;
 
+    get_ag_labels_names(snapshot, ggctx->graph_oid, &vertex_labels,
+                        &edge_labels);
+
     /* insert all of our vertices */
-    load_vertex_hashtable(ggctx);
+    load_vertex_hashtable(ggctx, snapshot, vertex_labels);
 
     /* insert all of our edges */
-    load_edge_hashtable(ggctx);
+    load_edge_hashtable(ggctx, snapshot, edge_labels);
+
+    free_ag_label_names(vertex_labels);
+    free_ag_label_names(edge_labels);
 }
 
 /*
  * Helper routine to load all edges into the GRAPH global edge and vertex
  * hashtables.
  */
-static void load_edge_hashtable(GRAPH_global_context *ggctx)
+static void load_edge_hashtable(GRAPH_global_context *ggctx,
+                                Snapshot snapshot, List *edge_labels)
 {
-    Oid graph_oid;
-    Snapshot snapshot;
-    List *edge_labels = NIL;
     ListCell *lc;
 
-    /* get the specific graph OID and namespace (schema) OID */
-    graph_oid = ggctx->graph_oid;
-    /* get the active snapshot */
-    snapshot = GetActiveSnapshot();
-    /* get metadata for all edge label tables */
-    edge_labels = get_ag_labels_names(snapshot, graph_oid, LABEL_TYPE_EDGE);
     /* go through all edge label tables in list */
     foreach (lc, edge_labels)
     {
@@ -913,6 +944,8 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
     GRAPH_global_context *new_ggctx = NULL;
     GRAPH_global_context *curr_ggctx = NULL;
     GRAPH_global_context *prev_ggctx = NULL;
+    GRAPH_global_context *found_ggctx = NULL;
+    Snapshot invalidation_snapshot = NULL;
     MemoryContext oldctx = NULL;
 
     /* we need a higher context, or one that isn't destroyed by SRF exit */
@@ -940,7 +973,8 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
         GRAPH_global_context *next_ggctx = curr_ggctx->next;
 
         /* if the transaction ids have changed, we have an invalid graph */
-        if (is_ggctx_invalid(curr_ggctx))
+        if (is_ggctx_invalid_with_snapshot(curr_ggctx,
+                                           &invalidation_snapshot))
         {
             bool success = false;
 
@@ -973,6 +1007,10 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
         }
         else
         {
+            if (found_ggctx == NULL && curr_ggctx->graph_oid == graph_oid)
+            {
+                found_ggctx = curr_ggctx;
+            }
             prev_ggctx = curr_ggctx;
         }
 
@@ -980,21 +1018,15 @@ static GRAPH_global_context *manage_GRAPH_global_contexts_internal(
         curr_ggctx = next_ggctx;
     }
 
-    /* find our graph's context. if it exists, we are done */
-    curr_ggctx = global_graph_contexts_container.contexts;
-    while (curr_ggctx != NULL)
+    if (found_ggctx != NULL)
     {
-        if (curr_ggctx->graph_oid == graph_oid)
-        {
-            /* switch our context back */
-            MemoryContextSwitchTo(oldctx);
+        /* switch our context back */
+        MemoryContextSwitchTo(oldctx);
 
-            /* we are done unlock the global contexts list */
-            pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
+        /* we are done unlock the global contexts list */
+        pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
-            return curr_ggctx;
-        }
-        curr_ggctx = curr_ggctx->next;
+        return found_ggctx;
     }
 
     /* otherwise, we need to create one and possibly attach it */

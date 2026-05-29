@@ -355,7 +355,10 @@ static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
 static List *make_target_list_from_join(ParseState *pstate,
                                         RangeTblEntry *rte);
 static void initialize_clause_function_oid_cache(void);
-static Oid get_clause_function_oid(const char *function_name);
+static Oid get_create_clause_func_oid(void);
+static Oid get_set_clause_func_oid(void);
+static Oid get_delete_clause_func_oid(void);
+static Oid get_merge_clause_func_oid(void);
 static Oid get_bool_or_func_oid(void);
 static Oid get_materialize_vle_edges_func_oid(void);
 static Oid get_build_path_func_oid(void);
@@ -367,7 +370,7 @@ static Oid get_age_properties_func_oid(void);
 static Node *make_age_properties_func_expr(Node *arg);
 static void invalidate_clause_function_oids(Datum arg, int cache_id,
                                             uint32 hash_value);
-static FuncExpr *make_clause_func_expr(char *function_name,
+static FuncExpr *make_clause_func_expr(Oid func_oid,
                                        Node *clause_information);
 static void markRelsAsNulledBy(ParseState *pstate, Node *n, int jindex);
 
@@ -1496,7 +1499,7 @@ static Query *transform_cypher_delete(cypher_parsestate *cpstate,
         delete_data->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
     }
 
-    func_expr = make_clause_func_expr(DELETE_CLAUSE_FUNCTION_NAME,
+    func_expr = make_clause_func_expr(get_delete_clause_func_oid(),
                                       (Node *)delete_data);
 
     /* Create the target entry */
@@ -2133,7 +2136,7 @@ static Query *transform_cypher_set(cypher_parsestate *cpstate,
         set_items_target_list->flags |= CYPHER_CLAUSE_FLAG_TERMINAL;
     }
 
-    func_expr = make_clause_func_expr(SET_CLAUSE_FUNCTION_NAME,
+    func_expr = make_clause_func_expr(get_set_clause_func_oid(),
                                       (Node *)set_items_target_list);
 
     /* Create the target entry */
@@ -6300,7 +6303,7 @@ static Query *transform_cypher_create(cypher_parsestate *cpstate,
     }
 
 
-    func_expr = make_clause_func_expr(CREATE_CLAUSE_FUNCTION_NAME,
+    func_expr = make_clause_func_expr(get_create_clause_func_oid(),
                                       (Node *)target_nodes);
 
     /* Create the target entry */
@@ -7458,7 +7461,7 @@ static Query *transform_cypher_merge(cypher_parsestate *cpstate,
      * Creates the function expression that the planner will find and
      * convert to a MERGE path.
      */
-    func_expr = make_clause_func_expr(MERGE_CLAUSE_FUNCTION_NAME,
+    func_expr = make_clause_func_expr(get_merge_clause_func_oid(),
                                       (Node *)merge_information);
 
     /* Create the target entry */
@@ -8329,11 +8332,10 @@ static ParseNamespaceItem *get_namespace_item(ParseState *pstate,
  * extensible node that represents the metadata that the clause needs to
  * handle the clause in the execution phase.
  */
-static FuncExpr *make_clause_func_expr(char *function_name,
+static FuncExpr *make_clause_func_expr(Oid func_oid,
                                        Node *clause_information)
 {
     Const *clause_information_const;
-    Oid func_oid;
     FuncExpr *func_expr;
 
     StringInfo str = makeStringInfo();
@@ -8352,8 +8354,6 @@ static FuncExpr *make_clause_func_expr(char *function_name,
     clause_information_const = makeConst(INTERNALOID, -1, InvalidOid, str->len,
                              PointerGetDatum(str->data), false, false);
 
-    func_oid = get_clause_function_oid(function_name);
-
     func_expr = makeFuncExpr(func_oid, AGTYPEOID,
                              list_make1(clause_information_const), InvalidOid,
                              InvalidOid, COERCE_EXPLICIT_CALL);
@@ -8361,7 +8361,7 @@ static FuncExpr *make_clause_func_expr(char *function_name,
     return func_expr;
 }
 
-static Oid get_clause_function_oid(const char *function_name)
+static Oid get_create_clause_func_oid(void)
 {
     initialize_clause_function_oid_cache();
 
@@ -8369,46 +8369,48 @@ static Oid get_clause_function_oid(const char *function_name)
     {
         create_clause_func_oid =
             get_ag_func_oid(CREATE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return create_clause_func_oid;
+}
+
+static Oid get_set_clause_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(set_clause_func_oid))
+    {
         set_clause_func_oid =
             get_ag_func_oid(SET_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return set_clause_func_oid;
+}
+
+static Oid get_delete_clause_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(delete_clause_func_oid))
+    {
         delete_clause_func_oid =
             get_ag_func_oid(DELETE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
+    }
+
+    return delete_clause_func_oid;
+}
+
+static Oid get_merge_clause_func_oid(void)
+{
+    initialize_clause_function_oid_cache();
+
+    if (!OidIsValid(merge_clause_func_oid))
+    {
         merge_clause_func_oid =
             get_ag_func_oid(MERGE_CLAUSE_FUNCTION_NAME, 1, INTERNALOID);
     }
 
-    if (strncmp(function_name, "_cypher_", sizeof("_cypher_") - 1) == 0)
-    {
-        switch (function_name[sizeof("_cypher_") - 1])
-        {
-            case 'c':
-                if (strcmp(function_name, CREATE_CLAUSE_FUNCTION_NAME) == 0)
-                {
-                    return create_clause_func_oid;
-                }
-                break;
-            case 'd':
-                if (strcmp(function_name, DELETE_CLAUSE_FUNCTION_NAME) == 0)
-                {
-                    return delete_clause_func_oid;
-                }
-                break;
-            case 'm':
-                if (strcmp(function_name, MERGE_CLAUSE_FUNCTION_NAME) == 0)
-                {
-                    return merge_clause_func_oid;
-                }
-                break;
-            case 's':
-                if (strcmp(function_name, SET_CLAUSE_FUNCTION_NAME) == 0)
-                {
-                    return set_clause_func_oid;
-                }
-                break;
-        }
-    }
-
-    return get_ag_func_oid(function_name, 1, INTERNALOID);
+    return merge_clause_func_oid;
 }
 
 static Oid get_bool_or_func_oid(void)

@@ -188,6 +188,7 @@ static void process_pattern(cypher_create_custom_scan_state *css)
             scantuple->tts_isnull[path->path_attr_num - 1] = false;
         }
 
+        list_free(css->path_values);
         css->path_values = NIL;
     }
 }
@@ -200,7 +201,8 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
     ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
     TupleTableSlot *slot;
     bool terminal = CYPHER_CLAUSE_IS_TERMINAL(css->flags);
-    bool used = false;
+
+    css->graph_mutated = false;
 
     /*
      * If the CREATE clause was the final cypher clause written then we aren't
@@ -227,23 +229,13 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
 
         process_pattern(css);
 
-        /*
-         * This may not be necessary. If we have an empty pattern, nothing was
-         * inserted and the current command Id was not used. So, only flag it
-         * if there is a non empty pattern.
-         */
-        if (css->pattern != NIL)
-        {
-            /* the current command Id has been used */
-            used = true;
-        }
     } while (terminal);
 
     /*
      * If the current command Id wasn't used, nothing was inserted and we're
      * done.
      */
-    if (!used)
+    if (!css->graph_mutated)
     {
         return NULL;
     }
@@ -427,6 +419,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
     /* Insert the new edge */
     insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+    css->graph_mutated = true;
 
     /* restore the old result relation info */
     estate->es_result_relations = old_estate_es_result_relations;
@@ -514,6 +507,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
         /* Insert the new vertex */
         insert_entity_tuple(resultRelInfo, elemTupleSlot, estate);
+        css->graph_mutated = true;
 
         /* restore the old result relation info */
         estate->es_result_relations = old_estate_es_result_relations;
