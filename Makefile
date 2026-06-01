@@ -127,6 +127,7 @@ OBJS = src/backend/age.o \
        src/backend/utils/ag_func.o \
        src/backend/utils/graph_generation.o \
        src/backend/utils/cache/ag_cache.o \
+       src/backend/utils/cache/agehash.o \
        src/backend/utils/load/ag_load_labels.o \
        src/backend/utils/load/ag_load_edges.o \
        src/backend/utils/load/age_load.o \
@@ -153,6 +154,7 @@ REGRESS = scan \
           graphid \
           agtype \
           agtype_hash_cmp \
+          agehash \
           catalog \
           cypher \
           expr \
