@@ -215,6 +215,91 @@ SELECT * FROM cypher('pattern_expr', $$
 $$) AS (result agtype);
 
 --
+-- Follow-up coverage (review #2360): pattern expressions in additional
+-- expression contexts opened up by allowing anonymous_path as an expr_atom.
+--
+
+--
+-- Single-node pattern on an already-bound variable: (a:Label)
+--
+-- NOTE: this is an EXISTS existence check on the bound variable, NOT an
+-- openCypher label predicate. A matching label is therefore always true
+-- (the variable is already bound), and a *different* label is rejected by
+-- AGE's pre-existing "multiple labels for variable" restriction rather than
+-- evaluating to false. Both behaviours are captured here so any future change
+-- to single-node-pattern semantics is caught by this test.
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, (a:Person)
+    ORDER BY a.name
+$$) AS (name agtype, is_person agtype);
+
+-- A non-matching label errors (pre-existing limitation, not a regression)
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, (a:Animal)
+    ORDER BY a.name
+$$) AS (name agtype, is_animal agtype);
+
+--
+-- Pattern expressions inside a list literal
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, [(a)-[:KNOWS]->(:Person), (a)-[:WORKS_WITH]->(:Person)]
+    ORDER BY a.name
+$$) AS (name agtype, flags agtype);
+
+--
+-- Pattern expressions inside a map literal
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN a.name, {knows: (a)-[:KNOWS]->(:Person), works: (a)-[:WORKS_WITH]->(:Person)}
+    ORDER BY a.name
+$$) AS (name agtype, m agtype);
+
+--
+-- Pattern expressions as function arguments
+--
+-- collect() shows the per-row boolean values are correct (ORDER BY before
+-- the aggregate so the collected order is deterministic across scan plans).
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WITH a ORDER BY a.name
+    RETURN collect((a)-[:KNOWS]->(:Person))
+$$) AS (vals agtype);
+
+-- count() counts non-null values; a boolean (including false) is non-null,
+-- so this counts every row rather than only the matching ones. This is the
+-- expected SQL aggregate semantics, documented here so the value is not
+-- mistaken for a bug.
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    RETURN count((a)-[:KNOWS]->(:Person))
+$$) AS (c agtype);
+
+--
+-- Pattern expression in OPTIONAL MATCH ... WHERE (null-preserving)
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    OPTIONAL MATCH (b:Person) WHERE (a)-[:KNOWS]->(b)
+    RETURN a.name, b.name
+    ORDER BY a.name, b.name
+$$) AS (a agtype, b agtype);
+
+--
+-- EXISTS() and a bare pattern combined in a single predicate
+--
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a:Person)
+    WHERE EXISTS((a)-[:KNOWS]->(:Person)) AND (a)-[:WORKS_WITH]->(:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (name agtype);
+
+--
 -- Cleanup
 --
 SELECT * FROM drop_graph('pattern_expr', true);
