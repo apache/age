@@ -197,9 +197,20 @@ void write_graphid(agtype_build_state *bstate, graphid graphid)
     write_const(AGT_HEADER_INTEGER, AGT_HEADER_TYPE);
     length += AGT_HEADER_SIZE;
 
-    /* graphid value */
-    write_const(graphid, int64);
-    length += sizeof(int64);
+    /*
+     * graphid value (int64). The 4-byte AGT_HEADER above leaves the buffer
+     * write position 4-byte-aligned but not 8-byte-aligned, so the typed
+     * write done by write_const(graphid, int64) is undefined behavior under
+     * strict alignment rules. Use memcpy. (UBSan flags the typed write as
+     * "store to misaligned address ... requires 8 byte alignment".)
+     */
+    {
+        int numlen = sizeof(int64);
+        int g_offset = BUFFER_RESERVE(numlen);
+
+        memcpy(bstate->buffer->data + g_offset, &graphid, sizeof(int64));
+        length += numlen;
+    }
 
     /* agtentry */
     write_agt(AGTENTRY_IS_AGTYPE | length);
@@ -214,8 +225,15 @@ void write_container(agtype_build_state *bstate, agtype *agtype)
     /* padding */
     length += BUFFER_WRITE_PAD();
 
-    /* varlen data */
-    length += write_ptr((char *) &agtype->root, VARSIZE(agtype));
+    /*
+     * Copy the inner agtype_container only, NOT the outer varlena header.
+     * VARSIZE(agtype) reports the total varlena size (including the 4-byte
+     * vl_len_ header), but we are starting our copy at &agtype->root, which
+     * is already past that header. Subtracting VARHDRSZ avoids reading
+     * VARHDRSZ bytes past the source allocation (caught by ASan as
+     * heap-buffer-overflow in __interceptor_memcpy from write_pointer).
+     */
+    length += write_ptr((char *) &agtype->root, VARSIZE(agtype) - VARHDRSZ);
 
     /* agtentry */
     write_agt(AGTENTRY_IS_CONTAINER | length);

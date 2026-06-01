@@ -104,6 +104,66 @@ static void pfree_iterator_agtype_value_token(agtype_iterator_token token,
                                               agtype_value *agtv);
 
 /*
+ * Per-call agtype build arena.
+ *
+ * Hot Datum functions in agtype.c build an agtype_value tree, serialize it
+ * via agtype_value_to_agtype(), then recursively free it with
+ * pfree_agtype_value_content(). The recursive free is O(N) in the number of
+ * tree nodes; the arena helpers below let callers replace it with an O(K)
+ * block reset (K = number of allocated AllocSet blocks; typically 1 for
+ * small trees) by allocating the entire tree inside a short-lived
+ * MemoryContext.
+ *
+ * The arena is sized for typical agtype_value trees; it grows on demand.
+ * Cost of creating and deleting the context is amortized against the
+ * eliminated per-node pfree walk and per-node AllocSetFree calls.
+ *
+ * agt_arena_end() is a no-op on NULL, allowing simple cleanup paths.
+ *
+ * The AGT_ARENA_BEGIN_SHARED() macro (declared in agtype.h) returns a
+ * context parented under CacheMemoryContext (process lifetime) so the
+ * caller may stash it in a file-static variable for reuse across many
+ * invocations. The first caller pays AllocSetContextCreate cost;
+ * subsequent callers reuse the context and pay only MemoryContextReset
+ * (cheap; ~100 ns when nothing was allocated since last reset). Use this
+ * for hot inner loops (sort comparators, per-tuple deep-copy workspaces).
+ */
+MemoryContext agt_arena_begin(void)
+{
+    /*
+     * ALLOCSET_SMALL_SIZES (initial=1KB, max=8KB). Most agtype value trees
+     * fit in a single 1KB block.
+     */
+    return AllocSetContextCreate(CurrentMemoryContext,
+                                 "agtype build arena",
+                                 ALLOCSET_SMALL_SIZES);
+}
+
+/*
+ * Pattern B (shared, long-lived arena) is exposed as the macro
+ * AGT_ARENA_BEGIN_SHARED in agtype.h, because PG's AllocSetContextCreate
+ * enforces a compile-time-constant name via StaticAssertStmt. The macro
+ * inlines the AllocSet creation at the call site so the name literal is
+ * visible to the StaticAssert.
+ */
+
+void agt_arena_reset(MemoryContext arena)
+{
+    if (arena != NULL)
+    {
+        MemoryContextReset(arena);
+    }
+}
+
+void agt_arena_end(MemoryContext arena)
+{
+    if (arena != NULL)
+    {
+        MemoryContextDelete(arena);
+    }
+}
+
+/*
  * Turn an in-memory agtype_value into an agtype for on-disk storage.
  *
  * There isn't an agtype_to_agtype_value(), because generally we find it more
@@ -834,12 +894,18 @@ static void fill_agtype_value_no_copy(agtype_container *container, int index,
         {
         case AGT_HEADER_INTEGER:
             result->type = AGTV_INTEGER;
-            result->val.int_value = *((int64 *)(base + AGT_HEADER_SIZE));
+            /* See ag_serialize_extended_type: the 4-byte AGT_HEADER leaves
+             * the int64 at a 4-byte-aligned but not 8-byte-aligned address.
+             * Use memcpy to avoid undefined behavior on strict alignment
+             * platforms (caught by UBSan). */
+            memcpy(&result->val.int_value, base + AGT_HEADER_SIZE,
+                   sizeof(int64));
             break;
 
         case AGT_HEADER_FLOAT:
             result->type = AGTV_FLOAT;
-            result->val.float_value = *((float8 *)(base + AGT_HEADER_SIZE));
+            memcpy(&result->val.float_value, base + AGT_HEADER_SIZE,
+                   sizeof(float8));
             break;
 
         default:
@@ -880,8 +946,122 @@ static void fill_agtype_value_no_copy(agtype_container *container, int index,
  * of the full iterator machinery. It extracts the scalar values using no-copy
  * fill and compares them directly.
  *
+ * For composite types (VERTEX, EDGE, PATH) the no-copy fill still
+ * deserializes into newly-allocated memory. To avoid the per-call
+ * pfree_agtype_value_content recursive walk on every sort comparator
+ * invocation, those allocations are routed through a long-lived shared
+ * arena that is reset (O(1)) at the end of each call. The arena is
+ * created lazily on the first call that needs it (i.e. the first
+ * VERTEX/EDGE/PATH comparison) and reused across all subsequent calls in
+ * the process.
+ *
+ * Additional fast path (A2): when both containers are VERTEX or EDGE of
+ * the same type, the comparator only needs the graphid `id` field
+ * (compare_agtype_scalar_values does this; all other fields are ignored).
+ * Skip the full ag_deserialize_composite agtype_value tree build entirely
+ * and walk the binary representation directly to read just the int64 id.
+ * This is the dominant cost of sort-bound queries (notably IC4) since the
+ * tree build is O(properties + label) per row when only one int64 is
+ * needed for ordering.
+ *
  * Returns: negative if a < b, 0 if a == b, positive if a > b
  */
+static MemoryContext compare_scalar_arena = NULL;
+
+/*
+ * Fast int64-id extraction from a binary VERTEX or EDGE container.
+ *
+ * Layout of an extended VERTEX/EDGE entry (set up by ag_serialize_extended_type
+ * with convert_extended_object): a 4-byte AGT_HEADER followed by a standard
+ * agtype_container holding an object whose first field (sorted by key length
+ * ascending) is "id". The id is itself stored as an extended AGTV_INTEGER:
+ * a 4-byte AGT_HEADER_INTEGER followed by an int64.
+ *
+ * Pair layout in an object container: children[0..N-1] are the keys, then
+ * children[N..2N-1] are the values; data follows. The "id" key is at index 0
+ * because "id" (length 2) is the shortest key in both VERTEX (id, label,
+ * properties) and EDGE (id, label, end_id, start_id, properties), and the
+ * agtype object representation sorts pairs by key length ascending.
+ *
+ * On success, writes the extracted graphid through *out and returns true.
+ * Returns false (leaving *out untouched) if the id field is not a well-formed
+ * extended AGTV_INTEGER, signaling the caller to fall back to the slow path.
+ * A bool result is used instead of a sentinel return value because a valid
+ * graphid can legitimately take any int64 value (e.g. label_id 0x8000 with
+ * entry_id 0 equals PG_INT64_MIN), so no in-band sentinel is safe.
+ *
+ * The caller is responsible for ensuring the input container actually holds a
+ * VERTEX or EDGE (i.e. this is only called after AGTE_IS_AGTYPE indicates an
+ * extended type and the AGT_HEADER matches AGT_HEADER_VERTEX or
+ * AGT_HEADER_EDGE).
+ */
+static bool extract_composite_id_fast(const agtype_container *outer_scalar,
+                                      graphid *out)
+{
+    const char *base_addr;
+    const agtype_container *obj;
+    int n_pairs;
+    const agtentry *children;
+    uint32 id_value_offset;
+    char *id_value_base;
+    char *id_extended_base;
+    AGT_HEADER_TYPE id_header;
+    int id_value_index;
+
+    /* outer_scalar is a single-element pseudo-array; element 0 is our extended type */
+    base_addr = (const char *)&outer_scalar->children[1];
+
+    /*
+     * Element 0 is an extended type. Its data starts at base_addr + 0 and
+     * begins with AGT_HEADER_VERTEX or AGT_HEADER_EDGE; the inner
+     * agtype_container follows immediately.
+     */
+    obj = (const agtype_container *)((const char *)base_addr + AGT_HEADER_SIZE);
+    n_pairs = AGTYPE_CONTAINER_SIZE(obj);
+    children = obj->children;
+
+    /*
+     * Pair value 0 ("id") lives at child index n_pairs (values come after
+     * keys). Compute its offset within the object's data area.
+     */
+    id_value_index = n_pairs;
+    id_value_offset = get_agtype_offset(obj, id_value_index);
+
+    /* Data area for this object starts after children[2*n_pairs] */
+    id_value_base = (char *)&children[2 * n_pairs];
+
+    /*
+     * The id value is an extended AGTV_INTEGER: AGT_HEADER (aligned) followed
+     * by the int64. INTALIGN matches what ag_deserialize_extended_type does.
+     */
+    id_extended_base = id_value_base + INTALIGN(id_value_offset);
+    /*
+     * The header is uint32 (4-byte) and lives at a 4-byte-aligned address,
+     * so a typed load is fine. The int64 that follows starts at offset
+     * AGT_HEADER_SIZE = 4 from id_extended_base, so it is 4-byte- but not
+     * necessarily 8-byte-aligned; use memcpy to avoid alignment UB.
+     */
+    memcpy(&id_header, id_extended_base, sizeof(AGT_HEADER_TYPE));
+
+    /*
+     * Defensive: if the value isn't actually an extended integer, fall back
+     * to the slow deserialize path by signaling. AGT_HEADER_INTEGER is the
+     * only valid header for the id field of a well-formed VERTEX/EDGE.
+     */
+    if (id_header != AGT_HEADER_INTEGER)
+    {
+        return false;
+    }
+
+    {
+        graphid id;
+
+        memcpy(&id, id_extended_base + AGT_HEADER_SIZE, sizeof(int64));
+        *out = id;
+        return true;
+    }
+}
+
 static int compare_agtype_scalar_containers(agtype_container *a,
                                             agtype_container *b)
 {
@@ -892,6 +1072,7 @@ static int compare_agtype_scalar_containers(agtype_container *a,
     int result;
     bool need_free_a = false;
     bool need_free_b = false;
+    MemoryContext saved_ctx = NULL;
 
     Assert(AGTYPE_CONTAINER_IS_SCALAR(a));
     Assert(AGTYPE_CONTAINER_IS_SCALAR(b));
@@ -900,13 +1081,77 @@ static int compare_agtype_scalar_containers(agtype_container *a,
     base_addr_a = (char *)&a->children[1];
     base_addr_b = (char *)&b->children[1];
 
+    /*
+     * A2 fast path: when both sides are extended-type scalars holding the
+     * same composite kind (VERTEX or EDGE), we only need the int64 id field
+     * to determine ordering (see compare_agtype_scalar_values' AGTV_VERTEX
+     * and AGTV_EDGE cases). Skip the full agtype_value tree build entirely.
+     */
+    if (AGTE_IS_AGTYPE(a->children[0]) && AGTE_IS_AGTYPE(b->children[0]))
+    {
+        AGT_HEADER_TYPE ha;
+        AGT_HEADER_TYPE hb;
+
+        /*
+         * The header is uint32 at an INTALIGN'd (4-byte) address, so a typed
+         * load would be safe, but use memcpy for consistency with the rest of
+         * this comparator (extract_composite_id_fast reads the same header via
+         * memcpy) and to stay robust if AGT_HEADER_TYPE is ever widened.
+         */
+        memcpy(&ha,
+               base_addr_a + INTALIGN(get_agtype_offset(a, 0)),
+               sizeof(AGT_HEADER_TYPE));
+        memcpy(&hb,
+               base_addr_b + INTALIGN(get_agtype_offset(b, 0)),
+               sizeof(AGT_HEADER_TYPE));
+
+        if (ha == hb &&
+            (ha == AGT_HEADER_VERTEX || ha == AGT_HEADER_EDGE))
+        {
+            graphid ida;
+            graphid idb;
+
+            /*
+             * extract_composite_id_fast returns false on a malformed id
+             * field; fall through to the slow path in that rare case rather
+             * than producing a wrong comparison.
+             */
+            if (extract_composite_id_fast(a, &ida) &&
+                extract_composite_id_fast(b, &idb))
+            {
+                if (ida == idb)
+                {
+                    return 0;
+                }
+                return (ida > idb) ? 1 : -1;
+            }
+        }
+    }
+
+    /*
+     * Peek at the entry types without filling, so we can route any composite
+     * allocations into the shared arena instead of CurrentMemoryContext.
+     * This avoids the recursive pfree walk after every comparison.
+     */
+    if (AGTE_IS_AGTYPE(a->children[0]) || AGTE_IS_AGTYPE(b->children[0]))
+    {
+        if (compare_scalar_arena == NULL)
+        {
+            compare_scalar_arena =
+                AGT_ARENA_BEGIN_SHARED("agtype scalar comparator");
+        }
+        saved_ctx = MemoryContextSwitchTo(compare_scalar_arena);
+    }
+
     /* Use no-copy fill to avoid allocations for simple types */
     fill_agtype_value_no_copy(a, 0, base_addr_a, 0, &va);
     fill_agtype_value_no_copy(b, 0, base_addr_b, 0, &vb);
 
     /*
-     * Check if we need to free the values after comparison.
-     * Only VERTEX, EDGE, and PATH types allocate memory in no-copy mode.
+     * Track which sides allocated composite content (VERTEX/EDGE/PATH).
+     * For the arena-backed allocations we still need this so we know to
+     * reset the arena at the end; for the (rare) caller-context-backed
+     * fallback path we still need to recursively free.
      */
     if (va.type == AGTV_VERTEX || va.type == AGTV_EDGE || va.type == AGTV_PATH)
     {
@@ -936,14 +1181,17 @@ static int compare_agtype_scalar_containers(agtype_container *a,
                   get_type_sort_priority(vb.type)) ? -1 : 1;
     }
 
-    /* Free any allocated memory from composite types */
-    if (need_free_a)
+    /*
+     * Cleanup. If we allocated into the shared arena, reset it (O(1));
+     * otherwise the no-copy fill made no allocations to free.
+     */
+    if (saved_ctx != NULL)
     {
-        pfree_agtype_value_content(&va);
-    }
-    if (need_free_b)
-    {
-        pfree_agtype_value_content(&vb);
+        MemoryContextSwitchTo(saved_ctx);
+        if (need_free_a || need_free_b)
+        {
+            agt_arena_reset(compare_scalar_arena);
+        }
     }
 
     return result;
@@ -2127,7 +2375,17 @@ int reserve_from_buffer(StringInfo buffer, int len)
 static void copy_to_buffer(StringInfo buffer, int offset, const char *data,
                            int len)
 {
-    memcpy(buffer->data + offset, data, len);
+    /*
+     * Guard against memcpy(dst, NULL, 0). Some callers (notably empty PATH
+     * scalars with no element bytes) reach here with data == NULL and len
+     * == 0; the C standard says memcpy with a NULL pointer is undefined even
+     * when len == 0. UBSan flags this as "null pointer passed as argument 2,
+     * which is declared to never be null".
+     */
+    if (len > 0)
+    {
+        memcpy(buffer->data + offset, data, len);
+    }
 }
 
 /*

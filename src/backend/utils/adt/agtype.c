@@ -5261,6 +5261,22 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     agtype_iterator_token tok;
     agtype_value *r;
     uint64 seed = 0xF0F0F0F0;
+    /*
+     * Stack of "is the current open array a raw_scalar pseudo-array?" so
+     * that the WAGT_END_ARRAY case can match the choice we made at
+     * WAGT_BEGIN_ARRAY. The iterator does not populate *val on END tokens
+     * (see comment above agtype_iterator_next), so r->val.array.raw_scalar
+     * is uninitialized at that point and reading it as a bool is undefined
+     * behavior (UBSan flagged values like 127 here).
+     *
+     * Arrays in agtype are bounded by AGTYPE_CONTAINER_SIZE which fits in
+     * AGT_CMASK; a fixed-size stack of 64 levels is far more than any real
+     * agtype graph value will ever produce. Bail out with an error if we
+     * exceed it rather than silently corrupting the hash.
+     */
+#define HASH_RAW_SCALAR_STACK_DEPTH 64
+    bool raw_scalar_stack[HASH_RAW_SCALAR_STACK_DEPTH];
+    int raw_scalar_top = -1;
 
     /* this function returns INTEGER which is 32 bits */
     if (PG_ARGISNULL(0))
@@ -5277,17 +5293,50 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
     {
         if (IS_A_AGTYPE_SCALAR(r) && AGTYPE_ITERATOR_TOKEN_IS_HASHABLE(tok))
             agtype_hash_scalar_value_extended(r, &hash, seed);
-        else if (tok == WAGT_BEGIN_ARRAY && !r->val.array.raw_scalar)
-            seed = LEFT_ROTATE(seed, 4);
+        else if (tok == WAGT_BEGIN_ARRAY)
+        {
+            /* push raw_scalar state for the matching END token */
+            raw_scalar_top++;
+            if (raw_scalar_top >= HASH_RAW_SCALAR_STACK_DEPTH)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                         errmsg("agtype_hash_cmp: array nesting depth exceeds %d",
+                                HASH_RAW_SCALAR_STACK_DEPTH)));
+            }
+            raw_scalar_stack[raw_scalar_top] = r->val.array.raw_scalar;
+            if (!r->val.array.raw_scalar)
+            {
+                seed = LEFT_ROTATE(seed, 4);
+            }
+        }
         else if (tok == WAGT_BEGIN_OBJECT)
             seed = LEFT_ROTATE(seed, 6);
-        else if (tok == WAGT_END_ARRAY && !r->val.array.raw_scalar)
-            seed = RIGHT_ROTATE(seed, 4);
+        else if (tok == WAGT_END_ARRAY)
+        {
+            bool was_raw_scalar;
+
+            /* pop matching BEGIN's raw_scalar state */
+            if (raw_scalar_top < 0)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_DATA_CORRUPTED),
+                         errmsg("agtype_hash_cmp: WAGT_END_ARRAY without matching WAGT_BEGIN_ARRAY")));
+            }
+            was_raw_scalar = raw_scalar_stack[raw_scalar_top];
+            raw_scalar_top--;
+            if (!was_raw_scalar)
+            {
+                seed = RIGHT_ROTATE(seed, 4);
+            }
+        }
         else if (tok == WAGT_END_OBJECT)
             seed = RIGHT_ROTATE(seed, 4);
 
         seed = LEFT_ROTATE(seed, 1);
     }
+
+#undef HASH_RAW_SCALAR_STACK_DEPTH
 
     pfree_if_not_null(r);
     PG_FREE_IF_COPY(agt, 0);
