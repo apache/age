@@ -29,5 +29,10 @@
 
 Node *transform_cypher_expr(cypher_parsestate *cpstate, Node *expr,
                             ParseExprKind expr_kind);
+Node *make_properties_expr(Node *prop_var);
+bool is_vertex_or_edge(Node *node);
+Node *extract_field_from_record(Node *node, char *field_name);
+Node *coerce_entity_to_agtype(ParseState *pstate, Node *node);
+void coerce_target_entities_to_agtype(ParseState *pstate, List *target_list);
 
 #endif
