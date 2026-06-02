@@ -245,6 +245,22 @@ class TestAgtype(unittest.TestCase):
         self.assertEqual(result[4], [1, 2, 3])
         self.assertEqual(result[5], {"key": "val"})
 
+    def test_string_value_preserves_inner_quotes(self):
+        """Issue #2418: preserve escaped boundary quotes when stripping.
+
+        visitStringValue must strip only the outer delimiters; otherwise
+        values like '"foo \\"bar\\""' lose their trailing escaped quote.
+        """
+        self.assertEqual(self.parse('"foo \\"bar\\""'), 'foo \\"bar\\"')
+        self.assertEqual(self.parse('"\\"leading"'), '\\"leading')
+        self.assertEqual(self.parse('"trailing\\""'), 'trailing\\"')
+        self.assertEqual(self.parse('""'), '')
+        # Same fix applies to visitPair() for object keys.
+        self.assertEqual(
+            self.parse('{"key\\"q": 1}'),
+            {'key\\"q': 1},
+        )
+
     def test_malformed_vertex_raises_agtypeerror_or_recovers(self):
         """Issue #2367: Malformed agtype must raise AGTypeError or recover gracefully."""
         from age.exceptions import AGTypeError
