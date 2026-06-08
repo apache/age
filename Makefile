@@ -183,7 +183,8 @@ REGRESS = scan \
           direct_field_access \
           security \
           reserved_keyword_alias \
-          agtype_jsonb_cast
+          agtype_jsonb_cast \
+          containment_selectivity
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)

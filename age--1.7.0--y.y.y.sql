@@ -762,3 +762,41 @@ CREATE FUNCTION ag_catalog._agehash_self_test()
     VOLATILE
     PARALLEL UNSAFE
 AS 'MODULE_PATHNAME';
+
+--
+-- Issue #2356: rebind containment and key-existence operators to the
+-- lightweight contsel / contjoinsel selectivity estimators.
+--
+-- @>, <@, @>>, <<@, ?, ?|, ?& on agtype were bound to matchingsel /
+-- matchingjoinsel. During planning matchingsel invokes the operator's
+-- underlying function (agtype_contains) once per pg_statistic MCV entry and
+-- histogram bin; with a realistic default_statistics_target that planning
+-- cost dominates simple point queries (the regression reported in #2356).
+--
+-- contsel / contjoinsel return fixed selectivity constants without calling the
+-- operator function, so planning is constant-time. This is a deliberate
+-- planning-speed vs. estimate-accuracy trade-off. Note it DIVERGES from
+-- PostgreSQL core, which keeps jsonb's @>, <@, ?, ?|, ?& on matchingsel /
+-- matchingjoinsel; it is an AGE-specific choice favoring workloads where these
+-- operators appear in selective point lookups.
+--
+ALTER OPERATOR ag_catalog.@>(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.<@(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.@>>(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.<<@(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?(agtype, text)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?|(agtype, text[])
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?|(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?&(agtype, text[])
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
+ALTER OPERATOR ag_catalog.?&(agtype, agtype)
+    SET (RESTRICT = contsel, JOIN = contjoinsel);
