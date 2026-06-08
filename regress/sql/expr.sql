@@ -4137,10 +4137,6 @@ SELECT * FROM drop_graph('keys', true);
 SELECT * FROM drop_graph('list', true);
 
 --
--- End of tests
---
-
---
 -- Issue 2391 - map literals must preserve keys whose values are null
 --
 SELECT create_graph('issue_2391');
@@ -4164,7 +4160,7 @@ $$) AS (m agtype);
 SELECT * FROM cypher('issue_2391', $$
   RETURN {outer: {inner: null, kept: 1}} AS m
 $$) AS (m agtype);
--- mixed non-null and null values are all preserved in order
+-- mixed non-null and null values are all preserved
 SELECT * FROM cypher('issue_2391', $$
   RETURN {a: 1, b: null, c: 'x'} AS m
 $$) AS (m agtype);
@@ -4181,3 +4177,7 @@ SELECT * FROM cypher('issue_2391', $$
   MATCH (n:Item) RETURN n
 $$) AS (n agtype);
 SELECT * FROM drop_graph('issue_2391', true);
+
+--
+-- End of tests
+--
