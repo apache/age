@@ -9866,10 +9866,10 @@ SELECT * FROM cypher('accessor_opt', $$
     MATCH (n:Person)
     RETURN {id: id(n), name: n.name}
 $$) AS (plan agtype);
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Seq Scan on accessor_opt."Person" n
-   Output: agtype_build_map_nonull('id'::text, n.id, 'name'::text, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
+   Output: agtype_build_map('id'::text, n.id, 'name'::text, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]))
 (2 rows)
 
 SELECT * FROM cypher('accessor_opt', $$
