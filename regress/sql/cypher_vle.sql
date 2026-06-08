@@ -264,7 +264,7 @@ BEGIN
     RETURN QUERY
     SELECT * FROM cypher('mygraph', $CYPHER$
         MATCH (h:head {name: $list_name})-[e:next*]->(v:node)
-        RETURN v
+        RETURN v ORDER BY id(v)
     $CYPHER$, ag_param) AS (node agtype);
 END $$;
 
