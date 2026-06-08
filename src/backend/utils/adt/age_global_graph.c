@@ -45,7 +45,6 @@
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
 
-#include <pthread.h>
 
 /* defines */
 #define VERTEX_HTAB_NAME "Vertex to edge lists " /* added a space at end for */
@@ -152,18 +151,8 @@ typedef struct GRAPH_global_context
     struct GRAPH_global_context *next; /* next graph */
 } GRAPH_global_context;
 
-/* container for GRAPH_global_context and its mutex */
-typedef struct GRAPH_global_context_container
-{
-    /* head of the list */
-    GRAPH_global_context *contexts;
-
-    /* mutex to protect the list */
-    pthread_mutex_t mutex_lock;
-} GRAPH_global_context_container;
-
 /* global variable to hold the per process GRAPH global contexts */
-static GRAPH_global_context_container global_graph_contexts_container = {0};
+static GRAPH_global_context *global_graph_contexts = NULL;
 
 /*
  * VertexEdgeArray helpers — flat-array adjacency container used by
@@ -1054,12 +1043,10 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
      *     5) One or more other contexts do exist but, one or more are invalid.
      */
 
-    /* lock the global contexts list */
-    pthread_mutex_lock(&global_graph_contexts_container.mutex_lock);
 
     /* free the invalidated GRAPH global contexts first */
     prev_ggctx = NULL;
-    curr_ggctx = global_graph_contexts_container.contexts;
+    curr_ggctx = global_graph_contexts;
     while (curr_ggctx != NULL)
     {
         GRAPH_global_context *next_ggctx = curr_ggctx->next;
@@ -1076,7 +1063,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
              */
             if (prev_ggctx == NULL)
             {
-                global_graph_contexts_container.contexts = next_ggctx;
+                global_graph_contexts = next_ggctx;
             }
             else
             {
@@ -1089,8 +1076,6 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
             /* if it wasn't successfull, there was a missing vertex entry */
             if (!success)
             {
-                /* unlock the mutex so we don't get a deadlock */
-                pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
                 ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
                                 errmsg("missing vertex or edge entry during free")));
@@ -1106,7 +1091,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     }
 
     /* find our graph's context. if it exists, we are done */
-    curr_ggctx = global_graph_contexts_container.contexts;
+    curr_ggctx = global_graph_contexts;
     while (curr_ggctx != NULL)
     {
         if (curr_ggctx->graph_oid == graph_oid)
@@ -1114,8 +1099,6 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
             /* switch our context back */
             MemoryContextSwitchTo(oldctx);
 
-            /* we are done unlock the global contexts list */
-            pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
             return curr_ggctx;
         }
@@ -1125,9 +1108,9 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     /* otherwise, we need to create one and possibly attach it */
     new_ggctx = palloc0(sizeof(GRAPH_global_context));
 
-    if (global_graph_contexts_container.contexts != NULL)
+    if (global_graph_contexts != NULL)
     {
-        new_ggctx->next = global_graph_contexts_container.contexts;
+        new_ggctx->next = global_graph_contexts;
     }
     else
     {
@@ -1135,7 +1118,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     }
 
     /* set the global context variable */
-    global_graph_contexts_container.contexts = new_ggctx;
+    global_graph_contexts = new_ggctx;
 
     /* set the graph name and oid */
     new_ggctx->graph_name = pstrdup(graph_name);
@@ -1157,8 +1140,6 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     load_GRAPH_global_hashtables(new_ggctx);
     freeze_GRAPH_global_hashtables(new_ggctx);
 
-    /* unlock the global contexts list */
-    pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
     /* switch back to the previous memory context */
     MemoryContextSwitchTo(oldctx);
@@ -1170,18 +1151,16 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
  * Helper function to delete all of the global graph contexts used by the
  * process. When done the global global_graph_contexts will be NULL.
  *
- * NOTE: Function uses a MUTEX global_graph_contexts_mutex
+ *
  */
 static bool delete_GRAPH_global_contexts(void)
 {
     GRAPH_global_context *curr_ggctx = NULL;
     bool retval = false;
 
-    /* lock contexts list */
-    pthread_mutex_lock(&global_graph_contexts_container.mutex_lock);
 
     /* get the first context, if any */
-    curr_ggctx = global_graph_contexts_container.contexts;
+    curr_ggctx = global_graph_contexts;
 
     /* free all GRAPH global contexts */
     while (curr_ggctx != NULL)
@@ -1195,8 +1174,6 @@ static bool delete_GRAPH_global_contexts(void)
         /* if it wasn't successfull, there was a missing vertex entry */
         if (!success)
         {
-            /* unlock the mutex so we don't get a deadlock */
-            pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
             ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
                             errmsg("missing vertex or edge entry during free")));
@@ -1209,10 +1186,8 @@ static bool delete_GRAPH_global_contexts(void)
     }
 
     /* reset the head of the contexts to NULL */
-    global_graph_contexts_container.contexts = NULL;
+    global_graph_contexts = NULL;
 
-    /* unlock the global contexts list */
-    pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
     return retval;
 }
@@ -1235,11 +1210,9 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
     /* get the graph oid */
     graph_oid = get_graph_oid(graph_name);
 
-    /* lock the global contexts list */
-    pthread_mutex_lock(&global_graph_contexts_container.mutex_lock);
 
     /* get the first context, if any */
-    curr_ggctx = global_graph_contexts_container.contexts;
+    curr_ggctx = global_graph_contexts;
 
     /* find the specified GRAPH global context */
     while (curr_ggctx != NULL)
@@ -1256,7 +1229,7 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
              */
             if (prev_ggctx == NULL)
             {
-                global_graph_contexts_container.contexts = next_ggctx;
+                global_graph_contexts = next_ggctx;
             }
             else
             {
@@ -1266,8 +1239,6 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
             /* free the current graph context */
             success = free_specific_GRAPH_global_context(curr_ggctx);
 
-            /* unlock the global contexts list */
-            pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
             /* if it wasn't successfull, there was a missing vertex entry */
             if (!success)
@@ -1285,8 +1256,6 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
         curr_ggctx = next_ggctx;
     }
 
-    /* unlock the global contexts list */
-    pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
     /* we didn't find it, return false */
     return false;
@@ -1347,19 +1316,15 @@ GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid)
 {
     GRAPH_global_context *ggctx = NULL;
 
-    /* lock the global contexts lists */
-    pthread_mutex_lock(&global_graph_contexts_container.mutex_lock);
 
     /* get the root */
-    ggctx = global_graph_contexts_container.contexts;
+    ggctx = global_graph_contexts;
 
     while(ggctx != NULL)
     {
         /* if we found it return it */
         if (ggctx->graph_oid == graph_oid)
         {
-            /* unlock the global contexts lists */
-            pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
             return ggctx;
         }
@@ -1368,8 +1333,6 @@ GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid)
         ggctx = ggctx->next;
     }
 
-    /* unlock the global contexts lists */
-    pthread_mutex_unlock(&global_graph_contexts_container.mutex_lock);
 
     /* we did not find it so return NULL */
     return NULL;
