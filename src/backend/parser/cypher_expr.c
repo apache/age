@@ -2265,16 +2265,19 @@ static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn)
             fname = list_make2(makeString("ag_catalog"), makeString(ag_name));
 
             /*
-             * Currently 3 functions need the graph name passed in as the first
-             * argument - in addition to the other arguments: startNode, endNode,
-             * and vle. So, check for those 3 functions here and that the arg list
-             * is not empty. Then prepend the graph name if necessary.
+             * Currently these functions need the graph name passed in as the
+             * first argument - in addition to the other arguments: startNode,
+             * endNode, vle, vertex_stats, shortest_path, and all_shortest_paths.
+             * So, check for those functions here and that the arg list is not
+             * empty. Then prepend the graph name if necessary.
              */
             if ((list_length(targs) != 0) &&
                 (strcasecmp("startNode", name) == 0 ||
                  strcasecmp("endNode", name) == 0 ||
                  strcasecmp("vle", name) == 0 ||
-                 strcasecmp("vertex_stats", name) == 0))
+                 strcasecmp("vertex_stats", name) == 0 ||
+                 strcasecmp("shortest_path", name) == 0 ||
+                 strcasecmp("all_shortest_paths", name) == 0))
             {
                 char *graph_name = cpstate->graph_name;
                 Datum d = string_to_agtype(graph_name);

@@ -201,6 +201,7 @@ REGRESS = scan \
           cypher_delete \
           cypher_with \
           cypher_vle \
+          age_shortest_path \
           cypher_union \
           cypher_call \
           cypher_merge \
