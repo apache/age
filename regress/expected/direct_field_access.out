@@ -78,7 +78,7 @@ $$) AS (lt agtype, gt agtype, eq agtype, ne agtype);
 (1 row)
 
 SELECT * FROM cypher('direct_access', $$
-    RETURN 'hello world' < 'hello worlds', 'test' > 'TEST'
+    RETURN 'hello world' < 'hello worlds', 'abd' > 'abc'
 $$) AS (lt agtype, gt agtype);
   lt  |  gt  
 ------+------
