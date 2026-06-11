@@ -61,7 +61,7 @@ SELECT * FROM cypher('direct_access', $$
 $$) AS (lt agtype, gt agtype, eq agtype, ne agtype);
 
 SELECT * FROM cypher('direct_access', $$
-    RETURN 'hello world' < 'hello worlds', 'test' > 'TEST'
+    RETURN 'hello world' < 'hello worlds', 'abd' > 'abc'
 $$) AS (lt agtype, gt agtype);
 
 -- Boolean comparisons
