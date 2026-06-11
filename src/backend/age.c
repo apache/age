@@ -17,6 +17,9 @@
  * under the License.
  */
 
+#include "postgres.h"
+#include "miscadmin.h"
+
 #include "catalog/ag_catalog.h"
 #include "nodes/ag_nodes.h"
 #include "optimizer/cypher_paths.h"
@@ -25,7 +28,6 @@
 #include "utils/age_global_graph.h"
 
 #if PG_VERSION_NUM < 170000
-#include "miscadmin.h"
 
 /* saved hook pointers for PG < 17 shmem path */
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
@@ -56,6 +58,11 @@ void _PG_init(void);
 
 void _PG_init(void)
 {
+    if (IsBinaryUpgrade)
+    {
+        return;
+    }
+
     register_ag_nodes();
     set_rel_pathlist_init();
     object_access_hook_init();

@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "catalog/ag_catalog.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 
@@ -64,7 +65,14 @@ static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
                              RangeTblEntry *rte)
 {
     if (prev_set_rel_pathlist_hook)
+    {
         prev_set_rel_pathlist_hook(root, rel, rti, rte);
+    }
+
+    if (!is_age_extension_exists())
+    {
+        return;
+    }
 
     switch (get_cypher_clause_kind(rte))
     {
