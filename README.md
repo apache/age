@@ -215,6 +215,16 @@ LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 ```
 
+### Note on `ag_catalog` ownership
+
+AGE installs all of its objects into the `ag_catalog` schema. Install AGE
+(`CREATE EXTENSION age`) **before** granting the `CREATE` privilege on the
+database to other roles. A role that can create schemas could otherwise
+pre-create `ag_catalog` and own it; `CREATE EXTENSION age` therefore refuses to
+install when `ag_catalog` already exists and is owned by a different role. If you
+hit that error, drop the stray schema (`DROP SCHEMA ag_catalog CASCADE`) or
+transfer its ownership to the installing role, then retry.
+
 <h2><img height="20" src="/img/contents.svg">&nbsp;&nbsp;Using AGE with Non-Autocommit Clients (psycopg, JDBC, etc.)</h2>
 
 If you are using AGE from a database client that does **not** default to autocommit — most commonly `psycopg` v3 or JDBC — you must understand how PostgreSQL's transaction semantics apply to AGE's setup and DDL-like functions. Otherwise, you may see graphs or labels that appear to be created successfully, but are not visible from new connections.
