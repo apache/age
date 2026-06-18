@@ -33,7 +33,7 @@ jobs:
         run: |
           git clone --depth 1 --branch REL_19_BETA1 https://git.postgresql.org/git/postgresql.git ~/pg19source
           cd ~/pg19source
-          ./configure --prefix=$HOME/pg19 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
+          ./configure --prefix=$HOME/pg19 CFLAGS="-std=gnu11 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
           cd contrib
           cd fuzzystrmatch
