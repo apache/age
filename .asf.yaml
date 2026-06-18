@@ -32,7 +32,6 @@ github:
     - postgresql-extension
     - graphdb
     - multi-model-dbms
-    - agensgraph
     - age-database
   features:
     wiki: true

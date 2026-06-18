@@ -2,44 +2,44 @@ name: Build / Regression
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "PG19" ]
 
   pull_request:
-    branches: [ "master" ]
+    branches: [ "PG19" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get latest commit id of PostgreSQL 18
+      - name: Get latest commit id of PostgreSQL 19
         run: |
-          echo "PG_COMMIT_HASH=$(git ls-remote https://git.postgresql.org/git/postgresql.git refs/heads/REL_18_STABLE | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PG_COMMIT_HASH=$(git ls-remote https://git.postgresql.org/git/postgresql.git refs/tags/REL_19_BETA1 | awk '{print $1}')" >> $GITHUB_ENV
 
-      - name: Cache PostgreSQL 18
+      - name: Cache PostgreSQL 19
         uses: actions/cache@v3
-        id: pg18cache
+        id: pg19cache
         with:
-          path: ~/pg18
-          key: ${{ runner.os }}-v1-pg18-${{ env.PG_COMMIT_HASH }}
+          path: ~/pg19
+          key: ${{ runner.os }}-v1-pg19-${{ env.PG_COMMIT_HASH }}
 
       - name: Install necessary dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison
 
-      - name: Install PostgreSQL 18 and some extensions
-        if: steps.pg18cache.outputs.cache-hit != 'true'
+      - name: Install PostgreSQL 19 and some extensions
+        if: steps.pg19cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch REL_18_STABLE https://git.postgresql.org/git/postgresql.git ~/pg18source
-          cd ~/pg18source
-          ./configure --prefix=$HOME/pg18 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
+          git clone --depth 1 --branch REL_19_BETA1 https://git.postgresql.org/git/postgresql.git ~/pg19source
+          cd ~/pg19source
+          ./configure --prefix=$HOME/pg19 CFLAGS="-std=gnu99 -ggdb -O0" --enable-cassert
           make install -j$(nproc) > /dev/null
           cd contrib
           cd fuzzystrmatch
-          make PG_CONFIG=$HOME/pg18/bin/pg_config install -j$(nproc) > /dev/null
+          make PG_CONFIG=$HOME/pg19/bin/pg_config install -j$(nproc) > /dev/null
           cd ../pg_trgm
-          make PG_CONFIG=$HOME/pg18/bin/pg_config install -j$(nproc) > /dev/null
+          make PG_CONFIG=$HOME/pg19/bin/pg_config install -j$(nproc) > /dev/null
 
       - uses: actions/checkout@v3
         with:
@@ -48,19 +48,19 @@ jobs:
       - name: Build AGE
         id: build
         run: |
-          make PG_CONFIG=$HOME/pg18/bin/pg_config COPT=-Werror install -j$(nproc)
+          make PG_CONFIG=$HOME/pg19/bin/pg_config COPT=-Werror install -j$(nproc)
 
       - name: Pull and build pgvector
         id: pgvector
         run: |
           git clone https://github.com/pgvector/pgvector.git
           cd pgvector
-          make PG_CONFIG=$HOME/pg18/bin/pg_config install -j$(nproc) > /dev/null
+          make PG_CONFIG=$HOME/pg19/bin/pg_config install -j$(nproc) > /dev/null
 
       - name: Regression tests
         id: regression_tests
         run: |
-          make PG_CONFIG=$HOME/pg18/bin/pg_config installcheck EXTRA_TESTS="pgvector fuzzystrmatch pg_trgm"
+          make PG_CONFIG=$HOME/pg19/bin/pg_config installcheck EXTRA_TESTS="pgvector fuzzystrmatch pg_trgm"
         continue-on-error: true
 
       - name: Dump regression test errors

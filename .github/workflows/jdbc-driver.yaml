@@ -2,10 +2,10 @@ name: JDBC Driver Tests
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "PG19" ]
 
   pull_request:
-    branches: [ "master" ]
+    branches: [ "PG19" ]
 
 jobs:
   build:
