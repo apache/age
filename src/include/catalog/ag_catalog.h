@@ -24,6 +24,8 @@
 
 #include "utils/agtype.h"
 
+bool is_age_extension_exists(void);
+
 void object_access_hook_init(void);
 void object_access_hook_fini(void);
 
