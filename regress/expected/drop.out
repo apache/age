@@ -40,6 +40,14 @@ SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'ag_catalog';
 -----------
 (0 rows)
 
+-- When ag_catalog is missing extension hooks shouldn't fail with the
+-- ERROR  schema "ag_catalog" does not exist.
+-- It might happen when 'age' is loaded but extension isn't created yet.
+SET client_min_messages TO WARNING;
+DROP SCHEMA IF EXISTS ag_catalog CASCADE;
+RESET client_min_messages;
+CREATE SCHEMA _regress_drop;
+DROP SCHEMA _regress_drop; -- should'n produce the ERROR
 -- Recreate the extension and validate we can recreate a graph
 CREATE EXTENSION age;
 SELECT create_graph('drop');
@@ -115,7 +123,7 @@ NOTICE:  label "issue_1305"."r" has been dropped
 (1 row)
 
 SELECT drop_label('issue_1305', 'r');
-ERROR:  rel_name not found for label "r"
+ERROR:  label "r" does not exist
 SELECT drop_label('issue_1305', 'n', false);
 NOTICE:  label "issue_1305"."n" has been dropped
  drop_label 
@@ -124,7 +132,7 @@ NOTICE:  label "issue_1305"."n" has been dropped
 (1 row)
 
 SELECT drop_label('issue_1305', 'n');
-ERROR:  rel_name not found for label "n"
+ERROR:  label "n" does not exist
 SELECT * FROM drop_graph('issue_1305', true);
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to table issue_1305._ag_label_vertex
