@@ -1,0 +1,341 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+-- Suppress the create_graph / create_vlabel NOTICE chatter so the assertions
+-- below are the deterministic output. (The feature is exercised regardless.)
+SET client_min_messages = warning;
+--
+-- Build a "somewhat large" source graph with NO MATCH (fast bulk CREATE):
+--   * 2000 isolated components, each  (:Person{pid,age})-[:KNOWS{w}]->(:Friend{pid})
+--     => 2000 Person + 2000 Friend vertices, 2000 KNOWS edges
+--   * 500 isolated :Company vertices (no edges)
+-- Totals: 4500 vertices, 2000 edges, label set {Person,Friend,Company,KNOWS}.
+--
+SELECT create_graph('sg_src');
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT count(*) FROM cypher('sg_src', $$
+    UNWIND range(1, 2000) AS i
+    CREATE (:Person {pid: i, age: i % 100})-[:KNOWS {w: i}]->(:Friend {pid: i})
+$$) AS (a agtype);
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM cypher('sg_src', $$
+    UNWIND range(1, 500) AS i CREATE (:Company {cid: i})
+$$) AS (a agtype);
+ count 
+-------
+     0
+(1 row)
+
+-- Source baseline (printed for reference; deterministic).
+SELECT
+    (SELECT count(*) FROM cypher('sg_src', $$ MATCH (n) RETURN n $$) AS (n agtype)) AS src_vertices,
+    (SELECT count(*) FROM cypher('sg_src', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype)) AS src_edges;
+ src_vertices | src_edges 
+--------------+-----------
+         4500 |      2000
+(1 row)
+
+--
+-- 1. Full copy ('*','*'): counts equal the source, and the new graph round-trips.
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_all', 'sg_src', '*', '*');
+ node_count | relationship_count 
+------------+--------------------
+       4500 |               2000
+(1 row)
+
+SELECT
+    (SELECT count(*) FROM cypher('sg_all', $$ MATCH (n) RETURN n $$) AS (n agtype))
+      = (SELECT count(*) FROM cypher('sg_src', $$ MATCH (n) RETURN n $$) AS (n agtype)) AS nodes_match,
+    (SELECT count(*) FROM cypher('sg_all', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype))
+      = (SELECT count(*) FROM cypher('sg_src', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype)) AS edges_match;
+ nodes_match | edges_match 
+-------------+-------------
+ t           | t
+(1 row)
+
+--
+-- 2. Vertex-induced (node filter only): keep pid <= 1000. An edge survives iff
+--    BOTH endpoints survive (induced rule), with no relationship filter.
+--    node_count is asserted against the function return; correctness is verified
+--    by recomputing the induced set from the source (robust booleans).
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_v', 'sg_src', 'n.pid <= 1000', '*');
+ node_count | relationship_count 
+------------+--------------------
+       2000 |               1000
+(1 row)
+
+SELECT
+    (SELECT count(*) FROM cypher('sg_v', $$ MATCH (n) RETURN n $$) AS (n agtype))
+      = (SELECT count(*) FROM cypher('sg_src',
+            $$ MATCH (n) WHERE n.pid <= 1000 RETURN n $$) AS (n agtype)) AS nodes_ok,
+    (SELECT count(*) FROM cypher('sg_v', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype))
+      = (SELECT count(*) FROM cypher('sg_src',
+            $$ MATCH (a)-[r]->(b) WHERE a.pid <= 1000 AND b.pid <= 1000 RETURN r $$)
+            AS (r agtype)) AS edges_ok;
+ nodes_ok | edges_ok 
+----------+----------
+ t        | t
+(1 row)
+
+--
+-- 3. Node + relationship predicate: keep pid <= 1000 vertices and w <= 300 edges.
+--    Edge survives iff w<=300 AND both endpoints pid<=1000.
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_nr', 'sg_src', 'n.pid <= 1000', 'r.w <= 300');
+ node_count | relationship_count 
+------------+--------------------
+       2000 |                300
+(1 row)
+
+SELECT
+    (SELECT count(*) FROM cypher('sg_nr', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype))
+      = (SELECT count(*) FROM cypher('sg_src',
+            $$ MATCH (a)-[r]->(b) WHERE r.w <= 300 AND a.pid <= 1000 AND b.pid <= 1000
+               RETURN r $$) AS (r agtype)) AS edges_ok;
+ edges_ok 
+----------
+ t
+(1 row)
+
+--
+-- 4. Label filter excludes one endpoint type: keep only :Person. Every KNOWS
+--    edge points Person->Friend, so all edges must be dropped (induced rule).
+--    (AGE evaluates label predicates with label(n); GDS uses n:Person -- same
+--    containment semantics, different predicate syntax.)
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_person', 'sg_src', $f$label(n) = 'Person'$f$, '*');
+ node_count | relationship_count 
+------------+--------------------
+       2000 |                  0
+(1 row)
+
+--
+-- 5. Bipartite (type filter): keep Person+Friend and KNOWS edges => all 2000.
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_bip', 'sg_src',
+                     $f$label(n) = 'Person' OR label(n) = 'Friend'$f$,
+                     $f$label(r) = 'KNOWS'$f$);
+ node_count | relationship_count 
+------------+--------------------
+       4000 |               2000
+(1 row)
+
+--
+-- 6. Empty result: a predicate matching nothing yields an empty subgraph
+--    (not an error), with the default labels only.
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_empty', 'sg_src', 'n.pid < 0', '*');
+ node_count | relationship_count 
+------------+--------------------
+          0 |                  0
+(1 row)
+
+SELECT count(*) AS empty_vertices
+FROM cypher('sg_empty', $$ MATCH (n) RETURN n $$) AS (n agtype);
+ empty_vertices 
+----------------
+              0
+(1 row)
+
+--
+-- 7. Composability: extract a subgraph from an already-extracted subgraph.
+--    From sg_v (pid<=1000) keep pid<=500; verify against recomputation on sg_v.
+--
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_v2', 'sg_v', 'n.pid <= 500', '*');
+ node_count | relationship_count 
+------------+--------------------
+       1000 |                500
+(1 row)
+
+SELECT
+    (SELECT count(*) FROM cypher('sg_v2', $$ MATCH (n) RETURN n $$) AS (n agtype))
+      = (SELECT count(*) FROM cypher('sg_v',
+            $$ MATCH (n) WHERE n.pid <= 500 RETURN n $$) AS (n agtype)) AS nodes_ok,
+    (SELECT count(*) FROM cypher('sg_v2', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype))
+      = (SELECT count(*) FROM cypher('sg_v',
+            $$ MATCH (a)-[r]->(b) WHERE a.pid <= 500 AND b.pid <= 500 RETURN r $$)
+            AS (r agtype)) AS edges_ok;
+ nodes_ok | edges_ok 
+----------+----------
+ t        | t
+(1 row)
+
+--
+-- 8. Self-loops and parallel edges (multigraph structure) are preserved.
+--
+SELECT create_graph('sg_multi');
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('sg_multi', $$
+    CREATE (a:N {k: 1}) CREATE (a)-[:E {t: 1}]->(a)
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('sg_multi', $$
+    CREATE (a:N {k: 2}), (b:N {k: 3}),
+           (a)-[:E {t: 2}]->(b), (a)-[:E {t: 3}]->(b)
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT node_count, relationship_count
+FROM create_subgraph('sg_multi_sub', 'sg_multi', '*', '*');
+ node_count | relationship_count 
+------------+--------------------
+          3 |                  3
+(1 row)
+
+-- self-loop preserved (exactly one edge from a node to itself)
+SELECT count(*) AS self_loops
+FROM cypher('sg_multi_sub', $$ MATCH (a)-[r]->(a) RETURN r $$) AS (r agtype);
+ self_loops 
+------------
+          1
+(1 row)
+
+-- parallel edges preserved (two edges between k=2 and k=3)
+SELECT count(*) AS parallel_edges
+FROM cypher('sg_multi_sub', $$ MATCH (a {k: 2})-[r]->(b {k: 3}) RETURN r $$) AS (r agtype);
+ parallel_edges 
+----------------
+              2
+(1 row)
+
+--
+-- 9. Property fidelity: a copied vertex keeps its properties verbatim.
+--
+SELECT count(*) AS person_500_age_ok
+FROM cypher('sg_v', $$ MATCH (n:Person {pid: 500}) WHERE n.age = 0 RETURN n $$) AS (n agtype);
+ person_500_age_ok 
+-------------------
+                 1
+(1 row)
+
+--
+-- 10. Error handling / edge cases.
+--
+-- NULL graph name
+SELECT create_subgraph(NULL, 'sg_src', '*', '*');
+ERROR:  new graph name must not be NULL
+CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 18 at RAISE
+-- source does not exist
+SELECT create_subgraph('sg_x', 'no_such_graph', '*', '*');
+ERROR:  graph "no_such_graph" does not exist
+CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 47 at RAISE
+-- extracting into the source itself
+SELECT create_subgraph('sg_src', 'sg_src', '*', '*');
+ERROR:  cannot extract a subgraph of "sg_src" into itself
+CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 24 at RAISE
+-- destination already exists
+SELECT create_subgraph('sg_all', 'sg_src', '*', '*');
+ERROR:  graph "sg_all" already exists
+CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 53 at RAISE
+-- invalid Cypher predicate is reported (propagated from the engine)
+SELECT create_subgraph('sg_bad', 'sg_src', 'n.pid <<>> 1', '*');
+ERROR:  operator does not exist: agtype <<>> agtype
+LINE 1: ...her('sg_src', $age_subgraph$MATCH (n) WHERE n.pid <<>> 1 RET...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  CREATE TEMP TABLE _ag_sg_kept_v ON COMMIT DROP AS SELECT DISTINCT ag_catalog.agtype_to_graphid(vid) AS gid FROM ag_catalog.cypher('sg_src', $age_subgraph$MATCH (n) WHERE n.pid <<>> 1 RETURN id(n)$age_subgraph$) AS (vid agtype)
+CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 80 at EXECUTE
+-- cleanup
+SELECT drop_graph('sg_v2', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_multi_sub', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_multi', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_empty', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_bip', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_person', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_nr', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_v', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_all', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('sg_src', true);
+ drop_graph 
+------------
+ 
+(1 row)
+
