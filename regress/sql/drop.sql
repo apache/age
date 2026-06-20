@@ -28,6 +28,15 @@ SELECT nspname FROM pg_catalog.pg_namespace WHERE nspname = 'drop';
 
 SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'ag_catalog';
 
+-- When ag_catalog is missing extension hooks shouldn't fail with the
+-- ERROR  schema "ag_catalog" does not exist.
+-- It might happen when 'age' is loaded but extension isn't created yet.
+SET client_min_messages TO WARNING;
+DROP SCHEMA IF EXISTS ag_catalog CASCADE;
+RESET client_min_messages;
+CREATE SCHEMA _regress_drop;
+DROP SCHEMA _regress_drop; -- should'n produce the ERROR
+
 -- Recreate the extension and validate we can recreate a graph
 CREATE EXTENSION age;
 
