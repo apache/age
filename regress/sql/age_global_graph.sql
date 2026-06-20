@@ -16,9 +16,18 @@ SELECT * FROM create_graph('ag_graph_3');
 SELECT * FROM cypher('ag_graph_3', $$ CREATE (v:vertex3) RETURN v  $$) AS (v agtype);
 
 -- load contexts using the vertex_stats command
+-- Build all three graph contexts under one snapshot. The vertex_stats()
+-- calls are wrapped in a single REPEATABLE READ transaction so they share
+-- one snapshot; this keeps the snapshot-fallback path in is_ggctx_invalid()
+-- from purging an already-built context when concurrent xid activity
+-- (autovacuum, parallel installcheck, replication) advances the snapshot
+-- between calls. Read Committed is insufficient: it takes a fresh snapshot
+-- per statement.
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+COMMIT;
 
 --- loading undefined contexts
 --- should throw exception - graph "ag_graph_4" does not exist
@@ -55,9 +64,13 @@ SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_graphs('ag_graph_4') 
 --
 
 -- load contexts again
+-- Same REPEATABLE READ wrap as the first build phase above, for the same
+-- snapshot-stability reason.
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_2', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
 SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
+COMMIT;
 
 -- delete all graph contexts
 -- should return true
@@ -115,12 +128,12 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u)-[e]->(v) RETURN u, e, v ORDER BY
 -- what is there now?
 SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (result agtype);
 -- remove some vertices
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT * FROM ag_graph_1._ag_label_vertex ORDER BY id;
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710661';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710662';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710664';
-SELECT * FROM ag_graph_1._ag_label_vertex;
-SELECT * FROM ag_graph_1._ag_label_edge;
+SELECT * FROM ag_graph_1._ag_label_vertex ORDER BY id;
+SELECT * FROM ag_graph_1._ag_label_edge ORDER BY id;
 -- The graph_stats query below will produce warnings for the dangling edges
 -- created by the DELETE commands above. The warnings appear in nondeterministic
 -- order because they come from iterating edge label tables (knows, stalks),

@@ -44,6 +44,14 @@ SELECT * FROM cypher('ag_graph_3', $$ CREATE (v:vertex3) RETURN v  $$) AS (v agt
 (1 row)
 
 -- load contexts using the vertex_stats command
+-- Build all three graph contexts under one snapshot. The vertex_stats()
+-- calls are wrapped in a single REPEATABLE READ transaction so they share
+-- one snapshot; this keeps the snapshot-fallback path in is_ggctx_invalid()
+-- from purging an already-built context when concurrent xid activity
+-- (autovacuum, parallel installcheck, replication) advances the snapshot
+-- between calls. Read Committed is insufficient: it takes a fresh snapshot
+-- per statement.
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
@@ -62,6 +70,7 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY 
  {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
+COMMIT;
 --- loading undefined contexts
 --- should throw exception - graph "ag_graph_4" does not exist
 SELECT * FROM cypher('ag_graph_4', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
@@ -130,6 +139,9 @@ LINE 1: SELECT * FROM cypher('ag_graph_4', $$ RETURN delete_global_g...
 -- delete_GRAPH_global_contexts
 --
 -- load contexts again
+-- Same REPEATABLE READ wrap as the first build phase above, for the same
+-- snapshot-stability reason.
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT * FROM cypher('ag_graph_3', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY id(u) $$) AS (result agtype);
                                             result                                             
 -----------------------------------------------------------------------------------------------
@@ -148,6 +160,7 @@ SELECT * FROM cypher('ag_graph_1', $$ MATCH (u) RETURN vertex_stats(u) ORDER BY 
  {"id": 844424930131969, "label": "vertex1", "in_degree": 0, "out_degree": 0, "self_loops": 0}
 (1 row)
 
+COMMIT;
 -- delete all graph contexts
 -- should return true
 SELECT * FROM cypher('ag_graph_1', $$ RETURN delete_global_graphs(NULL) $$) AS (result agtype);
@@ -306,7 +319,7 @@ SELECT * FROM cypher('ag_graph_1', $$ RETURN graph_stats('ag_graph_1') $$) AS (r
 (1 row)
 
 -- remove some vertices
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT * FROM ag_graph_1._ag_label_vertex ORDER BY id;
        id        |              properties              
 -----------------+--------------------------------------
  281474976710657 | {}
@@ -325,7 +338,7 @@ SELECT * FROM ag_graph_1._ag_label_vertex;
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710661';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710662';
 DELETE FROM ag_graph_1._ag_label_vertex WHERE id::text = '281474976710664';
-SELECT * FROM ag_graph_1._ag_label_vertex;
+SELECT * FROM ag_graph_1._ag_label_vertex ORDER BY id;
        id        |              properties              
 -----------------+--------------------------------------
  281474976710657 | {}
@@ -338,7 +351,7 @@ SELECT * FROM ag_graph_1._ag_label_vertex;
  844424930131969 | {}
 (8 rows)
 
-SELECT * FROM ag_graph_1._ag_label_edge;
+SELECT * FROM ag_graph_1._ag_label_edge ORDER BY id;
         id        |    start_id     |     end_id      | properties 
 ------------------+-----------------+-----------------+------------
  1125899906842625 | 281474976710659 | 281474976710660 | {}
