@@ -15,11 +15,38 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# ===========================================================================
+# Apache AGE extension build
+#
+# File layout (top to bottom):
+#   * Module
+#   * Upgrade regression-test support   (1/2: variables)
+#   * Extension SQL & data files
+#   * Regression test suite (REGRESS / REGRESS_OPTS)
+#   * PGXS include
+#   * Build rules
+#   * Upgrade regression-test support   (2/2: rules + installcheck lifecycle)
+#   * installcheck-existing (run against a running server)
+#   * help
+#
+# Common targets:
+#   all                    Build the extension (default)
+#   install                Install into the PostgreSQL tree
+#   installcheck           Run regression tests in a private temp instance
+#   installcheck-existing  Run regression tests against a running server
+#   clean                  Remove build artifacts
+#   help                   Show the target list
+# ===========================================================================
+
+# ===== Module =====
 MODULE_big = age
 
-age_sql = age--1.7.0.sql
-
-# --- Extension upgrade regression test support ---
+# ===== Upgrade regression-test support (1/2: variables) =====
+#
+# This feature spans two sections (the PGXS include forces the split):
+#   * 1/2 (here, pre-include): variables -- must be defined before DATA,
+#     REGRESS, and EXTRA_CLEAN reference them.
+#   * 2/2 (below the PGXS include): build rules + installcheck lifecycle.
 #
 # Validates the upgrade template (age--<VER>--y.y.y.sql) by simulating an
 # extension version upgrade entirely within "make installcheck". The test:
@@ -53,7 +80,7 @@ age_sql = age--1.7.0.sql
 #     (e.g., age--1.7.0--1.8.0.sql is committed): the synthetic test is
 #     redundant because the real script ships with the extension.
 # Current version from age.control (e.g., "1.7.0")
-AGE_CURR_VER := $(shell awk -F"'" '/default_version/ {print $$2}' age.control 2>/dev/null)
+AGE_CURR_VER := $(shell awk -F"'" '/^default_version/ {print $$2}' age.control 2>/dev/null)
 # Git commit that last changed age.control — the "initial release" commit
 AGE_VER_COMMIT := $(shell git log -1 --format=%H -- age.control 2>/dev/null)
 # Synthetic initial version: current version with _initial suffix
@@ -80,6 +107,7 @@ AGE_REAL_UPGRADE := $(shell git ls-files 'age--$(AGE_CURR_VER)--*.sql' 2>/dev/nu
 # supersedes the synthetic one and has its own validation path.
 AGE_HAS_UPGRADE_TEST = $(and $(AGE_VER_COMMIT),$(AGE_UPGRADE_TEMPLATE),$(if $(AGE_REAL_UPGRADE),,yes))
 
+# ===== Object files =====
 OBJS = src/backend/age.o \
        src/backend/catalog/ag_catalog.o \
        src/backend/catalog/ag_graph.o \
@@ -134,6 +162,7 @@ OBJS = src/backend/age.o \
        src/backend/utils/name_validation.o \
        src/backend/utils/ag_guc.o
 
+# ===== Extension SQL & data files =====
 EXTENSION = age
 
 # to allow cleaning of previous (old) age--.sql files
@@ -143,12 +172,18 @@ SQLS := $(shell cat sql/sql_files)
 SQLS := $(addprefix sql/,$(SQLS))
 SQLS := $(addsuffix .sql,$(SQLS))
 
+# Name of the generated install SQL (age--<version>.sql).
+# Derived from AGE_CURR_VER (read from age.control above) so the version
+# number lives in exactly one place.
+age_sql = age--$(AGE_CURR_VER).sql
+
 DATA_built = $(age_sql)
 
 # Git-tracked upgrade scripts shipped with the extension (e.g., age--1.6.0--1.7.0.sql).
 # Excludes the upgrade template (y.y.y) and the synthetic stamped test file.
-DATA = $(filter-out age--%-y.y.y.sql $(age_upgrade_test_sql),$(wildcard age--*--*.sql))
+DATA = $(filter-out age--%--y.y.y.sql $(age_upgrade_test_sql),$(wildcard age--*--*.sql))
 
+# ===== Regression test suite =====
 # sorted in dependency order
 REGRESS = scan \
           graphid \
@@ -203,10 +238,23 @@ REGRESS += drop
 srcdir=`pwd`
 
 ag_regress_dir = $(srcdir)/regress
-REGRESS_OPTS = --load-extension=age --inputdir=$(ag_regress_dir) --outputdir=$(ag_regress_dir) --temp-instance=$(ag_regress_dir)/instance --port=61958 --encoding=UTF-8 --temp-config $(ag_regress_dir)/age_regression.conf
+REGRESS_OPTS = --load-extension=age \
+               --inputdir=$(ag_regress_dir) \
+               --outputdir=$(ag_regress_dir) \
+               --temp-instance=$(ag_regress_dir)/instance \
+               --port=61958 \
+               --encoding=UTF-8 \
+               --temp-config $(ag_regress_dir)/age_regression.conf
 
 ag_regress_out = instance/ log/ results/ regression.*
-EXTRA_CLEAN = $(addprefix $(ag_regress_dir)/, $(ag_regress_out)) src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h src/include/parser/cypher_kwlist_d.h $(all_age_sql) $(age_init_sql) $(age_upgrade_test_sql) $(ag_regress_dir)/age_upgrade_cleanup.sh
+EXTRA_CLEAN = $(addprefix $(ag_regress_dir)/, $(ag_regress_out)) \
+              src/backend/parser/cypher_gram.c \
+              src/include/parser/cypher_gram_def.h \
+              src/include/parser/cypher_kwlist_d.h \
+              $(all_age_sql) \
+              $(age_init_sql) \
+              $(age_upgrade_test_sql) \
+              $(ag_regress_dir)/age_upgrade_cleanup.sh
 
 GEN_KEYWORDLIST = $(PERL) -I ./tools/ ./tools/gen_keywordlist.pl
 GEN_KEYWORDLIST_DEPS = ./tools/gen_keywordlist.pl tools/PerfectHash.pm
@@ -214,9 +262,12 @@ GEN_KEYWORDLIST_DEPS = ./tools/gen_keywordlist.pl tools/PerfectHash.pm
 ag_include_dir = $(srcdir)/src/include
 PG_CPPFLAGS = -I$(ag_include_dir) -I$(ag_include_dir)/parser
 
+# ===== PGXS =====
 PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
+
+# ===== Build rules =====
 
 # 32-bit platform support: pass SIZEOF_DATUM=4 to enable (e.g., make SIZEOF_DATUM=4)
 # When SIZEOF_DATUM=4, PASSEDBYVALUE is stripped from graphid type for pass-by-reference.
@@ -235,10 +286,11 @@ src/backend/parser/cypher_parser.o: src/backend/parser/cypher_gram.c src/include
 src/backend/parser/cypher_parser.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 src/backend/parser/cypher_keywords.o: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
 src/backend/parser/cypher_keywords.bc: src/backend/parser/cypher_gram.c src/include/parser/cypher_gram_def.h
+src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
 
 # Build the default install SQL (age--<VER>.sql) from current HEAD's sql/sql_files.
 # This is what CREATE EXTENSION age installs — it contains ALL current functions.
-# All 31 non-upgrade regression tests run against this complete SQL.
+# Every non-upgrade regression test runs against this complete SQL.
 $(age_sql): $(SQLS)
 	@echo "Building install SQL: $@ from HEAD"
 	@cat $(SQLS) > $@
@@ -247,6 +299,12 @@ ifeq ($(SIZEOF_DATUM),4)
 	@sed 's/^  PASSEDBYVALUE,$$/  -- PASSEDBYVALUE removed for 32-bit (see Makefile)/' $@ > $@.tmp && mv $@.tmp $@
 endif
 
+# ===== Upgrade regression-test support (2/2: rules + installcheck lifecycle) =====
+#
+# Part 1/2 (variables) is above the PGXS include; the rules and target
+# hooks below must follow the include.
+#
+# --- Synthetic SQL rules ---
 # Build synthetic "initial" version install SQL from the version-bump commit.
 # This represents the pre-upgrade state — the SQL at the time the version was
 # bumped in age.control. Used only by the upgrade test.
@@ -266,9 +324,7 @@ $(age_upgrade_test_sql): $(AGE_UPGRADE_TEMPLATE)
 	@sed -e "s/1\.X\.0/$(AGE_CURR_VER)/g" -e "s/y\.y\.y/$(AGE_CURR_VER)/g" $< > $@
 endif
 
-src/backend/parser/ag_scanner.c: FLEX_NO_BACKUP=yes
-
-# --- Upgrade test file lifecycle during installcheck ---
+# --- installcheck lifecycle: stage synthetic files, then clean up ---
 #
 # Problem: The upgrade test needs age--<INIT>.sql and age--<INIT>--<CURR>.sql
 # in the PG extension directory for CREATE EXTENSION VERSION and ALTER
@@ -288,7 +344,7 @@ SHAREDIR = $(shell $(PG_CONFIG) --sharedir)
 installcheck: export LC_COLLATE=C
 ifneq ($(AGE_HAS_UPGRADE_TEST),)
 .PHONY: _install_upgrade_test_files
-_install_upgrade_test_files: $(age_init_sql) $(age_upgrade_test_sql)  ## Build, install synthetic files, generate cleanup script
+_install_upgrade_test_files: $(age_init_sql) $(age_upgrade_test_sql)  # Build, install synthetic files, generate cleanup script
 	@echo "Installing upgrade test files to $(SHAREDIR)/extension/"
 	@$(INSTALL_DATA) $(age_init_sql) $(age_upgrade_test_sql) '$(SHAREDIR)/extension/'
 	@printf '#!/bin/sh\nrm -f "$(SHAREDIR)/extension/$(age_init_sql)" "$(SHAREDIR)/extension/$(age_upgrade_test_sql)"\nrm -f "$(age_init_sql)" "$(age_upgrade_test_sql)" "$(ag_regress_dir)/age_upgrade_cleanup.sh"\n' > $(ag_regress_dir)/age_upgrade_cleanup.sh
@@ -296,3 +352,60 @@ _install_upgrade_test_files: $(age_init_sql) $(age_upgrade_test_sql)  ## Build, 
 
 installcheck: _install_upgrade_test_files
 endif
+
+# ===== installcheck-existing: run tests against a running server =====
+#
+# Runs the regression suite against an already-running PostgreSQL server
+# instead of the private temp instance built by "make installcheck".
+#
+# "make installcheck" appends --temp-instance to REGRESS_OPTS, so it builds
+# its own throwaway cluster and needs no running server.  This target instead
+# connects to the server selected by the standard libpq environment variables
+# (PGHOST/PGPORT/PGUSER); PGDATABASE defaults to contrib_regression.  Override
+# any of them on the command line, e.g.:
+#
+#     make installcheck-existing PGHOST=localhost PGPORT=5432 PGUSER=postgres
+#
+# pg_regress creates the database and loads the extension itself through
+# --load-extension=age -- exactly as the temp-instance path does -- so no
+# manual "CREATE EXTENSION" step is required.  The connecting role must be
+# allowed to CREATE DATABASE.
+#
+# This deliberately does NOT pass pg_regress --use-existing: that option skips
+# database creation (which also disables --load-extension) and is only needed
+# on clusters where the test role cannot CREATE DATABASE.  For that narrow
+# case, pre-create the database and extension and add --use-existing to
+# EXTRA_REGRESS_OPTS.
+#
+# The upgrade test (age_upgrade) is excluded here: it installs synthetic
+# extension files into the local $(SHAREDIR), which an existing or remote
+# server would not see.  Validate the upgrade path with "make installcheck".
+#
+# Locale note: locale-sensitive comparisons follow the existing server's own
+# collation (fixed at its initdb time); the temp-instance locale flags do not
+# apply to an already-running server.
+PGDATABASE ?= contrib_regression
+REGRESS_EXISTING = $(filter-out age_upgrade,$(REGRESS))
+
+.PHONY: installcheck-existing
+installcheck-existing:
+	$(pg_regress_installcheck) \
+	  --inputdir=$(ag_regress_dir) \
+	  --outputdir=$(ag_regress_dir) \
+	  --load-extension=age \
+	  $(if $(PGHOST),--host=$(PGHOST)) \
+	  $(if $(PGPORT),--port=$(PGPORT)) \
+	  $(if $(PGUSER),--user=$(PGUSER)) \
+	  --dbname=$(PGDATABASE) \
+	  $(REGRESS_EXISTING)
+
+# ===== Help =====
+.PHONY: help
+help:
+	@echo "Apache AGE - common make targets:"
+	@echo "  all                    Build the extension (default target)"
+	@echo "  install                Install the extension into the PostgreSQL tree"
+	@echo "  installcheck           Run the regression suite in a private temp instance"
+	@echo "  installcheck-existing  Run the regression suite against a running server"
+	@echo "  clean                  Remove build artifacts"
+	@echo "  help                   Show this message"
