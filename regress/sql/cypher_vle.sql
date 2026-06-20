@@ -105,20 +105,20 @@ SELECT * FROM cypher('cypher_vle', $$MATCH ()-[*]->() RETURN count(*) $$) AS (e 
 SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[*]->() RETURN count(*) $$) AS (e agtype);
 SELECT * FROM cypher('cypher_vle', $$MATCH ()-[*]->(v) RETURN count(*) $$) AS (e agtype);
 -- Should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)<-[e*]-(v:end) RETURN e $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)<-[e*]-(v:end) RETURN e ORDER BY e ASC $$) AS (e agtype);
 -- Should find 5
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*1..1]-()-[]-() RETURN p ORDER BY p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*1..1]-()-[]-() RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Should find 2922
 SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*]->(v) RETURN count(*) $$) AS (e agtype);
 -- Should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]->(v:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]->(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Should find 12
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]-(v:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Each should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[*]-(v:end) RETURN p $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN p $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN e $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*]-()<-[]-(:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[*]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN e ORDER BY e ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*]-()<-[]-(:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Each should return 31
 SELECT count(*) FROM cypher('cypher_vle', $$ MATCH ()-[e1]->(v)-[e2]->() RETURN e1,e2 $$) AS (e1 agtype, e2 agtype);
 SELECT count(*) FROM cypher('cypher_vle', $$
@@ -163,16 +163,16 @@ FROM cypher('cypher_vle', $$
     RETURN a, e
 $$) AS (e1 agtype, e2 agtype);
 -- Should return 1 path
-SELECT * FROM cypher('cypher_vle', $$ MATCH p=()<-[e1*]-(:end)-[e2*]->(:begin) RETURN p $$) AS (result agtype);
+SELECT * FROM cypher('cypher_vle', $$ MATCH p=()<-[e1*]-(:end)-[e2*]->(:begin) RETURN p ORDER BY p ASC $$) AS (result agtype);
 -- Each should return 3
-SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)-[e*0..1]->(v) RETURN id(u), e, id(v) $$) AS (u agtype, e agtype, v agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[e*0..1]->(v) RETURN p $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)-[e*0..1]->(v) RETURN id(u), e, id(v) ORDER BY id(u) ASC, e ASC, id(v) ASC $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[e*0..1]->(v) RETURN p ORDER BY p ASC $$) AS (p agtype);
 -- Each should return 5
-SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[e*0..0]->(v) RETURN id(u), e, id(v) $$) AS (u agtype, e agtype, v agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u)-[e*0..0]->(v) RETURN id(u), p, id(v) $$) AS (u agtype, p agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[e*0..0]->(v) RETURN id(u), e, id(v) ORDER BY id(u) ASC, e ASC, id(v) ASC $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u)-[e*0..0]->(v) RETURN id(u), p, id(v) ORDER BY id(u) ASC, p ASC, id(v) ASC $$) AS (u agtype, p agtype, v agtype);
 -- Each should return 13 and will be the same
-SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*0..0]->()-[]->() RETURN p $$) AS (p agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[]->()-[*0..0]->() RETURN p $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*0..0]->()-[]->() RETURN p ORDER BY p ASC $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[]->()-[*0..0]->() RETURN p ORDER BY p ASC $$) AS (p agtype);
 
 --
 -- Test VLE inside of a BEGIN/COMMIT block
@@ -189,7 +189,7 @@ $$) AS (g1 agtype);
 /* should return 1 path with 1 edge */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge*]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g2 agtype);
 
 /* should delete the original path and replace it with a path with 2 edges */
@@ -202,13 +202,13 @@ $$) AS (g3 agtype);
 /* should find 2 paths with 1 edge */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g4 agtype);
 
 /* should return 3 paths, 2 with 1 edge, 1 with 2 edges */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge*]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g5 agtype);
 
 SELECT drop_graph('mygraph', true);
@@ -312,48 +312,48 @@ SELECT * FROM cypher('access',$$ CREATE ()-[:knows]->() $$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows]->()-[:knows]->()$$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows {id:0}]->()-[:knows {id: 1}]->() $$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows {id:2, arry:[0,1,2,3,{name: "joe"}]}]->()-[:knows {id: 3, arry:[1,3,{name:"john", stats: {age: 1000}}]}]->() $$) as (results agtype);
-SELECT * FROM cypher('access', $$ MATCH (u)-[e*]->(v) RETURN e $$)as (edges agtype);
-SELECT * FROM cypher('access', $$ MATCH (u)-[e*2..2]->(v) RETURN e $$)as (edges agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[0]) $$) as (prop_first_edge agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].id $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].arry[2] $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[1]) $$) as (prop_second_edge agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].id $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2] $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2].stats $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[2]) $$) as (prop_third_edge agtype);
+SELECT * FROM cypher('access', $$ MATCH (u)-[e*]->(v) RETURN e ORDER BY e ASC $$)as (edges agtype);
+SELECT * FROM cypher('access', $$ MATCH (u)-[e*2..2]->(v) RETURN e ORDER BY e ASC $$)as (edges agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[0]) ORDER BY id(e[0]) ASC $$) as (prop_first_edge agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].id ORDER BY id(e[0]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].arry[2] ORDER BY id(e[0]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[1]) ORDER BY id(e[1]) ASC $$) as (prop_second_edge agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].id ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2] ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2].stats ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[2]) ORDER BY id(e[2]) ASC $$) as (prop_third_edge agtype);
 
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN properties(e[0]), properties(e[1]) $$) as (prop_1st agtype, prop_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].id, e[1].id $$) as (results_1st agtype, results_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry, e[1].arry $$) as (results_1st agtype, results_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry[2], e[1].arry[2] $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN properties(e[0]), properties(e[1]) ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (prop_1st agtype, prop_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].id, e[1].id ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry, e[1].arry ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry[2], e[1].arry[2] ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
 
 SELECT drop_graph('access', true);
 
 -- issue 1043
 SELECT create_graph('issue_1043');
 SELECT * FROM cypher('issue_1043', $$ CREATE (n)-[:KNOWS {n:'hello'}]->({n:'hello'}) $$) as (a agtype);
-SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x ORDER BY id(x) ASC $$) as (a agtype);
 SELECT * FROM cypher('issue_1043', $$ CREATE (n)-[:KNOWS {n:'hello'}]->({n:'hello'}) $$) as (a agtype);
-SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x ORDER BY id(x) ASC $$) as (a agtype);
 
 SELECT drop_graph('issue_1043', true);
 
 -- issue 1910
 SELECT create_graph('issue_1910');
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*1]-({name: 'Willem Defoe'}))
-                                      RETURN n.full_name $$) AS (full_name agtype);
+                                      RETURN n.full_name ORDER BY id(n) ASC $$) AS (full_name agtype);
 SELECT * FROM cypher('issue_1910', $$ CREATE ({name: 'Jane Doe'})-[:KNOWS]->({name: 'John Doe'}) $$) AS (result agtype);
 SELECT * FROM cypher('issue_1910', $$ CREATE ({name: 'Donald Defoe'})-[:KNOWS]->({name: 'Willem Defoe'}) $$) AS (result agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (u {name: 'John Doe'})
                                       MERGE (u)-[:KNOWS]->({name: 'Willem Defoe'}) $$) AS (result agtype);
 
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*1]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*2..2]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 
 SELECT drop_graph('issue_1910', true);
 
