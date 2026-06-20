@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "catalog/ag_catalog.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
@@ -84,6 +85,11 @@ static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *js
     if (prev_post_parse_analyze_hook)
     {
         prev_post_parse_analyze_hook(pstate, query, jstate);
+    }
+
+    if (!is_age_extension_exists())
+    {
+        return;
     }
 
     /*
