@@ -2785,6 +2785,7 @@ static Query *transform_cypher_return(cypher_parsestate *cpstate,
     query->jointree = makeFromExpr(pstate->p_joinlist, NULL);
     query->hasAggs = pstate->p_hasAggs;
     query->hasSubLinks = pstate->p_hasSubLinks;
+    query->hasTargetSRFs = pstate->p_hasTargetSRFs;
 
     assign_query_collations(pstate, query);
 

@@ -98,6 +98,37 @@ CALLED ON NULL INPUT
 PARALLEL UNSAFE -- might be safe
 AS 'MODULE_PATHNAME';
 
+-- Unweighted (hop-count) shortest path between two vertices, computed over the
+-- cached global graph adjacency via BFS. Returns a single path (0 or 1 rows).
+-- Argument order mirrors the Cypher shortestPath() pattern
+-- (a)-[:type*min_hops..max_hops]->(b):
+--   (graph_name, start, end, edge_types, direction, min_hops, max_hops)
+CREATE FUNCTION ag_catalog.age_shortest_path(IN agtype, IN agtype, IN agtype,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL)
+    RETURNS SETOF agtype
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
+-- All unweighted shortest paths between two vertices (one path per row).
+-- Same argument order as age_shortest_path.
+CREATE FUNCTION ag_catalog.age_all_shortest_paths(IN agtype, IN agtype, IN agtype,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL)
+    RETURNS SETOF agtype
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
 -- function to build an edge for a VLE match
 CREATE FUNCTION ag_catalog.age_build_vle_match_edge(agtype, agtype)
     RETURNS agtype
