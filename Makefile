@@ -220,7 +220,8 @@ REGRESS = scan \
           reserved_keyword_alias \
           agtype_jsonb_cast \
           containment_selectivity \
-          subgraph
+          subgraph \
+          extension_security
 
 ifneq ($(EXTRA_TESTS),)
   REGRESS += $(EXTRA_TESTS)

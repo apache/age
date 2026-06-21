@@ -55,7 +55,10 @@
 CREATE FUNCTION ag_catalog.age_prepare_pg_upgrade()
     RETURNS void
     LANGUAGE plpgsql
-    SET search_path = ag_catalog, pg_catalog
+    -- Resolve built-in functions and operators from pg_catalog first so they
+    -- are not overridden by same-named objects defined in ag_catalog. The
+    -- ag_catalog objects referenced here are schema-qualified.
+    SET search_path = pg_catalog, ag_catalog
     AS $function$
 DECLARE
     graph_count integer;
@@ -143,7 +146,10 @@ COMMENT ON FUNCTION ag_catalog.age_prepare_pg_upgrade() IS
 CREATE FUNCTION ag_catalog.age_finish_pg_upgrade()
     RETURNS void
     LANGUAGE plpgsql
-    SET search_path = ag_catalog, pg_catalog
+    -- Resolve built-in functions and operators from pg_catalog first so they
+    -- are not overridden by same-named objects defined in ag_catalog. The
+    -- ag_catalog objects referenced here are schema-qualified.
+    SET search_path = pg_catalog, ag_catalog
     AS $function$
 DECLARE
     mapping_count integer;
@@ -266,7 +272,7 @@ BEGIN
     -- and preserve original schema ownership.
     --
     RAISE NOTICE 'Invalidating AGE caches...';
-    PERFORM pg_catalog.pg_advisory_xact_lock(hashtext('age_finish_pg_upgrade'));
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('age_finish_pg_upgrade'));
     DECLARE
         graph_rec RECORD;
         cache_invalidated boolean := false;
@@ -280,8 +286,8 @@ BEGIN
             BEGIN
                 -- Touch schema by changing owner to current_user then back to original
                 -- This triggers cache invalidation without permanently changing ownership
-                EXECUTE format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, current_user);
-                EXECUTE format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, graph_rec.owner_name);
+                EXECUTE pg_catalog.format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, current_user);
+                EXECUTE pg_catalog.format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, graph_rec.owner_name);
                 cache_invalidated := true;
             EXCEPTION WHEN insufficient_privilege THEN
                 -- If we can't change ownership, skip this schema
@@ -330,7 +336,10 @@ COMMENT ON FUNCTION ag_catalog.age_finish_pg_upgrade() IS
 CREATE FUNCTION ag_catalog.age_revert_pg_upgrade_changes()
     RETURNS void
     LANGUAGE plpgsql
-    SET search_path = ag_catalog, pg_catalog
+    -- Resolve built-in functions and operators from pg_catalog first so they
+    -- are not overridden by same-named objects defined in ag_catalog. The
+    -- ag_catalog objects referenced here are schema-qualified.
+    SET search_path = pg_catalog, ag_catalog
     AS $function$
 BEGIN
     -- Check if namespace column is oid type (needs reverting)
@@ -363,7 +372,7 @@ BEGIN
     -- Invalidate AGE's internal caches by touching each graph's namespace
     -- We use xact-level advisory lock and preserve original ownership
     --
-    PERFORM pg_catalog.pg_advisory_xact_lock(hashtext('age_revert_pg_upgrade'));
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('age_revert_pg_upgrade'));
     DECLARE
         graph_rec RECORD;
     BEGIN
@@ -375,8 +384,8 @@ BEGIN
         LOOP
             BEGIN
                 -- Touch schema by changing owner to current_user then back to original
-                EXECUTE format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, current_user);
-                EXECUTE format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, graph_rec.owner_name);
+                EXECUTE pg_catalog.format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, current_user);
+                EXECUTE pg_catalog.format('ALTER SCHEMA %I OWNER TO %I', graph_rec.ns_name, graph_rec.owner_name);
             EXCEPTION WHEN insufficient_privilege THEN
                 RAISE NOTICE 'Could not invalidate cache for schema % (insufficient privileges)', graph_rec.ns_name;
             END;
@@ -410,7 +419,10 @@ CREATE FUNCTION ag_catalog.age_pg_upgrade_status()
         message text
     )
     LANGUAGE plpgsql
-    SET search_path = ag_catalog, pg_catalog
+    -- Resolve built-in functions and operators from pg_catalog first so they
+    -- are not overridden by same-named objects defined in ag_catalog. The
+    -- ag_catalog objects referenced here are schema-qualified.
+    SET search_path = pg_catalog, ag_catalog
     AS $function$
 DECLARE
     ns_type text;
