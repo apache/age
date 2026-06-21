@@ -21,6 +21,33 @@
 \echo Use "CREATE EXTENSION age" to load this file. \quit
 
 --
+-- Ensure ag_catalog is created and owned by the installing role.
+--
+-- CREATE EXTENSION places all of AGE's objects in ag_catalog. A normal install
+-- creates that schema, owned by the installer. If ag_catalog already exists and
+-- is owned by a different role, that role would retain control over the schema
+-- that holds AGE's catalog objects. To keep ownership well-defined, refuse to
+-- install into a pre-existing ag_catalog owned by another role. Ownership is
+-- compared directly (not via role membership) so the check is exact even for a
+-- superuser, who is otherwise considered a member of every role.
+--
+DO $age_install_guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_namespace n
+        WHERE n.nspname = 'ag_catalog'
+          AND n.nspowner <> (SELECT r.oid
+                             FROM pg_catalog.pg_roles r
+                             WHERE r.rolname = current_user)
+    ) THEN
+        RAISE EXCEPTION 'schema "ag_catalog" already exists and is not owned by the installing role "%"', current_user
+            USING HINT = 'Apache AGE will not install into a pre-existing ag_catalog owned by another role. Drop it (DROP SCHEMA ag_catalog CASCADE) or transfer its ownership to the installing role, then retry CREATE EXTENSION age.';
+    END IF;
+END
+$age_install_guard$;
+
+--
 -- catalog tables
 --
 
