@@ -47,6 +47,7 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m) 
     WITH n,e,m
     RETURN n,e,m
+    ORDER BY id(n) ASC, id(e) ASC, id(m) ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 -- WITH/AS
@@ -55,12 +56,14 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m)
     WITH n.name AS n1, e as edge, m.name as n2
     RETURN n1,label(edge),n2
+    ORDER BY id(edge) ASC
 $$) AS (start_node agtype,edge agtype, end_node agtype);
 
 SELECT * FROM cypher('cypher_with',$$
     MATCH (person)-[r]->(otherPerson)
     WITH *, type(r) AS connectionType
     RETURN person.name, connectionType, otherPerson.name
+    ORDER BY id(person) ASC, id(otherPerson) ASC
 $$) AS (start_node agtype, connection agtype, end_node agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -75,6 +78,7 @@ MATCH (george {name: 'George'})<-[]-(otherPerson)
     WITH otherPerson, toUpper(otherPerson.name) AS upperCaseName
     WHERE upperCaseName STARTS WITH 'C'
     RETURN otherPerson.name
+    ORDER BY id(otherPerson) ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -82,6 +86,7 @@ SELECT * FROM cypher('cypher_with', $$
 	WITH otherPerson, count(*) AS foaf
 	WHERE foaf > 1
 	RETURN otherPerson.name
+	ORDER BY id(otherPerson) ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -89,6 +94,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH p, length(p) AS path_length 
     WHERE path_length > 1 
     RETURN p
+    ORDER BY p ASC
 $$) AS (pattern agtype);
 
 -- MATCH/WHERE with WITH/WHERE
@@ -99,6 +105,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH *
     WHERE m.name = 'Andres'
     RETURN m.name,label(e),b.name
+    ORDER BY id(m) ASC, id(e) ASC, id(b) ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 -- WITH/ORDER BY
@@ -133,9 +140,10 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m)
     WITH n, e, m
     WHERE label(e) = 'KNOWS'
-    WITH n.name as n1, label(e) as edge, m.name as n2
+    WITH id(e) AS eid, n.name as n1, label(e) as edge, m.name as n2
     WHERE n1 = 'Andres'
     RETURN n1,edge,n2
+    ORDER BY eid ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -145,6 +153,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH x
     LIMIT 5
     RETURN x
+    ORDER BY x ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -154,6 +163,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH m as start_node, b as end_node
     WHERE end_node.name = 'George'
     RETURN id(start_node),start_node.name,id(end_node),end_node.name
+    ORDER BY id(start_node) ASC, id(end_node) ASC
 $$) AS (id1 agtype, name1 agtype, id2 agtype, name2 agtype);
 
 -- Expression item must be aliased.
@@ -284,6 +294,7 @@ SELECT * FROM cypher('with_accessor_opt', $$
     MATCH (n:Person)
     WITH n as m
     RETURN m
+    ORDER BY id(m) ASC
 $$) AS (n vertex);
 
 SELECT * FROM cypher('with_accessor_opt', $$
