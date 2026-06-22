@@ -9,7 +9,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest) so the Bison version stays fixed at 3.8.x.
+    # The Cypher GLR grammar pins exact conflict counts via %expect / %expect-rr
+    # in src/backend/parser/cypher_gram.y, and Bison treats %expect as exact-match:
+    # a different Bison version can report different counts and break the build.
+    # Freezing the runner image freezes Bison; bump both together, intentionally.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Get latest commit id of PostgreSQL 18
@@ -27,6 +32,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison
+
+      - name: Verify Bison version (grammar conflict counts are pinned)
+        run: |
+          ver=$(bison --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "bison $ver"
+          case "$ver" in
+            3.8.*) ;;
+            *)
+              echo "::error::Bison $ver != 3.8.x. The Cypher GLR grammar pins exact"
+              echo "::error::%expect / %expect-rr conflict counts in src/backend/parser/cypher_gram.y."
+              echo "::error::A new Bison version may report different counts. Re-run bison locally,"
+              echo "::error::update the %expect/%expect-rr numbers (and the comment block), then bump"
+              echo "::error::the pinned runner image and this guard together."
+              exit 1
+              ;;
+          esac
 
       - name: Install PostgreSQL 18 and some extensions
         if: steps.pg18cache.outputs.cache-hit != 'true'
