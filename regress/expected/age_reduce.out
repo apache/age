@@ -1,0 +1,538 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('reduce');
+NOTICE:  graph "reduce" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+--
+-- Basic folds
+--
+-- sum
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 6
+(1 row)
+
+-- sum of a longer list
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 55
+(1 row)
+
+-- product (factorial)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(p = 1, x IN [1, 2, 3, 4, 5] | p * x)
+$$) AS (result agtype);
+ result 
+--------
+ 120
+(1 row)
+
+-- non-zero initial accumulator
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 100, x IN [1, 2, 3] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 106
+(1 row)
+
+-- single element
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [42] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 42
+(1 row)
+
+--
+-- List order is significant
+--
+-- left-associative subtraction: ((((0-1)-2)-3)-4) = -10
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3, 4] | s - x)
+$$) AS (result agtype);
+ result 
+--------
+ -10
+(1 row)
+
+-- forward string concatenation
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = '', x IN ['a', 'b', 'c'] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ "abc"
+(1 row)
+
+-- reverse string concatenation (element before accumulator)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = '', x IN ['a', 'b', 'c'] | x + s)
+$$) AS (result agtype);
+ result 
+--------
+ "cba"
+(1 row)
+
+--
+-- Empty and NULL list semantics
+--
+-- empty list returns the initial value
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 0
+(1 row)
+
+-- empty list returns the initial value (non-zero)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 999, x IN [] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 999
+(1 row)
+
+-- NULL list returns NULL
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN null | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 
+(1 row)
+
+-- empty list with a NULL initial value yields NULL: the list is empty (not
+-- null) so the fold runs over zero rows, and COALESCE(<no rows>, init) is
+-- COALESCE(NULL, NULL) -> NULL. (Distinct from a NULL *list*, which the outer
+-- CASE short-circuits to NULL, and from a non-empty list with a NULL init,
+-- which seeds the accumulator with agtype 'null'.)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = null, x IN [] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 
+(1 row)
+
+--
+-- NULL handling within the fold
+--
+-- a NULL element propagates through arithmetic to NULL
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, null, 3] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ null
+(1 row)
+
+-- NULL initial value
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = null, x IN [1, 2, 3] | s)
+$$) AS (result agtype);
+ result 
+--------
+ null
+(1 row)
+
+-- a body that always evaluates to null yields null, NOT the initial value:
+-- every step stores agtype 'null' as the running state, so the final state is
+-- a real agtype 'null' and the empty-list COALESCE(..., init) guard must not
+-- resurrect the initial value here (the load-bearing fold-to-null vs empty-list
+-- distinction)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 7, x IN [1, 2, 3] | null)
+$$) AS (result agtype);
+ result 
+--------
+ null
+(1 row)
+
+-- the accumulator legitimately becomes null mid-fold and the body climbs back
+-- out of it: element 2 sets the accumulator to null, element 3 produces a fresh
+-- non-null value, and element 4 reads that recovered state (999 + 4), proving a
+-- null intermediate state does not poison the rest of the fold
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3, 4] |
+                  CASE WHEN x = 2 THEN null
+                       WHEN x = 3 THEN 999
+                       ELSE s + x END)
+$$) AS (result agtype);
+ result 
+--------
+ 1003
+(1 row)
+
+--
+-- Errors raised from the fold body propagate cleanly
+--
+-- a type error in the body (agtype number + map) aborts the statement rather
+-- than corrupting the running aggregate state or crashing the backend
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2] | s + {a: 1})
+$$) AS (result agtype);
+ERROR:  invalid left operand for agtype concatenation
+-- a runtime arithmetic error in the body (division by zero) likewise aborts
+-- the fold; the error surfaces from the standalone per-element evaluator
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 1, x IN [1, 0, 2] | s / x)
+$$) AS (result agtype);
+ERROR:  division by zero
+--
+-- Building a list with the accumulator
+--
+-- collect squares
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(acc = [], x IN [1, 2, 3] | acc + [x * x])
+$$) AS (result agtype);
+  result   
+-----------
+ [1, 4, 9]
+(1 row)
+
+--
+-- A conditional body (CASE)
+--
+-- sum of even elements only
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3, 4, 5, 6] | CASE WHEN x % 2 = 0 THEN s + x ELSE s END)
+$$) AS (result agtype);
+ result 
+--------
+ 12
+(1 row)
+
+--
+-- Boolean and comparison fold bodies
+--
+-- the body evaluates to a boolean, which is normalized to an agtype boolean
+-- (a boolean accumulator is a real Cypher use case for "all"/"any" style folds)
+-- logical AND fold: all true?
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = true, x IN [true, true, false] | s AND x)
+$$) AS (result agtype);
+ result 
+--------
+ false
+(1 row)
+
+-- logical OR fold: any true?
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = false, x IN [false, true, false] | s OR x)
+$$) AS (result agtype);
+ result 
+--------
+ true
+(1 row)
+
+-- a comparison body
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = false, x IN [1, 2, 3] | x = 2)
+$$) AS (result agtype);
+ result 
+--------
+ false
+(1 row)
+
+-- "does any element equal 2?" (search fold)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(found = false, x IN [1, 2, 3] | found OR x = 2)
+$$) AS (result agtype);
+ result 
+--------
+ true
+(1 row)
+
+-- "are all elements positive?" (using a comparison inside the fold)
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = true, x IN [1, 2, 3] | s AND x > 0)
+$$) AS (result agtype);
+ result 
+--------
+ true
+(1 row)
+
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = true, x IN [1, -2, 3] | s AND x > 0)
+$$) AS (result agtype);
+ result 
+--------
+ false
+(1 row)
+
+--
+-- Property access on the element variable
+--
+-- sum a field across a list of maps
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [{n: 1}, {n: 2}, {n: 3}] | s + x.n)
+$$) AS (result agtype);
+ result 
+--------
+ 6
+(1 row)
+
+-- concatenate a string field across a list of maps
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = '', x IN [{w: 'a'}, {w: 'b'}, {w: 'c'}] | s + x.w)
+$$) AS (result agtype);
+ result 
+--------
+ "abc"
+(1 row)
+
+--
+-- Multiple reduce() in one expression
+--
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x) + reduce(p = 1, y IN [2, 3] | p * y)
+$$) AS (result agtype);
+ result 
+--------
+ 12
+(1 row)
+
+--
+-- reduce() in a boolean expression
+--
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x) > 5
+           AND reduce(p = 1, y IN [2, 3] | p * y) < 10
+$$) AS (result agtype);
+ result 
+--------
+ true
+(1 row)
+
+--
+-- reduce() nested in the list or initial value of another reduce()
+--
+-- nesting is allowed in the list and the initial value (both evaluated in the
+-- outer context) even though it is rejected inside the fold body.
+-- nested reduce() in the list
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [reduce(a = 0, y IN [1, 2, 3] | a + y), 10] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 16
+(1 row)
+
+-- nested reduce() in the initial value
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = reduce(a = 0, y IN [1, 2, 3] | a + y), x IN [10, 20] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 36
+(1 row)
+
+--
+-- reduce() over a correlated (per-row) list
+--
+SELECT * FROM cypher('reduce', $$
+    UNWIND [[1, 2], [3, 4, 5], []] AS arr
+    RETURN reduce(s = 0, x IN arr | s + x) AS total
+    ORDER BY total
+$$) AS (result agtype);
+ result 
+--------
+ 0
+ 3
+ 12
+(3 rows)
+
+--
+-- reduce() with the list and initial value bound in an outer clause
+--
+SELECT * FROM cypher('reduce', $$
+    WITH [10, 20, 30] AS ns
+    RETURN reduce(t = 0, n IN ns | t + n)
+$$) AS (result agtype);
+ result 
+--------
+ 60
+(1 row)
+
+-- the initial value may reference an outer variable (correlation is allowed
+-- in the init and the list, only not in the body)
+SELECT * FROM cypher('reduce', $$
+    WITH 5 AS base
+    RETURN reduce(s = base, x IN [1, 2, 3] | s + x)
+$$) AS (result agtype);
+ result 
+--------
+ 11
+(1 row)
+
+--
+-- reduce() nested inside a list comprehension
+--
+SELECT * FROM cypher('reduce', $$
+    RETURN [v IN [1, 2, 3] | reduce(s = 0, x IN [v, v, v] | s + x)]
+$$) AS (result agtype);
+  result   
+-----------
+ [3, 6, 9]
+(1 row)
+
+--
+-- reduce() in a WHERE clause
+--
+SELECT * FROM cypher('reduce', $$
+    UNWIND [[1, 2, 3], [1, 1], [10]] AS l
+    WITH l WHERE reduce(s = 0, x IN l | s + x) > 3
+    RETURN l
+    ORDER BY l
+$$) AS (result agtype);
+  result   
+-----------
+ [1, 2, 3]
+ [10]
+(2 rows)
+
+--
+-- reduce() over graph data (the canonical Cypher example)
+--
+SELECT * FROM cypher('reduce', $$
+    CREATE (:person {name: 'Alice', age: 38}),
+           (:person {name: 'Bob', age: 25}),
+           (:person {name: 'Daniel', age: 54})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- sum the ages of all person nodes
+SELECT * FROM cypher('reduce', $$
+    MATCH (p:person)
+    WITH collect(p) AS people
+    RETURN reduce(total = 0, n IN people | total + n.age)
+$$) AS (result agtype);
+ result 
+--------
+ 117
+(1 row)
+
+--
+-- reduce() over a graph node's list property
+--
+SELECT * FROM cypher('reduce', $$
+    CREATE (:bag {name: 'low', vals: [1, 2, 3]}),
+           (:bag {name: 'mid', vals: [5, 5, 5]}),
+           (:bag {name: 'high', vals: [10, 20, 30]})
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+-- filter nodes by a reduce() over their list property
+SELECT * FROM cypher('reduce', $$
+    MATCH (u:bag) WHERE reduce(s = 0, x IN u.vals | s + x) > 10
+    RETURN u.name
+    ORDER BY u.name
+$$) AS (result agtype);
+ result 
+--------
+ "high"
+ "mid"
+(2 rows)
+
+-- compute a reduce() value per node and order by it
+SELECT * FROM cypher('reduce', $$
+    MATCH (u:bag)
+    RETURN u.name AS name, reduce(s = 0, x IN u.vals | s + x) AS total
+    ORDER BY total
+$$) AS (name agtype, total agtype);
+  name  | total 
+--------+-------
+ "low"  | 6
+ "mid"  | 15
+ "high" | 60
+(3 rows)
+
+--
+-- Not-yet-supported constructs raise a clean feature error
+--
+-- an outer variable referenced in the body
+SELECT * FROM cypher('reduce', $$
+    WITH 5 AS w
+    RETURN reduce(s = 0, x IN [1, 2] | s + x + w)
+$$) AS (result agtype);
+ERROR:  a reduce() expression may only reference its accumulator and element variables
+LINE 1: SELECT * FROM cypher('reduce', $$
+                                        ^
+-- a nested reduce() in the body
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2] | s + reduce(t = 0, y IN [x] | t + y))
+$$) AS (result agtype);
+ERROR:  subqueries (including a nested reduce()) are not supported in a reduce() expression
+LINE 1: SELECT * FROM cypher('reduce', $$
+                                        ^
+-- an aggregate function in the body
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2] | s + count(x))
+$$) AS (result agtype);
+ERROR:  aggregate functions are not supported in a reduce() expression
+LINE 1: SELECT * FROM cypher('reduce', $$
+                                        ^
+--
+-- "reduce" as a property key name (safe_keywords backward compatibility):
+-- because reduce() introduced a reserved keyword, confirm the word is still
+-- usable as a map key, the same way any/none/single are.
+--
+SELECT * FROM cypher('reduce', $$
+    RETURN {reduce: 1, any: 2, none: 3}
+$$) AS (result agtype);
+               result               
+------------------------------------
+ {"any": 2, "none": 3, "reduce": 1}
+(1 row)
+
+--
+-- Cleanup
+--
+SELECT * FROM drop_graph('reduce', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table reduce._ag_label_vertex
+drop cascades to table reduce._ag_label_edge
+drop cascades to table reduce.person
+drop cascades to table reduce.bag
+NOTICE:  graph "reduce" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
