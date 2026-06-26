@@ -10649,11 +10649,39 @@ $$) AS (n agtype);
  {"id": 844424930131969, "label": "Item", "properties": {"keep": 1}}::vertex
 (1 row)
 
+-- nested map values under a write (CREATE / SET =) are preserved: the
+-- top-level property map is null-stripped, but a nested map literal is
+-- its own node and keeps its null-valued keys
+SELECT * FROM cypher('issue_2391', $$
+  CREATE (n:Nested {a: {b: null}}) RETURN n
+$$) AS (n agtype);
+                                           n                                           
+---------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "Nested", "properties": {"a": {"b": null}}}::vertex
+(1 row)
+
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Nested) SET n = {a: {b: null}} RETURN n
+$$) AS (n agtype);
+                                           n                                           
+---------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "Nested", "properties": {"a": {"b": null}}}::vertex
+(1 row)
+
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Nested) RETURN n
+$$) AS (n agtype);
+                                           n                                           
+---------------------------------------------------------------------------------------
+ {"id": 1125899906842625, "label": "Nested", "properties": {"a": {"b": null}}}::vertex
+(1 row)
+
 SELECT * FROM drop_graph('issue_2391', true);
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table issue_2391._ag_label_vertex
 drop cascades to table issue_2391._ag_label_edge
 drop cascades to table issue_2391."Item"
+drop cascades to table issue_2391."Nested"
 NOTICE:  graph "issue_2391" has been dropped
  drop_graph 
 ------------

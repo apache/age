@@ -4176,6 +4176,18 @@ $$) AS (n agtype);
 SELECT * FROM cypher('issue_2391', $$
   MATCH (n:Item) RETURN n
 $$) AS (n agtype);
+-- nested map values under a write (CREATE / SET =) are preserved: the
+-- top-level property map is null-stripped, but a nested map literal is
+-- its own node and keeps its null-valued keys
+SELECT * FROM cypher('issue_2391', $$
+  CREATE (n:Nested {a: {b: null}}) RETURN n
+$$) AS (n agtype);
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Nested) SET n = {a: {b: null}} RETURN n
+$$) AS (n agtype);
+SELECT * FROM cypher('issue_2391', $$
+  MATCH (n:Nested) RETURN n
+$$) AS (n agtype);
 SELECT * FROM drop_graph('issue_2391', true);
 
 --
