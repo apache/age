@@ -131,7 +131,7 @@
                  MATCH MERGE
                  NONE NOT NULL_P
                  ON OPERATOR OPTIONAL OR ORDER
-                 REMOVE RETURN
+                 REDUCE REMOVE RETURN
                  SET SINGLE SKIP STARTS
                  THEN TRUE_P
                  UNION UNWIND
@@ -331,6 +331,11 @@ static Node *build_predicate_function_node(cypher_predicate_function_kind kind,
 
 /* pattern expression helper */
 static Node *make_exists_pattern_sublink(Node *pattern, int location);
+
+/* reduce(acc = init, var IN list | body) */
+static Node *build_reduce_node(char *acc_varname, Node *init_expr,
+                               char *elem_varname, Node *list_expr,
+                               Node *body_expr, int location);
 
 /* helper functions */
 static ExplainStmt *make_explain_stmt(List *options);
@@ -1963,6 +1968,10 @@ expr_func_subexpr:
         {
             $$ = build_predicate_function_node(CPFK_SINGLE, $3, $5, $7, @1);
         }
+    | REDUCE '(' var_name '=' expr ',' var_name IN expr '|' expr ')'
+        {
+            $$ = build_reduce_node($3, $5, $7, $9, $11, @1);
+        }
     ;
 
 expr_subquery:
@@ -2561,6 +2570,7 @@ safe_keywords:
     | OPTIONAL   { $$ = KEYWORD_STRDUP($1); }
     | OR         { $$ = KEYWORD_STRDUP($1); }
     | ORDER      { $$ = KEYWORD_STRDUP($1); }
+    | REDUCE     { $$ = KEYWORD_STRDUP($1); }
     | REMOVE     { $$ = KEYWORD_STRDUP($1); }
     | RETURN     { $$ = KEYWORD_STRDUP($1); }
     | SET        { $$ = KEYWORD_STRDUP($1); }
@@ -3644,6 +3654,86 @@ static Node *make_exists_pattern_sublink(Node *pattern, int location)
     n->location = location;
 
     return (Node *)node_to_agtype((Node *)n, "boolean", location);
+}
+
+/*
+ * Helper function to build a reduce() grammar node.
+ *
+ * Follows the openCypher syntax:
+ *   reduce(acc = init, var IN list | body)
+ *
+ * The accumulator `acc` is seeded with `init` and threaded across the
+ * elements of `list` (bound to `var`) in list order, with `body` producing
+ * the next accumulator value at each step. The result is the final
+ * accumulator value, or `init` when the list is empty.
+ *
+ * The reduce node is wrapped in an EXPR_SUBLINK (scalar subquery) whose
+ * subselect is the cypher_reduce node; transform_cypher_reduce() in
+ * cypher_clause.c rewrites it into a correlated scalar subquery over an
+ * ordered aggregate.
+ *
+ * The whole thing is then wrapped so the openCypher null/empty-list semantics
+ * hold without the transform layer having to special-case them:
+ *
+ *   CASE WHEN list IS NULL THEN NULL
+ *        ELSE COALESCE((reduce subquery), init) END
+ *
+ * A NULL list yields NULL; an empty list yields `init` (the aggregate runs
+ * over zero rows and returns SQL NULL, which COALESCE replaces with init);
+ * a non-empty list yields the fold result. The list and init grammar nodes
+ * are shared between the reduce node and this guard, which is safe because
+ * AGE's expression transformer builds new nodes rather than mutating in place.
+ */
+static Node *build_reduce_node(char *acc_varname, Node *init_expr,
+                               char *elem_varname, Node *list_expr,
+                               Node *body_expr, int location)
+{
+    SubLink *sub;
+    cypher_reduce *reduce_node = NULL;
+    CoalesceExpr *coalesce;
+    NullTest *null_test;
+    CaseWhen *case_when;
+    CaseExpr *guard;
+
+    reduce_node = make_ag_node(cypher_reduce);
+    reduce_node->acc_varname = acc_varname;
+    reduce_node->init_expr = init_expr;
+    reduce_node->elem_varname = elem_varname;
+    reduce_node->list_expr = list_expr;
+    reduce_node->body_expr = body_expr;
+
+    sub = makeNode(SubLink);
+    sub->subLinkId = 0;
+    sub->testexpr = NULL;
+    sub->operName = NIL;
+    sub->subselect = (Node *) reduce_node;
+    sub->location = location;
+    sub->subLinkType = EXPR_SUBLINK;
+
+    /* COALESCE((reduce subquery), init) -- empty list falls back to init */
+    coalesce = makeNode(CoalesceExpr);
+    coalesce->args = list_make2((Node *) sub, init_expr);
+    coalesce->location = location;
+
+    /* CASE WHEN list IS NULL THEN NULL ELSE <coalesce> END */
+    null_test = makeNode(NullTest);
+    null_test->arg = (Expr *) list_expr;
+    null_test->nulltesttype = IS_NULL;
+    null_test->argisrow = false;
+    null_test->location = location;
+
+    case_when = makeNode(CaseWhen);
+    case_when->expr = (Expr *) null_test;
+    case_when->result = (Expr *) make_null_const(location);
+    case_when->location = location;
+
+    guard = makeNode(CaseExpr);
+    guard->arg = NULL;
+    guard->args = list_make1(case_when);
+    guard->defresult = (Expr *) coalesce;
+    guard->location = location;
+
+    return (Node *) guard;
 }
 
 /* Helper function to create an ExplainStmt node */

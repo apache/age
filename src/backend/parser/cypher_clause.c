@@ -50,6 +50,7 @@
 #include "parser/cypher_expr.h"
 #include "parser/cypher_item.h"
 #include "parser/cypher_parse_agg.h"
+#include "utils/agtype.h"
 #include "parser/cypher_transform_entity.h"
 #include "utils/ag_cache.h"
 #include "utils/ag_func.h"
@@ -315,6 +316,10 @@ static Query *transform_cypher_list_comprehension(cypher_parsestate *cpstate,
 static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
                                                   cypher_clause *clause);
 
+/* reduce */
+static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
+                                      cypher_clause *clause);
+
 /* merge */
 static Query *transform_cypher_merge(cypher_parsestate *cpstate,
                                      cypher_clause *clause);
@@ -578,6 +583,10 @@ Query *transform_cypher_clause(cypher_parsestate *cpstate,
     else if (is_ag_node(self, cypher_predicate_function))
     {
         result = transform_cypher_predicate_function(cpstate, clause);
+    }
+    else if (is_ag_node(self, cypher_reduce))
+    {
+        result = transform_cypher_reduce(cpstate, clause);
     }
     else
     {
@@ -2014,6 +2023,418 @@ static Query *transform_cypher_predicate_function(cypher_parsestate *cpstate,
 
         return query;
     }
+}
+
+/*
+ * Mutator context for rewriting the fold body's accumulator/element Vars
+ * (columns 1 and 2 of the throwaway namespace RTE) into PARAM_EXEC params.
+ */
+typedef struct reduce_var_param_context
+{
+    int varno;  /* rangetable index of the dummy (acc, elem) RTE */
+} reduce_var_param_context;
+
+/*
+ * Rewrite Var(varno, 1) -> Param(PARAM_EXEC, 0) [accumulator] and
+ * Var(varno, 2) -> Param(PARAM_EXEC, 1) [element] in the transformed fold
+ * body, so the body can be evaluated standalone inside age_reduce_transfn
+ * with the two params rebound for every element.
+ */
+static Node *reduce_var_to_param_mutator(Node *node, void *context)
+{
+    reduce_var_param_context *ctx = (reduce_var_param_context *) context;
+
+    if (node == NULL)
+    {
+        return NULL;
+    }
+
+    if (IsA(node, Var))
+    {
+        Var *var = (Var *) node;
+
+        /*
+         * Only the dummy (acc, elem) RTE at this level is rewritten. The
+         * varlevelsup == 0 check is essential: an outer-query RTE can share
+         * the same varno (each parse state's range table is numbered from 1),
+         * so without it a correlated outer reference at attno 1/2 would be
+         * silently rewritten into the accumulator/element param. Outer Vars
+         * are instead left in place and rejected by reduce_body_check_walker.
+         */
+        if (var->varno == ctx->varno && var->varlevelsup == 0 &&
+            (var->varattno == 1 || var->varattno == 2))
+        {
+            Param *param = makeNode(Param);
+
+            param->paramkind = PARAM_EXEC;
+            param->paramid = var->varattno - 1;
+            param->paramtype = AGTYPEOID;
+            param->paramtypmod = -1;
+            param->paramcollid = InvalidOid;
+            param->location = -1;
+
+            return (Node *) param;
+        }
+    }
+
+    return expression_tree_mutator(node, reduce_var_to_param_mutator, context);
+}
+
+/*
+ * Build a throwaway subquery "SELECT NULL::agtype AS <acc>, NULL::agtype AS
+ * <elem>" used only to give the fold body a namespace in which the accumulator
+ * and element variables resolve to agtype columns. Those references are later
+ * rewritten to PARAM_EXEC params and the subquery is discarded.
+ */
+static Query *make_reduce_var_subquery(char *acc_name, char *elem_name)
+{
+    Query *subquery = makeNode(Query);
+    Const *acc_const;
+    Const *elem_const;
+    TargetEntry *acc_te;
+    TargetEntry *elem_te;
+
+    acc_const = makeConst(AGTYPEOID, -1, InvalidOid, -1, (Datum) 0, true, false);
+    elem_const = makeConst(AGTYPEOID, -1, InvalidOid, -1, (Datum) 0, true, false);
+
+    acc_te = makeTargetEntry((Expr *) acc_const, 1, acc_name, false);
+    elem_te = makeTargetEntry((Expr *) elem_const, 2, elem_name, false);
+
+    subquery->commandType = CMD_SELECT;
+    subquery->targetList = list_make2(acc_te, elem_te);
+    subquery->jointree = makeFromExpr(NIL, NULL);
+    subquery->rtable = NIL;
+    subquery->rteperminfos = NIL;
+
+    return subquery;
+}
+
+/*
+ * Validate a transformed-and-mutated reduce() fold body. After
+ * reduce_var_to_param_mutator() has replaced the accumulator and element with
+ * PARAM_EXEC params 0 and 1, a valid body is a pure expression over those two
+ * params: it must contain no other Vars (outer-query references), no other
+ * params, and no aggregates or subqueries, because the body is evaluated
+ * standalone (ExecEvalExpr) inside age_reduce_transfn with only those two
+ * param slots bound.
+ */
+static bool reduce_body_check_walker(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, Var))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("a reduce() expression may only reference its accumulator and element variables")));
+    }
+
+    if (IsA(node, Param))
+    {
+        Param *param = (Param *) node;
+
+        if (param->paramkind != PARAM_EXEC ||
+            (param->paramid != 0 && param->paramid != 1))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("a reduce() expression may not reference query parameters")));
+        }
+    }
+
+    if (IsA(node, Aggref) || IsA(node, GroupingFunc) || IsA(node, WindowFunc))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("aggregate functions are not supported in a reduce() expression")));
+    }
+
+    if (IsA(node, SubLink))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("subqueries (including a nested reduce()) are not supported in a reduce() expression")));
+    }
+
+    return expression_tree_walker(node, reduce_body_check_walker, context);
+}
+
+/*
+ * Transform a cypher_reduce node into a query tree.
+ *
+ * reduce(acc = init, var IN list | body) is rewritten into a scalar subquery
+ * over the age_reduce aggregate, with the list unnested WITH ORDINALITY and the
+ * aggregate ordered by that ordinality so the fold runs in list order:
+ *
+ *     SELECT ag_catalog.age_reduce(<init>, '<serialized-body>'::text,
+ *                                  r.elem ORDER BY r.ord)
+ *     FROM   unnest(<list>) WITH ORDINALITY AS r(elem, ord)
+ *
+ * The fold body is transformed separately with the accumulator and element
+ * rewritten to PARAM_EXEC params 0 and 1, serialized into the text argument,
+ * and evaluated per element inside age_reduce_transfn.
+ *
+ * The null/empty-list guard
+ * (CASE WHEN list IS NULL THEN NULL ELSE COALESCE(<agg>, init) END) is built
+ * at the grammar level in build_reduce_node().
+ */
+static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
+                                      cypher_clause *clause)
+{
+    cypher_reduce *reduce = (cypher_reduce *) clause->self;
+    Query *query;
+    Query *var_subquery;
+    cypher_parsestate *body_cpstate;
+    ParseState *body_pstate;
+    ParseNamespaceItem *body_pnsi;
+    Node *body_node;
+    char *body_serialized;
+    reduce_var_param_context mutator_ctx;
+    cypher_parsestate *child_cpstate;
+    ParseState *child_pstate;
+    FuncCall *unnest_fc;
+    RangeFunction *rf;
+    RangeTblEntry *rte = NULL;
+    int rtindex = 0;
+    List *namespace = NULL;
+    Node *from_item;
+    Node *init_node;
+    Node *elem_var;
+    Var *ord_var;
+    TargetEntry *ord_te;
+    SortGroupClause *sortcl;
+    Oid sort_ltop;
+    Oid sort_eqop;
+    bool sort_hashable;
+    Const *body_const;
+    Aggref *agg;
+    Oid agg_oid;
+    Oid agg_argtypes[3];
+    TargetEntry *result_te;
+
+    /*
+     * 1. Resolve the fold body's accumulator and element variables against a
+     *    throwaway 2-column agtype subquery, rewrite those Vars to PARAM_EXEC
+     *    params, validate it is a pure expression over those params, and
+     *    serialize the body for age_reduce_transfn.
+     */
+    body_cpstate = make_cypher_parsestate(cpstate);
+    body_pstate = (ParseState *) body_cpstate;
+
+    var_subquery = make_reduce_var_subquery(reduce->acc_varname,
+                                            reduce->elem_varname);
+    body_pnsi = addRangeTableEntryForSubquery(body_pstate, var_subquery,
+                                              makeAlias("reduce_vars", NIL),
+                                              false, true);
+    addNSItemToQuery(body_pstate, body_pnsi, false, true, true);
+
+    body_node = transform_cypher_expr(body_cpstate, reduce->body_expr,
+                                      EXPR_KIND_SELECT_TARGET);
+
+    /*
+     * The accumulator is always an agtype value (the aggregate's stype is
+     * agtype). A fold body can legitimately produce a non-agtype scalar -- for
+     * example "s AND x" or "x = 2" yield a boolean -- so normalize the body to
+     * agtype here. Without this the transition function would treat a by-value
+     * Datum (e.g. bool) as a by-reference varlena and crash. A boolean is
+     * wrapped in ag_catalog.bool_to_agtype() (AGE registers no implicit
+     * boolean-to-agtype cast); any other non-agtype type is coerced through
+     * the normal cast machinery, which raises a clean error if impossible.
+     */
+    if (exprType(body_node) != AGTYPEOID)
+    {
+        if (exprType(body_node) == BOOLOID)
+        {
+            Oid bool_to_agtype_oid = get_ag_func_oid("bool_to_agtype", 1,
+                                                     BOOLOID);
+
+            body_node = (Node *) makeFuncExpr(bool_to_agtype_oid, AGTYPEOID,
+                                              list_make1(body_node),
+                                              InvalidOid, InvalidOid,
+                                              COERCE_EXPLICIT_CALL);
+        }
+        else
+        {
+            body_node = coerce_to_common_type(body_pstate, body_node,
+                                              AGTYPEOID, "reduce");
+        }
+    }
+
+    mutator_ctx.varno = body_pnsi->p_rtindex;
+    body_node = reduce_var_to_param_mutator(body_node, &mutator_ctx);
+
+    reduce_body_check_walker(body_node, NULL);
+
+    body_serialized = nodeToString(body_node);
+
+    free_cypher_parsestate(body_cpstate);
+
+    /*
+     * 2. Build the outer aggregate query:
+     *    SELECT age_reduce(<init>, '<body>'::text, r.elem ORDER BY r.ord)
+     *    FROM unnest(<list>) WITH ORDINALITY AS r(elem, ord)
+     */
+    query = makeNode(Query);
+    query->commandType = CMD_SELECT;
+
+    child_cpstate = make_cypher_parsestate(cpstate);
+    child_pstate = (ParseState *) child_cpstate;
+
+    unnest_fc = makeFuncCall(list_make1(makeString("unnest")),
+                             list_make1(reduce->list_expr),
+                             COERCE_SQL_SYNTAX, -1);
+    rf = makeNode(RangeFunction);
+    rf->lateral = false;
+    rf->ordinality = true;
+    rf->is_rowsfrom = false;
+    rf->functions = list_make1(list_make2((Node *) unnest_fc, NIL));
+    rf->alias = makeAlias("reduce_src",
+                          list_make2(makeString(reduce->elem_varname),
+                                     makeString("reduce_ordinality")));
+    rf->coldeflist = NIL;
+
+    from_item = transform_from_clause_item(child_cpstate, (Node *) rf,
+                                           &rte, &rtindex, &namespace);
+    checkNameSpaceConflicts(child_pstate, child_pstate->p_namespace, namespace);
+    child_pstate->p_joinlist = lappend(child_pstate->p_joinlist, from_item);
+    child_pstate->p_namespace = list_concat(child_pstate->p_namespace,
+                                            namespace);
+    setNamespaceLateralState(child_pstate->p_namespace, false, true);
+
+    /* arguments to age_reduce: init, serialized body text, element column */
+    init_node = transform_cypher_expr(child_cpstate, reduce->init_expr,
+                                      EXPR_KIND_SELECT_TARGET);
+    elem_var = colNameToVar(child_pstate, reduce->elem_varname, false, -1);
+    body_const = makeConst(TEXTOID, -1, InvalidOid, -1,
+                           CStringGetTextDatum(body_serialized), false, false);
+
+    /* the WITH ORDINALITY column (bigint), used only to order the fold */
+    ord_var = makeVar(rtindex, 2, INT8OID, -1, InvalidOid, 0);
+    get_sort_group_operators(INT8OID, true, true, false,
+                             &sort_ltop, &sort_eqop, NULL, &sort_hashable);
+
+    ord_te = makeTargetEntry((Expr *) ord_var, 4, NULL, true);
+    ord_te->ressortgroupref = 1;
+
+    sortcl = makeNode(SortGroupClause);
+    sortcl->tleSortGroupRef = 1;
+    sortcl->eqop = sort_eqop;
+    sortcl->sortop = sort_ltop;
+    sortcl->reverse_sort = false;
+    sortcl->nulls_first = false;
+    sortcl->hashable = sort_hashable;
+
+    /*
+     * Evaluate <init> exactly once per reduce() instead of once per element.
+     * A regular aggregate argument is evaluated by the executor for every
+     * input row, but age_reduce_transfn only reads the init argument on the
+     * first transition (when the running state is still NULL). Re-evaluating
+     * an expensive init wastes work, and a volatile init would fire its side
+     * effects once per element.
+     *
+     * Rows are fed to the aggregate in ascending ordinality order, so the
+     * first transition is always the row with ordinality 1. Wrapping init in
+     *     CASE WHEN reduce_ordinality = 1 THEN <init> ELSE NULL::agtype END
+     * computes <init> on exactly that row (CASE only evaluates the matching
+     * branch's result) and passes a NULL init -- which the transition
+     * function ignores -- on every other row. The empty-list case is handled
+     * separately by the COALESCE(..., init) guard in build_reduce_node().
+     */
+    {
+        OpExpr *ord_is_first;
+        Const *one_const;
+        CaseWhen *init_when;
+        CaseExpr *init_case;
+        Const *null_init;
+
+        one_const = makeConst(INT8OID, -1, InvalidOid, sizeof(int64),
+                              Int64GetDatum(1), false, true);
+
+        ord_is_first = makeNode(OpExpr);
+        ord_is_first->opno = sort_eqop;            /* int8 equality */
+        ord_is_first->opfuncid = get_opcode(sort_eqop);
+        ord_is_first->opresulttype = BOOLOID;
+        ord_is_first->opretset = false;
+        ord_is_first->opcollid = InvalidOid;
+        ord_is_first->inputcollid = InvalidOid;
+        ord_is_first->args = list_make2(copyObject(ord_var), one_const);
+        ord_is_first->location = -1;
+
+        null_init = makeConst(AGTYPEOID, -1, InvalidOid, -1, (Datum) 0,
+                              true, false);
+
+        init_when = makeNode(CaseWhen);
+        init_when->expr = (Expr *) ord_is_first;
+        init_when->result = (Expr *) init_node;
+        init_when->location = -1;
+
+        init_case = makeNode(CaseExpr);
+        init_case->casetype = AGTYPEOID;
+        init_case->casecollid = InvalidOid;
+        init_case->arg = NULL;
+        init_case->args = list_make1(init_when);
+        init_case->defresult = (Expr *) null_init;
+        init_case->location = -1;
+
+        init_node = (Node *) init_case;
+    }
+
+    /* look up the age_reduce(agtype, text, agtype) aggregate */
+    agg_argtypes[0] = AGTYPEOID;
+    agg_argtypes[1] = TEXTOID;
+    agg_argtypes[2] = AGTYPEOID;
+    agg_oid = LookupFuncName(list_make2(makeString("ag_catalog"),
+                                        makeString("age_reduce")),
+                             3, agg_argtypes, false);
+
+    agg = makeNode(Aggref);
+    agg->aggfnoid = agg_oid;
+    agg->aggtype = AGTYPEOID;
+    agg->aggcollid = InvalidOid;
+    agg->inputcollid = InvalidOid;
+    agg->aggtranstype = InvalidOid;     /* filled by the planner */
+    agg->aggargtypes = list_make3_oid(AGTYPEOID, TEXTOID, AGTYPEOID);
+    agg->aggdirectargs = NIL;
+    agg->args = list_make4(makeTargetEntry((Expr *) init_node, 1, NULL, false),
+                           makeTargetEntry((Expr *) body_const, 2, NULL, false),
+                           makeTargetEntry((Expr *) elem_var, 3, NULL, false),
+                           ord_te);
+    agg->aggorder = list_make1(sortcl);
+    agg->aggdistinct = NIL;
+    agg->aggfilter = NULL;
+    agg->aggstar = false;
+    agg->aggvariadic = false;
+    agg->aggkind = AGGKIND_NORMAL;
+    agg->aggpresorted = false;
+    agg->agglevelsup = 0;
+    agg->aggsplit = AGGSPLIT_SIMPLE;
+    agg->aggno = -1;
+    agg->aggtransno = -1;
+    agg->location = -1;
+
+    child_pstate->p_hasAggs = true;
+
+    result_te = makeTargetEntry((Expr *) agg,
+                                (AttrNumber) child_pstate->p_next_resno++,
+                                "reduce", false);
+
+    query->targetList = list_make1(result_te);
+    query->jointree = makeFromExpr(child_pstate->p_joinlist, NULL);
+    query->rtable = child_pstate->p_rtable;
+    query->rteperminfos = child_pstate->p_rteperminfos;
+    query->hasAggs = true;
+    query->hasSubLinks = child_pstate->p_hasSubLinks;
+    query->hasTargetSRFs = child_pstate->p_hasTargetSRFs;
+
+    assign_query_collations(child_pstate, query);
+    parse_check_aggregates(child_pstate, query);
+
+    free_cypher_parsestate(child_cpstate);
+
+    return query;
 }
 
 /*

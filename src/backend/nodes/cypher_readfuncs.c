@@ -329,3 +329,17 @@ void read_cypher_predicate_function(struct ExtensibleNode *node)
     READ_NODE_FIELD(expr);
     READ_NODE_FIELD(where);
 }
+
+/*
+ * Deserialize a string representing the cypher_reduce data structure.
+ */
+void read_cypher_reduce(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_reduce);
+
+    READ_STRING_FIELD(acc_varname);
+    READ_NODE_FIELD(init_expr);
+    READ_STRING_FIELD(elem_varname);
+    READ_NODE_FIELD(list_expr);
+    READ_NODE_FIELD(body_expr);
+}
