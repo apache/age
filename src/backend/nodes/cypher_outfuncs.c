@@ -200,6 +200,18 @@ void out_cypher_predicate_function(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(where);
 }
 
+/* serialization function for the cypher_reduce ExtensibleNode. */
+void out_cypher_reduce(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_reduce);
+
+    WRITE_STRING_FIELD(acc_varname);
+    WRITE_NODE_FIELD(init_expr);
+    WRITE_STRING_FIELD(elem_varname);
+    WRITE_NODE_FIELD(list_expr);
+    WRITE_NODE_FIELD(body_expr);
+}
+
 /* serialization function for the cypher_merge ExtensibleNode. */
 void out_cypher_merge(StringInfo str, const ExtensibleNode *node)
 {
