@@ -35,7 +35,12 @@ jobs:
 
       - name: Verify Bison version (grammar conflict counts are pinned)
         run: |
-          ver=$(bison --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          ver=$(bison --version | awk 'NR==1 {print $NF}')
+          if [ -z "$ver" ]; then
+            echo "::error::Could not determine Bison version from 'bison --version'."
+            echo "::error::Expected the first line to end with a version (e.g. '... 3.8.2')."
+            exit 1
+          fi
           echo "bison $ver"
           case "$ver" in
             3.8.*) ;;
