@@ -1100,3 +1100,25 @@ $function$;
 
 COMMENT ON FUNCTION ag_catalog.create_subgraph(name, name, text, text) IS
 'Materializes a new persistent graph as the induced subgraph of from_graph selected by a Cypher node predicate (on n) and relationship predicate (on r); ''*'' keeps all. An edge is kept only if its predicate holds and both endpoints are kept. Returns (node_count, relationship_count).';
+
+--
+-- reduce(acc = init, var IN list | body) fold support
+--
+-- Transition function for the age_reduce aggregate. The fold body is compiled
+-- by transform_cypher_reduce() with the accumulator and element rewritten to
+-- PARAM_EXEC params 0 and 1 and serialized into the text argument; the
+-- transition evaluates it for each element in list order. It must be callable
+-- with a NULL transition state (no initcond), so it is intentionally not STRICT.
+CREATE FUNCTION ag_catalog.age_reduce_transfn(agtype, agtype, text, agtype)
+    RETURNS agtype
+    LANGUAGE c
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
+-- aggregate definition for reduce(); direct arguments are
+-- (init, serialized-body, element), with the element fed ORDER BY ordinality.
+CREATE AGGREGATE ag_catalog.age_reduce(agtype, text, agtype)
+(
+    stype = agtype,
+    sfunc = ag_catalog.age_reduce_transfn
+);

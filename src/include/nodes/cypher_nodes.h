@@ -247,6 +247,24 @@ typedef struct cypher_predicate_function
     Node *where;    /* the predicate to test */
 } cypher_predicate_function;
 
+/*
+ * reduce(acc = init, var IN list | body)
+ *
+ * Folds `body` over `list`, threading an accumulator `acc` (seeded with
+ * `init`) across the elements in list order, binding each element to `var`.
+ * Transformed into a correlated scalar subquery over an ordered aggregate
+ * by transform_cypher_reduce() in cypher_clause.c.
+ */
+typedef struct cypher_reduce
+{
+    ExtensibleNode extensible;
+    char *acc_varname;  /* accumulator variable name */
+    Node *init_expr;    /* initial accumulator value */
+    char *elem_varname; /* per-element variable name */
+    Node *list_expr;    /* the list to fold over */
+    Node *body_expr;    /* the fold expression evaluated per element */
+} cypher_reduce;
+
 typedef enum cypher_map_projection_element_type
 {
     PROPERTY_SELECTOR = 0,  /* map_var { .key } */

@@ -56,4 +56,8 @@ void copy_cypher_merge_information(ExtensibleNode *newnode,
 /* predicate function data structure */
 void copy_cypher_predicate_function(ExtensibleNode *newnode,
                                     const ExtensibleNode *from);
+
+/* reduce data structure */
+void copy_cypher_reduce(ExtensibleNode *newnode,
+                        const ExtensibleNode *from);
 #endif

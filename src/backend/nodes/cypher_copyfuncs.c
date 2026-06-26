@@ -185,3 +185,15 @@ void copy_cypher_predicate_function(ExtensibleNode *newnode,
     COPY_NODE_FIELD(expr);
     COPY_NODE_FIELD(where);
 }
+
+/* copy function for cypher_reduce */
+void copy_cypher_reduce(ExtensibleNode *newnode, const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_reduce);
+
+    COPY_STRING_FIELD(acc_varname);
+    COPY_NODE_FIELD(init_expr);
+    COPY_STRING_FIELD(elem_varname);
+    COPY_NODE_FIELD(list_expr);
+    COPY_NODE_FIELD(body_expr);
+}
