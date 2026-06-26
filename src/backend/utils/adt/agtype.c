@@ -47,8 +47,11 @@
 #include "miscadmin.h"
 #include "parser/parse_coerce.h"
 #include "nodes/nodes.h"
+#include "nodes/nodeFuncs.h"
+#include "executor/executor.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
+#include "utils/datum.h"
 #include "executor/cypher_utils.h"
 #include "utils/float.h"
 #include "utils/lsyscache.h"
@@ -11573,6 +11576,168 @@ Datum age_float8_stddev_pop_aggfinalfn(PG_FUNCTION_ARGS)
     }
 
     PG_RETURN_POINTER(agtype_value_to_agtype(&agtv_float));
+}
+
+/*
+ * Per-aggregate-group evaluation state for reduce(). Caches the compiled
+ * fold-body expression and a standalone ExprContext whose PARAM_EXEC slots
+ * (0 = accumulator, 1 = current element) are rebound on every element.
+ */
+typedef struct reduce_eval_ctx
+{
+    ExprState *body_state;  /* compiled fold-body expression */
+    ExprContext *econtext;  /* eval context carrying the param slots */
+    ParamExecData *params;  /* [0] = accumulator, [1] = current element */
+} reduce_eval_ctx;
+
+/* Build an agtype 'null' Datum (a real agtype value, not a SQL NULL). */
+static Datum reduce_agtype_null(void)
+{
+    agtype_value agtv;
+
+    agtv.type = AGTV_NULL;
+    return AGTYPE_P_GET_DATUM(agtype_value_to_agtype(&agtv));
+}
+
+/*
+ * age_reduce_transfn(state agtype, init agtype, body text, element agtype)
+ *
+ * Transition function for the age_reduce aggregate that implements the Cypher
+ * reduce(acc = init, var IN list | body) fold. The fold body is compiled by
+ * transform_cypher_reduce() with the accumulator and element rewritten to
+ * PARAM_EXEC params 0 and 1, then serialized into the `body` text argument.
+ *
+ * On the first element of a group the accumulator is seeded from `init`
+ * (the running state is NULL because the aggregate uses no initcond); on
+ * every element the body is evaluated with the params rebound, and the result
+ * becomes the next accumulator state.
+ *
+ * The accumulator and element are normalized to a non-NULL agtype 'null'
+ * before evaluation so that (a) the fold body sees agtype values and Cypher
+ * null semantics apply, and (b) the running state is never a SQL NULL, which
+ * keeps PG_ARGISNULL(0) a reliable "first element of the group" signal even
+ * when the fold legitimately produces null.
+ */
+PG_FUNCTION_INFO_V1(age_reduce_transfn);
+
+Datum age_reduce_transfn(PG_FUNCTION_ARGS)
+{
+    MemoryContext aggcontext;
+    MemoryContext oldctx;
+    reduce_eval_ctx *rc;
+    Datum acc;
+    Datum element;
+    Datum result;
+    bool result_isnull;
+
+    if (!AggCheckCallContext(fcinfo, &aggcontext))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("age_reduce_transfn called in a non-aggregate context")));
+    }
+
+    /* the fold can run over a large list; stay responsive to cancellation */
+    CHECK_FOR_INTERRUPTS();
+
+    /*
+     * One-time per-FmgrInfo setup: deserialize and compile the fold body, and
+     * build the standalone ExprContext plus its two PARAM_EXEC slots. The body
+     * text is a query constant, so caching the compiled state across groups is
+     * correct.
+     */
+    rc = (reduce_eval_ctx *) fcinfo->flinfo->fn_extra;
+    if (rc == NULL)
+    {
+        text *body_txt;
+        char *body_str;
+        Node *body_node;
+
+        if (PG_ARGISNULL(2))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                     errmsg("age_reduce: missing fold expression")));
+        }
+
+        oldctx = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+        rc = (reduce_eval_ctx *) palloc0(sizeof(reduce_eval_ctx));
+        body_txt = PG_GETARG_TEXT_PP(2);
+        body_str = text_to_cstring(body_txt);
+        body_node = (Node *) stringToNode(body_str);
+
+        /*
+         * age_reduce() is SQL-callable, so the serialized body argument is
+         * not guaranteed to have come from transform_cypher_reduce(). The
+         * running state is stored as an agtype varlena (the datumCopy() below
+         * uses typbyval=false, typlen=-1), so a body that evaluates to a
+         * by-value type (e.g. a bare boolean or integer) would have its Datum
+         * misread as a pointer and could crash the backend. Reject any body
+         * whose result type is not agtype. transform_cypher_reduce() always
+         * normalizes the fold body to agtype, so a planner-generated reduce()
+         * is never rejected here.
+         */
+        if (exprType(body_node) != AGTYPEOID)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("age_reduce: fold expression must return agtype")));
+        }
+
+        rc->body_state = ExecInitExpr((Expr *) body_node, NULL);
+        rc->econtext = CreateStandaloneExprContext();
+        rc->params = (ParamExecData *) palloc0(sizeof(ParamExecData) * 2);
+        rc->econtext->ecxt_param_exec_vals = rc->params;
+        fcinfo->flinfo->fn_extra = rc;
+        MemoryContextSwitchTo(oldctx);
+    }
+
+    /*
+     * Seed the accumulator. The aggregate declares no initcond, so on the
+     * first element the running state (arg 0) is NULL and we use `init`
+     * (arg 1); thereafter the accumulator is the prior state. A NULL init is
+     * normalized to agtype 'null'.
+     */
+    if (PG_ARGISNULL(0))
+    {
+        acc = PG_ARGISNULL(1) ? reduce_agtype_null() : PG_GETARG_DATUM(1);
+    }
+    else
+    {
+        acc = PG_GETARG_DATUM(0);
+    }
+
+    /* a NULL element is likewise normalized to agtype 'null' */
+    element = PG_ARGISNULL(3) ? reduce_agtype_null() : PG_GETARG_DATUM(3);
+
+    /* bind PARAM_EXEC 0 = accumulator, 1 = current element */
+    rc->params[0].value = acc;
+    rc->params[0].isnull = false;
+    rc->params[0].execPlan = NULL;
+    rc->params[1].value = element;
+    rc->params[1].isnull = false;
+    rc->params[1].execPlan = NULL;
+
+    /* evaluate the fold body for this element */
+    ResetExprContext(rc->econtext);
+    result = ExecEvalExpr(rc->body_state, rc->econtext, &result_isnull);
+
+    /*
+     * Never let the running state become a SQL NULL: a null fold result is
+     * stored as agtype 'null' so the next element is not mistaken for the
+     * first one (see PG_ARGISNULL(0) above).
+     */
+    if (result_isnull)
+    {
+        result = reduce_agtype_null();
+    }
+
+    /* the new state must survive in the aggregate context across elements */
+    oldctx = MemoryContextSwitchTo(aggcontext);
+    result = datumCopy(result, false, -1);
+    MemoryContextSwitchTo(oldctx);
+
+    PG_RETURN_DATUM(result);
 }
 
 PG_FUNCTION_INFO_V1(age_agtype_larger_aggtransfn);

@@ -216,6 +216,7 @@ REGRESS = scan \
           list_comprehension \
           predicate_functions \
           pattern_expression \
+          age_reduce \
           map_projection \
           direct_field_access \
           security \

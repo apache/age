@@ -865,6 +865,25 @@ bool cypher_raw_expr_tree_walker_impl(Node *node,
                 return true;
             }
         }
+        else if (is_ag_node(node, cypher_reduce))
+        {
+            cypher_reduce *rd = (cypher_reduce *)node;
+
+            if (WALK(rd->init_expr))
+            {
+                return true;
+            }
+
+            if (WALK(rd->list_expr))
+            {
+                return true;
+            }
+
+            if (WALK(rd->body_expr))
+            {
+                return true;
+            }
+        }
         /* Add more node types here as needed */
         else
         {

@@ -54,4 +54,7 @@ void read_cypher_merge_information(struct ExtensibleNode *node);
 /* predicate function data structure */
 void read_cypher_predicate_function(struct ExtensibleNode *node);
 
+/* reduce data structure */
+void read_cypher_reduce(struct ExtensibleNode *node);
+
 #endif
