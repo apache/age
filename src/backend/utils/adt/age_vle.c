@@ -2887,11 +2887,12 @@ static graphid sp_queue_pop(sp_queue *q)
 }
 
 /* Resolve a vertex argument (a vertex agtype or an integer id) to a graphid. */
-static graphid sp_agtype_to_graphid(agtype *agt, const char *argname)
+static graphid sp_agtype_to_graphid(agtype *agt, char *fname,
+                                    const char *argname)
 {
     agtype_value *agtv = NULL;
 
-    agtv = get_agtype_value("age_shortest_path", agt, AGTV_VERTEX, false);
+    agtv = get_agtype_value(fname, agt, AGTV_VERTEX, false);
 
     if (agtv != NULL && agtv->type == AGTV_VERTEX)
     {
@@ -2909,7 +2910,7 @@ static graphid sp_agtype_to_graphid(agtype *agt, const char *argname)
 }
 
 /* Resolve the optional direction argument; NULL defaults to undirected. */
-static cypher_rel_dir sp_agtype_to_direction(agtype *agt)
+static cypher_rel_dir sp_agtype_to_direction(agtype *agt, char *fname)
 {
     agtype_value *agtv = NULL;
     char *s = NULL;
@@ -2920,7 +2921,7 @@ static cypher_rel_dir sp_agtype_to_direction(agtype *agt)
         return CYPHER_REL_DIR_NONE;
     }
 
-    agtv = get_agtype_value("age_shortest_path", agt, AGTV_STRING, true);
+    agtv = get_agtype_value(fname, agt, AGTV_STRING, true);
     s = pnstrdup(agtv->val.string.val, agtv->val.string.len);
 
     if (pg_strcasecmp(s, "out") == 0)
@@ -2939,7 +2940,8 @@ static cypher_rel_dir sp_agtype_to_direction(agtype *agt)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("direction argument must be one of 'out', 'in', or 'any'")));
+                 errmsg("%s: direction argument must be one of 'out', 'in', or 'any'",
+                        fname)));
     }
 
     pfree_if_not_null(s);
@@ -2979,7 +2981,7 @@ static Datum sp_build_path_datum(Oid graph_oid, graphid *alt, int64 alt_len)
  * (collect_all) every shortest-path predecessor is recorded per vertex.
  */
 static HTAB *sp_run_bfs(GRAPH_global_context *ggctx, graphid source,
-                        graphid target, bool filter_edges, Oid edge_label_oid,
+                        graphid target, Oid *label_oids, int n_label_oids,
                         cypher_rel_dir dir, int64 max_hops, bool collect_all,
                         int64 *out_target_depth, bool *out_found)
 {
@@ -3123,18 +3125,35 @@ static HTAB *sp_run_bfs(GRAPH_global_context *ggctx, graphid source,
 
                 /*
                  * Optional edge label filter. When a label filter is active
-                 * we keep only edges whose label table oid matches. Note that
-                 * a label name which does not exist in this graph resolves to
-                 * InvalidOid; because no real edge can have an InvalidOid
-                 * label table, every edge is then skipped and only the
-                 * zero-length (start == end) path can match -- matching the
-                 * openCypher semantics that an unknown relationship type
-                 * matches no relationships.
+                 * (n_label_oids > 0) we keep only edges whose label table oid
+                 * is one of the requested relationship types. A requested type
+                 * that does not exist in this graph resolves to InvalidOid;
+                 * since no real edge can have an InvalidOid label table, such a
+                 * type contributes no matches and simply drops out of the set,
+                 * while edges of any of the other (known) requested types still
+                 * match. Only when every requested type is unknown does the
+                 * filter match no edges, leaving just the zero-length
+                 * (start == end) path -- matching the openCypher semantics that
+                 * an unknown relationship type matches no relationships.
                  */
-                if (filter_edges &&
-                    get_edge_entry_label_table_oid(ee) != edge_label_oid)
+                if (n_label_oids > 0)
                 {
-                    continue;
+                    Oid ee_label_oid = get_edge_entry_label_table_oid(ee);
+                    bool label_match = false;
+                    int li = 0;
+
+                    for (li = 0; li < n_label_oids; li++)
+                    {
+                        if (label_oids[li] == ee_label_oid)
+                        {
+                            label_match = true;
+                            break;
+                        }
+                    }
+                    if (!label_match)
+                    {
+                        continue;
+                    }
                 }
 
                 /* the neighbor depends on which side of the edge u is on */
@@ -3193,12 +3212,24 @@ static HTAB *sp_run_bfs(GRAPH_global_context *ggctx, graphid source,
 }
 
 /*
+ * Maximum number of result paths age_all_shortest_paths will materialize
+ * before raising an error. The shortest-path DAG can contain exponentially
+ * many equal-length paths (grid-like or multi-edge graphs), and they are all
+ * built up front in the SRF's memory context, so this is a backstop against
+ * unbounded memory growth. CHECK_FOR_INTERRUPTS() in sp_enumerate still allows
+ * cancellation, but a fast explosion can outrun a statement_timeout.
+ */
+#define SP_MAX_RESULT_PATHS 1000000
+
+/*
  * Recursively enumerate every shortest path by walking the predecessor DAG
  * from target back to source. Each completed path is appended to *out as a
- * freshly allocated interleaved graphid array of length alt_len.
+ * freshly allocated interleaved graphid array of length alt_len. The running
+ * total is capped at SP_MAX_RESULT_PATHS to bound peak memory.
  */
 static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
-                         graphid *alt, int64 alt_len, int64 pos, List **out)
+                         graphid *alt, int64 alt_len, int64 pos,
+                         char *fname, List **out)
 {
     sp_visit_entry *e = NULL;
     ListCell *lc = NULL;
@@ -3220,6 +3251,20 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
 
             memcpy(copy, alt, sizeof(graphid) * alt_len);
             *out = lappend(*out, copy);
+
+            /*
+             * Bound the number of materialized paths. Without a ceiling, a
+             * combinatorial shortest-path DAG could exhaust memory before the
+             * first row is returned.
+             */
+            if (list_length(*out) > SP_MAX_RESULT_PATHS)
+            {
+                ereport(ERROR,
+                        (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                         errmsg("%s: shortest path count exceeded %d",
+                                fname, SP_MAX_RESULT_PATHS),
+                         errhint("Narrow the search with a relationship type or a maximum hop count, or use age_shortest_path for a single path.")));
+            }
         }
         return;
     }
@@ -3236,8 +3281,191 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
 
         alt[pos - 1] = p->edge;
         sp_enumerate(visited, source, p->parent_vertex, alt, alt_len, pos - 2,
-                     out);
+                     fname, out);
     }
+}
+
+/*
+ * Maximum number of distinct paths the minimum-hop fallback will enumerate
+ * before giving up. The exhaustive DFS used for a minimum hop count greater
+ * than the shortest distance can explode on dense graphs, so this acts as a
+ * safety valve alongside CHECK_FOR_INTERRUPTS()/statement_timeout in the DFS.
+ */
+#define SP_MINHOPS_MAX_PATHS 1000000
+
+/*
+ * Fallback for the "minimum hop count greater than the shortest distance"
+ * regime, which plain BFS cannot satisfy (it requires longer, vertex-revisiting
+ * paths under relationship-uniqueness). This reuses the VLE depth-first engine
+ * directly: it builds a VLE_local_context by hand (no fcinfo), enumerates every
+ * path whose length is within [min_hops, max_hops], and keeps only those of the
+ * smallest qualifying length. For shortest_path one such path is returned; for
+ * all_shortest_paths every tie at that length is returned. Returns NULL with
+ * *out_count == 0 when no qualifying path exists.
+ *
+ * The VLE engine matches a single edge label oid only, so a multi-type filter
+ * is rejected by the caller before reaching here. A single label_oid of
+ * InvalidOid means "any edge label".
+ */
+static Datum *sp_minhops_fallback(GRAPH_global_context *ggctx, Oid graph_oid,
+                                  const char *graph_name, char *fname,
+                                  graphid source, graphid target, Oid label_oid,
+                                  cypher_rel_dir dir, int64 min_hops,
+                                  int64 max_hops, bool collect_all,
+                                  int64 *out_count)
+{
+    MemoryContext oldctx = CurrentMemoryContext;
+    MemoryContext tmpctx = NULL;
+    VLE_local_context *vlelctx = NULL;
+    agtype_value av_empty;
+    agtype *empty_constraint = NULL;
+    List *best = NIL;
+    ListCell *lc = NULL;
+    int64 best_len = PG_INT64_MAX;
+    int64 examined = 0;
+    int64 result_len = 0;
+    int64 n = 0;
+    int64 idx = 0;
+    Datum *paths = NULL;
+
+    *out_count = 0;
+
+    /* do the VLE enumeration in a private context we can throw away at the end */
+    tmpctx = AllocSetContextCreate(oldctx, "age shortest path minhops",
+                                   ALLOCSET_DEFAULT_SIZES);
+    MemoryContextSwitchTo(tmpctx);
+
+    /* an empty property constraint object: every edge satisfies it */
+    av_empty.type = AGTV_OBJECT;
+    av_empty.val.object.num_pairs = 0;
+    av_empty.val.object.pairs = NULL;
+    empty_constraint = agtype_value_to_agtype(&av_empty);
+
+    /* build the VLE local context by hand (no fcinfo, no caching) */
+    vlelctx = palloc0(sizeof(VLE_local_context));
+    vlelctx->graph_name = pnstrdup(graph_name, strlen(graph_name));
+    vlelctx->graph_oid = graph_oid;
+    vlelctx->ggctx = ggctx;
+    vlelctx->path_function = VLE_FUNCTION_PATHS_BETWEEN;
+    vlelctx->next_vertex = NULL;
+    vlelctx->vsid = source;
+    vlelctx->veid = target;
+    vlelctx->edge_property_constraint = empty_constraint;
+    vlelctx->edge_property_constraint_datum =
+        AGTYPE_P_GET_DATUM(empty_constraint);
+    vlelctx->edge_property_constraint_hash =
+        datum_image_hash(vlelctx->edge_property_constraint_datum, false, -1);
+    vlelctx->edge_label_name = NULL;
+    vlelctx->edge_label_name_oid = label_oid;
+    vlelctx->lidx = (min_hops > 0) ? min_hops : 1;
+    if (max_hops < 0)
+    {
+        vlelctx->uidx_infinite = true;
+        vlelctx->uidx = 0;
+    }
+    else
+    {
+        vlelctx->uidx_infinite = false;
+        vlelctx->uidx = max_hops;
+    }
+    vlelctx->edge_direction = dir;
+    vlelctx->use_cache = false;
+    vlelctx->vle_grammar_node_id = 0;
+    vlelctx->next = NULL;
+    vlelctx->is_dirty = true;
+
+    create_VLE_local_state_hashtable(vlelctx);
+    vlelctx->dfs_vertex_stack = new_gid_stack();
+    vlelctx->dfs_edge_stack = new_gid_stack();
+    vlelctx->dfs_path_stack = new_gid_stack();
+    load_initial_dfs_stacks(vlelctx);
+
+    /*
+     * Enumerate qualifying paths, keeping only those of the smallest length
+     * seen. The DFS yields paths in no particular length order, so a strictly
+     * shorter path resets the kept set.
+     */
+    while (dfs_find_a_path_between(vlelctx))
+    {
+        int64 hops = gid_stack_size(vlelctx->dfs_path_stack);
+        bool take = false;
+        bool reset = false;
+
+        examined = examined + 1;
+        if (examined > SP_MINHOPS_MAX_PATHS)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                     errmsg("%s: minimum hop count search exceeded %d candidate paths",
+                            fname, SP_MINHOPS_MAX_PATHS),
+                     errhint("Provide a maximum hop count to bound the search.")));
+        }
+
+        if (hops < best_len)
+        {
+            take = true;
+            reset = true;
+        }
+        else if (hops == best_len && collect_all)
+        {
+            take = true;
+        }
+
+        if (take)
+        {
+            VLE_path_container *vpc = NULL;
+            graphid *garr = NULL;
+            int64 arrlen = 0;
+
+            vpc = build_VLE_path_container(vlelctx);
+            garr = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
+            arrlen = vpc->graphid_array_size;
+
+            /* copy the path into the surviving context and record it */
+            MemoryContextSwitchTo(oldctx);
+            if (reset)
+            {
+                list_free_deep(best);
+                best = NIL;
+                best_len = hops;
+            }
+            {
+                graphid *copy = palloc(sizeof(graphid) * arrlen);
+
+                memcpy(copy, garr, sizeof(graphid) * arrlen);
+                best = lappend(best, copy);
+            }
+            MemoryContextSwitchTo(tmpctx);
+
+            pfree(vpc);
+        }
+    }
+
+    /* tear down the VLE engine state, then drop the whole scratch context */
+    free_VLE_local_context(vlelctx);
+    MemoryContextSwitchTo(oldctx);
+    MemoryContextDelete(tmpctx);
+
+    n = list_length(best);
+    if (n == 0)
+    {
+        return NULL;
+    }
+
+    /* every kept path has the same (minimum qualifying) length */
+    result_len = (2 * best_len) + 1;
+    paths = palloc(sizeof(Datum) * n);
+    foreach(lc, best)
+    {
+        graphid *a = (graphid *) lfirst(lc);
+
+        paths[idx] = sp_build_path_datum(graph_oid, a, result_len);
+        idx = idx + 1;
+    }
+
+    list_free_deep(best);
+    *out_count = n;
+    return paths;
 }
 
 /*
@@ -3248,8 +3476,8 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
 static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
                                agtype *end_agt, agtype *label_agt,
                                agtype *dir_agt, agtype *minhops_agt,
-                               agtype *maxhops_agt, bool collect_all,
-                               int64 *out_count)
+                               agtype *maxhops_agt, char *fname,
+                               bool collect_all, int64 *out_count)
 {
     agtype_value *agtv_temp = NULL;
     char *graph_name = NULL;
@@ -3257,14 +3485,17 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     GRAPH_global_context *ggctx = NULL;
     graphid source = 0;
     graphid target = 0;
-    bool filter_edges = false;
-    Oid edge_label_oid = InvalidOid;
+    Oid *label_oids = NULL;
+    int n_label_oids = 0;
     cypher_rel_dir dir = CYPHER_REL_DIR_NONE;
+    int64 min_hops = 0;
     int64 max_hops = -1;
     HTAB *visited = NULL;
     int64 target_depth = -1;
     bool found = false;
     Datum *paths = NULL;
+    MemoryContext oldctx = CurrentMemoryContext;
+    MemoryContext scratch = NULL;
 
     *out_count = 0;
 
@@ -3273,10 +3504,10 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("age_shortest_path: graph name cannot be NULL")));
+                 errmsg("%s: graph name cannot be NULL", fname)));
     }
 
-    agtv_temp = get_agtype_value("age_shortest_path", graph_name_agt,
+    agtv_temp = get_agtype_value(fname, graph_name_agt,
                                  AGTV_STRING, true);
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
@@ -3288,16 +3519,21 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
      */
     if (start_agt == NULL || end_agt == NULL)
     {
+        pfree_if_not_null(graph_name);
         return NULL;
     }
 
-    source = sp_agtype_to_graphid(start_agt, "start vertex");
-    target = sp_agtype_to_graphid(end_agt, "end vertex");
+    source = sp_agtype_to_graphid(start_agt, fname, "start vertex");
+    target = sp_agtype_to_graphid(end_agt, fname, "end vertex");
 
     /*
-     * Optional edge type filter. A single relationship type may be supplied
-     * either as a bare string or as a one-element array. Multiple relationship
-     * types (an array with more than one element) are not yet supported.
+     * Optional edge type filter. A relationship type may be supplied as a
+     * bare string, or one or more types may be supplied as an array of
+     * strings. Each (non-empty) type name is resolved to its edge label table
+     * oid; an edge is kept when its label oid is one of the requested set. An
+     * empty string, an empty array, or NULL means no filter (every edge is
+     * traversed). An unknown type resolves to InvalidOid and so matches no
+     * edges.
      */
     if (label_agt != NULL)
     {
@@ -3306,74 +3542,84 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
         if (AGT_ROOT_IS_ARRAY(label_agt) && !AGT_ROOT_IS_SCALAR(label_agt))
         {
             int nelems = AGT_ROOT_COUNT(label_agt);
+            int i = 0;
 
-            if (nelems > 1)
+            if (nelems > 0)
             {
-                ereport(ERROR,
-                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                         errmsg("age_shortest_path: multiple relationship types are not yet supported")));
+                label_oids = palloc(sizeof(Oid) * nelems);
             }
 
-            if (nelems == 1)
+            for (i = 0; i < nelems; i++)
             {
                 agtv_temp = get_ith_agtype_value_from_container(
-                    &label_agt->root, 0);
+                    &label_agt->root, i);
                 if (agtv_temp->type != AGTV_STRING)
                 {
                     ereport(ERROR,
                             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                             errmsg("age_shortest_path: relationship type must be a string")));
+                             errmsg("%s: relationship type must be a string",
+                                    fname)));
                 }
+                /* skip empty type names; they impose no constraint */
                 if (agtv_temp->val.string.len != 0)
                 {
                     label_name = pnstrdup(agtv_temp->val.string.val,
                                           agtv_temp->val.string.len);
-                    edge_label_oid = get_label_relation(label_name, graph_oid);
-                    filter_edges = true;
+                    label_oids[n_label_oids] =
+                        get_label_relation(label_name, graph_oid);
+                    n_label_oids = n_label_oids + 1;
+
+                    /* the resolved oid is all we keep; free the type name */
+                    pfree(label_name);
+                    label_name = NULL;
                 }
             }
         }
         else
         {
-            agtv_temp = get_agtype_value("age_shortest_path", label_agt,
+            agtv_temp = get_agtype_value(fname, label_agt,
                                          AGTV_STRING, true);
             if (agtv_temp->val.string.len != 0)
             {
                 label_name = pnstrdup(agtv_temp->val.string.val,
                                       agtv_temp->val.string.len);
-                edge_label_oid = get_label_relation(label_name, graph_oid);
-                filter_edges = true;
+                label_oids = palloc(sizeof(Oid));
+                label_oids[0] = get_label_relation(label_name, graph_oid);
+                n_label_oids = 1;
+
+                /* the resolved oid is all we keep; free the type name */
+                pfree(label_name);
+                label_name = NULL;
             }
         }
     }
 
     /* optional direction (defaults to undirected) */
-    dir = sp_agtype_to_direction(dir_agt);
+    dir = sp_agtype_to_direction(dir_agt, fname);
 
     /*
-     * Optional minimum hop count. A genuine minimum-length constraint needs a
-     * different search than plain BFS, so for now only the default (NULL or 0)
-     * is accepted; any other value is rejected loudly.
+     * Optional minimum hop count (NULL or negative means none). A minimum
+     * that does not exceed the true shortest distance imposes no additional
+     * constraint, so it is handled directly by the BFS result below. A
+     * minimum greater than the shortest distance requires enumerating longer,
+     * vertex-revisiting paths, which plain BFS cannot do; that case falls
+     * back to the VLE depth-first engine after the search (see below).
      */
     if (minhops_agt != NULL)
     {
-        int64 min_hops = 0;
-
-        agtv_temp = get_agtype_value("age_shortest_path", minhops_agt,
+        agtv_temp = get_agtype_value(fname, minhops_agt,
                                      AGTV_INTEGER, true);
         min_hops = agtv_temp->val.int_value;
-        if (min_hops != 0)
+        if (min_hops < 0)
         {
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("age_shortest_path: a minimum hop count is not yet supported")));
+            min_hops = 0;
         }
     }
 
     /* optional upper hop bound (NULL or negative means unbounded) */
     if (maxhops_agt != NULL)
     {
-        agtv_temp = get_agtype_value("age_shortest_path", maxhops_agt,
+        agtv_temp = get_agtype_value(fname, maxhops_agt,
                                      AGTV_INTEGER, true);
         max_hops = agtv_temp->val.int_value;
         if (max_hops < 0)
@@ -3386,17 +3632,85 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
     if (ggctx == NULL)
     {
+        pfree_if_not_null(graph_name);
+        pfree_if_not_null(label_oids);
         return NULL;
     }
 
+    /*
+     * Run the search and reconstruct the result path(s) in a private scratch
+     * context. The BFS bookkeeping (visited table, frontier queue, predecessor
+     * multiset) and the intermediate path arrays are only needed while we
+     * compute; the surviving result Datums are built in the caller's
+     * (SRF-lifetime) context and copied out before the scratch context is
+     * deleted. This bounds peak memory to the result set plus one search,
+     * rather than retaining the whole search state for the life of the SRF.
+     */
+    scratch = AllocSetContextCreate(oldctx, "age shortest path scratch",
+                                    ALLOCSET_DEFAULT_SIZES);
+    MemoryContextSwitchTo(scratch);
+
     /* run the breadth-first search */
-    visited = sp_run_bfs(ggctx, source, target, filter_edges, edge_label_oid,
+    visited = sp_run_bfs(ggctx, source, target, label_oids, n_label_oids,
                          dir, max_hops, collect_all, &target_depth, &found);
 
     if (!found)
     {
-        hash_destroy(visited);
+        MemoryContextSwitchTo(oldctx);
+        MemoryContextDelete(scratch);
+        pfree_if_not_null(graph_name);
+        pfree_if_not_null(label_oids);
         return NULL;
+    }
+
+    /*
+     * A minimum hop count greater than the true shortest distance can only be
+     * satisfied by longer, vertex-revisiting paths (Neo4j's exhaustive search
+     * regime). Plain BFS cannot produce those, so fall back to the VLE
+     * depth-first engine for that case. When min_hops <= target_depth the
+     * bound imposes no additional constraint and the shortest path(s) already
+     * found are returned unchanged.
+     *
+     * The VLE engine matches a single edge label only, so a multi-type filter
+     * combined with this regime is still unsupported.
+     */
+    if (min_hops > 0 && target_depth < min_hops)
+    {
+        Oid fallback_label_oid = InvalidOid;
+
+        /* the BFS scratch is no longer needed; the fallback uses its own */
+        MemoryContextSwitchTo(oldctx);
+        MemoryContextDelete(scratch);
+
+        if (n_label_oids > 1)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     errmsg("%s: a minimum hop count greater than the shortest path length is not supported with multiple relationship types",
+                            fname)));
+        }
+
+        if (n_label_oids == 1)
+        {
+            fallback_label_oid = label_oids[0];
+        }
+
+        /*
+         * The fallback duplicates graph_name internally and only needs the
+         * resolved label oid, so the temporaries are freed here once its
+         * result is captured rather than retained for the SRF's lifetime.
+         */
+        {
+            Datum *fb_paths;
+
+            fb_paths = sp_minhops_fallback(ggctx, graph_oid, graph_name, fname,
+                                           source, target, fallback_label_oid,
+                                           dir, min_hops, max_hops, collect_all,
+                                           out_count);
+            pfree_if_not_null(graph_name);
+            pfree_if_not_null(label_oids);
+            return fb_paths;
+        }
     }
 
     if (!collect_all)
@@ -3421,6 +3735,8 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
             cur = e->parent_vertex;
         }
 
+        /* build the surviving result Datum in the caller's context */
+        MemoryContextSwitchTo(oldctx);
         paths = palloc(sizeof(Datum));
         paths[0] = sp_build_path_datum(graph_oid, alt, alt_len);
         *out_count = 1;
@@ -3436,9 +3752,12 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
         int64 idx = 0;
 
         sp_enumerate(visited, source, target, alt, alt_len, alt_len - 1,
-                     &arrays);
+                     fname, &arrays);
 
         n = list_length(arrays);
+
+        /* build the surviving result Datums in the caller's context */
+        MemoryContextSwitchTo(oldctx);
         paths = palloc(sizeof(Datum) * (n > 0 ? n : 1));
         foreach(lc, arrays)
         {
@@ -3450,7 +3769,11 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
         *out_count = n;
     }
 
-    hash_destroy(visited);
+    /* results are copied out; drop the BFS/enumeration scratch */
+    MemoryContextSwitchTo(oldctx);
+    MemoryContextDelete(scratch);
+    pfree_if_not_null(graph_name);
+    pfree_if_not_null(label_oids);
     return paths;
 }
 
@@ -3521,8 +3844,10 @@ static Datum sp_srf_impl(FunctionCallInfo fcinfo, bool collect_all)
         state = palloc0(sizeof(sp_srf_state));
         state->next = 0;
         state->paths = sp_compute_paths(a_graph, a_start, a_end, a_label,
-                                        a_dir, a_min, a_max, collect_all,
-                                        &state->npaths);
+                                        a_dir, a_min, a_max,
+                                        collect_all ? "age_all_shortest_paths"
+                                                    : "age_shortest_path",
+                                        collect_all, &state->npaths);
         funcctx->user_fctx = state;
 
         MemoryContextSwitchTo(oldctx);
