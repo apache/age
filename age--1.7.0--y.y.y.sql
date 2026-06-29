@@ -1013,7 +1013,7 @@ BEGIN
         EXECUTE format(
             'CREATE TEMP TABLE _ag_sg_vstage ON COMMIT DROP AS '
             'SELECT t.id AS old_id, '
-            '       ag_catalog._graphid(%s, nextval(%L)) AS new_id, '
+            '       ag_catalog._graphid(%s, nextval(%L::regclass)) AS new_id, '
             '       t.properties AS props '
             'FROM ONLY %s t '
             'WHERE EXISTS (SELECT 1 FROM _ag_sg_kept_v k WHERE k.gid = t.id)',
@@ -1076,7 +1076,7 @@ BEGIN
         DROP TABLE IF EXISTS _ag_sg_estage;
         EXECUTE format(
             'CREATE TEMP TABLE _ag_sg_estage ON COMMIT DROP AS '
-            'SELECT ag_catalog._graphid(%s, nextval(%L)) AS new_id, '
+            'SELECT ag_catalog._graphid(%s, nextval(%L::regclass)) AS new_id, '
             '       vs.new_id AS new_start, ve.new_id AS new_end, '
             '       x.properties AS props '
             'FROM ONLY %s x '
