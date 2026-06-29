@@ -222,12 +222,15 @@ $$) AS (result agtype);
 --
 -- Single-node pattern on an already-bound variable: (a:Label)
 --
--- NOTE: this is an EXISTS existence check on the bound variable, NOT an
--- openCypher label predicate. A matching label is therefore always true
--- (the variable is already bound), and a *different* label is rejected by
--- AGE's pre-existing "multiple labels for variable" restriction rather than
--- evaluating to false. Both behaviours are captured here so any future change
--- to single-node-pattern semantics is caught by this test.
+-- NOTE: as of #2443 a single-node labeled pattern is a correlated label
+-- predicate -- in WHERE / EXISTS it tests whether the bound vertex actually
+-- has the label (see the WHERE (a:Person) / EXISTS((a:Company)) cases in the
+-- #2443 section below). Here the variable is already bound to the SAME label,
+-- so the predicate is trivially true (the label matches). A *different* label
+-- on an already-bound variable is still rejected by AGE's pre-existing
+-- "multiple labels for variable" restriction rather than evaluating to false;
+-- that is an orthogonal limitation, captured here so any future change to
+-- single-node-pattern semantics is caught by this test.
 SELECT * FROM cypher('pattern_expr', $$
     MATCH (a:Person)
     RETURN a.name, (a:Person)
@@ -295,6 +298,40 @@ $$) AS (a agtype, b agtype);
 SELECT * FROM cypher('pattern_expr', $$
     MATCH (a:Person)
     WHERE EXISTS((a)-[:KNOWS]->(:Person)) AND (a)-[:WORKS_WITH]->(:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (name agtype);
+
+--
+-- Single-node labeled pattern as a boolean (#2443)
+--
+-- A bound vertex carrying a label, e.g. (a:Person), must test that vertex's
+-- label rather than be trivially true. Add a non-Person vertex so the filter
+-- is observable (every other vertex in this graph is a :Person).
+SELECT * FROM cypher('pattern_expr', $$
+    CREATE (:Company {name: 'Acme'})
+$$) AS (result agtype);
+
+-- bare single-node label predicate in WHERE: only the :Person vertices
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a)
+    WHERE (a:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (name agtype);
+
+-- negated: only the non-Person vertex
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a)
+    WHERE NOT (a:Person)
+    RETURN a.name
+    ORDER BY a.name
+$$) AS (name agtype);
+
+-- EXISTS() form of a single-node label predicate
+SELECT * FROM cypher('pattern_expr', $$
+    MATCH (a)
+    WHERE EXISTS((a:Company))
     RETURN a.name
     ORDER BY a.name
 $$) AS (name agtype);
