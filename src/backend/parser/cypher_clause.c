@@ -5873,10 +5873,56 @@ static List *make_path_join_quals(cypher_parsestate *cpstate, List *entities)
     List *quals = NIL;
     List *join_quals;
 
-    /* for vertex only queries, there is no work to do */
+    /*
+     * Vertex-only patterns have no edges, so the edge-driven correlation and
+     * label-filter logic below never runs. That is correct for a freshly
+     * scanned vertex -- its label comes from its label-table scan. But a
+     * vertex that refers to a variable from an ENCLOSING query -- e.g. the
+     * (a:Person) in MATCH (a) WHERE (a:Person) / EXISTS((a:Person)) -- is not
+     * scanned from its label table here. Without an explicit filter such a
+     * sub-pattern is uncorrelated and trivially true (the label is never
+     * tested). If the vertex carries a non-default label and its variable
+     * exists in an ancestor parse state, emit a label-id filter: make_qual
+     * builds a name-based id reference that resolves to the outer variable,
+     * which both correlates the sub-pattern to it and enforces the label.
+     */
     if (list_length(entities) < 3)
     {
-        return NIL;
+        cypher_parsestate *parent_cpstate =
+            (cypher_parsestate *) cpstate->pstate.parentParseState;
+        ListCell *vlc;
+
+        if (parent_cpstate != NULL)
+        {
+            foreach (vlc, entities)
+            {
+                transform_entity *ent = lfirst(vlc);
+                char *label;
+                char *name;
+
+                if (ent->type != ENT_VERTEX)
+                {
+                    continue;
+                }
+
+                label = ent->entity.node->label;
+                name = ent->entity.node->name;
+
+                if (label != NULL && !IS_DEFAULT_LABEL_VERTEX(label) &&
+                    name != NULL &&
+                    find_variable(parent_cpstate, name) != NULL)
+                {
+                    Node *id_field = make_qual(cpstate, ent, "id");
+
+                    quals = lappend(quals,
+                                    filter_vertices_on_label_id(cpstate,
+                                                                id_field,
+                                                                label));
+                }
+            }
+        }
+
+        return quals;
     }
 
     lc = list_head(entities);
