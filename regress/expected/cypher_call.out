@@ -80,7 +80,6 @@ SELECT * FROM cypher('cypher_call', $$CALL ag_catalog.add_agtype(1,2)$$) as (sqr
 ERROR:  function ag_catalog.add_agtype(agtype, agtype) does not exist
 LINE 2: ...cypher('cypher_call', $$CALL ag_catalog.add_agtype(1,2)$$) a...
                                                              ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 /* CALL YIELD WHERE, should fail */
 SELECT * FROM cypher('cypher_call', $$CALL sqrt(64) YIELD sqrt WHERE sqrt > 1$$) as (sqrt agtype);
 ERROR:  Cannot use standalone CALL with WHERE
@@ -287,12 +286,11 @@ SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc() YIELD myfunc RET
 ERROR:  function ag_catalog.myfunc() does not exist
 LINE 1: ...T * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunc() Y...
                                                              ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  No function of that name accepts the given number of arguments.
 SELECT * FROM cypher('cypher_call', $$ CALL ag_catalog.myfunz(25) YIELD myfunc RETURN myfunc $$) as (result agtype);
 ERROR:  function ag_catalog.myfunz(agtype) does not exist
 LINE 1: ...OM cypher('cypher_call', $$ CALL ag_catalog.myfunz(25) YIELD...
                                                              ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 DROP FUNCTION myfunc;
 DROP SCHEMA call_stmt_test CASCADE;
 NOTICE:  drop cascades to function call_stmt_test.add_agtype(agtype,agtype)

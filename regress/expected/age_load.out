@@ -55,8 +55,8 @@ SELECT currval('agload_test_graph."Country_id_seq"')=248;
 -- Should error out on loading the same file again due to duplicate id
 SELECT load_labels_from_file('agload_test_graph', 'Country',
     'age_load/countries.csv', true);
-ERROR:  Cannot insert duplicate vertex id: 844424930131970
-HINT:  Entry id 2 is already used
+ERROR:  duplicate key value violates unique constraint "Country_pkey"
+DETAIL:  Key (id)=(844424930131970) already exists.
 --
 -- Load cities with id
 --
@@ -79,8 +79,8 @@ SELECT currval('agload_test_graph."City_id_seq"')=146941;
 -- Should error out on loading the same file again due to duplicate id
 SELECT load_labels_from_file('agload_test_graph', 'City',
     'age_load/cities.csv', true);
-ERROR:  Cannot insert duplicate vertex id: 1125899906842777
-HINT:  Entry id 153 is already used
+ERROR:  duplicate key value violates unique constraint "City_pkey"
+DETAIL:  Key (id)=(1125899906842777) already exists.
 --
 -- Load edges -- Connects cities to countries
 --

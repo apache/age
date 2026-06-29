@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/amapi.h"
 #include "access/heapam.h"
 #include "catalog/namespace.h"
 #include "commands/trigger.h"
@@ -417,7 +418,7 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         ScanKeyInit(&key, 1, BTEqualStrategyNumber,
                     F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
-        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
+        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0, SO_NONE);
         index_rescan(idx_scan_desc, &key, 1, NULL, 0);
 
         while (index_getnext_slot(idx_scan_desc, ForwardScanDirection, slot))
@@ -472,7 +473,7 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                     F_CHAREQ, CharGetDatum(label_type));
 
-        scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
+        scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys, SO_NONE);
 
         /* get all of the label names */
         while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
@@ -745,7 +746,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
                                                    graph_namespace_oid);
         /* open the relation (table) and begin the scan */
         graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
-        scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL);
+        scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL, SO_NONE);
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_vertex_label);
         /* bail if the number of columns differs */
@@ -847,7 +848,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
                                                  graph_namespace_oid);
         /* open the relation (table) and begin the scan */
         graph_edge_label = table_open(edge_label_table_oid, AccessShareLock);
-        scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL);
+        scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL, SO_NONE);
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_edge_label);
         /* bail if the number of columns differs */
@@ -1754,13 +1755,12 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
  * DSM path: GetNamedDSMSegment init callback.
  * Called once when the DSM segment is first created.
  */
-static void age_dsm_init_callback(void *ptr)
+static void age_dsm_init_callback(void *ptr, void *arg)
 {
     GraphVersionState *state = (GraphVersionState *) ptr;
 
     LWLockInitialize(&state->lock,
-                     LWLockNewTrancheId());
-    LWLockRegisterTranche(state->lock.tranche, "age_graph_version");
+                     LWLockNewTrancheId("age_graph_version"));
     state->num_entries = 0;
     memset(state->entries, 0, sizeof(state->entries));
 }
@@ -1777,7 +1777,7 @@ static GraphVersionState *get_version_state_dsm(void)
         GetNamedDSMSegment("age_graph_versions",
                            sizeof(GraphVersionState),
                            age_dsm_init_callback,
-                           &found);
+                           &found, NULL);
 }
 #endif /* PG_VERSION_NUM >= 170000 */
 

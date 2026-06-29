@@ -24,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "access/amapi.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -252,7 +253,7 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
 
         index_rel = index_open(index_oid, AccessShareLock);
 
-        index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+        index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0, SO_NONE);
         index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
         if (!index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
@@ -266,7 +267,8 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     } 
     else
     {        
-        scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
+        scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys,
+                                    SO_NONE);
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
 
         /*
@@ -341,8 +343,8 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
     /* Insert index entries for the tuple */
     if (resultRelInfo->ri_NumIndices > 0)
     {
-        ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate,
-                              false, false, NULL, NIL, false);
+        ExecInsertIndexTuples(resultRelInfo, estate, 0, elemTupleSlot, NIL,
+                              NULL);
     }
 
     return tuple;
