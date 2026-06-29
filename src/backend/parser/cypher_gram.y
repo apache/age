@@ -2127,6 +2127,16 @@ map:
 
             n = make_ag_node(cypher_map);
             n->keyvals = $2;
+            /*
+             * By default, a Cypher map literal preserves keys whose
+             * values are null (openCypher / Neo4j semantics: e.g.
+             * RETURN {a: null} yields {a: null}, not {}). CREATE and
+             * SET = override this to false on the top-level property
+             * map in cypher_clause.c so null properties are stripped
+             * on write; a nested map value is its own node and keeps
+             * this default, preserving its null-valued keys.
+             */
+            n->keep_null = true;
 
             $$ = (Node *)n;
         }
