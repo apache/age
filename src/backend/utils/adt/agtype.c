@@ -7099,8 +7099,6 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     int count;
     int i;
     bool is_valid = false;
-    float8 float_num;
-    char buffer[64];
 
     /* check for null */
     if (PG_ARGISNULL(0))
@@ -7160,11 +7158,16 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
 
         case AGTV_FLOAT:
 
+            /*
+             * The element is already a float8, so assign it directly. The
+             * previous approach formatted it to a string with sprintf() and
+             * re-parsed it: that both overflowed a fixed 64-byte stack buffer
+             * for large magnitudes (e.g. 1.0e308 needs ~317 chars) and lost
+             * precision, since "%f" truncates to 6 fractional digits. Direct
+             * assignment avoids both problems.
+             */
             float_elem.type = AGTV_FLOAT;
-            float_num = elem->val.float_value;
-            sprintf(buffer, "%f", float_num);
-            string = buffer;
-            float_elem.val.float_value = float8in_internal_null(string, NULL, "double precision", string, &is_valid);
+            float_elem.val.float_value = elem->val.float_value;
             agis_result.res = push_agtype_value(&agis_result.parse_state, WAGT_ELEM, &float_elem);
 
             break;
@@ -8146,7 +8149,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_FLOAT:
 
-            sprintf(buffer, "%.*g", DBL_DIG, elem->val.float_value);
+            snprintf(buffer, sizeof(buffer), "%.*g", DBL_DIG, elem->val.float_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
 
@@ -8157,7 +8160,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
 
         case AGTV_INTEGER:
 
-            sprintf(buffer, "%ld", elem->val.int_value);
+            snprintf(buffer, sizeof(buffer), "%ld", elem->val.int_value);
             string_elem.val.string.val = pstrdup(buffer);
             string_elem.val.string.len = strlen(buffer);
 
