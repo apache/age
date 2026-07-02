@@ -70,7 +70,7 @@ static void process_edge_row(char **fields, int nfields,
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("edge file row has %d columns; expected at least 4 "
-                        "and no more than the header's %d",
+                        "and no more than the header's %d columns",
                         nfields, header_count)));
     }
 

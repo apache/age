@@ -60,7 +60,7 @@ static void process_vertex_row(char **fields, int nfields,
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("label file row has %d columns, more than the "
-                        "header's %d", nfields, header_count)));
+                        "header's %d columns", nfields, header_count)));
     }
 
     /* Generate or use provided entry_id */

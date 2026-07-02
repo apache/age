@@ -204,8 +204,22 @@ SELECT create_graph('agload_delim');
 SELECT create_vlabel('agload_delim', 'V');
 SELECT create_elabel('agload_delim', 'E');
 
--- pipe-delimited edge file -> parses to 1 column -> clean error (was a segfault)
+-- pipe-delimited edge file -> parses to 1 column -> clean error at the header
+-- (was a segfault)
 SELECT load_edges_from_file('agload_delim', 'E', 'age_load/bad_delim_edges.csv');
+
+-- per-row guards (header is valid, but an individual data row is ragged):
+-- an edge row with fewer than 4 columns -> clean error (was an OOB read of
+-- the fixed fields[1..3])
+SELECT load_edges_from_file('agload_delim', 'E', 'age_load/edges_short_row.csv');
+
+-- an edge row with more columns than the header -> clean error (was an OOB
+-- read of header[i] in create_agtype_from_list_i)
+SELECT load_edges_from_file('agload_delim', 'E', 'age_load/edges_long_row.csv');
+
+-- a label row with more columns than the header -> clean error (was an OOB
+-- read of header[i] in create_agtype_from_list)
+SELECT load_labels_from_file('agload_delim', 'V', 'age_load/labels_long_row.csv');
 
 SELECT drop_graph('agload_delim', true);
 
