@@ -2110,13 +2110,292 @@ static Query *make_reduce_var_subquery(char *acc_name, char *elem_name)
 }
 
 /*
- * Validate a transformed-and-mutated reduce() fold body. After
- * reduce_var_to_param_mutator() has replaced the accumulator and element with
- * PARAM_EXEC params 0 and 1, a valid body is a pure expression over those two
- * params: it must contain no other Vars (outer-query references), no other
- * params, and no aggregates or subqueries, because the body is evaluated
- * standalone (ExecEvalExpr) inside age_reduce_transfn with only those two
- * param slots bound.
+ * Walker: true if the subtree references the reduce() accumulator or element,
+ * i.e. it contains PARAM_EXEC param 0 or 1 (assigned by
+ * reduce_var_to_param_mutator). Such a subtree changes per element and cannot
+ * be captured as a loop-invariant outer value.
+ */
+static bool reduce_expr_has_acc_elem(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, Param))
+    {
+        Param *param = (Param *) node;
+
+        if (param->paramkind == PARAM_EXEC &&
+            (param->paramid == 0 || param->paramid == 1))
+        {
+            return true;
+        }
+    }
+
+    return expression_tree_walker(node, reduce_expr_has_acc_elem, context);
+}
+
+/*
+ * Walker: true if the subtree contains an aggregate, grouping, or window
+ * function. Such a node cannot be evaluated standalone and must not be folded
+ * into a captured outer value (it would become an illegal nested aggregate).
+ */
+static bool reduce_expr_has_aggregate(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, Aggref) || IsA(node, GroupingFunc) || IsA(node, WindowFunc))
+    {
+        return true;
+    }
+
+    return expression_tree_walker(node, reduce_expr_has_aggregate, context);
+}
+
+/*
+ * Walker: true if the subtree references anything that cannot be evaluated
+ * standalone -- an outer-query Var or a non-PARAM_EXEC parameter (e.g. a
+ * cypher() $parameter, which transforms to agtype_access_operator over a
+ * PARAM_EXTERN). Such a subtree must be captured and supplied to the fold via
+ * the extras array. A subtree of only constants does not need capturing.
+ */
+static bool reduce_expr_needs_capture(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, Var))
+    {
+        return true;
+    }
+
+    if (IsA(node, Param))
+    {
+        Param *param = (Param *) node;
+
+        if (param->paramkind != PARAM_EXEC)
+        {
+            return true;
+        }
+    }
+
+    return expression_tree_walker(node, reduce_expr_needs_capture, context);
+}
+
+/*
+ * Walker: true if the subtree contains a subquery (SubLink). A captured outer
+ * value is supplied to the aggregate as a plain expression argument, which the
+ * standalone fold evaluator cannot plan, so a subtree containing a subquery is
+ * never captured -- it falls through to the explicit rejection instead.
+ */
+static bool reduce_expr_has_sublink(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, SubLink))
+    {
+        return true;
+    }
+
+    return expression_tree_walker(node, reduce_expr_has_sublink, context);
+}
+
+/*
+ * Walker: true if the subtree contains an outer reference that is not itself
+ * agtype-typed -- a non-agtype Var, or a non-agtype non-PARAM_EXEC Param. The
+ * common case is the graphid component of a graph vertex/edge variable: a
+ * pattern variable expands to a builder over its underlying columns, one of
+ * which is a graphid Var. Such a value cannot stand alone as an agtype[] extra,
+ * so its smallest enclosing agtype-typed subtree is captured whole rather than
+ * being decomposed to leaves.
+ */
+static bool reduce_expr_has_nonagtype_outer(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (IsA(node, Var))
+    {
+        if (((Var *) node)->vartype != AGTYPEOID)
+        {
+            return true;
+        }
+    }
+
+    if (IsA(node, Param))
+    {
+        Param *param = (Param *) node;
+
+        if (param->paramkind != PARAM_EXEC && param->paramtype != AGTYPEOID)
+        {
+            return true;
+        }
+    }
+
+    return expression_tree_walker(node, reduce_expr_has_nonagtype_outer,
+                                  context);
+}
+
+/*
+ * Mutator context for capturing loop-invariant outer references in a reduce()
+ * fold body. Each captured subtree is assigned the next PARAM_EXEC id (starting
+ * at 2, after the accumulator and element) and collected, in id order, so the
+ * caller can supply the values to age_reduce_transfn through the extras array.
+ */
+typedef struct reduce_capture_context
+{
+    int next_slot;   /* next PARAM_EXEC id to assign (starts at 2) */
+    List *captured;  /* captured outer-reference exprs, in slot order */
+} reduce_capture_context;
+
+/*
+ * Capture the loop-invariant outer references in a reduce() fold body.
+ *
+ * After reduce_var_to_param_mutator() has rewritten the accumulator and
+ * element to PARAM_EXEC params 0 and 1, the remaining outer references (outer-
+ * query variables and cypher() $parameters) are replaced by new PARAM_EXEC
+ * params 2, 3, ... and collected in slot order. Each captured value is
+ * loop-invariant within a fold, so the executor evaluates it once per row in
+ * the outer query context (as an aggregate argument) and binds it to its slot;
+ * the body expression is then evaluated per element by the fold.
+ *
+ * Capture is as fine-grained as the agtype[] extras argument allows, because a
+ * captured value becomes an aggregate argument that the executor evaluates
+ * eagerly and unconditionally. Hoisting a whole computed subtree out of the
+ * body would defeat short-circuiting: in
+ *     reduce(s = 0, x IN [1] | CASE WHEN false THEN s + 1/z ELSE s END)
+ * capturing "1/z" would divide by zero even though the WHEN branch is never
+ * taken. So when every outer reference in a loop-invariant subtree is itself
+ * agtype-typed, the mutator recurses and captures only the bare leaves (here
+ * "z"), leaving the operators and CASE/AND/OR branches in the body under the
+ * fold's own control flow. A leaf read cannot raise an error, so evaluating it
+ * eagerly is safe; the only cost is re-evaluating a loop-invariant
+ * sub-computation per element, which is always correct.
+ *
+ * The exception is an outer reference that is not agtype-typed and so cannot be
+ * an agtype[] extra on its own -- most commonly the graphid inside a graph
+ * vertex/edge variable, which expands to a builder over its underlying columns.
+ * Such a subtree cannot be decomposed to agtype leaves, so its smallest
+ * enclosing agtype-typed subtree is captured whole (for example the scalar
+ * value of "u.vals[0]"). A property read like that cannot raise an error
+ * either, so eager evaluation is still safe.
+ *
+ * Aggregates and subqueries (including a nested reduce()) are rejected
+ * outright: an aggregate is undefined inside a per-element fold, and a subquery
+ * cannot be supplied as a plain aggregate argument or evaluated standalone.
+ */
+static Node *reduce_capture_mutator(Node *node, void *context)
+{
+    reduce_capture_context *ctx = (reduce_capture_context *) context;
+
+    if (node == NULL)
+    {
+        return NULL;
+    }
+
+    /*
+     * Container / support nodes that expression_tree_mutator hands us are not
+     * themselves typed expressions (calling exprType on them errors), so just
+     * recurse into them. For an agtype scalar fold body these are List nodes
+     * (argument lists) and CaseWhen nodes (CASE branches).
+     */
+    if (IsA(node, List) || IsA(node, CaseWhen))
+    {
+        return expression_tree_mutator(node, reduce_capture_mutator, context);
+    }
+
+    /* an aggregate in the fold body is never supported */
+    if (IsA(node, Aggref) || IsA(node, GroupingFunc) || IsA(node, WindowFunc))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("aggregate functions are not supported in a reduce() expression")));
+    }
+
+    /*
+     * A loop-invariant, agtype-typed subtree that references an outer value and
+     * embeds no aggregate or subquery is a capture candidate. The exprType
+     * guard is evaluated first and the accumulator/element and subquery tests
+     * short-circuit the rest, so the walkers are never run on a non-agtype
+     * wrapper or descended into a nested reduce()'s subquery -- both of which
+     * would otherwise trip the tree walker on a node it cannot type.
+     */
+    if (exprType(node) == AGTYPEOID &&
+        !reduce_expr_has_acc_elem(node, NULL) &&
+        !reduce_expr_has_aggregate(node, NULL) &&
+        !reduce_expr_has_sublink(node, NULL) &&
+        reduce_expr_needs_capture(node, NULL))
+    {
+        /*
+         * Capture the whole subtree when it is a bare outer leaf (a Var or a
+         * cypher() $parameter Param) or the smallest enclosing agtype-typed
+         * wrapper of a non-agtype outer reference -- most commonly the graphid
+         * of a graph vertex/edge variable, which cannot stand alone as an
+         * agtype[] extra. Such a value is a plain read that cannot raise an
+         * error, so evaluating it eagerly as an aggregate argument is safe.
+         */
+        if (IsA(node, Var) ||
+            (IsA(node, Param) && ((Param *) node)->paramkind != PARAM_EXEC) ||
+            reduce_expr_has_nonagtype_outer(node, NULL))
+        {
+            Param *param = makeNode(Param);
+
+            param->paramkind = PARAM_EXEC;
+            param->paramid = ctx->next_slot++;
+            param->paramtype = AGTYPEOID;
+            param->paramtypmod = -1;
+            param->paramcollid = InvalidOid;
+            param->location = -1;
+
+            ctx->captured = lappend(ctx->captured, copyObject(node));
+
+            return (Node *) param;
+        }
+
+        /*
+         * Otherwise every outer reference in the subtree is agtype-typed and
+         * the node itself is a computation (an operator, function call, or CASE
+         * result). Recurse to capture those outer leaves individually and leave
+         * the computation in the body, so the fold's own control flow -- not an
+         * eagerly evaluated aggregate argument -- decides whether it runs. This
+         * is what preserves CASE/AND/OR short-circuiting.
+         */
+        return expression_tree_mutator(node, reduce_capture_mutator, context);
+    }
+
+    /*
+     * A subquery in the body (for example a nested reduce()) is never captured
+     * -- the capture test above excludes it -- and cannot be evaluated
+     * standalone by the fold; reject it.
+     */
+    if (IsA(node, SubLink))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("subqueries (including a nested reduce()) are not supported in a reduce() expression")));
+    }
+
+    return expression_tree_mutator(node, reduce_capture_mutator, context);
+}
+
+/*
+ * Safety net run after reduce_capture_mutator(). A valid body now references
+ * only PARAM_EXEC params (0/1 for the accumulator and element, 2.. for the
+ * captured outer values) and constants. Any remaining Var or non-PARAM_EXEC
+ * parameter is an outer reference that could not be captured (for example a
+ * non-agtype-typed one); reject it cleanly rather than letting it reach the
+ * standalone evaluator.
  */
 static bool reduce_body_check_walker(Node *node, void *context)
 {
@@ -2129,34 +2408,19 @@ static bool reduce_body_check_walker(Node *node, void *context)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("a reduce() expression may only reference its accumulator and element variables")));
+                 errmsg("a reduce() expression references a value that cannot be used in the fold body")));
     }
 
     if (IsA(node, Param))
     {
         Param *param = (Param *) node;
 
-        if (param->paramkind != PARAM_EXEC ||
-            (param->paramid != 0 && param->paramid != 1))
+        if (param->paramkind != PARAM_EXEC)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("a reduce() expression may not reference query parameters")));
+                     errmsg("a reduce() expression references a value that cannot be used in the fold body")));
         }
-    }
-
-    if (IsA(node, Aggref) || IsA(node, GroupingFunc) || IsA(node, WindowFunc))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("aggregate functions are not supported in a reduce() expression")));
-    }
-
-    if (IsA(node, SubLink))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("subqueries (including a nested reduce()) are not supported in a reduce() expression")));
     }
 
     return expression_tree_walker(node, reduce_body_check_walker, context);
@@ -2170,12 +2434,17 @@ static bool reduce_body_check_walker(Node *node, void *context)
  * aggregate ordered by that ordinality so the fold runs in list order:
  *
  *     SELECT ag_catalog.age_reduce(<init>, '<serialized-body>'::text,
- *                                  r.elem ORDER BY r.ord)
+ *                                  r.elem, <captured-outer-values>
+ *                                  ORDER BY r.ord)
  *     FROM   unnest(<list>) WITH ORDINALITY AS r(elem, ord)
  *
  * The fold body is transformed separately with the accumulator and element
  * rewritten to PARAM_EXEC params 0 and 1, serialized into the text argument,
- * and evaluated per element inside age_reduce_transfn.
+ * and evaluated per element inside age_reduce_transfn. Loop-invariant outer
+ * references in the body (outer-query variables and cypher() parameters) are
+ * captured as PARAM_EXEC params 2.. and passed through the trailing agtype[]
+ * argument so the body can use values from the enclosing query; correlated
+ * captures are re-evaluated per group.
  *
  * The null/empty-list guard
  * (CASE WHEN list IS NULL THEN NULL ELSE COALESCE(<agg>, init) END) is built
@@ -2193,6 +2462,7 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
     Node *body_node;
     char *body_serialized;
     reduce_var_param_context mutator_ctx;
+    reduce_capture_context capture_ctx;
     cypher_parsestate *child_cpstate;
     ParseState *child_pstate;
     FuncCall *unnest_fc;
@@ -2210,9 +2480,11 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
     Oid sort_eqop;
     bool sort_hashable;
     Const *body_const;
+    ArrayExpr *extras_arr;
+    List *extras_exprs = NIL;
     Aggref *agg;
     Oid agg_oid;
-    Oid agg_argtypes[3];
+    Oid agg_argtypes[4];
     TargetEntry *result_te;
 
     /*
@@ -2266,6 +2538,18 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
     mutator_ctx.varno = body_pnsi->p_rtindex;
     body_node = reduce_var_to_param_mutator(body_node, &mutator_ctx);
 
+    /*
+     * Capture loop-invariant outer references (outer-query variables and
+     * cypher() parameters) in the body as PARAM_EXEC params 2.. and collect
+     * them in slot order; their values are supplied to the fold through the
+     * extras array argument built below.
+     */
+    capture_ctx.next_slot = 2;
+    capture_ctx.captured = NIL;
+    body_node = reduce_capture_mutator(body_node, &capture_ctx);
+    extras_exprs = capture_ctx.captured;
+
+    /* reject anything in the body that could not be captured or evaluated */
     reduce_body_check_walker(body_node, NULL);
 
     body_serialized = nodeToString(body_node);
@@ -2316,7 +2600,7 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
     get_sort_group_operators(INT8OID, true, true, false,
                              &sort_ltop, &sort_eqop, NULL, &sort_hashable);
 
-    ord_te = makeTargetEntry((Expr *) ord_var, 4, NULL, true);
+    ord_te = makeTargetEntry((Expr *) ord_var, 5, NULL, true);
     ord_te->ressortgroupref = 1;
 
     sortcl = makeNode(SortGroupClause);
@@ -2382,13 +2666,28 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
         init_node = (Node *) init_case;
     }
 
-    /* look up the age_reduce(agtype, text, agtype) aggregate */
+    /*
+     * The captured loop-invariant outer values (outer-query variables and
+     * cypher() parameters referenced by the body) are passed to the aggregate
+     * as an agtype[] argument, in the same order their PARAM_EXEC params 2, 3,
+     * ... were assigned. When the body references nothing outside the
+     * accumulator and element this is an empty array.
+     */
+    extras_arr = makeNode(ArrayExpr);
+    extras_arr->array_typeid = AGTYPEARRAYOID;
+    extras_arr->element_typeid = AGTYPEOID;
+    extras_arr->elements = extras_exprs;
+    extras_arr->multidims = false;
+    extras_arr->location = -1;
+
+    /* look up the age_reduce(agtype, text, agtype, agtype[]) aggregate */
     agg_argtypes[0] = AGTYPEOID;
     agg_argtypes[1] = TEXTOID;
     agg_argtypes[2] = AGTYPEOID;
+    agg_argtypes[3] = AGTYPEARRAYOID;
     agg_oid = LookupFuncName(list_make2(makeString("ag_catalog"),
                                         makeString("age_reduce")),
-                             3, agg_argtypes, false);
+                             4, agg_argtypes, false);
 
     agg = makeNode(Aggref);
     agg->aggfnoid = agg_oid;
@@ -2396,11 +2695,13 @@ static Query *transform_cypher_reduce(cypher_parsestate *cpstate,
     agg->aggcollid = InvalidOid;
     agg->inputcollid = InvalidOid;
     agg->aggtranstype = InvalidOid;     /* filled by the planner */
-    agg->aggargtypes = list_make3_oid(AGTYPEOID, TEXTOID, AGTYPEOID);
+    agg->aggargtypes = list_make4_oid(AGTYPEOID, TEXTOID, AGTYPEOID,
+                                      AGTYPEARRAYOID);
     agg->aggdirectargs = NIL;
-    agg->args = list_make4(makeTargetEntry((Expr *) init_node, 1, NULL, false),
+    agg->args = list_make5(makeTargetEntry((Expr *) init_node, 1, NULL, false),
                            makeTargetEntry((Expr *) body_const, 2, NULL, false),
                            makeTargetEntry((Expr *) elem_var, 3, NULL, false),
+                           makeTargetEntry((Expr *) extras_arr, 4, NULL, false),
                            ord_te);
     agg->aggorder = list_make1(sortcl);
     agg->aggdistinct = NIL;
