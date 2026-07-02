@@ -152,6 +152,55 @@ SELECT * FROM cypher('reduce', $$
 $$) AS (result agtype);
 
 --
+-- Value types in the fold
+--
+-- a float accumulator and float elements
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0.0, x IN [1.5, 2.5, 3.0] | s + x)
+$$) AS (result agtype);
+
+-- negative numbers
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [-1, -2, -3] | s + x)
+$$) AS (result agtype);
+
+-- a map accumulator passed through unchanged
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = {n: 0}, x IN [1, 2, 3] | s)
+$$) AS (result agtype);
+
+-- elements that are themselves lists, indexed in the body
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [[1, 2], [3, 4], [5, 6]] | s + x[0])
+$$) AS (result agtype);
+
+--
+-- Function calls in the fold body
+--
+-- a scalar function applied to the element
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN ['a', 'bb', 'ccc'] | s + size(x))
+$$) AS (result agtype);
+
+-- the list itself produced by a function
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN range(1, 5) | s + x)
+$$) AS (result agtype);
+
+--
+-- Composing reduce() with surrounding expressions
+--
+-- the reduce() result consumed by another function
+SELECT * FROM cypher('reduce', $$
+    RETURN size(reduce(s = [], x IN [1, 2, 3, 4] | s + [x]))
+$$) AS (result agtype);
+
+-- the reduce() result used in a comparison
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x) = 6
+$$) AS (result agtype);
+
+--
 -- A conditional body (CASE)
 --
 -- sum of even elements only
@@ -317,15 +366,127 @@ SELECT * FROM cypher('reduce', $$
 $$) AS (name agtype, total agtype);
 
 --
--- Not-yet-supported constructs raise a clean feature error
+-- Outer references in the fold body
 --
--- an outer variable referenced in the body
+-- The body may reference loop-invariant values from the enclosing query: an
+-- outer variable, a property of an outer variable, or a cypher() parameter.
+-- a plain outer variable in the body
 SELECT * FROM cypher('reduce', $$
     WITH 5 AS w
-    RETURN reduce(s = 0, x IN [1, 2] | s + x + w)
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x + w)
 $$) AS (result agtype);
 
--- a nested reduce() in the body
+-- an outer variable used as a multiplier
+SELECT * FROM cypher('reduce', $$
+    WITH 3 AS factor
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x * factor)
+$$) AS (result agtype);
+
+-- two distinct outer variables in the body
+SELECT * FROM cypher('reduce', $$
+    WITH 2 AS a, 100 AS b
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x * a + b)
+$$) AS (result agtype);
+
+-- a property of an outer (graph) variable in the body
+SELECT * FROM cypher('reduce', $$
+    MATCH (u:bag) WHERE u.name = 'mid'
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x + u.vals[0])
+$$) AS (result agtype);
+
+-- the same outer variable referenced more than once in the body
+SELECT * FROM cypher('reduce', $$
+    WITH 7 AS k
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + k + k)
+$$) AS (result agtype);
+
+-- a property of an outer map referenced in the body
+SELECT * FROM cypher('reduce', $$
+    WITH {factor: 10} AS m
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x * m.factor)
+$$) AS (result agtype);
+
+-- a subexpression that mixes an outer reference with the element: only the
+-- loop-invariant part (the outer list) is captured, the element index is not
+SELECT * FROM cypher('reduce', $$
+    WITH [10, 20, 30] AS lookup
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + lookup[x - 1])
+$$) AS (result agtype);
+
+-- an outer reference inside a CASE branch of the body is captured
+SELECT * FROM cypher('reduce', $$
+    WITH 10 AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | CASE WHEN x % 2 = 0 THEN s + w ELSE s + x END)
+$$) AS (result agtype);
+
+-- a NULL outer value propagates through the fold
+SELECT * FROM cypher('reduce', $$
+    WITH null AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x + w)
+$$) AS (result agtype);
+
+-- multiple outer captures with a mix of NULL and non-NULL: each is bound to its
+-- own slot (the non-NULL multiplier is bound and the NULL still propagates)
+SELECT * FROM cypher('reduce', $$
+    WITH 3 AS a, null AS b
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + x * a + b)
+$$) AS (result agtype);
+
+-- an outer variable that changes per row is captured per group
+SELECT * FROM cypher('reduce', $$
+    UNWIND [1, 2, 3] AS m
+    RETURN reduce(s = 0, x IN [1, 2, 3, 4] | s + x * m) AS total
+    ORDER BY total
+$$) AS (result agtype);
+
+--
+-- Short-circuit evaluation is preserved for outer references in the body
+--
+-- Only the outer leaf is captured; operators and CASE/AND/OR branches stay in
+-- the body, so a guarded outer sub-expression is not evaluated on a branch
+-- that is not taken. Each case below would divide by zero if the whole "1/w"
+-- were hoisted into an eagerly evaluated aggregate argument instead.
+-- the THEN branch is never taken, so "1/w" is not evaluated (expect 6)
+SELECT * FROM cypher('reduce', $$
+    WITH 0 AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | CASE WHEN false THEN s + 1/w ELSE s + x END)
+$$) AS (result agtype);
+
+-- the ELSE branch is never taken, so "1/w" is not evaluated (expect 6)
+SELECT * FROM cypher('reduce', $$
+    WITH 0 AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | CASE WHEN true THEN s + x ELSE s + 1/w END)
+$$) AS (result agtype);
+
+-- OR short-circuits once "w = 0" is true, so "1/w > 0" is not evaluated
+SELECT * FROM cypher('reduce', $$
+    WITH 0 AS w
+    RETURN reduce(s = true, x IN [1, 2, 3] | s AND (w = 0 OR 1/w > 0))
+$$) AS (result agtype);
+
+-- AND short-circuits once "w <> 0" is false, so "1/w > 0" is not evaluated
+SELECT * FROM cypher('reduce', $$
+    WITH 0 AS w
+    RETURN reduce(s = true, x IN [1, 2, 3] | s AND (w <> 0 AND 1/w > 0))
+$$) AS (result agtype);
+
+-- coalesce short-circuits: "1/w" is not evaluated when arg 1 is non-null
+SELECT * FROM cypher('reduce', $$
+    WITH 0 AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | s + coalesce(w, 1/w))
+$$) AS (result agtype);
+
+-- when the guarded branch is taken, the outer sub-expression is evaluated
+-- normally (division by a non-zero outer value): x = 2 -> s + 10/2 (expect 9)
+SELECT * FROM cypher('reduce', $$
+    WITH 2 AS w
+    RETURN reduce(s = 0, x IN [1, 2, 3] | CASE WHEN x % 2 = 0 THEN s + 10/w ELSE s + x END)
+$$) AS (result agtype);
+
+--
+-- Not-yet-supported constructs raise a clean feature error
+--
+-- a nested reduce() in the body (any subquery in the body is unsupported)
 SELECT * FROM cypher('reduce', $$
     RETURN reduce(s = 0, x IN [1, 2] | s + reduce(t = 0, y IN [x] | t + y))
 $$) AS (result agtype);
@@ -334,6 +495,43 @@ $$) AS (result agtype);
 SELECT * FROM cypher('reduce', $$
     RETURN reduce(s = 0, x IN [1, 2] | s + count(x))
 $$) AS (result agtype);
+
+--
+-- Syntax errors: each required piece of the reduce() form is enforced
+--
+-- missing "= init"
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s, x IN [1, 2] | s + x)
+$$) AS (result agtype);
+
+-- missing ", var IN list"
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0 | s)
+$$) AS (result agtype);
+
+-- missing "| body"
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x IN [1, 2])
+$$) AS (result agtype);
+
+-- a qualified iterator variable is not allowed
+SELECT * FROM cypher('reduce', $$
+    RETURN reduce(s = 0, x.y IN [1, 2] | s)
+$$) AS (result agtype);
+
+--
+-- cypher() parameter referenced in the fold body (via a prepared statement)
+--
+PREPARE reduce_param(agtype) AS
+    SELECT * FROM cypher('reduce', $$
+        RETURN reduce(s = 0, x IN [1, 2, 3] | s + x + $p)
+    $$, $1) AS (result agtype);
+
+EXECUTE reduce_param('{"p": 10}');
+
+EXECUTE reduce_param('{"p": 100}');
+
+DEALLOCATE reduce_param;
 
 --
 -- "reduce" as a property key name (safe_keywords backward compatibility):
