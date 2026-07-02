@@ -195,6 +195,21 @@ SELECT load_edges_from_file('agload_conversion', 'Edges1', '../../etc/passwd', t
 SELECT drop_graph('agload_conversion', true);
 
 --
+-- Issue 2449: mis-delimited / malformed load files must fail with a clear
+-- error instead of segfaulting or silently corrupting data. Edge files
+-- require the 4 fixed columns; a file that is not comma-delimited parses as
+-- a single column, so this must be rejected at the header.
+--
+SELECT create_graph('agload_delim');
+SELECT create_vlabel('agload_delim', 'V');
+SELECT create_elabel('agload_delim', 'E');
+
+-- pipe-delimited edge file -> parses to 1 column -> clean error (was a segfault)
+SELECT load_edges_from_file('agload_delim', 'E', 'age_load/bad_delim_edges.csv');
+
+SELECT drop_graph('agload_delim', true);
+
+--
 -- Test security and permissions
 --
 

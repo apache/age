@@ -455,6 +455,49 @@ NOTICE:  graph "agload_conversion" has been dropped
 (1 row)
 
 --
+-- Issue 2449: mis-delimited / malformed load files must fail with a clear
+-- error instead of segfaulting or silently corrupting data. Edge files
+-- require the 4 fixed columns; a file that is not comma-delimited parses as
+-- a single column, so this must be rejected at the header.
+--
+SELECT create_graph('agload_delim');
+NOTICE:  graph "agload_delim" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_vlabel('agload_delim', 'V');
+NOTICE:  VLabel "V" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('agload_delim', 'E');
+NOTICE:  ELabel "E" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+-- pipe-delimited edge file -> parses to 1 column -> clean error (was a segfault)
+SELECT load_edges_from_file('agload_delim', 'E', 'age_load/bad_delim_edges.csv');
+ERROR:  edge file must have at least 4 columns (start_id, start_vertex_type, end_id, end_vertex_type), but the header has 1
+HINT:  load_edges_from_file expects a comma-delimited CSV; check the file's delimiter.
+SELECT drop_graph('agload_delim', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table agload_delim._ag_label_vertex
+drop cascades to table agload_delim._ag_label_edge
+drop cascades to table agload_delim."V"
+drop cascades to table agload_delim."E"
+NOTICE:  graph "agload_delim" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+--
 -- Test security and permissions
 --
 SELECT create_graph('agload_security');
