@@ -162,6 +162,10 @@ OBJS = src/backend/age.o \
        src/backend/utils/name_validation.o \
        src/backend/utils/ag_guc.o
 
+# Per-object header-dependency files (see "Automatic header-dependency
+# tracking" below the PGXS include). One .d is generated beside each .o.
+DEPFILES = $(OBJS:.o=.d)
+
 # ===== Extension SQL & data files =====
 EXTENSION = age
 
@@ -258,7 +262,8 @@ EXTRA_CLEAN = $(addprefix $(ag_regress_dir)/, $(ag_regress_out)) \
               $(all_age_sql) \
               $(age_init_sql) \
               $(age_upgrade_test_sql) \
-              $(ag_regress_dir)/age_upgrade_cleanup.sh
+              $(ag_regress_dir)/age_upgrade_cleanup.sh \
+              $(DEPFILES)
 
 GEN_KEYWORDLIST = $(PERL) -I ./tools/ ./tools/gen_keywordlist.pl
 GEN_KEYWORDLIST_DEPS = ./tools/gen_keywordlist.pl tools/PerfectHash.pm
@@ -270,6 +275,23 @@ PG_CPPFLAGS = -I$(ag_include_dir) -I$(ag_include_dir)/parser
 PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
+
+# ===== Automatic header-dependency tracking =====
+#
+# AGE lists OBJS explicitly, and PGXS's built-in .deps tracking only runs when
+# the *server* was built with --enable-depend (often off). Without the lines
+# below, editing a header does NOT rebuild the .c files that include it, leaving
+# STALE .o files. This is especially dangerous for node/struct headers: a stale
+# ag_nodes.o keeps an old node_size, so _readExtensibleNode under-allocates and
+# readNode corrupts the heap ("unrecognized node type: <garbage>").
+#
+# The compiler emits a .d file next to each object (-MMD = user headers only;
+# -MP adds phony targets so deleting a header does not break the build). With
+# "-o foo.o", -MMD writes "foo.d" automatically (no -MF, no basename clashes).
+# On servers that DO set --enable-depend, PGXS appends its own "-MF .deps/*.Po"
+# after $(CFLAGS) (last -MF wins), so this degrades cleanly to that mechanism.
+override CFLAGS += -MMD -MP
+-include $(DEPFILES)
 
 # ===== Build rules =====
 
