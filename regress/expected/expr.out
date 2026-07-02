@@ -3548,6 +3548,26 @@ $$) AS (toFloatList agtype);
  [1.20002]
 (1 row)
 
+-- large magnitudes must not overflow the conversion (regression: unbounded
+-- sprintf into a fixed stack buffer overflowed for values like 1.0e308)
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([1.0e308, -1.0e308])
+$$) AS (toFloatList agtype);
+    tofloatlist    
+-------------------
+ [1e+308, -1e+308]
+(1 row)
+
+-- precision must be preserved (regression: "%f" format truncated to 6 digits,
+-- so 0.123456789 came back as 0.123457)
+SELECT * FROM cypher('expr', $$
+    RETURN toFloatList([0.123456789])
+$$) AS (toFloatList agtype);
+  tofloatlist  
+---------------
+ [0.123456789]
+(1 row)
+
 -- should return null
 SELECT * FROM cypher('expr', $$
     RETURN toFloatList(['true'])
