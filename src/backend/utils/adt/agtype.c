@@ -11581,13 +11581,16 @@ Datum age_float8_stddev_pop_aggfinalfn(PG_FUNCTION_ARGS)
 /*
  * Per-aggregate-group evaluation state for reduce(). Caches the compiled
  * fold-body expression and a standalone ExprContext whose PARAM_EXEC slots
- * (0 = accumulator, 1 = current element) are rebound on every element.
+ * are rebound on every element. Slot 0 = accumulator, slot 1 = current
+ * element, and slots 2 .. nparams-1 = captured loop-invariant outer values
+ * (outer-query variables and cypher() parameters referenced by the body).
  */
 typedef struct reduce_eval_ctx
 {
     ExprState *body_state;  /* compiled fold-body expression */
     ExprContext *econtext;  /* eval context carrying the param slots */
-    ParamExecData *params;  /* [0] = accumulator, [1] = current element */
+    ParamExecData *params;  /* [0]=accumulator, [1]=element, [2..]=outer refs */
+    int nparams;            /* total param slots = 2 + number of captures */
 } reduce_eval_ctx;
 
 /* Build an agtype 'null' Datum (a real agtype value, not a SQL NULL). */
@@ -11600,12 +11603,17 @@ static Datum reduce_agtype_null(void)
 }
 
 /*
- * age_reduce_transfn(state agtype, init agtype, body text, element agtype)
+ * age_reduce_transfn(state agtype, init agtype, body text, element agtype,
+ *                    extras agtype[])
  *
  * Transition function for the age_reduce aggregate that implements the Cypher
  * reduce(acc = init, var IN list | body) fold. The fold body is compiled by
  * transform_cypher_reduce() with the accumulator and element rewritten to
  * PARAM_EXEC params 0 and 1, then serialized into the `body` text argument.
+ * Any loop-invariant outer-query variable or cypher() parameter referenced by
+ * the body is captured into the `extras` agtype array and rewritten to a
+ * PARAM_EXEC param 2, 3, ... in body order; those slots are bound from the
+ * array here.
  *
  * On the first element of a group the accumulator is seeded from `init`
  * (the running state is NULL because the aggregate uses no initcond); on
@@ -11652,12 +11660,32 @@ Datum age_reduce_transfn(PG_FUNCTION_ARGS)
         text *body_txt;
         char *body_str;
         Node *body_node;
+        int n_extras = 0;
 
         if (PG_ARGISNULL(2))
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INTERNAL_ERROR),
                      errmsg("age_reduce: missing fold expression")));
+        }
+
+        /*
+         * The number of captured outer values is fixed for this aggregate
+         * call (the body's structure does not change between rows), so it is
+         * read once here to size the param array. Their values are bound per
+         * row below because a correlated capture changes between groups.
+         *
+         * The PG_NARGS() guard lets the function tolerate being reached
+         * through an older 4-argument aggregate definition (for example a
+         * stale catalog paired with a newer age.so): a missing extras
+         * argument is simply treated as zero captures.
+         */
+        if (PG_NARGS() > 4 && !PG_ARGISNULL(4))
+        {
+            ArrayType *extras_arr = PG_GETARG_ARRAYTYPE_P(4);
+
+            n_extras = ArrayGetNItems(ARR_NDIM(extras_arr),
+                                      ARR_DIMS(extras_arr));
         }
 
         oldctx = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
@@ -11686,7 +11714,9 @@ Datum age_reduce_transfn(PG_FUNCTION_ARGS)
 
         rc->body_state = ExecInitExpr((Expr *) body_node, NULL);
         rc->econtext = CreateStandaloneExprContext();
-        rc->params = (ParamExecData *) palloc0(sizeof(ParamExecData) * 2);
+        rc->nparams = 2 + n_extras;
+        rc->params = (ParamExecData *) palloc0(sizeof(ParamExecData) *
+                                               rc->nparams);
         rc->econtext->ecxt_param_exec_vals = rc->params;
         fcinfo->flinfo->fn_extra = rc;
         MemoryContextSwitchTo(oldctx);
@@ -11710,6 +11740,9 @@ Datum age_reduce_transfn(PG_FUNCTION_ARGS)
     /* a NULL element is likewise normalized to agtype 'null' */
     element = PG_ARGISNULL(3) ? reduce_agtype_null() : PG_GETARG_DATUM(3);
 
+    /* evaluate the fold body for this element */
+    ResetExprContext(rc->econtext);
+
     /* bind PARAM_EXEC 0 = accumulator, 1 = current element */
     rc->params[0].value = acc;
     rc->params[0].isnull = false;
@@ -11718,8 +11751,57 @@ Datum age_reduce_transfn(PG_FUNCTION_ARGS)
     rc->params[1].isnull = false;
     rc->params[1].execPlan = NULL;
 
-    /* evaluate the fold body for this element */
-    ResetExprContext(rc->econtext);
+    /*
+     * Bind the captured loop-invariant outer values to params 2 .. The values
+     * are pulled from the extras array every row because correlated captures
+     * differ between groups; the per-row deconstruction is done in the
+     * econtext's per-tuple memory (reset above) so it does not leak. A NULL
+     * array element is normalized to agtype 'null' like the accumulator and
+     * element.
+     *
+     * Every slot 2 .. nparams-1 is rebound on every row, so a slot never
+     * retains a value from a previous row -- which, after the per-tuple reset
+     * above, would be a dangling pointer. If the extras array supplies fewer
+     * values than there are capture slots (only reachable through a direct SQL
+     * call with a varying-length array), the unsupplied slots are filled with
+     * agtype 'null'. The PG_NARGS() guard keeps the arg-4 access safe under an
+     * older 4-argument signature.
+     */
+    if (rc->nparams > 2 && PG_NARGS() > 4 && !PG_ARGISNULL(4))
+    {
+        ArrayType *extras_arr = PG_GETARG_ARRAYTYPE_P(4);
+        Oid elemtype = ARR_ELEMTYPE(extras_arr);
+        int16 typlen;
+        bool typbyval;
+        char typalign;
+        Datum *ex_vals;
+        bool *ex_nulls;
+        int ex_n;
+        int i;
+        MemoryContext per_tuple = rc->econtext->ecxt_per_tuple_memory;
+        MemoryContext save = MemoryContextSwitchTo(per_tuple);
+
+        get_typlenbyvalalign(elemtype, &typlen, &typbyval, &typalign);
+        deconstruct_array(extras_arr, elemtype, typlen, typbyval, typalign,
+                          &ex_vals, &ex_nulls, &ex_n);
+
+        for (i = 0; (2 + i) < rc->nparams; i++)
+        {
+            if (i < ex_n && !ex_nulls[i])
+            {
+                rc->params[2 + i].value = ex_vals[i];
+            }
+            else
+            {
+                rc->params[2 + i].value = reduce_agtype_null();
+            }
+            rc->params[2 + i].isnull = false;
+            rc->params[2 + i].execPlan = NULL;
+        }
+
+        MemoryContextSwitchTo(save);
+    }
+
     result = ExecEvalExpr(rc->body_state, rc->econtext, &result_isnull);
 
     /*
