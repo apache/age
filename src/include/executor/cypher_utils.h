@@ -119,6 +119,7 @@ typedef struct cypher_merge_custom_scan_state
 void apply_update_list(CustomScanState *node,
                        cypher_update_information *set_info);
 
+void clear_entity_slot(TupleTableSlot *elemTupleSlot);
 TupleTableSlot *populate_vertex_tts(TupleTableSlot *elemTupleSlot,
                                     agtype_value *id, agtype_value *properties);
 TupleTableSlot *populate_edge_tts(

@@ -21,6 +21,7 @@
 
 #include "common/hashfn.h"
 #include "executor/executor.h"
+#include "executor/nodeModifyTable.h"
 #include "storage/bufmgr.h"
 #include "utils/rls.h"
 
@@ -131,6 +132,28 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
             close_indices = true;
         }
         ExecStoreVirtualTuple(elemTupleSlot);
+
+        /*
+         * Recompute any stored generated columns before materializing the heap
+         * tuple. The slot's tuple descriptor is the full relation descriptor,
+         * which may include a GENERATED ALWAYS ... STORED column that the SET
+         * path does not populate; leaving those slot entries uninitialized makes
+         * heap_form_tuple() segfault on the garbage values (issue #2450).
+         */
+        if (resultRelInfo->ri_RelationDesc->rd_att->constr != NULL &&
+            resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+        {
+            /*
+             * A generation expression may reference the tableoid system column,
+             * so the slot must carry the relation's OID before we recompute the
+             * stored generated columns (mirrors PostgreSQL's own ExecUpdate path).
+             */
+            elemTupleSlot->tts_tableOid =
+                RelationGetRelid(resultRelInfo->ri_RelationDesc);
+            ExecComputeStoredGenerated(resultRelInfo, estate, elemTupleSlot,
+                                       CMD_UPDATE);
+        }
+
         tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
         tuple->t_self = old_tuple->t_self;
 

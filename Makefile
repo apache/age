@@ -223,6 +223,7 @@ REGRESS = scan \
           age_reduce \
           map_projection \
           direct_field_access \
+          generated_columns \
           security \
           reserved_keyword_alias \
           agtype_jsonb_cast \

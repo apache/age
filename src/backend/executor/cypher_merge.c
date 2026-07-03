@@ -1199,7 +1199,16 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
 
         estate->es_result_relations = &resultRelInfo;
 
-        ExecClearTuple(elemTupleSlot);
+        /*
+         * Only clear and null-init the slot when we will actually insert. On a
+         * matched MERGE the slot is never materialized (the output is built from
+         * id/prop directly), so the null-init memset would be wasted work that
+         * scales with any user-added columns (issue #2450 review follow-up).
+         */
+        if (should_insert)
+        {
+            clear_entity_slot(elemTupleSlot);
+        }
 
         /* if we not are going to insert, we need our structure pointers */
         if (should_insert == false &&
@@ -1526,7 +1535,16 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
 
     estate->es_result_relations = &resultRelInfo;
 
-    ExecClearTuple(elemTupleSlot);
+    /*
+     * Only clear and null-init the slot when we will actually insert. On a
+     * matched MERGE the slot is never materialized (the output is built from
+     * id/prop directly), so the null-init memset would be wasted work that
+     * scales with any user-added columns (issue #2450 review follow-up).
+     */
+    if (should_insert)
+    {
+        clear_entity_slot(elemTupleSlot);
+    }
 
     /* if we not are going to insert, we need our structure pointers */
     if (should_insert == false &&
