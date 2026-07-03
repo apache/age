@@ -27,6 +27,7 @@
 #include "access/genam.h"
 
 #include "executor/executor.h"
+#include "executor/nodeModifyTable.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
@@ -66,6 +67,9 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
     RangeVar *rv;
     Relation label_relation;
     ResultRelInfo *resultRelInfo;
+    ListCell *lc;
+    Index rtindex = 0;
+    Index index = 0;
 
     ParseState *pstate = make_parsestate(NULL);
 
@@ -82,9 +86,26 @@ ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
 
     label_relation = parserOpenTable(pstate, rv, RowExclusiveLock);
 
-    /* initialize the resultRelInfo */
-    InitResultRelInfo(resultRelInfo, label_relation,
-                      list_length(estate->es_range_table), NULL,
+    /*
+     * Only associate the result relation with an RTE for this label. Labels
+     * opened during execution may not appear in the range table; use zero
+     * for those rather than borrowing permissions or updated-column metadata
+     * from an unrelated RTE.
+     */
+    foreach(lc, estate->es_range_table)
+    {
+        RangeTblEntry *rte = lfirst(lc);
+
+        index++;
+        if (rte->rtekind == RTE_RELATION &&
+            rte->relid == RelationGetRelid(label_relation))
+        {
+            rtindex = index;
+            break;
+        }
+    }
+
+    InitResultRelInfo(resultRelInfo, label_relation, rtindex, NULL,
                       estate->es_instrument);
 
     /* open the parse state */
@@ -105,6 +126,24 @@ void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info)
     table_close(result_rel_info->ri_RelationDesc, RowExclusiveLock);
 }
 
+/*
+ * Clear an entity slot and mark every attribute NULL before AGE fills in the
+ * columns it manages (id/start_id/end_id/properties).
+ *
+ * The slot's tuple descriptor is the full label-table descriptor, which may
+ * contain columns AGE does not populate -- e.g. a user-added plain column, or a
+ * GENERATED ALWAYS ... STORED column. Without this, those attributes keep stale
+ * slot memory and heap_form_tuple() segfaults dereferencing the garbage
+ * (issue #2450). Plain columns then default to NULL; generated columns are
+ * recomputed via ExecComputeStoredGenerated() before the tuple is materialized.
+ */
+void clear_entity_slot(TupleTableSlot *elemTupleSlot)
+{
+    ExecClearTuple(elemTupleSlot);
+    memset(elemTupleSlot->tts_isnull, true,
+           elemTupleSlot->tts_tupleDescriptor->natts * sizeof(bool));
+}
+
 TupleTableSlot *populate_vertex_tts(
     TupleTableSlot *elemTupleSlot, agtype_value *id, agtype_value *properties)
 {
@@ -115,6 +154,8 @@ TupleTableSlot *populate_vertex_tts(
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                         errmsg("vertex id field cannot be NULL")));
     }
+
+    clear_entity_slot(elemTupleSlot);
 
     properties_isnull = properties == NULL;
 
@@ -150,6 +191,8 @@ TupleTableSlot *populate_edge_tts(
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                         errmsg("edge end_id field cannot be NULL")));
     }
+
+    clear_entity_slot(elemTupleSlot);
 
     properties_isnull = properties == NULL;
 
@@ -295,6 +338,30 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
     HeapTuple tuple = NULL;
 
     ExecStoreVirtualTuple(elemTupleSlot);
+
+    /*
+     * The slot's tuple descriptor is the full relation descriptor, which may
+     * contain columns AGE does not populate itself -- most notably a
+     * GENERATED ALWAYS ... STORED column added to the label table. Those slot
+     * entries are left uninitialized by the create/merge/set paths, so we must
+     * compute the stored generated columns here before materializing the heap
+     * tuple. Otherwise heap_form_tuple() reads the uninitialized slot values
+     * and segfaults dereferencing garbage (issue #2450).
+     */
+    if (resultRelInfo->ri_RelationDesc->rd_att->constr != NULL &&
+        resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+    {
+        /*
+         * A generation expression may reference the tableoid system column, so
+         * the slot must carry the relation's OID before we compute the stored
+         * generated columns (mirrors PostgreSQL's own ExecInsert path).
+         */
+        elemTupleSlot->tts_tableOid =
+            RelationGetRelid(resultRelInfo->ri_RelationDesc);
+        ExecComputeStoredGenerated(resultRelInfo, estate, elemTupleSlot,
+                                   CMD_INSERT);
+    }
+
     tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
 
     /* Check the constraints of the tuple */

@@ -396,7 +396,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
     estate->es_result_relations = &resultRelInfo;
 
-    ExecClearTuple(elemTupleSlot);
+    clear_entity_slot(elemTupleSlot);
 
     /* Graph Id for the edge */
     id = ExecEvalExpr(node->id_expr_state, econtext, &isNull);
@@ -491,7 +491,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
         estate->es_result_relations = &resultRelInfo;
 
-        ExecClearTuple(elemTupleSlot);
+        clear_entity_slot(elemTupleSlot);
 
         /* get the next graphid for this vertex. */
         id = ExecEvalExpr(node->id_expr_state, econtext, &isNull);
