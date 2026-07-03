@@ -540,9 +540,8 @@ void insert_batch(batch_insert_state *batch_state)
         for (i = 0; i < batch_state->num_tuples; i++)
         {
             result = ExecInsertIndexTuples(batch_state->resultRelInfo,
-                                           batch_state->slots[i],
-                                           batch_state->estate, false,
-                                           true, NULL, NIL, false);
+                                           batch_state->estate, EIIT_NO_DUPE_ERROR,
+                                           batch_state->slots[i], NIL, NULL);
 
             /* Check if the unique constraint is violated */
             if (list_length(result) != 0)

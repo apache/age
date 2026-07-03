@@ -75,7 +75,7 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
 
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
-                          &TTSOpsHeapTuple);
+                          &TTSOpsHeapTuple, 0);
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {

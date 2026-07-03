@@ -275,7 +275,7 @@ SELECT create_subgraph('sg_bad', 'sg_src', 'n.pid <<>> 1', '*');
 ERROR:  operator does not exist: agtype <<>> agtype
 LINE 1: ...her('sg_src', $age_subgraph$MATCH (n) WHERE n.pid <<>> 1 RET...
                                                              ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+DETAIL:  There is no operator of that name.
 QUERY:  CREATE TEMP TABLE _ag_sg_kept_v ON COMMIT DROP AS SELECT DISTINCT ag_catalog.agtype_to_graphid(vid) AS gid FROM ag_catalog.cypher('sg_src', $age_subgraph$MATCH (n) WHERE n.pid <<>> 1 RETURN id(n)$age_subgraph$) AS (vid agtype)
 CONTEXT:  PL/pgSQL function create_subgraph(name,name,text,text) line 80 at EXECUTE
 -- cleanup
