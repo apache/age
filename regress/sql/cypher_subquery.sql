@@ -396,6 +396,44 @@ SELECT * FROM cypher('subquery', $$ MATCH (a:pet) WHERE [true] IN [[EXISTS {
 MATCH (a) WHERE EXISTS {MATCH (a)-[]-()} RETURN a}]] RETURN a $$) AS (result agtype);
 
 --
+-- issue 2396: returnless UNION with VLE in EXISTS
+--
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION
+												  MATCH (a)-[:loved]->(:person)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:loved]->(:person)
+												  UNION
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION ALL
+												  MATCH (a)-[:loved]->(:person)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:loved]->(:person)
+												  UNION
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION
+												  MATCH (a)-[:knows]->(:person)
+												  WHERE a.name = 'Faye'
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+
+--
 -- Cleanup
 --
 SELECT * FROM drop_graph('subquery', true);

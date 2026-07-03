@@ -786,6 +786,73 @@ MATCH (a) WHERE EXISTS {MATCH (a)-[]-()} RETURN a}]] RETURN a $$) AS (result agt
 (4 rows)
 
 --
+-- issue 2396: returnless UNION with VLE in EXISTS
+--
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION
+												  MATCH (a)-[:loved]->(:person)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+   name    
+-----------
+ "Calvin"
+ "Charlie"
+ "Jon"
+ "Tony"
+(4 rows)
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:loved]->(:person)
+												  UNION
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+   name    
+-----------
+ "Calvin"
+ "Charlie"
+ "Jon"
+ "Tony"
+(4 rows)
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION ALL
+												  MATCH (a)-[:loved]->(:person)
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+   name    
+-----------
+ "Calvin"
+ "Charlie"
+ "Jon"
+ "Tony"
+(4 rows)
+
+SELECT * FROM cypher('subquery', $$ MATCH (a:person)
+									WHERE EXISTS {
+												  MATCH (a)-[:loved]->(:person)
+												  UNION
+												  MATCH (a)-[:knows*1..2]->(:pet)
+												  UNION
+												  MATCH (a)-[:knows]->(:person)
+												  WHERE a.name = 'Faye'
+												 }
+									RETURN a.name ORDER BY a.name $$) AS (name agtype);
+   name    
+-----------
+ "Calvin"
+ "Charlie"
+ "Faye"
+ "Jon"
+ "Tony"
+(5 rows)
+
+--
 -- Cleanup
 --
 SELECT * FROM drop_graph('subquery', true);

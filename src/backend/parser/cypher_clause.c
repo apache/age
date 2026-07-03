@@ -80,6 +80,7 @@
 #define AGE_VARNAME_ID AGE_DEFAULT_VARNAME_PREFIX"id"
 #define AGE_VARNAME_SET_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"set_clause"
 #define AGE_VARNAME_SET_VALUE AGE_DEFAULT_VARNAME_PREFIX"set_value"
+#define AGE_VARNAME_RETURNLESS_UNION AGE_DEFAULT_VARNAME_PREFIX"returnless_union"
 
 /*
  * In the transformation stage, we need to track
@@ -295,9 +296,12 @@ static cypher_clause *make_cypher_clause(List *stmt);
 static Query *transform_cypher_union(cypher_parsestate *cpstate,
                                      cypher_clause *clause);
 
+static void project_returnless_union_leaf(Query *query);
+
 static Node * transform_cypher_union_tree(cypher_parsestate *cpstate,
                                           cypher_clause *clause,
                                           bool isTopLevel,
+                                          bool returnless_union,
                                           List **targetlist);
 
 Query *cypher_parse_sub_analyze_union(cypher_clause *clause,
@@ -649,6 +653,18 @@ static cypher_clause *make_cypher_clause(List *stmt)
     return clause;
 }
 
+static void project_returnless_union_leaf(Query *query)
+{
+    TargetEntry *tle;
+
+    tle = makeTargetEntry((Expr *) makeBoolConst(true, false),
+                          1,
+                          AGE_VARNAME_RETURNLESS_UNION,
+                          false);
+
+    query->targetList = list_make1(tle);
+}
+
 /*
  * transform_cypher_union -
  *    transforms a union tree, derived from postgresql's
@@ -710,7 +726,9 @@ static Query *transform_cypher_union(cypher_parsestate *cpstate,
      * Recursively transform the components of the tree.
      */
     cypher_union_statement = (SetOperationStmt *) transform_cypher_union_tree(cpstate,
-                                                                clause, true, NULL);
+                                                       clause, true,
+                                                       self->returnless_union,
+                                                       NULL);
 
     Assert(cypher_union_statement);
     qry->setOperations = (Node *) cypher_union_statement;
@@ -871,7 +889,8 @@ static Query *transform_cypher_union(cypher_parsestate *cpstate,
  */
 static Node *
 transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
-                            bool isTopLevel, List **targetlist)
+                            bool isTopLevel, bool returnless_union,
+                            List **targetlist)
 {
     bool isLeaf;
 
@@ -974,6 +993,17 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         }
 
         /*
+         * Returnless UNION branches use a parser-injected RETURN * only as a
+         * syntactic carrier. The branch output is unobservable, so expose one
+         * stable column to PostgreSQL's set-op planner instead of leaking the
+         * branch's current variable list into set-op metadata.
+         */
+        if (returnless_union)
+        {
+            project_returnless_union_leaf(returnQuery);
+        }
+
+        /*
          * Extract a list of the non-junk TLEs for upper-level processing.
          */
 
@@ -1019,8 +1049,10 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         ListCell *rtl;
         cypher_return *self = (cypher_return *) clause->self;
         const char *context;
+        bool child_returnless_union;
 
         context = "UNION";
+        child_returnless_union = returnless_union || self->returnless_union;
 
         op->op = self->op;
         op->all = self->all_or_distinct;
@@ -1031,6 +1063,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         op->larg = transform_cypher_union_tree(cpstate,
                                                (cypher_clause *) self->larg,
                                                false,
+                                               child_returnless_union,
                                                &ltargetlist);
 
         /*
@@ -1053,6 +1086,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
         op->rarg = transform_cypher_union_tree(cpstate,
                                                (cypher_clause *) self->rarg,
                                                false,
+                                               child_returnless_union,
                                                &rtargetlist);
 
         /*
@@ -1062,7 +1096,7 @@ transform_cypher_union_tree(cypher_parsestate *cpstate, cypher_clause *clause,
          * matching, because they are not relevant to the end result.
          */
         if (list_length(ltargetlist) != list_length(rtargetlist) &&
-            self->returnless_union == false)
+            returnless_union == false)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_SYNTAX_ERROR),
