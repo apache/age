@@ -17,7 +17,9 @@
 #
 
 # Build stage: Install necessary development tools for compilation and installation
-FROM postgres:19 AS build
+# PG19 is still in beta: Docker Hub has no `postgres:19` tag yet, only `19beta1`.
+# Bump both stages to `postgres:19` once the PG19 GA image is published.
+FROM postgres:19beta1 AS build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --no-install-suggests \
@@ -34,7 +36,8 @@ RUN make && make install
 
 
 # Final stage: Create a final image by copying the files created in the build stage
-FROM postgres:19
+# PG19 beta: use `19beta1` until the `postgres:19` GA tag exists (see build stage).
+FROM postgres:19beta1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --no-install-suggests \
