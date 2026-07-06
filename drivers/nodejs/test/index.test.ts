@@ -38,7 +38,7 @@ const config = {
 const testGraphName = 'age_test'
 
 // DESIGN NOTE: All test suites use { createExtension: false } intentionally.
-// The CI Docker image (apache/age:dev_snapshot_master) has the AGE extension
+// The CI Docker image (apache/age:dev_snapshot_PG19) has the AGE extension
 // pre-installed, matching the GitHub Actions workflow. Using createExtension: false
 // is the correct security default — auto-creating extensions requires SUPERUSER
 // privileges and conflates extension lifecycle management with session setup.
