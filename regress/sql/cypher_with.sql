@@ -47,6 +47,7 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m) 
     WITH n,e,m
     RETURN n,e,m
+    ORDER BY id(n) ASC, id(e) ASC, id(m) ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 -- WITH/AS
@@ -55,12 +56,14 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m)
     WITH n.name AS n1, e as edge, m.name as n2
     RETURN n1,label(edge),n2
+    ORDER BY id(edge) ASC
 $$) AS (start_node agtype,edge agtype, end_node agtype);
 
 SELECT * FROM cypher('cypher_with',$$
     MATCH (person)-[r]->(otherPerson)
     WITH *, type(r) AS connectionType
     RETURN person.name, connectionType, otherPerson.name
+    ORDER BY id(person) ASC, id(otherPerson) ASC
 $$) AS (start_node agtype, connection agtype, end_node agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -75,6 +78,7 @@ MATCH (george {name: 'George'})<-[]-(otherPerson)
     WITH otherPerson, toUpper(otherPerson.name) AS upperCaseName
     WHERE upperCaseName STARTS WITH 'C'
     RETURN otherPerson.name
+    ORDER BY id(otherPerson) ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -82,6 +86,7 @@ SELECT * FROM cypher('cypher_with', $$
 	WITH otherPerson, count(*) AS foaf
 	WHERE foaf > 1
 	RETURN otherPerson.name
+	ORDER BY id(otherPerson) ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -89,6 +94,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH p, length(p) AS path_length 
     WHERE path_length > 1 
     RETURN p
+    ORDER BY p ASC
 $$) AS (pattern agtype);
 
 -- MATCH/WHERE with WITH/WHERE
@@ -99,6 +105,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH *
     WHERE m.name = 'Andres'
     RETURN m.name,label(e),b.name
+    ORDER BY id(m) ASC, id(e) ASC, id(b) ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 -- WITH/ORDER BY
@@ -133,9 +140,10 @@ SELECT * FROM cypher('cypher_with', $$
     MATCH (n)-[e]->(m)
     WITH n, e, m
     WHERE label(e) = 'KNOWS'
-    WITH n.name as n1, label(e) as edge, m.name as n2
+    WITH id(e) AS eid, n.name as n1, label(e) as edge, m.name as n2
     WHERE n1 = 'Andres'
     RETURN n1,edge,n2
+    ORDER BY eid ASC
 $$) AS (N1 agtype, edge agtype, N2 agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -145,6 +153,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH x
     LIMIT 5
     RETURN x
+    ORDER BY x ASC
 $$) as (name agtype);
 
 SELECT * FROM cypher('cypher_with', $$
@@ -154,6 +163,7 @@ SELECT * FROM cypher('cypher_with', $$
     WITH m as start_node, b as end_node
     WHERE end_node.name = 'George'
     RETURN id(start_node),start_node.name,id(end_node),end_node.name
+    ORDER BY id(start_node) ASC, id(end_node) ASC
 $$) AS (id1 agtype, name1 agtype, id2 agtype, name2 agtype);
 
 -- Expression item must be aliased.
@@ -226,6 +236,150 @@ $$) as (a agtype,b agtype);
 -- Clean up
 
 SELECT drop_graph('graph', true);
+
+
+--
+-- Test accessor optimizations in WITH clause
+--
+SELECT * FROM create_graph('with_accessor_opt');
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[r:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+
+-- Single with
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH id(n) AS node_id
+    RETURN node_id
+$$) AS (node_id agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH properties(n) AS props
+    RETURN props
+$$) AS (props agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    MATCH (n:Person)
+    WITH label(n) AS lbl
+    RETURN lbl
+$$) AS (lbl agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n.name AS name, n.age AS age
+    RETURN name, age
+$$) AS (name agtype, age agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WITH id(r) AS rid
+    RETURN rid
+$$) AS (rid agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n, id(n) AS nid
+    WITH n.name AS name, nid
+    RETURN name, nid
+$$) AS (name agtype, nid agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    MATCH (n:Person)
+    WITH n as m
+    RETURN m
+    ORDER BY id(m) ASC
+$$) AS (n vertex);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n
+    RETURN id(n), n.name
+$$) AS (id agtype, name agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WITH r
+    RETURN id(r), type(r)
+$$) AS (id agtype, typ agtype);
+
+--
+-- Chained WITH tests
+--
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)-[r:KNOWS]->(b:Person)
+    WITH a, b, id(a) AS aid
+    WITH a.name AS aname, b.name AS bname, aid
+    RETURN aname, bname, aid
+$$) AS (aname agtype, bname agtype, aid agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n, n.age AS age
+    WHERE age > 20
+    RETURN n.name
+$$) AS (name agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n.name as name, id(n) AS nid
+    ORDER BY nid
+    RETURN name
+$$) AS (name agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH id(n) AS id, count(*) AS cnt
+    RETURN id, cnt
+$$) AS (id agtype, cnt agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    MATCH (n:Person)
+    WITH DISTINCT label(n) AS lbl
+    RETURN lbl
+$$) AS (lbl agtype);
+
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH n
+    WITH n, id(n) AS nid
+    WITH n.name AS name, nid
+    RETURN name, nid
+$$) AS (name agtype, nid agtype);
+
+-- MATCH -> WITH accessors -> MATCH -> RETURN
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (a:Person)
+    WITH a, id(a) AS aid
+    MATCH (a)-[r:KNOWS]->(b)
+    RETURN aid, b.name
+$$) AS (aid agtype, bname agtype);
+
+-- WITH + UNWIND with accessors
+SELECT * FROM cypher('with_accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH (n:Person)
+    WITH collect(id(n)) AS ids
+    UNWIND ids AS nid
+    RETURN nid
+$$) AS (nid agtype);
+
+-- Clean up
+SELECT drop_graph('with_accessor_opt', true);
+
 
 --
 -- End of test

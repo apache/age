@@ -216,3 +216,29 @@ CREATE AGGREGATE ag_catalog.age_collect(variadic "any")
     finalfunc = ag_catalog.age_collect_aggfinalfn,
     parallel = safe
 );
+
+--
+-- reduce(acc = init, var IN list | body) fold support
+--
+-- Transition function for the age_reduce aggregate. The fold body is compiled
+-- by transform_cypher_reduce() with the accumulator and element rewritten to
+-- PARAM_EXEC params 0 and 1 and serialized into the text argument; the
+-- transition evaluates it for each element in list order. The trailing
+-- agtype[] argument carries the loop-invariant outer values (outer-query
+-- variables and cypher() parameters) referenced by the body, bound to
+-- PARAM_EXEC params 2, 3, ... It must be callable with a NULL transition state
+-- (no initcond), so it is intentionally not STRICT.
+CREATE FUNCTION ag_catalog.age_reduce_transfn(agtype, agtype, text, agtype, agtype[])
+    RETURNS agtype
+    LANGUAGE c
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
+-- aggregate definition for reduce(); direct arguments are
+-- (init, serialized-body, element, captured-outer-values), with the element
+-- fed ORDER BY ordinality.
+CREATE AGGREGATE ag_catalog.age_reduce(agtype, text, agtype, agtype[])
+(
+    stype = agtype,
+    sfunc = ag_catalog.age_reduce_transfn
+);

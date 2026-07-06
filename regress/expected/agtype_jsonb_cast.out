@@ -1,0 +1,261 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+--
+-- agtype -> jsonb casts
+--
+-- String scalar
+SELECT '"hello"'::agtype::jsonb;
+  jsonb  
+---------
+ "hello"
+(1 row)
+
+-- Null
+SELECT 'null'::agtype::jsonb;
+ jsonb 
+-------
+ null
+(1 row)
+
+-- Array
+SELECT '[1, "two", null]'::agtype::jsonb;
+      jsonb       
+------------------
+ [1, "two", null]
+(1 row)
+
+-- Nested array
+SELECT '[[1, 2], [3, 4]]'::agtype::jsonb;
+      jsonb       
+------------------
+ [[1, 2], [3, 4]]
+(1 row)
+
+-- Empty array
+SELECT '[]'::agtype::jsonb;
+ jsonb 
+-------
+ []
+(1 row)
+
+-- Object
+SELECT '{"name": "Alice", "age": 30}'::agtype::jsonb;
+            jsonb             
+------------------------------
+ {"age": 30, "name": "Alice"}
+(1 row)
+
+-- Nested object
+SELECT '{"a": {"b": {"c": 1}}}'::agtype::jsonb;
+         jsonb          
+------------------------
+ {"a": {"b": {"c": 1}}}
+(1 row)
+
+-- Object with array values
+SELECT '{"tags": ["a", "b"], "count": 2}'::agtype::jsonb;
+              jsonb               
+----------------------------------
+ {"tags": ["a", "b"], "count": 2}
+(1 row)
+
+-- Empty object
+SELECT '{}'::agtype::jsonb;
+ jsonb 
+-------
+ {}
+(1 row)
+
+--
+-- jsonb -> agtype casts
+--
+-- String scalar
+SELECT '"hello"'::jsonb::agtype;
+ agtype  
+---------
+ "hello"
+(1 row)
+
+-- Numeric scalar
+SELECT '42'::jsonb::agtype;
+ agtype 
+--------
+ 42
+(1 row)
+
+-- Float scalar
+SELECT '3.14'::jsonb::agtype;
+ agtype 
+--------
+ 3.14
+(1 row)
+
+-- Boolean
+SELECT 'true'::jsonb::agtype;
+ agtype 
+--------
+ true
+(1 row)
+
+-- Null
+SELECT 'null'::jsonb::agtype;
+ agtype 
+--------
+ null
+(1 row)
+
+-- Array
+SELECT '[1, "two", null]'::jsonb::agtype;
+      agtype      
+------------------
+ [1, "two", null]
+(1 row)
+
+-- Nested array
+SELECT '[[1, 2], [3, 4]]'::jsonb::agtype;
+      agtype      
+------------------
+ [[1, 2], [3, 4]]
+(1 row)
+
+-- Empty array
+SELECT '[]'::jsonb::agtype;
+ agtype 
+--------
+ []
+(1 row)
+
+-- Object
+SELECT '{"name": "Alice", "age": 30}'::jsonb::agtype;
+            agtype            
+------------------------------
+ {"age": 30, "name": "Alice"}
+(1 row)
+
+-- Nested object
+SELECT '{"a": {"b": {"c": 1}}}'::jsonb::agtype;
+         agtype         
+------------------------
+ {"a": {"b": {"c": 1}}}
+(1 row)
+
+-- Empty object
+SELECT '{}'::jsonb::agtype;
+ agtype 
+--------
+ {}
+(1 row)
+
+--
+-- Roundtrip: jsonb -> agtype -> jsonb
+--
+SELECT ('{"key": "value"}'::jsonb::agtype)::jsonb;
+      jsonb       
+------------------
+ {"key": "value"}
+(1 row)
+
+SELECT ('[1, 2, 3]'::jsonb::agtype)::jsonb;
+   jsonb   
+-----------
+ [1, 2, 3]
+(1 row)
+
+SELECT ('null'::jsonb::agtype)::jsonb;
+ jsonb 
+-------
+ null
+(1 row)
+
+--
+-- Graph data -> jsonb (vertex and edge)
+--
+SELECT create_graph('agtype_jsonb_test');
+NOTICE:  graph "agtype_jsonb_test" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('agtype_jsonb_test', $$
+    CREATE (a:Person {name: 'Alice', age: 30})-[:KNOWS {since: 2020}]->(b:Person {name: 'Bob', age: 25})
+    RETURN a, b
+$$) AS (a agtype, b agtype);
+                                               a                                                |                                              b                                               
+------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "Person", "properties": {"age": 30, "name": "Alice"}}::vertex | {"id": 844424930131970, "label": "Person", "properties": {"age": 25, "name": "Bob"}}::vertex
+(1 row)
+
+-- Vertex to jsonb: check structure
+SELECT v::jsonb ? 'label' AS has_label,
+       v::jsonb ? 'properties' AS has_properties,
+       (v::jsonb -> 'properties' ->> 'name') AS name
+FROM cypher('agtype_jsonb_test', $$
+    MATCH (n:Person) RETURN n ORDER BY n.name
+$$) AS (v agtype);
+ has_label | has_properties | name  
+-----------+----------------+-------
+ t         | t              | Alice
+ t         | t              | Bob
+(2 rows)
+
+-- Edge to jsonb: check structure
+SELECT e::jsonb ? 'label' AS has_label,
+       (e::jsonb ->> 'label') AS label,
+       (e::jsonb -> 'properties' ->> 'since') AS since
+FROM cypher('agtype_jsonb_test', $$
+    MATCH ()-[r:KNOWS]->() RETURN r
+$$) AS (e agtype);
+ has_label | label | since 
+-----------+-------+-------
+ t         | KNOWS | 2020
+(1 row)
+
+--
+-- NULL handling
+--
+SELECT NULL::agtype::jsonb;
+ jsonb 
+-------
+ 
+(1 row)
+
+SELECT NULL::jsonb::agtype;
+ agtype 
+--------
+ 
+(1 row)
+
+--
+-- Cleanup
+--
+SELECT drop_graph('agtype_jsonb_test', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table agtype_jsonb_test._ag_label_vertex
+drop cascades to table agtype_jsonb_test._ag_label_edge
+drop cascades to table agtype_jsonb_test."Person"
+drop cascades to table agtype_jsonb_test."KNOWS"
+NOTICE:  graph "agtype_jsonb_test" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+

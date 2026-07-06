@@ -269,6 +269,8 @@ void read_cypher_update_item(struct ExtensibleNode *node)
     READ_NODE_FIELD(qualified_name);
     READ_BOOL_FIELD(remove_item);
     READ_BOOL_FIELD(is_add);
+    READ_NODE_FIELD(prop_expr);
+    READ_NODE_FIELD(prop_expr_state);
 }
 
 /*
@@ -310,4 +312,34 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_UINT_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
+    READ_NODE_FIELD(on_match_set_info);
+    READ_NODE_FIELD(on_create_set_info);
+}
+
+/*
+ * Deserialize a string representing the cypher_predicate_function
+ * data structure.
+ */
+void read_cypher_predicate_function(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_predicate_function);
+
+    READ_ENUM_FIELD(kind, cypher_predicate_function_kind);
+    READ_STRING_FIELD(varname);
+    READ_NODE_FIELD(expr);
+    READ_NODE_FIELD(where);
+}
+
+/*
+ * Deserialize a string representing the cypher_reduce data structure.
+ */
+void read_cypher_reduce(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_reduce);
+
+    READ_STRING_FIELD(acc_varname);
+    READ_NODE_FIELD(init_expr);
+    READ_STRING_FIELD(elem_varname);
+    READ_NODE_FIELD(list_expr);
+    READ_NODE_FIELD(body_expr);
 }

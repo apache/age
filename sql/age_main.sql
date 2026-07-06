@@ -21,6 +21,33 @@
 \echo Use "CREATE EXTENSION age" to load this file. \quit
 
 --
+-- Ensure ag_catalog is created and owned by the installing role.
+--
+-- CREATE EXTENSION places all of AGE's objects in ag_catalog. A normal install
+-- creates that schema, owned by the installer. If ag_catalog already exists and
+-- is owned by a different role, that role would retain control over the schema
+-- that holds AGE's catalog objects. To keep ownership well-defined, refuse to
+-- install into a pre-existing ag_catalog owned by another role. Ownership is
+-- compared directly (not via role membership) so the check is exact even for a
+-- superuser, who is otherwise considered a member of every role.
+--
+DO $age_install_guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_namespace n
+        WHERE n.nspname = 'ag_catalog'
+          AND n.nspowner <> (SELECT r.oid
+                             FROM pg_catalog.pg_roles r
+                             WHERE r.rolname = current_user)
+    ) THEN
+        RAISE EXCEPTION 'schema "ag_catalog" already exists and is not owned by the installing role "%"', current_user
+            USING HINT = 'Apache AGE will not install into a pre-existing ag_catalog owned by another role. Drop it (DROP SCHEMA ag_catalog CASCADE) or transfer its ownership to the installing role, then retry CREATE EXTENSION age.';
+    END IF;
+END
+$age_install_guard$;
+
+--
 -- catalog tables
 --
 
@@ -84,6 +111,16 @@ CREATE FUNCTION ag_catalog._label_id(graph_name name, label_name name)
     LANGUAGE c
     STABLE
 PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+-- Internal selftest for the agehash open-addressing hashtable. Returns "OK"
+-- on success or "FAIL: ..." with a diagnostic message. Intended for the
+-- agehash regression test only.
+CREATE FUNCTION ag_catalog._agehash_self_test()
+    RETURNS text
+    LANGUAGE c
+    VOLATILE
+    PARALLEL UNSAFE
 AS 'MODULE_PATHNAME';
 
 --
@@ -368,16 +405,20 @@ CREATE FUNCTION ag_catalog._graphid(label_id int, entry_id bigint)
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
-CREATE FUNCTION ag_catalog._label_name(graph_oid oid, graphid)
-    RETURNS cstring
-    LANGUAGE c
-    IMMUTABLE
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
-
 CREATE FUNCTION ag_catalog._extract_label_id(graphid)
     RETURNS label_id
     LANGUAGE c
     STABLE
 PARALLEL SAFE
+AS 'MODULE_PATHNAME';
+
+--
+-- VLE cache invalidation trigger function.
+-- Installed on graph label tables to catch SQL-level mutations
+-- (INSERT/UPDATE/DELETE/TRUNCATE) and increment the graph's
+-- version counter so VLE caches are properly invalidated.
+--
+CREATE FUNCTION ag_catalog.age_invalidate_graph_cache()
+    RETURNS trigger
+    LANGUAGE c
 AS 'MODULE_PATHNAME';

@@ -786,20 +786,319 @@ SELECT * FROM cypher('issue_1907', $$ MERGE (a {name: 'Test Node A'})-[r:RELATED
 SELECT * FROM cypher('issue_1907', $$ MATCH ()-[r]->() RETURN r $$) AS (r agtype);
 
 --
+-- Fix issue 1446: First MERGE does not see the second MERGE's changes
+--
+-- When chained MERGEs appear (MATCH ... MERGE ... MERGE ...), the first
+-- (non-terminal) MERGE returned rows one at a time, so the second MERGE's
+-- lateral join was materialized before the first finished all iterations.
+-- This caused duplicate nodes. The fix makes non-terminal MERGE eager:
+-- it processes ALL input rows before returning any.
+--
+SELECT * FROM create_graph('issue_1446');
+-- Reporter's exact setup: two initial nodes
+SELECT * FROM cypher('issue_1446', $$ CREATE (:A), (:C) $$) AS (a agtype);
+-- Reporter's exact reproduction case: two chained MERGEs
+-- Without fix: C is created multiple times (once per MATCH row) because the
+-- second MERGE's lateral join materializes before the first MERGE finishes.
+-- With fix: returns 2 rows, C is found and reused by the second MERGE.
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (x)
+    MERGE (x)-[:r]->(:t)
+    MERGE (:C)-[:r]->(:t)
+    RETURN x
+$$) AS (a agtype);
+-- Verify: A(1), C(1), t(2) = 4 nodes, 2 edges
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN labels(n) AS label, count(*) AS cnt
+    ORDER BY label
+$$) AS (label agtype, cnt agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
+-- Test with 3 initial nodes: ensures eager buffering works for larger sets
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$ CREATE (:X), (:Y), (:Z) $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    MERGE (n)-[:link]->(:shared)
+    MERGE (:hub)-[:link]->(:shared)
+    RETURN n
+$$) AS (a agtype);
+-- Without fix: hub is created 3 times (once per MATCH row).
+-- With fix: hub(1), shared(4), X(1), Y(1), Z(1) = 8 nodes, 4 edges
+-- (3 n->shared edges + 1 hub->shared edge; hub reused for rows 2 & 3)
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN labels(n) AS label, count(*) AS cnt
+    ORDER BY label
+$$) AS (label agtype, cnt agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
+-- Test chained MERGE with empty MATCH result (empty buffer scenario)
+-- Without fix: non-terminal MERGE falls through to terminal logic,
+-- incorrectly creating entities when MATCH returns 0 rows.
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (x:NonExistent)
+    MERGE (x)-[:r]->(:t)
+    MERGE (:C)-[:r]->(:t)
+    RETURN count(*) AS cnt
+$$) AS (cnt agtype);
+-- Verify no nodes or edges were created
+SELECT * FROM cypher('issue_1446', $$
+    MATCH (n)
+    RETURN count(*) AS node_count
+$$) AS (node_count agtype);
+SELECT * FROM cypher('issue_1446', $$
+    MATCH ()-[e]->()
+    RETURN count(*) AS edge_count
+$$) AS (edge_count agtype);
+
+-- Issue 1954: CREATE + WITH + MERGE causes "vertex was deleted" error
+-- when the number of input rows exceeds the snapshot's command ID window.
+-- entity_exists() used a stale curcid, making recently-created vertices
+-- invisible on later iterations.
+--
+SELECT * FROM create_graph('issue_1954');
+
+-- Setup: create source nodes and relationships (3 rows to trigger the bug)
+SELECT * FROM cypher('issue_1954', $$
+    CREATE (:A {name: 'a1'})-[:R]->(:B {name: 'b1'}),
+           (:A {name: 'a2'})-[:R]->(:B {name: 'b2'}),
+           (:A {name: 'a3'})-[:R]->(:B {name: 'b3'})
+$$) AS (result agtype);
+
+-- This query would fail with "vertex assigned to variable c was deleted"
+-- on the 3rd row before the fix.
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Verify edges were created
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+
+-- Test with two MERGEs (more complex case from the original report)
+SELECT * FROM cypher('issue_1954', $$
+    MATCH ()-[e:LINK]->() DELETE e
+$$) AS (result agtype);
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (c:C) DELETE c
+$$) AS (result agtype);
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:R]->(b:B)
+    CREATE (c:C {name: a.name + '|' + b.name})
+    WITH a, b, c
+    MERGE (a)-[:LINK1]->(c)
+    MERGE (b)-[:LINK2]->(c)
+    RETURN a.name, b.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Verify both sets of edges
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (a:A)-[:LINK1]->(c:C)
+    RETURN a.name, c.name
+    ORDER BY a.name
+$$) AS (a agtype, c agtype);
+
+SELECT * FROM cypher('issue_1954', $$
+    MATCH (b:B)-[:LINK2]->(c:C)
+    RETURN b.name, c.name
+    ORDER BY b.name
+$$) AS (b agtype, c agtype);
+
+--
 -- clean up graphs
 --
 SELECT * FROM cypher('cypher_merge', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1630', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 SELECT * FROM cypher('issue_1709', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1446', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+SELECT * FROM cypher('issue_1954', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
+
+--
+-- ON CREATE SET / ON MATCH SET tests (issue #1619)
+--
+SELECT create_graph('merge_actions');
+
+-- Basic ON CREATE SET: first run creates the node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON CREATE SET n.created = true
+  RETURN n.name, n.created
+$$) AS (name agtype, created agtype);
+
+-- ON MATCH SET: second run matches the existing node
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Alice'})
+    ON MATCH SET n.found = true
+  RETURN n.name, n.created, n.found
+$$) AS (name agtype, created agtype, found agtype);
+
+-- Both ON CREATE SET and ON MATCH SET (first run = create)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+
+-- Both ON CREATE SET and ON MATCH SET (second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bob'})
+    ON CREATE SET n.created = true
+    ON MATCH SET n.matched = true
+  RETURN n.name, n.created, n.matched
+$$) AS (name agtype, created agtype, matched agtype);
+
+-- ON CREATE SET with MERGE after MATCH (Case 1: has predecessor, first run = create)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Alice'})
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
+    ON CREATE SET b.source = 'merge_create'
+  RETURN a.name, b.name, b.source
+$$) AS (a agtype, b agtype, source agtype);
+
+-- ON MATCH SET with MERGE after MATCH (Case 1: has predecessor, second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Alice'})
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Charlie'})
+    ON MATCH SET b.visited = true
+  RETURN a.name, b.name, b.visited
+$$) AS (a agtype, b agtype, visited agtype);
+
+-- Multiple SET items in a single ON CREATE SET
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Dave'})
+    ON CREATE SET n.a = 1, n.b = 2
+  RETURN n.name, n.a, n.b
+$$) AS (name agtype, a agtype, b agtype);
+
+-- Reverse order: ON MATCH before ON CREATE should work
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Eve'})
+    ON MATCH SET n.seen = true
+    ON CREATE SET n.new = true
+  RETURN n.name, n.new
+$$) AS (name agtype, new agtype);
+
+-- Error: ON CREATE SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON CREATE SET n.a = 1
+    ON CREATE SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+
+-- Error: ON MATCH SET specified more than once
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (n:Person {name: 'Bad'})
+    ON MATCH SET n.a = 1
+    ON MATCH SET n.b = 2
+  RETURN n
+$$) AS (n agtype);
+
+-- Chained (non-terminal) MERGE with ON CREATE SET (eager-buffering path)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (a:Person {name: 'Frank'})
+    ON CREATE SET a.created = true
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Grace'})
+    ON CREATE SET b.created = true
+  RETURN a.name, a.created, b.name, b.created
+$$) AS (a_name agtype, a_created agtype, b_name agtype, b_created agtype);
+
+-- Chained (non-terminal) MERGE with ON MATCH SET (second run = match)
+SELECT * FROM cypher('merge_actions', $$
+  MERGE (a:Person {name: 'Frank'})
+    ON MATCH SET a.matched = true
+  MERGE (a)-[:KNOWS]->(b:Person {name: 'Grace'})
+    ON MATCH SET b.matched = true
+  RETURN a.name, a.matched, b.name, b.matched
+$$) AS (a_name agtype, a_matched agtype, b_name agtype, b_matched agtype);
+
+-- ON keyword as label name (backward compat via safe_keywords)
+SELECT * FROM cypher('merge_actions', $$
+  CREATE (n:on {name: 'test'})
+  RETURN n.name
+$$) AS (name agtype);
+
+-- Issue #2347: RHS of ON CREATE / ON MATCH SET referencing a bound
+-- variable crashed the backend when MERGE had a previous clause, because
+-- the lateral-join's ParseNamespaceItem had p_nscolumns=NULL.
+
+-- ON CREATE SET with RHS referencing the outer MATCH's variable
+SELECT * FROM cypher('merge_actions', $$ CREATE (:Person {name:'Anchor'}) $$) AS (a agtype);
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'FromOuter'})
+    ON CREATE SET b.source_name = a.name
+  RETURN a.name, b.name, b.source_name
+$$) AS (a_name agtype, b_name agtype, b_source agtype);
+
+-- ON CREATE SET with RHS referencing the MERGE-bound variable itself
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'SelfRef'})
+    ON CREATE SET b.echo_name = b.name
+  RETURN b.name, b.echo_name
+$$) AS (b_name agtype, b_echo agtype);
+
+-- ON CREATE SET driven by UNWIND with self-reference on the RHS
+-- (Muhammad's second reproducer)
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND ['U1', 'U2'] AS nm
+  MERGE (n:Person {name: nm})
+    ON CREATE SET n.copy_name = n.name
+  RETURN n.name, n.copy_name
+$$) AS (n_name agtype, n_copy agtype);
+
+-- Multiple SET items mixing outer-ref, self-ref, and literal RHS
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'MultiItem'})
+    ON CREATE SET b.from_a = a.name, b.self = b.name, b.lit = 'literal'
+  RETURN b.from_a, b.self, b.lit
+$$) AS (fa agtype, sf agtype, lit agtype);
+
+-- ON MATCH SET with variable RHS (second run on existing node)
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (a:Person {name: 'Anchor'})
+  MERGE (b:Person {name: 'FromOuter'})
+    ON CREATE SET b.source_name = a.name
+    ON MATCH SET b.last_seen_by = a.name
+  RETURN b.source_name, b.last_seen_by
+$$) AS (src agtype, last agtype);
+
+-- cleanup
+SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 
 --
 -- delete graphs
 --
+SELECT drop_graph('merge_actions', true);
 SELECT drop_graph('issue_1907', true);
 SELECT drop_graph('cypher_merge', true);
 SELECT drop_graph('issue_1630', true);
 SELECT drop_graph('issue_1691', true);
 SELECT drop_graph('issue_1709', true);
+SELECT drop_graph('issue_1446', true);
+SELECT drop_graph('issue_1954', true);
 
 --
 -- End

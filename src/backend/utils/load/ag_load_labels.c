@@ -46,6 +46,23 @@ static void process_vertex_row(char **fields, int nfields,
     TupleTableSlot *slot;
     agtype *vertex_properties;
 
+    /*
+     * Guard the header[i]/fields[i] pairing in create_agtype_from_list()
+     * against out-of-bounds reads on malformed rows that have more fields
+     * than the header. Rows with fewer fields than the header are allowed
+     * (matching existing behavior). Note: a file delimited by something
+     * other than comma is parsed as a single column throughout, so header
+     * and rows still match and the data lands in properties verbatim --
+     * specifying the delimiter is the separate fix for that.
+     */
+    if (nfields > header_count)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("label file row has %d columns, more than the "
+                        "header's %d columns", nfields, header_count)));
+    }
+
     /* Generate or use provided entry_id */
     if (id_field_exists)
     {

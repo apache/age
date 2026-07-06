@@ -124,6 +124,8 @@ typedef struct cypher_merge
 {
     ExtensibleNode extensible;
     Node *path;
+    List *on_match;   /* List of cypher_set_item, or NIL */
+    List *on_create;  /* List of cypher_set_item, or NIL */
 } cypher_merge;
 
 /*
@@ -223,6 +225,45 @@ typedef struct cypher_map_projection
     Node *where;
     Node *mapping_expr;
  } cypher_list_comprehension;
+
+/*
+ * Predicate function kinds for all(), any(), none(), single().
+ * These take the form: func(variable IN list WHERE predicate)
+ */
+typedef enum cypher_predicate_function_kind
+{
+    CPFK_ALL = 0,
+    CPFK_ANY,
+    CPFK_NONE,
+    CPFK_SINGLE
+} cypher_predicate_function_kind;
+
+typedef struct cypher_predicate_function
+{
+    ExtensibleNode extensible;
+    cypher_predicate_function_kind kind;
+    char *varname;
+    Node *expr;     /* the list to iterate over */
+    Node *where;    /* the predicate to test */
+} cypher_predicate_function;
+
+/*
+ * reduce(acc = init, var IN list | body)
+ *
+ * Folds `body` over `list`, threading an accumulator `acc` (seeded with
+ * `init`) across the elements in list order, binding each element to `var`.
+ * Transformed into a correlated scalar subquery over an ordered aggregate
+ * by transform_cypher_reduce() in cypher_clause.c.
+ */
+typedef struct cypher_reduce
+{
+    ExtensibleNode extensible;
+    char *acc_varname;  /* accumulator variable name */
+    Node *init_expr;    /* initial accumulator value */
+    char *elem_varname; /* per-element variable name */
+    Node *list_expr;    /* the list to fold over */
+    Node *body_expr;    /* the fold expression evaluated per element */
+} cypher_reduce;
 
 typedef enum cypher_map_projection_element_type
 {
@@ -451,6 +492,9 @@ typedef struct cypher_update_item
     List *qualified_name;
     bool remove_item;
     bool is_add;
+    Node *prop_expr;    /* SET value expression, used by MERGE ON CREATE/MATCH SET
+                         * where the expression is not in the plan's target list */
+    ExprState *prop_expr_state;  /* initialized at plan init, not per-row */
 } cypher_update_item;
 
 typedef struct cypher_delete_information
@@ -477,6 +521,8 @@ typedef struct cypher_merge_information
     uint32 graph_oid;
     AttrNumber merge_function_attr;
     cypher_create_path *path;
+    cypher_update_information *on_match_set_info;  /* NULL if no ON MATCH SET */
+    cypher_update_information *on_create_set_info;  /* NULL if no ON CREATE SET */
 } cypher_merge_information;
 
 /* grammar node for typecasts */

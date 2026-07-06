@@ -1,4 +1,5 @@
 *.o
+*.d
 *.so
 build.sh
 .idea
@@ -15,3 +16,4 @@ __pycache__
 **/apache_age_python.egg-info
 
 drivers/python/build
+*.bc

@@ -25,6 +25,7 @@
 #include "postgres.h"
 
 #include "executor/executor.h"
+#include "executor/nodeModifyTable.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_relation.h"
@@ -128,6 +129,24 @@ void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info)
     table_close(result_rel_info->ri_RelationDesc, RowExclusiveLock);
 }
 
+/*
+ * Clear an entity slot and mark every attribute NULL before AGE fills in the
+ * columns it manages (id/start_id/end_id/properties).
+ *
+ * The slot's tuple descriptor is the full label-table descriptor, which may
+ * contain columns AGE does not populate -- e.g. a user-added plain column, or a
+ * GENERATED ALWAYS ... STORED column. Without this, those attributes keep stale
+ * slot memory and heap_form_tuple() segfaults dereferencing the garbage
+ * (issue #2450). Plain columns then default to NULL; generated columns are
+ * recomputed via ExecComputeStoredGenerated() before the tuple is materialized.
+ */
+void clear_entity_slot(TupleTableSlot *elemTupleSlot)
+{
+    ExecClearTuple(elemTupleSlot);
+    memset(elemTupleSlot->tts_isnull, true,
+           elemTupleSlot->tts_tupleDescriptor->natts * sizeof(bool));
+}
+
 TupleTableSlot *populate_vertex_tts(
     TupleTableSlot *elemTupleSlot, agtype_value *id, agtype_value *properties)
 {
@@ -138,6 +157,8 @@ TupleTableSlot *populate_vertex_tts(
         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                         errmsg("vertex id field cannot be NULL")));
     }
+
+    clear_entity_slot(elemTupleSlot);
 
     properties_isnull = properties == NULL;
 
@@ -174,6 +195,8 @@ TupleTableSlot *populate_edge_tts(
                         errmsg("edge end_id field cannot be NULL")));
     }
 
+    clear_entity_slot(elemTupleSlot);
+
     properties_isnull = properties == NULL;
 
     elemTupleSlot->tts_values[edge_tuple_id] =
@@ -208,6 +231,9 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     HeapTuple tuple;
     Relation rel;
     bool result = true;
+    TupleTableSlot *slot;
+    Oid index_oid = InvalidOid;
+    CommandId saved_curcid;
 
     /*
      * Extract the label id from the graph id and get the table name
@@ -219,22 +245,69 @@ bool entity_exists(EState *estate, Oid graph_oid, graphid id)
     ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                 F_GRAPHIDEQ, GRAPHID_GET_DATUM(id));
 
-    rel = table_open(label->relation, RowExclusiveLock);
-    scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
-
-    tuple = heap_getnext(scan_desc, ForwardScanDirection);
-
     /*
-     * If a single tuple was returned, the tuple is still valid, otherwise'
-     * set to false.
+     * Temporarily advance the snapshot's curcid so that entities inserted
+     * by preceding clauses (e.g., CREATE) in the same query are visible.
+     * CREATE calls CommandCounterIncrement() which advances the global
+     * CID, but does not update es_snapshot->curcid. The Decrement/Increment
+     * CID macros used by the executors can leave curcid behind the global
+     * CID, making recently created entities invisible to this scan.
+     *
+     * Use Max to ensure we never decrease curcid. The executor macros
+     * (Increment_Estate_CommandId) can push curcid above the global CID,
+     * and blindly assigning GetCurrentCommandId could make tuples that
+     * are visible at the current curcid become invisible.
      */
-    if (!HeapTupleIsValid(tuple))
+    saved_curcid = estate->es_snapshot->curcid;
+    estate->es_snapshot->curcid = Max(saved_curcid,
+                                      GetCurrentCommandId(false));
+
+    rel = table_open(label->relation, RowExclusiveLock);
+
+    index_oid = find_usable_btree_index_for_attr(rel, 1);
+
+    if (OidIsValid(index_oid))
     {
-        result = false;
+        IndexScanDesc index_scan_desc;
+        Relation index_rel;
+
+        slot = table_slot_create(rel, NULL);
+
+        index_rel = index_open(index_oid, AccessShareLock);
+
+        index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+        index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
+
+        if (!index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
+        {
+            result = false;
+        } 
+
+        index_endscan(index_scan_desc);
+        index_close(index_rel, AccessShareLock);
+        ExecDropSingleTupleTableSlot(slot);
+    } 
+    else
+    {        
+        scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
+        tuple = heap_getnext(scan_desc, ForwardScanDirection);
+
+        /*
+        * If a single tuple was returned, the tuple is still valid, otherwise'
+        * set to false.
+        */
+        if (!HeapTupleIsValid(tuple))
+        {
+            result = false;
+        }
+
+        table_endscan(scan_desc);
     }
 
-    table_endscan(scan_desc);
     table_close(rel, RowExclusiveLock);
+
+    /* Restore the original curcid */
+    estate->es_snapshot->curcid = saved_curcid;
 
     return result;
 }
@@ -268,6 +341,30 @@ HeapTuple insert_entity_tuple_cid(ResultRelInfo *resultRelInfo,
     HeapTuple tuple = NULL;
 
     ExecStoreVirtualTuple(elemTupleSlot);
+
+    /*
+     * The slot's tuple descriptor is the full relation descriptor, which may
+     * contain columns AGE does not populate itself -- most notably a
+     * GENERATED ALWAYS ... STORED column added to the label table. Those slot
+     * entries are left uninitialized by the create/merge/set paths, so we must
+     * compute the stored generated columns here before materializing the heap
+     * tuple. Otherwise heap_form_tuple() reads the uninitialized slot values
+     * and segfaults dereferencing garbage (issue #2450).
+     */
+    if (resultRelInfo->ri_RelationDesc->rd_att->constr != NULL &&
+        resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+    {
+        /*
+         * A generation expression may reference the tableoid system column, so
+         * the slot must carry the relation's OID before we compute the stored
+         * generated columns (mirrors PostgreSQL's own ExecInsert path).
+         */
+        elemTupleSlot->tts_tableOid =
+            RelationGetRelid(resultRelInfo->ri_RelationDesc);
+        ExecComputeStoredGenerated(resultRelInfo, estate, elemTupleSlot,
+                                   CMD_INSERT);
+    }
+
     tuple = ExecFetchSlotHeapTuple(elemTupleSlot, true, NULL);
 
     /* Check the constraints of the tuple */

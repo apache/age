@@ -118,6 +118,20 @@ class Path(AGObj):
 
         return buf.getvalue()
 
+    def to_dict(self) -> list:
+        # AGObj elements are recursively converted; JSON-native types
+        # (dict, list, str, int, float, bool, None) pass through unchanged.
+        # Non-serializable objects fall back to str() as a safety net.
+        result = []
+        for e in (self.entities or []):
+            if isinstance(e, AGObj):
+                result.append(e.to_dict())
+            elif isinstance(e, (dict, list, str, int, float, bool, type(None))):
+                result.append(e)
+            else:
+                result.append(str(e))
+        return result
+
 
     
 
@@ -145,6 +159,18 @@ class Vertex(AGObj):
 
     def __repr__(self) -> str:
         return self.toString()
+
+    def to_dict(self) -> dict:
+        """Return a plain dict suitable for JSON serialization.
+
+        Properties are shallow-copied; nested mutable values will share
+        references with the original Vertex.
+        """
+        return {
+            "id": self.id,
+            "label": self.label,
+            "properties": dict(self.properties) if self.properties else {},
+        }
 
     def toString(self) -> str: 
         return nodeToString(self)
@@ -185,6 +211,20 @@ class Edge(AGObj):
 
     def __repr__(self) -> str:
         return self.toString()
+
+    def to_dict(self) -> dict:
+        """Return a plain dict suitable for JSON serialization.
+
+        Properties are shallow-copied; nested mutable values will share
+        references with the original Edge.
+        """
+        return {
+            "id": self.id,
+            "label": self.label,
+            "start_id": self.start_id,
+            "end_id": self.end_id,
+            "properties": dict(self.properties) if self.properties else {},
+        }
 
     def extraStrFormat(node, buf):
         if node.start_id != None:

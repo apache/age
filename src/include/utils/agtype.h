@@ -32,6 +32,7 @@
 #define AG_AGTYPE_H
 
 #include "utils/array.h"
+#include "utils/memutils.h"
 #include "utils/numeric.h"
 
 #include "utils/graphid.h"
@@ -581,6 +582,64 @@ agtype_iterator_token agtype_iterator_next(agtype_iterator **it,
 agtype *agtype_value_to_agtype(agtype_value *val);
 bool agtype_deep_contains(agtype_iterator **val,
                           agtype_iterator **m_contained, bool skip_nested);
+
+/*
+ * Per-call agtype build arena.
+ *
+ * Many top-level Datum functions in agtype.c follow the pattern:
+ *   1. Allocate / build an agtype_value tree
+ *   2. Serialize it via agtype_value_to_agtype()
+ *   3. Recursively pfree the tree
+ *
+ * Step 3 (pfree_agtype_value_content) is an O(N) walk that frees each tree
+ * node individually. By building the tree inside a dedicated AllocSet
+ * MemoryContext and resetting the context after serialization, we trade
+ * the O(N) walk for an O(K) block reset (K << N) and eliminate per-node
+ * AllocSetFree overhead. The AllocSetAlloc cost is also reduced because
+ * the arena uses a small initial block size and grows on demand.
+ *
+ * Two usage patterns:
+ *
+ *   Pattern A — disposable per-call arena (one-shot):
+ *       MemoryContext arena = agt_arena_begin();
+ *       MemoryContext caller = MemoryContextSwitchTo(arena);
+ *       ... build tree ...
+ *       MemoryContextSwitchTo(caller);
+ *       result = agtype_value_to_agtype(val);  // copies into caller
+ *       agt_arena_end(arena);                   // resets / discards
+ *
+ *   Pattern B — long-lived shared arena (sort comparator, hot inner loop):
+ *       static MemoryContext shared_arena = NULL;
+ *       if (shared_arena == NULL)
+ *       {
+ *           shared_arena = AGT_ARENA_BEGIN_SHARED("comparator");
+ *       }
+ *       MemoryContext caller = MemoryContextSwitchTo(shared_arena);
+ *       ... allocate / use ...
+ *       MemoryContextSwitchTo(caller);
+ *       agt_arena_reset(shared_arena);          // O(1) cheap reset
+ *
+ * Pattern A creates a fresh context per call (microseconds). Pattern B
+ * amortizes the create cost across many calls (single AllocSetCreate at
+ * the very first call), and pays only a MemoryContextReset (~100 ns) per
+ * subsequent call. Use Pattern B when the function is invoked many times
+ * per query (e.g. a sort comparator called O(N log N) times).
+ */
+MemoryContext agt_arena_begin(void);
+/*
+ * Pattern-B shared-arena creator. Implemented as a macro because PG's
+ * AllocSetContextCreate enforces memory-context names be compile-time
+ * constants via a StaticAssert. Use with a string literal:
+ *     static MemoryContext my_arena = NULL;
+ *     if (my_arena == NULL)
+ *     {
+ *         my_arena = AGT_ARENA_BEGIN_SHARED("my comparator workspace");
+ *     }
+ */
+#define AGT_ARENA_BEGIN_SHARED(_name) \
+    AllocSetContextCreate(CacheMemoryContext, (_name), ALLOCSET_SMALL_SIZES)
+void agt_arena_reset(MemoryContext arena);
+void agt_arena_end(MemoryContext arena);
 void agtype_hash_scalar_value(const agtype_value *scalar_val, uint32 *hash);
 void agtype_hash_scalar_value_extended(const agtype_value *scalar_val,
                                        uint64 *hash, uint64 seed);
@@ -593,6 +652,7 @@ bool is_numeric_result(agtype_value *lhs, agtype_value *rhs);
 void copy_agtype_value(agtype_parse_state* pstate,
                        agtype_value* original_agtype_value,
                        agtype_value **copied_agtype_value, bool is_top_level);
+Oid find_usable_btree_index_for_attr(Relation rel, AttrNumber attnum);
 
 /* agtype.c support functions */
 /*
@@ -667,5 +727,12 @@ Oid get_AGTYPEARRAYOID(void);
 void clear_global_Oids_AGTYPE(void);
 #define AGTYPEOID get_AGTYPEOID()
 #define AGTYPEARRAYOID get_AGTYPEARRAYOID()
+
+/* Oid accessors for vertex and edge composite types */
+Oid get_VERTEXOID(void);
+Oid get_EDGEOID(void);
+void clear_global_Oids_VERTEX_EDGE(void);
+#define VERTEXOID get_VERTEXOID()
+#define EDGEOID get_EDGEOID()
 
 #endif

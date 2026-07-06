@@ -17,6 +17,9 @@
  * under the License.
  */
 
+-- This will only work within a major version of PostgreSQL, not across
+-- major versions.
+
 --* This is a TEMPLATE for upgrading from the previous version of Apache AGE
 --* Please adjust the below ALTER EXTENSION to reflect the -- correct version it
 --* is upgrading to.

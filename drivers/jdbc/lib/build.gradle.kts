@@ -38,11 +38,15 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    testImplementation("org.testcontainers:testcontainers:1.18.0")
+    testImplementation("org.testcontainers:testcontainers:1.21.4")
     testImplementation("org.postgresql:postgresql:42.6.0")
 
     testImplementation("org.slf4j:slf4j-api:2.0.7")
     testImplementation("org.slf4j:slf4j-simple:2.0.7")
+}
+
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
 }
 
 tasks.generateGrammarSource {

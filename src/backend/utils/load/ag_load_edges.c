@@ -56,6 +56,24 @@ static void process_edge_row(char **fields, int nfields,
     char *end_vertex_type;
     agtype *edge_properties;
 
+    /*
+     * Guard the fixed fields[0..3] accesses below and the header[i]/fields[i]
+     * pairing in create_agtype_from_list_i() against out-of-bounds reads on
+     * malformed or mis-delimited rows. A row must have at least the 4 fixed
+     * columns and no more columns than the header (rows with fewer trailing
+     * property columns than the header are allowed, matching existing
+     * behavior). A single-column row from a non-comma-delimited file is
+     * rejected here (previously it segfaulted).
+     */
+    if (nfields < 4 || nfields > header_count)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("edge file row has %d columns; expected at least 4 "
+                        "and no more than the header's %d columns",
+                        nfields, header_count)));
+    }
+
     /* Generate edge ID */
     entry_id = nextval_internal(label_seq_relid, true);
     edge_id = make_graphid(label_id, entry_id);
@@ -217,6 +235,27 @@ int create_edges_from_csv_file(char *file_path,
                 {
                     /* Trim whitespace from header fields */
                     header[i] = trim_whitespace(fields[i]);
+                }
+
+                /*
+                 * Edge files require the four fixed columns start_id,
+                 * start_vertex_type, end_id and end_vertex_type. A smaller
+                 * count almost always means the file is not comma-delimited
+                 * (COPY defaults to comma). Fail clearly here instead of
+                 * reading past the parsed fields in process_edge_row(), which
+                 * previously caused a segfault.
+                 */
+                if (header_count < 4)
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                             errmsg("edge file must have at least 4 columns "
+                                    "(start_id, start_vertex_type, end_id, "
+                                    "end_vertex_type), but the header has %d",
+                                    header_count),
+                             errhint("load_edges_from_file expects a "
+                                     "comma-delimited CSV; check the file's "
+                                     "delimiter.")));
                 }
 
                 is_first_row = false;

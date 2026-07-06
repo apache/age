@@ -29,6 +29,7 @@ authors = [
     {name = "Ikchan Kwon, Apache AGE", email = "dev-subscribe@age.apache.org"}
 ]
 classifiers = [
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,7 +38,11 @@ classifiers = [
 ]
 dependencies = [
     "psycopg",
-    "antlr4-python3-runtime==4.11.1",
+    # Parser is generated with ANTLR 4.13.2. Runtime is forward- and
+    # backward-compatible within the 4.x series (checkVersion() emits a
+    # warning on mismatch but parsing still works); tested on 4.11.1–4.13.2
+    # with Python 3.9–3.14.
+    "antlr4-python3-runtime>=4.13.2,<5.0",
 ]
 
 [project.urls]

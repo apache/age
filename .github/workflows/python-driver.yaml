@@ -22,14 +22,14 @@ jobs:
       run: docker compose up -d
 
     - name: Set up python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
 
     - name: Install pre-requisites
       run: |
         sudo apt-get install python3-dev libpq-dev
-        pip install -r requirements.txt
+        pip install --no-binary psycopg -r requirements.txt
 
     - name: Build
       run: |
@@ -40,3 +40,4 @@ jobs:
         python test_age_py.py -db "postgres" -u "postgres" -pass "agens"
         python test_networkx.py -db "postgres" -u "postgres" -pass "agens"
         python -m unittest -v test_agtypes.py
+        python -m unittest -v test_security.py

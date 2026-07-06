@@ -294,6 +294,47 @@ $$) AS t(a agtype, b agtype, c agtype);
  " \" \" ' ' " | " ' ' \" \" " | " / / \\ \b \f \n \r \t "
 (1 row)
 
+-- doubled-quote escape sequences for SQL driver compatibility (issue #2222)
+SELECT * FROM cypher('scan', $$
+RETURN 'isn''t'
+$$) AS t(a agtype);
+    a    
+---------
+ "isn't"
+(1 row)
+
+SELECT * FROM cypher('scan', $$
+RETURN '''hello'
+$$) AS t(a agtype);
+    a     
+----------
+ "'hello"
+(1 row)
+
+SELECT * FROM cypher('scan', $$
+RETURN 'hello'''
+$$) AS t(a agtype);
+    a     
+----------
+ "hello'"
+(1 row)
+
+SELECT * FROM cypher('scan', $$
+RETURN 'it''s a ''test'''
+$$) AS t(a agtype);
+        a        
+-----------------
+ "it's a 'test'"
+(1 row)
+
+SELECT * FROM cypher('scan', $$
+RETURN "she said ""hello"""
+$$) AS t(a agtype);
+          a           
+----------------------
+ "she said \"hello\""
+(1 row)
+
 -- invalid escape sequence
 SELECT * FROM cypher('scan', $$
 RETURN "\a"

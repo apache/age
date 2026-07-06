@@ -108,8 +108,18 @@ typedef struct cypher_merge_custom_scan_state
     bool found_a_path;
     CommandId base_currentCommandId;
     struct created_path *created_paths_list;
+    List *eager_tuples;
+    int eager_tuples_index;
+    bool eager_buffer_filled;
+    cypher_update_information *on_match_set_info;   /* NULL if not specified */
+    cypher_update_information *on_create_set_info;   /* NULL if not specified */
 } cypher_merge_custom_scan_state;
 
+/* Reusable SET logic callable from MERGE executor */
+void apply_update_list(CustomScanState *node,
+                       cypher_update_information *set_info);
+
+void clear_entity_slot(TupleTableSlot *elemTupleSlot);
 TupleTableSlot *populate_vertex_tts(TupleTableSlot *elemTupleSlot,
                                     agtype_value *id, agtype_value *properties);
 TupleTableSlot *populate_edge_tts(
@@ -148,5 +158,11 @@ typedef struct RLSCacheEntry
     List *withCheckOptions;
     List *withCheckOptionExprs;
 } RLSCacheEntry;
+
+/* Hash table entry for caching index OIDs per label */
+typedef struct IndexCacheEntry {
+    Oid relid;      /* hash key */
+    Oid index_oid;
+} IndexCacheEntry;
 
 #endif

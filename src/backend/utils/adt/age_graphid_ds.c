@@ -258,3 +258,94 @@ graphid pop_graphid_stack(ListGraphId *stack)
     /* return the id */
     return id;
 }
+
+/*
+ * ============================================================================
+ * GraphIdStack — Array-based stack for VLE DFS traversal
+ *
+ * Uses a flat graphid array with size/capacity tracking. Push appends to
+ * the end (doubling capacity when full), pop decrements size. No per-element
+ * allocation — just sequential array access.
+ *
+ * This is intentionally separate from ListGraphId to avoid the lifetime
+ * and complexity issues that arise from modifying linked-list behavior.
+ * ============================================================================
+ */
+
+#define GID_STACK_INITIAL_CAPACITY 64
+
+GraphIdStack *new_gid_stack(void)
+{
+    GraphIdStack *s = palloc(sizeof(GraphIdStack));
+
+    s->array = palloc(sizeof(graphid) * GID_STACK_INITIAL_CAPACITY);
+    s->size = 0;
+    s->capacity = GID_STACK_INITIAL_CAPACITY;
+    return s;
+}
+
+void free_gid_stack(GraphIdStack *stack)
+{
+    if (stack == NULL)
+    {
+        return;
+    }
+
+    if (stack->array != NULL)
+    {
+        pfree(stack->array);
+    }
+
+    pfree(stack);
+}
+
+void gid_stack_push(GraphIdStack *s, graphid id)
+{
+    Assert(s != NULL);
+
+    /* double capacity if full */
+    if (s->size >= s->capacity)
+    {
+        s->capacity *= 2;
+        s->array = repalloc(s->array, sizeof(graphid) * s->capacity);
+    }
+
+    s->array[s->size] = id;
+    s->size++;
+}
+
+graphid gid_stack_pop(GraphIdStack *s)
+{
+    Assert(s != NULL);
+    Assert(s->size > 0);
+
+    s->size--;
+    return s->array[s->size];
+}
+
+graphid gid_stack_peek(GraphIdStack *s)
+{
+    Assert(s != NULL);
+    Assert(s->size > 0);
+
+    return s->array[s->size - 1];
+}
+
+bool gid_stack_is_empty(GraphIdStack *s)
+{
+    return s->size == 0;
+}
+
+int64 gid_stack_size(GraphIdStack *s)
+{
+    return s->size;
+}
+
+/* Access element by index — 0 is bottom, size-1 is top */
+graphid gid_stack_get(GraphIdStack *s, int64 i)
+{
+    Assert(s != NULL);
+    Assert(i >= 0 && i < s->size);
+
+    return s->array[i];
+}
