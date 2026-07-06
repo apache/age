@@ -25,6 +25,7 @@
 #include "commands/tablecmds.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "parser/parse_node.h"
 #include "parser/parser.h"
 
 #include "catalog/ag_graph.h"
@@ -139,6 +140,7 @@ Datum age_graph_exists(PG_FUNCTION_ARGS)
 
 static Oid create_schema_for_graph(const Name graph_name)
 {
+    ParseState *pstate = make_parsestate(NULL);
     char *graph_name_str = NameStr(*graph_name);
     CreateSchemaStmt *schema_stmt;
     CreateSeqStmt *seq_stmt;
@@ -180,9 +182,10 @@ static Oid create_schema_for_graph(const Name graph_name)
     seq_stmt->if_not_exists = false;
     schema_stmt->schemaElts = list_make1(seq_stmt);
     schema_stmt->if_not_exists = false;
-    nsp_id = CreateSchemaCommand(schema_stmt,
-                                 "(generated CREATE SCHEMA command)", -1, -1);
+    pstate->p_sourcetext = "(generated CREATE SCHEMA command)";
+    nsp_id = CreateSchemaCommand(pstate, schema_stmt, -1, -1);
     /* CommandCounterIncrement() is called in CreateSchemaCommand() */
+    free_parsestate(pstate);
 
     return nsp_id;
 }
@@ -394,7 +397,7 @@ List *get_graphnames(void)
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 0, NULL);
 
-    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple);
+    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple, 0);
 
     for (;;)
     {
