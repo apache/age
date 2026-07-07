@@ -1,0 +1,185 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ * Tests for relationship-type alternation in MATCH patterns:
+ * `[:A|B|C]` and the equivalent `[:A|:B|:C]` openCypher form.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+SELECT create_graph('rel_label_alt');
+NOTICE:  graph "rel_label_alt" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_elabel('rel_label_alt', 'WORKS_AT');
+NOTICE:  ELabel "WORKS_AT" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('rel_label_alt', 'REPORTS_TO');
+NOTICE:  ELabel "REPORTS_TO" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('rel_label_alt', 'OWNS');
+NOTICE:  ELabel "OWNS" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+SELECT * FROM cypher('rel_label_alt', $$
+    CREATE (a:Person {n:'alice'})-[:WORKS_AT]->(:Company {n:'acme'}),
+           (a)-[:REPORTS_TO]->(:Person {n:'bob'}),
+           (a)-[:OWNS]->(:Asset {n:'car'})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- Two-label alternation. Returns two rows ordered by destination name.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT|REPORTS_TO]->(c) RETURN c.n ORDER BY c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+ "bob"
+(2 rows)
+
+-- Three-label alternation. All three outgoing edges match.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT|REPORTS_TO|OWNS]->(c) RETURN c.n ORDER BY c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+ "bob"
+ "car"
+(3 rows)
+
+-- Redundant-colon openCypher form [:A|:B] is equivalent to [:A|B].
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT|:REPORTS_TO]->(c) RETURN c.n ORDER BY c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+ "bob"
+(2 rows)
+
+-- Single-label edge is unchanged (regression check).
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT]->(c) RETURN c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+(1 row)
+
+-- Edge variable + multi-label, projecting type(r).
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[r:WORKS_AT|REPORTS_TO]->(c)
+    RETURN type(r) AS t, c.n AS n ORDER BY n
+$$) AS (t agtype, n agtype);
+      t       |   n    
+--------------+--------
+ "WORKS_AT"   | "acme"
+ "REPORTS_TO" | "bob"
+(2 rows)
+
+-- Unknown labels in the alternation are silently ignored — only the
+-- valid label contributes rows.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT|DOES_NOT_EXIST]->(c) RETURN c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+(1 row)
+
+-- All labels in the alternation are unknown — yields zero rows, not an
+-- error.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:DOES_NOT_EXIST|ALSO_MISSING]->(c) RETURN c.n
+$$) AS (n agtype);
+ n 
+---
+(0 rows)
+
+-- Multi-label edge inside a two-edge path; checks the qual integrates
+-- with the join-tree quals correctly.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (a:Person {n:'alice'})-[:WORKS_AT|OWNS]->(x)
+    RETURN x.n ORDER BY x.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+ "car"
+(2 rows)
+
+-- Undirected alternation `-[:A|B]-` matches edges in either direction.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p:Person {n:'alice'})-[:WORKS_AT|REPORTS_TO]-(c) RETURN c.n ORDER BY c.n
+$$) AS (n agtype);
+   n    
+--------
+ "acme"
+ "bob"
+(2 rows)
+
+-- Reverse-directed alternation `<-[:A|B]-`.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (b:Person {n:'bob'})<-[:WORKS_AT|REPORTS_TO]-(p) RETURN p.n ORDER BY p.n
+$$) AS (n agtype);
+    n    
+---------
+ "alice"
+(1 row)
+
+-- Variable-length relationship combined with alternation is not yet
+-- supported and must be rejected with a clear error.
+SELECT * FROM cypher('rel_label_alt', $$
+    MATCH (p)-[:WORKS_AT|REPORTS_TO*1..2]->(c) RETURN c.n
+$$) AS (n agtype);
+ERROR:  variable length relationships with type alternation is not yet supported
+LINE 2:     MATCH (p)-[:WORKS_AT|REPORTS_TO*1..2]->(c) RETURN c.n
+                      ^
+SELECT drop_graph('rel_label_alt', true);
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to table rel_label_alt._ag_label_vertex
+drop cascades to table rel_label_alt._ag_label_edge
+drop cascades to table rel_label_alt."WORKS_AT"
+drop cascades to table rel_label_alt."REPORTS_TO"
+drop cascades to table rel_label_alt."OWNS"
+drop cascades to table rel_label_alt."Person"
+drop cascades to table rel_label_alt."Company"
+drop cascades to table rel_label_alt."Asset"
+NOTICE:  graph "rel_label_alt" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
