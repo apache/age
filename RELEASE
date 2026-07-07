@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-Release Notes for Apache AGE release 1.8.0 for master branch (currently PG18)
+Release Notes for Apache AGE release 1.8.0 for PG18 branch
 
 #
 # WARNING!
@@ -27,6 +27,8 @@ Release Notes for Apache AGE release 1.8.0 for master branch (currently PG18)
 
 Apache AGE 1.8.0 - Release Notes
 
+Merge master into PG18: advance to Apache AGE 1.8.0
+Advance master branch to Apache AGE version 1.8.0 (#2455)
 Fix installcheck fetch-depth parameter to 100 (#2461)
 Fix segfault on CREATE/MERGE/SET with generated or extra label columns (#2458)
 Propagate null through unnest and single() three-valued logic (#2406)
