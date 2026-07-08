@@ -576,6 +576,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     int32 label_id;
     bool id_field_exists;
     bool load_as_agtype;
+    char delimiter;
 
     if (PG_ARGISNULL(0))
     {
@@ -604,6 +605,23 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
     id_field_exists = PG_GETARG_BOOL(3);
     load_as_agtype = PG_GETARG_BOOL(4);
 
+    if (PG_NARGS() > 5 && !PG_ARGISNULL(5))
+    {
+        text *delim_text = PG_GETARG_TEXT_P(5);
+        char *delim_str = text_to_cstring(delim_text);
+        if (strlen(delim_str) != 1)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("delimiter must be a single character")));
+        }
+        delimiter = delim_str[0];
+    }
+    else
+    {
+        delimiter = ',';
+    }
+
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
@@ -625,7 +643,7 @@ Datum load_labels_from_file(PG_FUNCTION_ARGS)
 
     create_labels_from_csv_file(file_path_str, graph_name_str, graph_oid,
                                 label_name_str, label_id, id_field_exists,
-                                load_as_agtype);
+                                load_as_agtype, delimiter);
 
     free(file_path_str);
 
@@ -645,6 +663,7 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     Oid label_relid;
     int32 label_id;
     bool load_as_agtype;
+    char delimiter;
 
     if (PG_ARGISNULL(0))
     {
@@ -672,6 +691,23 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     file_name = PG_GETARG_TEXT_P(2);
     load_as_agtype = PG_GETARG_BOOL(3);
 
+    if (PG_NARGS() > 4 && !PG_ARGISNULL(4))
+    {
+        text *delim_text = PG_GETARG_TEXT_P(4);
+        char *delim_str = text_to_cstring(delim_text);
+        if (strlen(delim_str) != 1)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                     errmsg("delimiter must be a single character")));
+        }
+        delimiter = delim_str[0];
+    }
+    else
+    {
+        delimiter = ',';
+    }
+
     graph_name_str = NameStr(*graph_name);
     label_name_str = NameStr(*label_name);
 
@@ -692,7 +728,8 @@ Datum load_edges_from_file(PG_FUNCTION_ARGS)
     check_rls_for_load(label_relid);
 
     create_edges_from_csv_file(file_path_str, graph_name_str, graph_oid,
-                               label_name_str, label_id, load_as_agtype);
+                               label_name_str, label_id, load_as_agtype,
+                               delimiter);
 
     free(file_path_str);
 

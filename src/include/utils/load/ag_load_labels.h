@@ -39,6 +39,7 @@
  */
 int create_labels_from_csv_file(char *file_path, char *graph_name, Oid graph_oid,
                                 char *label_name, int label_id,
-                                bool id_field_exists, bool load_as_agtype);
+                                bool id_field_exists, bool load_as_agtype,
+                                char delimiter);
 
 #endif /* AG_LOAD_LABELS_H */

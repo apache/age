@@ -134,7 +134,7 @@ static void process_edge_row(char **fields, int nfields,
  * Create COPY options for CSV parsing.
  * Returns a List of DefElem nodes.
  */
-static List *create_copy_options(void)
+static List *create_copy_options(char delimiter)
 {
     List *options = NIL;
 
@@ -150,6 +150,17 @@ static List *create_copy_options(void)
                                   (Node *) makeBoolean(false),
                                   -1));
 
+    /* DELIMITER */
+    {
+        char delimiter_str[2];
+        delimiter_str[0] = delimiter;
+        delimiter_str[1] = '\0';
+        options = lappend(options,
+                          makeDefElem("delimiter",
+                                      (Node *) makeString(pstrdup(delimiter_str)),
+                                      -1));
+    }
+
     return options;
 }
 
@@ -161,7 +172,8 @@ int create_edges_from_csv_file(char *file_path,
                                Oid graph_oid,
                                char *label_name,
                                int label_id,
-                               bool load_as_agtype)
+                               bool load_as_agtype,
+                               char delimiter)
 {
     Relation        label_rel;
     Oid             label_relid;
@@ -196,7 +208,7 @@ int create_edges_from_csv_file(char *file_path,
     init_batch_insert(&batch_state, label_name, graph_oid);
 
     /* Create COPY options for CSV parsing */
-    copy_options = create_copy_options();
+    copy_options = create_copy_options(delimiter);
 
     /* Create a minimal ParseState for BeginCopyFrom */
     pstate = make_parsestate(NULL);
