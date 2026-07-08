@@ -102,7 +102,7 @@ Refer to our latest [Apache AGE documentation](https://age.apache.org/age-manual
 
 <h2><img height="30" src="/img/installation.svg">&nbsp;&nbsp;Pre-Installation</h2>
 
-Install the following essential libraries according to each OS. Building AGE from the source depends on the following Linux libraries (Ubuntu package names shown below):
+Install the following essential libraries according to each OS. Building AGE from the source depends on the following Linux libraries:
 
 - **CentOS**
 ```bash
