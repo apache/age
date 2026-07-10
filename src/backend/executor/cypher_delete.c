@@ -25,6 +25,7 @@
 #include "miscadmin.h"
 #include "utils/acl.h"
 #include "utils/rls.h"
+#include "utils/snapmgr.h"
 
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
@@ -689,6 +690,29 @@ static void check_for_connected_edges(CustomScanState *node)
         (cypher_delete_custom_scan_state *)node;
     EState *estate = css->css.ss.ps.state;
     char *graph_name = css->delete_data->graph_name;
+    bool pushed_snapshot = false;
+
+    /*
+     * check_for_connected_edges() runs from end_cypher_delete(), i.e. during
+     * executor shutdown (ExecEndPlan), by which point the portal's active
+     * snapshot has already been popped. Evaluating an edge-label RLS policy
+     * whose USING/WITH CHECK qual invokes a function (e.g. a STABLE tenant
+     * accessor) requires an active snapshot: check_security_quals() ->
+     * ExecQual() -> fmgr_sql() -> postquel_start() runs the function's query
+     * with GetActiveSnapshot() and dereferences it unconditionally. With no
+     * snapshot on the stack that is a NULL dereference -> SIGSEGV (#2474).
+     *
+     * Ensure a snapshot is active for the duration of the scan. es_snapshot is
+     * still valid here (the EState is not torn down until after this returns),
+     * and is the correct snapshot for reading connected edges. If an error is
+     * raised mid-scan (e.g. an RLS denial), transaction abort resets the active
+     * snapshot stack, so the unpaired push on that path is cleaned up.
+     */
+    if (!ActiveSnapshotSet())
+    {
+        PushActiveSnapshot(estate->es_snapshot);
+        pushed_snapshot = true;
+    }
 
     /* scans each label from css->edge_labels */
     foreach (lc, css->edge_labels)
@@ -833,5 +857,10 @@ static void check_for_connected_edges(CustomScanState *node)
         }
 
         destroy_entity_result_rel_info(resultRelInfo);
+    }
+
+    if (pushed_snapshot)
+    {
+        PopActiveSnapshot();
     }
 }
