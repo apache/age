@@ -164,7 +164,7 @@ $$) AS (n agtype);
 SELECT * FROM cypher('rel_label_alt', $$
     MATCH (p)-[:WORKS_AT|REPORTS_TO*1..2]->(c) RETURN c.n
 $$) AS (n agtype);
-ERROR:  variable length relationships with type alternation is not yet supported
+ERROR:  variable length relationships with type alternation are not yet supported
 LINE 2:     MATCH (p)-[:WORKS_AT|REPORTS_TO*1..2]->(c) RETURN c.n
                       ^
 SELECT drop_graph('rel_label_alt', true);

@@ -5789,7 +5789,7 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     {
         ereport(ERROR,
                 (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                 errmsg("variable length relationships with type alternation is not yet supported"),
+                 errmsg("variable length relationships with type alternation are not yet supported"),
                  parser_errposition(&cpstate->pstate, rel->location)));
     }
 
