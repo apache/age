@@ -9,8 +9,8 @@ You should have installed following jar files and packages.
 - [gradle](https://gradle.org/install/) build tool
 - [postgres JDBC driver](https://jdbc.postgresql.org/download/)
 - [antlr4-4.9.2-complete](https://repo1.maven.org/maven2/org/antlr/antlr4/4.9.2/)
-- [common-lang3](http://www.java2s.com/Code/Jar/c/Downloadcommonlang3jar.htm)
-- [commons-text-1.6](http://www.java2s.com/ref/jar/download-commonstext16jar-file.html)
+- [common-lang3](https://mvnrepository.com/artifact/org.apache.commons/commons-lang3)
+- [commons-text-1.6](https://mvnrepository.com/artifact/org.apache.commons/commons-text)
 
 Kindly unzip the jars if they are zipped before using them.
 

@@ -1,6 +1,6 @@
 # Apache AGE - Go driver Type mapping
 
-* For more information about Apache AGE result types : https://age.apache.org/docs/Apache_AGE_Guide.pdf
+* For more information about Apache AGE result types : https://age.apache.org/age-manual/master/intro/types.html
 
 | Type | AGE Result | Go Type |
 |------|------------|---------|

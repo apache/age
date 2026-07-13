@@ -34,7 +34,7 @@ Check [latest version](https://github.com/apache/age/releases)
 ### For more information about [Apache AGE](https://age.apache.org/)
 * Apache Age : https://age.apache.org/
 * GitHub : https://github.com/apache/age
-* Document : https://age.apache.org/docs/
+* Document : https://age.apache.org/age-manual/
 
 ### Check that Apache AGE is loaded on your PostgreSQL database
 Connect to your containerized Postgres instance and then run the following commands:
