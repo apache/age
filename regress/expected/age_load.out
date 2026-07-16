@@ -551,18 +551,18 @@ SELECT load_edges_from_file('agload_pipe', 'Connected', 'age_load/pipe_edges.csv
 
 -- verify data loaded correctly
 SELECT * FROM cypher('agload_pipe', $$ MATCH (n:City) RETURN n.name, n.country ORDER BY n.name $$) AS (name agtype, country agtype);
-   name   |  country 
------------+----------
- "Berlin"  | "Germany"
- "Moscow"  | "Russia"
- "Paris"   | "France"
+   name   |  country  
+----------+-----------
+ "Berlin" | "Germany"
+ "Moscow" | "Russia"
+ "Paris"  | "France"
 (3 rows)
 
 SELECT * FROM cypher('agload_pipe', $$ MATCH (a:City)-[e:Connected]->(b:City) RETURN a.name, b.name, e.distance ORDER BY a.name $$) AS (a_name agtype, b_name agtype, distance agtype);
-  a_name   |  b_name  | distance 
------------+----------+----------
- "Berlin"  | "Paris"  | "1050"
- "Moscow"  | "Berlin" | "2500"
+  a_name  |  b_name  | distance 
+----------+----------+----------
+ "Berlin" | "Paris"  | "1050"
+ "Moscow" | "Berlin" | "2500"
 (2 rows)
 
 SELECT drop_graph('agload_pipe', true);
