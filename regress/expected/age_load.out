@@ -512,6 +512,72 @@ NOTICE:  graph "agload_delim" has been dropped
 (1 row)
 
 --
+-- Test delimiter parameter for pipe-delimited files
+--
+SELECT create_graph('agload_pipe');
+NOTICE:  graph "agload_pipe" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_vlabel('agload_pipe', 'City');
+NOTICE:  VLabel "City" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT create_elabel('agload_pipe', 'Connected');
+NOTICE:  ELabel "Connected" has been created
+ create_elabel 
+---------------
+ 
+(1 row)
+
+-- pipe-delimited vertex file with delimiter parameter
+SELECT load_labels_from_file('agload_pipe', 'City', 'age_load/pipe_vertices.csv', true, false, '|');
+ load_labels_from_file 
+-----------------------
+ 
+(1 row)
+
+-- pipe-delimited edge file with delimiter parameter
+SELECT load_edges_from_file('agload_pipe', 'Connected', 'age_load/pipe_edges.csv', false, '|');
+ load_edges_from_file 
+----------------------
+ 
+(1 row)
+
+-- verify data loaded correctly
+SELECT * FROM cypher('agload_pipe', $$ MATCH (n:City) RETURN n.name, n.country ORDER BY n.name $$) AS (name agtype, country agtype);
+   name   |  country  
+----------+-----------
+ "Berlin" | "Germany"
+ "Moscow" | "Russia"
+ "Paris"  | "France"
+(3 rows)
+
+SELECT * FROM cypher('agload_pipe', $$ MATCH (a:City)-[e:Connected]->(b:City) RETURN a.name, b.name, e.distance ORDER BY a.name $$) AS (a_name agtype, b_name agtype, distance agtype);
+  a_name  |  b_name  | distance 
+----------+----------+----------
+ "Berlin" | "Paris"  | "1050"
+ "Moscow" | "Berlin" | "2500"
+(2 rows)
+
+SELECT drop_graph('agload_pipe', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table agload_pipe._ag_label_vertex
+drop cascades to table agload_pipe._ag_label_edge
+drop cascades to table agload_pipe."City"
+drop cascades to table agload_pipe."Connected"
+NOTICE:  graph "agload_pipe" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+--
 -- Test security and permissions
 --
 SELECT create_graph('agload_security');

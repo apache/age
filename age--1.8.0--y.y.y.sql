@@ -22,7 +22,7 @@
 
 --* This is a TEMPLATE for upgrading from the previous version of Apache AGE
 --* Please adjust the below ALTER EXTENSION to reflect the -- correct version it
---* is upgrading to.
+-- is upgrading to.
 
 -- This will only work within a major version of PostgreSQL, not across
 -- major versions.
@@ -33,3 +33,35 @@
 --* Please add all additions, deletions, and modifications to the end of this
 --* file. We need to keep the order of these changes.
 --* REMOVE ALL LINES ABOVE, and this one, that start with --*
+
+--
+-- Add delimiter parameter to load_labels_from_file and load_edges_from_file
+--
+-- Issue #2449: Both load_labels_from_file and load_edges_from_file now accept
+-- an optional delimiter parameter (default ',') to support non-CSV delimiters
+-- such as pipe-delimited files.
+
+-- Drop and recreate load_labels_from_file with new delimiter parameter
+DROP FUNCTION IF EXISTS ag_catalog.load_labels_from_file(name, name, text, bool, bool);
+
+CREATE FUNCTION ag_catalog.load_labels_from_file(graph_name name,
+                                                 label_name name,
+                                                 file_path text,
+                                                 id_field_exists bool default true,
+                                                 load_as_agtype bool default false,
+                                                 delimiter text default ',')
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';
+
+-- Drop and recreate load_edges_from_file with new delimiter parameter
+DROP FUNCTION IF EXISTS ag_catalog.load_edges_from_file(name, name, text, bool);
+
+CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
+                                                label_name name,
+                                                file_path text,
+                                                load_as_agtype bool default false,
+                                                delimiter text default ',')
+    RETURNS void
+    LANGUAGE c
+    AS 'MODULE_PATHNAME';

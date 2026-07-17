@@ -167,7 +167,8 @@ CREATE FUNCTION ag_catalog.load_labels_from_file(graph_name name,
                                                  label_name name,
                                                  file_path text,
                                                  id_field_exists bool default true,
-                                                 load_as_agtype bool default false)
+                                                 load_as_agtype bool default false,
+                                                 delimiter text default ',')
     RETURNS void
     LANGUAGE c
     AS 'MODULE_PATHNAME';
@@ -175,7 +176,8 @@ CREATE FUNCTION ag_catalog.load_labels_from_file(graph_name name,
 CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
                                                 label_name name,
                                                 file_path text,
-                                                load_as_agtype bool default false)
+                                                load_as_agtype bool default false,
+                                                delimiter text default ',')
     RETURNS void
     LANGUAGE c
     AS 'MODULE_PATHNAME';
