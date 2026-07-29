@@ -120,6 +120,10 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
     /* TODO is this necessary? Removing it seems to not have an impact */
     ExecAssignExprContext(estate, &node->ss.ps);
 
+    /* Build the lookup cache only when MERGE can execute SET items. */
+    if (css->on_match_set_info != NULL || css->on_create_set_info != NULL)
+        css->entity_lookup_cache = create_entity_lookup_cache();
+
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
                           &TTSOpsVirtual);
@@ -1055,6 +1059,9 @@ static void end_cypher_merge(CustomScanState *node)
     {
         increment_graph_version(css->graph_oid);
     }
+
+    /* Release cached index handles and fetch slots. */
+    destroy_entity_lookup_cache(css->entity_lookup_cache);
 
     ExecEndNode(node->ss.ps.lefttree);
 

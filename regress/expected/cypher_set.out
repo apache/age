@@ -1227,6 +1227,319 @@ $$) AS (a agtype);
  {"id": 5066549580791809, "label": "TestE2", "properties": {"pathRels": [{"id": 5348024557502465, "label": "E2REL", "end_id": 5066549580791810, "start_id": 5066549580791809, "properties": {}}::edge], "pathNodes": [{"id": 5066549580791809, "label": "TestE2", "properties": {}}::vertex, {"id": 5066549580791810, "label": "TestE2", "properties": {}}::vertex]}}::vertex
 (1 row)
 
+-- ============================================================================
+-- ctid lookup fallback tests
+-- ============================================================================
+SELECT create_graph('ctid_set');
+NOTICE:  graph "ctid_set" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+-- Same entity referenced through two aliases: the second SET must fall back
+-- from the stale ctid to graphid lookup after the first SET moves the tuple.
+SELECT * FROM cypher('ctid_set', $$CREATE (:v {k: 1})$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:v), (m:v)
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.a = 2
+    RETURN n.a, m.a
+$$) AS (n agtype, m agtype);
+ n | m 
+---+---
+ 2 | 2
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$MATCH (n:v) RETURN n.a$$) AS (a agtype);
+ a 
+---
+ 2
+(1 row)
+
+-- Updating the same entity through different aliases must preserve earlier
+-- changes, including when a later RHS depends on an earlier SET.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:alias_vertex {k: 1})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:alias_vertex), (m:alias_vertex)
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.b = n.a + 1
+    RETURN n.a, m.a, m.b
+$$) AS (na agtype, ma agtype, mb agtype);
+ na | ma | mb 
+----+----+----
+ 1  | 1  | 2
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:alias_vertex)
+    RETURN n.a, n.b
+$$) AS (a agtype, b agtype);
+ a | b 
+---+---
+ 1 | 2
+(1 row)
+
+-- The same alias synchronization is required for edges.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE ()-[:alias_edge {k: 1}]->()
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[n:alias_edge]->(), ()-[m:alias_edge]->()
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.b = n.a + 1
+    RETURN n.a, m.a, m.b
+$$) AS (na agtype, ma agtype, mb agtype);
+ na | ma | mb 
+----+----+----
+ 1  | 1  | 2
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[n:alias_edge]->()
+    RETURN n.a, n.b
+$$) AS (a agtype, b agtype);
+ a | b 
+---+---
+ 1 | 2
+(1 row)
+
+-- Hidden ctid columns must propagate through WITH.
+SELECT * FROM cypher('ctid_set', $$CREATE (:w {k: 1})$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:w)
+    WITH n
+    SET n.k = 2
+    RETURN n.k
+$$) AS (a agtype);
+ a 
+---
+ 2
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$MATCH (n:w) RETURN n.k$$) AS (a agtype);
+ a 
+---
+ 2
+(1 row)
+
+-- Hidden ctid columns must follow simple WITH aliases too.
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:w)
+    WITH n AS m
+    SET m.k = 3
+    RETURN m.k
+$$) AS (a agtype);
+ a 
+---
+ 3
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$MATCH (n:w) RETURN n.k$$) AS (a agtype);
+ a 
+---
+ 3
+(1 row)
+
+-- Computed WITH expressions must not inherit a ctid from one of their inputs.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:expr {k: 1}), (:expr {k: 2})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (a:expr {k: 1}), (b:expr {k: 2})
+    WITH CASE WHEN a.k = 1 THEN a ELSE b END AS n
+    SET n.mark = 1
+    RETURN n.k, n.mark
+$$) AS (k agtype, mark agtype);
+ k | mark 
+---+------
+ 1 | 1
+(1 row)
+
+-- Aggregating WITH clauses must not leak pre-aggregation ctid values.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:aggregate {k: 1}), (:aggregate {k: 2})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:aggregate)
+    WITH collect(n) AS nodes, count(*) AS total
+    UNWIND nodes AS n
+    SET n.total = total
+    RETURN n.k, n.total
+$$) AS (k agtype, total agtype);
+ k | total 
+---+-------
+ 1 | 2
+ 2 | 2
+(2 rows)
+
+-- DISTINCT is a row-shaping boundary and must preserve its semantics.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:distinct_source), (:distinct_source),
+           (:distinct_target {hits: 0})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (:distinct_source), (n:distinct_target)
+    WITH DISTINCT n
+    SET n.hits = n.hits + 1
+    RETURN n.hits
+$$) AS (hits agtype);
+ hits 
+------
+ 1
+(1 row)
+
+-- Edge labels have no inherited primary key. A user-created B-tree index on
+-- id must support fallback when DISTINCT intentionally suppresses the ctid.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE ()-[:indexed_edge {k: 1}]->(),
+           ()-[:indexed_edge {k: 2}]->()
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+CREATE INDEX ctid_set_indexed_edge_id_idx
+    ON ctid_set.indexed_edge (id);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[e:indexed_edge]->()
+    WITH DISTINCT e
+    SET e.indexed = true
+    RETURN e.k, e.indexed
+    ORDER BY e.k
+$$) AS (k agtype, indexed agtype);
+ k | indexed 
+---+---------
+ 1 | true
+ 2 | true
+(2 rows)
+
+-- WITH * and RETURN * must not expose hidden ctid target entries.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:wildcard {k: 1})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:wildcard)
+    WITH *
+    SET n.updated = true
+    RETURN *
+$$) AS (n agtype);
+                                               n                                                
+------------------------------------------------------------------------------------------------
+ {"id": 3377699720527873, "label": "wildcard", "properties": {"k": 1, "updated": true}}::vertex
+(1 row)
+
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:wildcard)
+    RETURN n.updated
+$$) AS (updated agtype);
+ updated 
+---------
+ true
+(1 row)
+
+-- DISTINCT suppresses the ctid. Without the default vertex id index, lookup
+-- must fall back to a sequential scan and still update the intended rows.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:seqscan_vertex {k: 1}), (:seqscan_vertex {k: 2})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+ALTER TABLE ctid_set.seqscan_vertex
+    DROP CONSTRAINT seqscan_vertex_pkey;
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:seqscan_vertex)
+    WITH DISTINCT n
+    SET n.fallback = true
+    RETURN n.k, n.fallback
+    ORDER BY n.k
+$$) AS (k agtype, fallback agtype);
+ k | fallback 
+---+----------
+ 1 | true
+ 2 | true
+(2 rows)
+
+-- ExtensibleNode metadata, including ctid_position, must survive generic-plan
+-- reuse. DDL invalidation between executions must rebuild a valid plan.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:generic_plan {k: 1})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SET plan_cache_mode = force_generic_plan;
+PREPARE ctid_generic_plan(agtype) AS
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:generic_plan)
+    WHERE n.k = $target
+    SET n.mark = $mark
+    RETURN n.mark
+$$, $1) AS (mark agtype);
+EXECUTE ctid_generic_plan('{"target": 1, "mark": 10}'::agtype);
+ mark 
+------
+ 10
+(1 row)
+
+ALTER TABLE ctid_set.generic_plan ADD COLUMN review_dummy integer;
+EXECUTE ctid_generic_plan('{"target": 1, "mark": 20}'::agtype);
+ mark 
+------
+ 20
+(1 row)
+
+DEALLOCATE ctid_generic_plan;
+RESET plan_cache_mode;
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:generic_plan)
+    RETURN n.mark
+$$) AS (mark agtype);
+ mark 
+------
+ 20
+(1 row)
+
 --
 -- Clean up
 --
@@ -1299,6 +1612,28 @@ drop cascades to table issue_1884."TestE1"
 drop cascades to table issue_1884."TestE2"
 drop cascades to table issue_1884."E2REL"
 NOTICE:  graph "issue_1884" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('ctid_set', true);
+NOTICE:  drop cascades to 14 other objects
+DETAIL:  drop cascades to table ctid_set._ag_label_vertex
+drop cascades to table ctid_set._ag_label_edge
+drop cascades to table ctid_set.v
+drop cascades to table ctid_set.alias_vertex
+drop cascades to table ctid_set.alias_edge
+drop cascades to table ctid_set.w
+drop cascades to table ctid_set.expr
+drop cascades to table ctid_set.aggregate
+drop cascades to table ctid_set.distinct_source
+drop cascades to table ctid_set.distinct_target
+drop cascades to table ctid_set.indexed_edge
+drop cascades to table ctid_set.wildcard
+drop cascades to table ctid_set.seqscan_vertex
+drop cascades to table ctid_set.generic_plan
+NOTICE:  graph "ctid_set" has been dropped
  drop_graph 
 ------------
  

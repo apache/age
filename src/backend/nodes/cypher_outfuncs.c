@@ -109,6 +109,9 @@ void out_cypher_return(StringInfo str, const ExtensibleNode *node)
     WRITE_ENUM_FIELD(op, SetOperation);
     WRITE_NODE_FIELD(larg);
     WRITE_NODE_FIELD(rarg);
+
+    /* serialize is-WITH flag for ctid propagation through WITH */
+    WRITE_BOOL_FIELD(is_with);
 }
 
 /* serialization function for the cypher_with ExtensibleNode. */
@@ -447,6 +450,9 @@ void out_cypher_update_item(StringInfo str, const ExtensibleNode *node)
 
     WRITE_INT32_FIELD(prop_position);
     WRITE_INT32_FIELD(entity_position);
+
+    /* serialize ctid position for direct tuple fetch */
+    WRITE_INT32_FIELD(ctid_position);
     WRITE_STRING_FIELD(var_name);
     WRITE_STRING_FIELD(prop_name);
     WRITE_NODE_FIELD(qualified_name);
@@ -475,6 +481,9 @@ void out_cypher_delete_item(StringInfo str, const ExtensibleNode *node)
 
     WRITE_NODE_FIELD(entity_position);
     WRITE_STRING_FIELD(var_name);
+
+    /* serialize ctid position for direct tuple fetch */
+    WRITE_INT32_FIELD(ctid_position);
 }
 
 /* serialization function for the cypher_merge_information ExtensibleNode. */
