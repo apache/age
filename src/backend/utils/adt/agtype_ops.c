@@ -188,12 +188,21 @@ Datum agtype_add(PG_FUNCTION_ARGS)
 
         concat_to_agtype_string(&agtv_result, lhs, llen, rhs, rlen);
     }
-    /* Both are integers - regular addition */
+    /* Both are integers - addition with overflow check */
     else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
+        int64 result;
+
+        if (__builtin_add_overflow(agtv_lhs->val.int_value,
+                                   agtv_rhs->val.int_value, &result))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer addition overflow")));
+        }
+
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value +
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = result;
     }
     /* Both are floats - regular addition */
     else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
@@ -539,9 +548,18 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
+        int64 result;
+
+        if (__builtin_sub_overflow(agtv_lhs->val.int_value,
+                                   agtv_rhs->val.int_value, &result))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer subtraction overflow")));
+        }
+
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value -
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = result;
     }
     else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
     {
@@ -635,11 +653,32 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
 
     if (agtv_value->type == AGTV_INTEGER)
     {
+        if (agtv_value->val.int_value == PG_INT64_MIN)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer negation overflow")));
+        }
+
         agtv_result.type = AGTV_INTEGER;
         agtv_result.val.int_value = -agtv_value->val.int_value;
     }
     else if (agtv_value->type == AGTV_FLOAT)
     {
+        /*
+         * The parser may store 9223372036854775808 as a float because
+         * 9223372036854775808 exceeds INT64_MAX. Negating the float value
+         * equal to PG_INT64_MIN would produce a value outside the int64
+         * range, so we must still raise an overflow error to stay
+         * consistent with the integer path.
+         */
+        if (agtv_value->val.float_value == (double)PG_INT64_MIN)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer negation overflow")));
+        }
+
         agtv_result.type = AGTV_FLOAT;
         agtv_result.val.float_value = -agtv_value->val.float_value;
     }
@@ -692,9 +731,18 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
+        int64 result;
+
+        if (__builtin_mul_overflow(agtv_lhs->val.int_value,
+                                   agtv_rhs->val.int_value, &result))
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer multiplication overflow")));
+        }
+
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value *
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = result;
     }
     else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
     {
@@ -793,6 +841,14 @@ Datum agtype_div(PG_FUNCTION_ARGS)
             ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
                             errmsg("division by zero")));
             PG_RETURN_NULL();
+        }
+
+        if (agtv_lhs->val.int_value == PG_INT64_MIN &&
+            agtv_rhs->val.int_value == -1)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer division overflow")));
         }
 
         agtv_result.type = AGTV_INTEGER;
@@ -912,6 +968,21 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
+        if (agtv_rhs->val.int_value == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
+                            errmsg("division by zero")));
+            PG_RETURN_NULL();
+        }
+
+        if (agtv_lhs->val.int_value == PG_INT64_MIN &&
+            agtv_rhs->val.int_value == -1)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                     errmsg("integer modulo overflow")));
+        }
+
         agtv_result.type = AGTV_INTEGER;
         agtv_result.val.int_value = agtv_lhs->val.int_value %
                                     agtv_rhs->val.int_value;

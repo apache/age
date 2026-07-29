@@ -1128,6 +1128,44 @@ SELECT * FROM cypher('issue_2243', $$
   $$ ) as (result agtype);
 
 --
+-- Integer overflow tests (issue #2471)
+--
+SELECT create_graph('integer_overflow');
+
+-- Addition overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN 9223372036854775807 + 1 AS r
+  $$) AS (r agtype);
+
+-- Subtraction overflow (underflow)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 - 1 AS r
+  $$) AS (r agtype);
+
+-- Multiplication overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN 9223372036854775807 * 2 AS r
+  $$) AS (r agtype);
+
+-- Negation overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -(-9223372036854775808) AS r
+  $$) AS (r agtype);
+
+-- Division overflow (INT64_MIN / -1)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 / -1 AS r
+  $$) AS (r agtype);
+
+-- Modulo overflow (INT64_MIN % -1)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 % -1 AS r
+  $$) AS (r agtype);
+
+-- Cleanup overflow tests
+SELECT drop_graph('integer_overflow', true);
+
+--
 -- Cleanup
 --
 SELECT drop_graph('issue_2243', true);

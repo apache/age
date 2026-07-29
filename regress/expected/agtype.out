@@ -3907,6 +3907,54 @@ SELECT * FROM cypher('issue_2243', $$
 (1 row)
 
 --
+-- Integer overflow tests (issue #2471)
+--
+SELECT create_graph('integer_overflow');
+NOTICE:  graph "integer_overflow" has been created
+ create_graph 
+--------------
+
+(1 row)
+
+-- Addition overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN 9223372036854775807 + 1 AS r
+  $$) AS (r agtype);
+ERROR:  integer addition overflow
+-- Subtraction overflow (underflow)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 - 1 AS r
+  $$) AS (r agtype);
+ERROR:  integer subtraction overflow
+-- Multiplication overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN 9223372036854775807 * 2 AS r
+  $$) AS (r agtype);
+ERROR:  integer multiplication overflow
+-- Negation overflow
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -(-9223372036854775808) AS r
+  $$) AS (r agtype);
+ERROR:  integer negation overflow
+-- Division overflow (INT64_MIN / -1)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 / -1 AS r
+  $$) AS (r agtype);
+ERROR:  integer division overflow
+-- Modulo overflow (INT64_MIN % -1)
+SELECT * FROM cypher('integer_overflow', $$
+    RETURN -9223372036854775808 % -1 AS r
+  $$) AS (r agtype);
+ERROR:  integer modulo overflow
+-- Cleanup overflow tests
+SELECT drop_graph('integer_overflow', true);
+NOTICE:  graph "integer_overflow" has been dropped
+ drop_graph 
+------------
+
+(1 row)
+
+--
 -- Cleanup
 --
 SELECT drop_graph('issue_2243', true);
