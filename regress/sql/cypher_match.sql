@@ -1690,6 +1690,72 @@ $$) AS (name agtype, friend agtype);
 SELECT drop_graph('issue_2378', true);
 
 --
+-- Issue 2473: a query that begins with OPTIONAL MATCH drops the row when the
+-- pattern has no match.
+--
+-- Cypher gives every OPTIONAL MATCH left join semantics.  With no clause to
+-- its left it joins against the implicit single row that begins a query, so a
+-- leading OPTIONAL MATCH whose pattern matches nothing must still emit one
+-- row, with NULLs in the optional columns.  Before the fix the transform had
+-- no previous clause to join against and fell through to the plain MATCH
+-- path, which returns no rows at all.
+--
+SELECT create_graph('issue_2473');
+SELECT * FROM cypher('issue_2473', $$
+    CREATE (:Person {name: 'Alice'}),
+           (:Person {name: 'Bob'})
+$$) AS (v agtype);
+
+-- No vertex carries this label; expect one row with n = NULL.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (n:NoSuchLabel)
+    RETURN n
+$$) AS (n agtype);
+
+-- The pattern does match; expect exactly the matching rows, and no extra
+-- null-filled row from the synthesized left side.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (n:Person)
+    RETURN n.name AS name
+    ORDER BY name
+$$) AS (name agtype);
+
+-- Relationship pattern with no match; every optional column is NULL.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (a:Person)-[r:NoSuchEdge]->(b)
+    RETURN a.name AS name, r, b
+$$) AS (name agtype, r agtype, b agtype);
+
+-- A WHERE that no binding survives still preserves the row.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (n:Person)
+    WHERE n.name = 'Nobody'
+    RETURN n
+$$) AS (n agtype);
+
+-- The synthesized left side is internal; RETURN * must not expose it.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (n:NoSuchLabel)
+    RETURN *
+$$) AS (n agtype);
+
+-- A leading MATCH is unaffected and still returns no rows.
+SELECT * FROM cypher('issue_2473', $$
+    MATCH (n:NoSuchLabel)
+    RETURN n
+$$) AS (n agtype);
+
+-- The guard against MATCH following OPTIONAL MATCH still applies when the
+-- OPTIONAL MATCH leads the query.
+SELECT * FROM cypher('issue_2473', $$
+    OPTIONAL MATCH (n:Person)
+    MATCH (m:Person)
+    RETURN n, m
+$$) AS (n agtype, m agtype);
+
+SELECT drop_graph('issue_2473', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
