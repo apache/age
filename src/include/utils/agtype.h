@@ -37,6 +37,20 @@
 
 #include "utils/graphid.h"
 
+/*
+ * Pack and unpack a TID into an int64 for agtype transport.
+ * Layout: BlockNumber (32 bits) << 16 | OffsetNumber (16 bits).
+ */
+StaticAssertDecl(sizeof(OffsetNumber) == 2 && sizeof(BlockNumber) == 4,
+                 "AGE_CTID_PACK assumes 16-bit OffsetNumber and "
+                 "32-bit BlockNumber");
+#define AGE_CTID_PACK(blk, off) \
+    (((int64)(blk) << 16) | (int64)(off))
+#define AGE_CTID_UNPACK_BLOCK(packed) \
+    ((BlockNumber)((packed) >> 16))
+#define AGE_CTID_UNPACK_OFFSET(packed) \
+    ((OffsetNumber)((packed) & 0xFFFF))
+
 /* Tokens used when sequentially processing an agtype value */
 typedef enum
 {

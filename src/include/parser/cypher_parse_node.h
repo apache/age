@@ -50,6 +50,13 @@ typedef struct cypher_parsestate
      */
     bool exprHasAgg;
     bool p_opt_match;
+
+    /*
+     * True if the Cypher statement contains SET, REMOVE, or DELETE, making
+     * hidden ctid columns useful during MATCH transforms.
+     */
+    bool has_writable_clause;
+
 } cypher_parsestate;
 
 typedef struct errpos_ecb_state

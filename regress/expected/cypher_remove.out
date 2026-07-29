@@ -457,6 +457,45 @@ SELECT * FROM cypher('cypher_remove', $$MATCH ()-[e:edge_multi_property]-() REMO
  {"id": 3659174697238529, "label": "edge_multi_property", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge
 (2 rows)
 
+-- Hidden ctid columns must propagate through WITH for REMOVE.
+SELECT * FROM cypher('cypher_remove', $$
+    CREATE (:ctid_remove {drop_me: 1})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('cypher_remove', $$
+    MATCH (n:ctid_remove)
+    WITH n
+    REMOVE n.drop_me
+    RETURN n
+$$) AS (a agtype);
+                                     a                                      
+----------------------------------------------------------------------------
+ {"id": 3940649673949185, "label": "ctid_remove", "properties": {}}::vertex
+(1 row)
+
+-- REMOVE must fall back from a stale ctid after an earlier SET moves the row.
+SELECT * FROM cypher('cypher_remove', $$
+    CREATE (:ctid_remove_stale {drop_me: 1})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('cypher_remove', $$
+    MATCH (n:ctid_remove_stale), (m:ctid_remove_stale)
+    WHERE id(n) = id(m)
+    SET n.changed = true
+    REMOVE m.drop_me
+    RETURN m
+$$) AS (a agtype);
+                                                a                                                
+-------------------------------------------------------------------------------------------------
+ {"id": 4222124650659841, "label": "ctid_remove_stale", "properties": {"changed": true}}::vertex
+(1 row)
+
 --Errors
 SELECT * FROM cypher('cypher_remove', $$REMOVE n.i$$) AS (a agtype);
 ERROR:  REMOVE cannot be the first clause in a Cypher query
@@ -475,7 +514,7 @@ LINE 1: SELECT * FROM cypher('cypher_remove', $$MATCH (n) REMOVE wro...
 --
 DROP FUNCTION remove_test;
 SELECT drop_graph('cypher_remove', true);
-NOTICE:  drop cascades to 13 other objects
+NOTICE:  drop cascades to 15 other objects
 DETAIL:  drop cascades to table cypher_remove._ag_label_vertex
 drop cascades to table cypher_remove._ag_label_edge
 drop cascades to table cypher_remove.test_1
@@ -489,6 +528,8 @@ drop cascades to table cypher_remove.test_6
 drop cascades to table cypher_remove.e
 drop cascades to table cypher_remove.test_7
 drop cascades to table cypher_remove.edge_multi_property
+drop cascades to table cypher_remove.ctid_remove
+drop cascades to table cypher_remove.ctid_remove_stale
 NOTICE:  graph "cypher_remove" has been dropped
  drop_graph 
 ------------
