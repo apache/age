@@ -665,14 +665,7 @@ Datum agtype_neg(PG_FUNCTION_ARGS)
     }
     else if (agtv_value->type == AGTV_FLOAT)
     {
-        /*
-         * The parser may store 9223372036854775808 as a float because
-         * 9223372036854775808 exceeds INT64_MAX. Negating the float value
-         * equal to PG_INT64_MIN would produce a value outside the int64
-         * range, so we must still raise an overflow error to stay
-         * consistent with the integer path.
-         */
-        if (agtv_value->val.float_value == (double)PG_INT64_MIN)
+        if (agtv_value->val.float_value == -(double)PG_INT64_MIN)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
