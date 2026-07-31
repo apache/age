@@ -91,6 +91,28 @@ typedef struct edge_state_entry
     bool used_in_path;             /* like visited but more descriptive */
     bool has_been_matched;         /* have we checked for a  match */
     bool matched;                  /* is it a match */
+    /*
+     * Topology cache, populated once (alongside has_been_matched/matched)
+     * the first time this edge is classified in add_valid_vertex_edges().
+     * Both endpoints are cached -- NOT a single pre-resolved "next vertex" --
+     * because for CYPHER_REL_DIR_NONE the correct next vertex depends on
+     * which endpoint the DFS is currently standing on, which can differ
+     * between the first time an edge is classified and a later, unrelated
+     * point in the same traversal where it is approached from the other
+     * side. See get_next_vertex_from_state() for the direction-resolution
+     * logic, which mirrors get_next_vertex() but reads from this cache
+     * instead of re-fetching the edge_entry.
+     *
+     * Valid if and only if has_been_matched is true. Zeroed (not left
+     * uninitialized) on a fresh entry in get_edge_state_with_hash(): they
+     * are only ever read once has_been_matched is true (asserted in
+     * get_next_vertex_from_state() for cassert builds), but zeroing means
+     * any accidental early read in a production build resolves to graphid
+     * 0 -- which cannot be a real vertex id -- instead of uninitialized
+     * palloc'd memory.
+     */
+    graphid start_vertex_id;
+    graphid end_vertex_id;
 } edge_state_entry;
 
 /*
@@ -208,6 +230,8 @@ static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx);
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id);
 static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
+static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
+                                          edge_state_entry *ese);
 static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id);
 /* VLE path and edge building functions */
 static VLE_path_container *create_VLE_path_container(int64 path_size);
@@ -971,6 +995,19 @@ static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
         ese->used_in_path = false;
         ese->has_been_matched = false;
         ese->matched = false;
+        /*
+         * start_vertex_id/end_vertex_id are only ever read once
+         * has_been_matched is true -- see get_next_vertex_from_state(),
+         * which also Assert()s that precondition for cassert builds. Zero
+         * them here anyway (rather than leaving them as whatever garbage
+         * hash_search_with_hash_value's palloc happened to return) so that
+         * any accidental early read in a production (non-cassert) build
+         * resolves deterministically to graphid 0 -- which cannot be a
+         * real vertex id -- instead of silently "succeeding" with
+         * plausible-looking uninitialized bytes.
+         */
+        ese->start_vertex_id = 0;
+        ese->end_vertex_id = 0;
     }
     return ese;
 }
@@ -1031,6 +1068,73 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
 }
 
 /*
+ * Cache-based counterpart to get_next_vertex(). Resolves the vertex the DFS
+ * moves to when it takes edge `ese`, using only start_vertex_id/end_vertex_id
+ * already cached on the edge_state_entry -- no edge_entry lookup required.
+ *
+ * Precondition: ese->has_been_matched must be true (guaranteed for any edge
+ * that ever reaches the DFS hot loop, since only matched edges are ever
+ * pushed onto dfs_edge_stack -- see add_valid_vertex_edges()).
+ *
+ * Mirrors get_next_vertex()'s branching exactly; see that function's
+ * comments for why CYPHER_REL_DIR_NONE must consult the vertex stack (the
+ * next vertex for an undirected edge depends on which endpoint the DFS is
+ * currently standing on, not on the edge alone).
+ */
+static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
+                                          edge_state_entry *ese)
+{
+    Assert(ese->has_been_matched);
+
+    switch (vlelctx->edge_direction)
+    {
+        case CYPHER_REL_DIR_RIGHT:
+            return ese->end_vertex_id;
+
+        case CYPHER_REL_DIR_LEFT:
+            return ese->start_vertex_id;
+
+        case CYPHER_REL_DIR_NONE:
+        {
+            graphid parent_vertex_id;
+
+            /*
+             * The whole vertex-stack scheme for CYPHER_REL_DIR_NONE relies
+             * on dfs_vertex_stack and dfs_edge_stack staying in lockstep
+             * (one vertex pushed/popped per edge pushed/popped -- see
+             * add_valid_vertex_edges() and the backtracking branches in
+             * dfs_find_a_path_between()/dfs_find_a_path_from()). Cheap
+             * enough to check on every step in cassert builds, and it
+             * would catch a future refactor breaking that invariant
+             * immediately instead of manifesting as a confusing
+             * "get_next_vertex_from_state: no parent match" error (or
+             * worse, a wrong-but-plausible path) far away from the bug.
+             */
+            Assert(gid_stack_size(vlelctx->dfs_vertex_stack) ==
+                   gid_stack_size(vlelctx->dfs_edge_stack));
+
+            parent_vertex_id = gid_stack_peek(vlelctx->dfs_vertex_stack);
+
+            if (ese->start_vertex_id == parent_vertex_id)
+            {
+                return ese->end_vertex_id;
+            }
+            else if (ese->end_vertex_id == parent_vertex_id)
+            {
+                return ese->start_vertex_id;
+            }
+
+            elog(ERROR, "get_next_vertex_from_state: no parent match");
+        }
+
+        default:
+            elog(ERROR, "get_next_vertex_from_state: unknown edge direction");
+    }
+
+    return 0; /* unreachable; silences compiler control-reaches-end warning */
+}
+
+/*
  * Helper function to find one path BETWEEN two vertices.
  *
  * Note: On the very first entry into this function, the starting vertex's edges
@@ -1063,7 +1167,6 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         graphid edge_id;
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
-        edge_entry *ee = NULL;
         bool found = false;
         uint32 edge_hashvalue;
 
@@ -1078,9 +1181,8 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
         /*
-         * Compute the hash for edge_id once and reuse it for both the
-         * edge_state_hashtable lookup and (later) the edge_hashtable lookup.
-         * Both tables key on graphid using graphid_hash().
+         * Compute the hash for edge_id once and reuse it for the
+         * edge_state_hashtable lookup.
          */
         edge_hashvalue = graphid_hash(&edge_id, sizeof(int64));
         /* get the edge's state */
@@ -1120,6 +1222,8 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
             {
                 gid_stack_pop(vertex_stack);
             }
+            Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
+                   gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
             /* move to the next edge */
             continue;
         }
@@ -1131,9 +1235,12 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         ese->used_in_path = true;
         gid_stack_push(path_stack, edge_id);
 
-        /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry_with_hash(vlelctx->ggctx, edge_id, edge_hashvalue);
-        next_vertex_id = get_next_vertex(vlelctx, ee);
+        /*
+         * Resolve the next vertex directly from the cache populated by
+         * add_valid_vertex_edges() when this edge was first classified.
+         * No edge_entry lookup needed here.
+         */
+        next_vertex_id = get_next_vertex_from_state(vlelctx, ese);
 
         /*
          * Is this the end of a path that meets our requirements? Is its length
@@ -1206,7 +1313,6 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         graphid edge_id;
         graphid next_vertex_id;
         edge_state_entry *ese = NULL;
-        edge_entry *ee = NULL;
         bool found = false;
         uint32 edge_hashvalue;
 
@@ -1221,9 +1327,8 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         /* get an edge, but leave it on the stack for now */
         edge_id = gid_stack_peek(edge_stack);
         /*
-         * Compute the hash for edge_id once and reuse it for both the
-         * edge_state_hashtable lookup and (later) the edge_hashtable lookup.
-         * Both tables key on graphid using graphid_hash().
+         * Compute the hash for edge_id once and reuse it for the
+         * edge_state_hashtable lookup.
          */
         edge_hashvalue = graphid_hash(&edge_id, sizeof(int64));
         /* get the edge's state */
@@ -1263,6 +1368,8 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
             {
                 gid_stack_pop(vertex_stack);
             }
+            Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
+                   gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
             /* move to the next edge */
             continue;
         }
@@ -1274,9 +1381,12 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
         ese->used_in_path = true;
         gid_stack_push(path_stack, edge_id);
 
-        /* now get the edge entry so we can get the next vertex to move to */
-        ee = get_edge_entry_with_hash(vlelctx->ggctx, edge_id, edge_hashvalue);
-        next_vertex_id = get_next_vertex(vlelctx, ee);
+        /*
+         * Resolve the next vertex directly from the cache populated by
+         * add_valid_vertex_edges() when this edge was first classified.
+         * No edge_entry lookup needed here.
+         */
+        next_vertex_id = get_next_vertex_from_state(vlelctx, ese);
 
         /*
          * Is this a path that meets our requirements? Is its length within the
@@ -1519,20 +1629,21 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                 continue;
             }
 
-            /* validate the edge if it hasn't been already */
-            if (!ese->has_been_matched && is_an_edge_match(vlelctx, ee))
+            /*
+             * Validate the edge if it hasn't been already. Cache the edge
+             * endpoints at the same time, so the DFS can resolve the next
+             * vertex without another edge_entry lookup.
+             */
+            if (!ese->has_been_matched)
             {
                 ese->has_been_matched = true;
-                ese->matched = true;
-            }
-            else if (!ese->has_been_matched)
-            {
-                ese->has_been_matched = true;
-                ese->matched = false;
+                ese->matched = is_an_edge_match(vlelctx, ee);
+                ese->start_vertex_id = get_edge_entry_start_vertex_id(ee);
+                ese->end_vertex_id = get_edge_entry_end_vertex_id(ee);
             }
 
             /* if it is a match, add it */
-            if (ese->has_been_matched && ese->matched)
+            if (ese->matched)
             {
                 /*
                  * We need to maintain our source vertex for each edge
@@ -1547,6 +1658,8 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                     gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
                 }
                 gid_stack_push(edge_stack, edge_id);
+                Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
+                       gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
             }
         }
     }
