@@ -93,7 +93,7 @@ typedef struct edge_state_entry
     bool matched;                  /* is it a match */
     /*
      * Topology cache, populated once (alongside has_been_matched/matched)
-     * the first time this edge is classified in add_valid_vertex_edges().
+     * the first time this edge is classified in get_or_build_vertex_edge_cache().
      * Both endpoints are cached -- NOT a single pre-resolved "next vertex" --
      * because for CYPHER_REL_DIR_NONE the correct next vertex depends on
      * which endpoint the DFS is currently standing on, which can differ
@@ -114,6 +114,28 @@ typedef struct edge_state_entry
     graphid start_vertex_id;
     graphid end_vertex_id;
 } edge_state_entry;
+
+/*
+ * Vertex-level cache of statically-valid adjacent edges (see
+ * get_or_build_vertex_edge_cache). "Statically valid" means the edge passed
+ * is_an_edge_match() -- it says nothing about whether the edge is currently
+ * usable in the DFS (that is path-dependent and re-checked on every visit
+ * by add_valid_vertex_edges()).
+ */
+typedef struct vertex_edge_cache_entry
+{
+    graphid vertex_id;              /* vertex id, it is also the hash key */
+    int32 nvalid;                   /* number of entries in valid_edges */
+    graphid *valid_edges;           /* palloc'd array (in
+                                      * vlelctx->vertex_edge_cache_mcxt) of
+                                      * edge ids that passed is_an_edge_match
+                                      * for this vertex, in the same relative
+                                      * order they were discovered (out, then
+                                      * in, then self). Sized to exactly
+                                      * nvalid, not to the raw adjacency
+                                      * count -- see the repalloc in
+                                      * get_or_build_vertex_edge_cache(). */
+} vertex_edge_cache_entry;
 
 /*
  * VLE_path_function is an enum for the path function to use. This currently can
@@ -147,6 +169,32 @@ typedef struct VLE_local_context
     bool uidx_infinite;            /* flag if the upper bound is omitted */
     cypher_rel_dir edge_direction; /* the direction of the edge */
     HTAB *edge_state_hashtable;    /* local state hashtable for our edges */
+    HTAB *vertex_edge_cache;       /* vertex_id -> statically-valid adjacent
+                                     * edges (see get_or_build_vertex_edge_cache) */
+    MemoryContext vertex_edge_cache_mcxt; /* Dedicated child context, created
+                                     * explicitly in
+                                     * create_VLE_local_state_hashtable() and
+                                     * deleted explicitly in
+                                     * free_VLE_local_context(). Owns every
+                                     * valid_edges[] array pointed to from
+                                     * vertex_edge_cache entries above.
+                                     *
+                                     * Deliberately NOT "whatever
+                                     * CurrentMemoryContext happens to be" --
+                                     * this context is created once, up
+                                     * front, specifically for this purpose,
+                                     * so its lifetime does not depend on
+                                     * which of this file's several call
+                                     * sites is building this
+                                     * VLE_local_context (the LRU-cached
+                                     * TopMemoryContext path, the uncached
+                                     * multi_call_memory_ctx SRF path, or
+                                     * sp_minhops_fallback()'s private
+                                     * scratch context all do the right
+                                     * thing automatically, because we just
+                                     * parent off whatever CurrentMemoryContext
+                                     * is *once*, at creation, and then own
+                                     * deletion of our own child ourselves). */
     GraphIdStack *dfs_vertex_stack; /* dfs stack for vertices (array-based) */
     GraphIdStack *dfs_edge_stack;   /* dfs stack for edges (array-based) */
     GraphIdStack *dfs_path_stack;   /* dfs stack containing the path (array-based) */
@@ -232,6 +280,9 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
 static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
 static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
                                           edge_state_entry *ese);
+static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
+                                                    VLE_local_context *vlelctx,
+                                                    graphid vertex_id);
 static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id);
 /* VLE path and edge building functions */
 static VLE_path_container *create_VLE_path_container(int64 path_size);
@@ -423,6 +474,48 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
                                                 &edge_state_ctl,
                                                 HASH_ELEM | HASH_FUNCTION);
     pfree_if_not_null(eshn);
+
+    /*
+     * Create a dedicated child context to own every valid_edges[] array
+     * that will ever be allocated by get_or_build_vertex_edge_cache().
+     *
+     * We deliberately do NOT just capture CurrentMemoryContext into a bare
+     * MemoryContext field and palloc directly into it: this function is
+     * called from three different sites (the LRU-cached path in
+     * build_local_vle_context(), which runs under TopMemoryContext; the
+     * uncached SRF path, which runs under funcctx->multi_call_memory_ctx;
+     * and sp_minhops_fallback(), which runs under its own private scratch
+     * context). All three currently do the right thing, but relying on
+     * "whichever context the caller happened to switch to before calling
+     * in here" is exactly the kind of ambient-context assumption that
+     * silently breaks under refactoring. Creating our OWN child context
+     * here means its lifetime is entirely our responsibility, symmetric
+     * with hash_destroy() below: we explicitly MemoryContextDelete() it in
+     * free_VLE_local_context(), the same way hash_destroy() explicitly
+     * frees edge_state_hashtable's storage. Correctness no longer depends
+     * on what CurrentMemoryContext happens to be, here or at any future
+     * call site -- we still parent off it (so it is reclaimed for free if
+     * an ancestor context is ever deleted first, e.g. via
+     * sp_minhops_fallback()'s MemoryContextDelete(tmpctx)), but we never
+     * depend on that parent to be the one doing the cleanup.
+     */
+    vlelctx->vertex_edge_cache_mcxt = AllocSetContextCreate(CurrentMemoryContext,
+                                                            "VLE vertex edge cache",
+                                                            ALLOCSET_DEFAULT_SIZES);
+
+    /* initialize the per-vertex valid-edge cache (see get_or_build_vertex_edge_cache) */
+    {
+        HASHCTL vertex_edge_ctl;
+
+        MemSet(&vertex_edge_ctl, 0, sizeof(vertex_edge_ctl));
+        vertex_edge_ctl.keysize = sizeof(int64);
+        vertex_edge_ctl.entrysize = sizeof(vertex_edge_cache_entry);
+        vertex_edge_ctl.hash = graphid_hash;
+        vlelctx->vertex_edge_cache = hash_create("VLE vertex edge cache",
+                                                 EDGE_STATE_HTAB_INITIAL_SIZE,
+                                                 &vertex_edge_ctl,
+                                                 HASH_ELEM | HASH_FUNCTION);
+    }
 }
 
 /*
@@ -580,6 +673,32 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     /* we need to free our state hashtable */
     hash_destroy(vlelctx->edge_state_hashtable);
     vlelctx->edge_state_hashtable = NULL;
+
+    /*
+     * Free the vertex edge cache's own hashtable storage (its entries --
+     * fixed-size vertex_edge_cache_entry structs, held in dynahash's own
+     * private child context). This does NOT free the valid_edges[] arrays
+     * those entries point to.
+     */
+    if (vlelctx->vertex_edge_cache != NULL)
+    {
+        hash_destroy(vlelctx->vertex_edge_cache);
+        vlelctx->vertex_edge_cache = NULL;
+    }
+
+    /*
+     * Explicitly delete the dedicated context that owns every valid_edges[]
+     * array. This is what actually reclaims that memory -- hash_destroy()
+     * above never touches it. Symmetric, on purpose, with the hash_destroy()
+     * calls: every allocator this function uses gets an explicit, owned
+     * teardown call here, none of them are left to an ambient parent
+     * context to clean up "eventually".
+     */
+    if (vlelctx->vertex_edge_cache_mcxt != NULL)
+    {
+        MemoryContextDelete(vlelctx->vertex_edge_cache_mcxt);
+        vlelctx->vertex_edge_cache_mcxt = NULL;
+    }
 
     /*
      * Free the DFS stacks. When is_dirty is false, the stacks are in the
@@ -1074,7 +1193,8 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
  *
  * Precondition: ese->has_been_matched must be true (guaranteed for any edge
  * that ever reaches the DFS hot loop, since only matched edges are ever
- * pushed onto dfs_edge_stack -- see add_valid_vertex_edges()).
+ * pushed onto dfs_edge_stack -- see get_or_build_vertex_edge_cache() and the
+ * push site in add_valid_vertex_edges()).
  *
  * Mirrors get_next_vertex()'s branching exactly; see that function's
  * comments for why CYPHER_REL_DIR_NONE must consult the vertex stack (the
@@ -1237,8 +1357,9 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
 
         /*
          * Resolve the next vertex directly from the cache populated by
-         * add_valid_vertex_edges() when this edge was first classified.
-         * No edge_entry lookup needed here.
+         * get_or_build_vertex_edge_cache() when this edge was first
+         * classified. No edge_entry lookup needed here -- that lookup
+         * already happened once, ever, per edge, not once per DFS step.
          */
         next_vertex_id = get_next_vertex_from_state(vlelctx, ese);
 
@@ -1383,8 +1504,8 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
 
         /*
          * Resolve the next vertex directly from the cache populated by
-         * add_valid_vertex_edges() when this edge was first classified.
-         * No edge_entry lookup needed here.
+         * get_or_build_vertex_edge_cache() when this edge was first
+         * classified. No edge_entry lookup needed here.
          */
         next_vertex_id = get_next_vertex_from_state(vlelctx, ese);
 
@@ -1440,16 +1561,6 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
 }
 
 /*
- * Helper function to add in valid vertex edges as part of the dfs path
- * algorithm. What constitutes a valid edge is the following -
- *
- *     1) Edge matches the correct direction specified.
- *     2) Edge is not currently in the path.
- *     3) Edge matches minimum edge properties specified.
- *
- * Note: The vertex must exist.
- */
-/*
  * Batched candidate buffer size for the adjacency lookup pipeline below.
  * 8 was chosen because it comfortably fits within the OoO window and the
  * per-core L1 MSHR count of modern Xeons (12+), so the K back-to-back
@@ -1457,19 +1568,48 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
  */
 #define VLE_LOOKUP_BATCH 8
 
-static void add_valid_vertex_edges(VLE_local_context *vlelctx,
-                                   graphid vertex_id)
+/*
+ * Build (on first visit) or fetch (on every subsequent visit) the static
+ * classification cache for `vertex_id`: the subset of its adjacent edges
+ * that pass is_an_edge_match(), independent of anything path-dependent.
+ *
+ * This is the "vertex-level adjacency cache" optimization. It is deliberately
+ * split apart from the DYNAMIC used_in_path/is_edge_in_path check, which
+ * changes constantly as the DFS advances and backtracks and can therefore
+ * never be cached at the vertex level -- only the *static* match result can.
+ *
+ * On the very first visit to a vertex, this runs the same 5-phase MLP-batched
+ * pipeline that add_valid_vertex_edges used to run on *every* visit: gather,
+ * hash, look up edge_entry (agehash), look up/create edge_state_entry
+ * (dynahash), classify. On every subsequent visit, this is a single dynahash
+ * lookup that returns the already-built array -- the adjacency arrays are
+ * never re-walked, and get_edge_entry_with_hash() (the expensive, L3-miss
+ * prone lookup) is never called again for any edge already classified,
+ * whether it was classified from this vertex or from its other endpoint.
+ *
+ * Note that because this cache lives in vlelctx and, for a grammar-node
+ * backed VLE call (the normal Cypher path -- see build_local_vle_context()'s
+ * use_cache handling), vlelctx itself is reused across many separate
+ * age_vle() SRF invocations (e.g. once per outer-loop row feeding into a
+ * VLE join), this cache's benefit compounds far beyond a single path
+ * enumeration: a vertex visited by row 1's traversal is already fully
+ * classified, for free, if row 2's traversal ever reaches it too. This
+ * also means the cache can grow large over the lifetime of a long-running
+ * backend, which is exactly why vertex_edge_cache_mcxt's lifetime has to be
+ * managed explicitly rather than left to an ambient context -- see
+ * create_VLE_local_state_hashtable() and free_VLE_local_context().
+ *
+ * The returned array and its length are only ever read by the caller
+ * (add_valid_vertex_edges) below; they are never mutated after this
+ * function returns.
+ */
+static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
+                                                    VLE_local_context *vlelctx,
+                                                    graphid vertex_id)
 {
-    GraphIdStack *vertex_stack = NULL;
-    GraphIdStack *edge_stack = NULL;
+    vertex_edge_cache_entry *vce = NULL;
+    bool found = false;
     vertex_entry *ve = NULL;
-    /*
-     * Three flat-array adjacency lists, walked in parallel via integer
-     * indices. An empty (or direction-disabled) list has size == 0 so its
-     * branch never fires. This replaces the previous GraphIdNode pointer
-     * walk with a contiguous-memory traversal — significantly better for
-     * cache and branch-predictor behaviour on the DFS hot path.
-     */
     graphid *arr_out = NULL;
     int32    sz_out = 0;
     int32    idx_out = 0;
@@ -1480,32 +1620,26 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     int32    sz_self = 0;
     int32    idx_self = 0;
     VertexEdgeArray *vea = NULL;
+    graphid  *scratch = NULL;
+    int32     nscratch = 0;
+    int32     scratch_cap;
+    MemoryContext oldcontext;
 
-    /*
-     * Per-batch scratch arrays for the MLP lookup pipeline. Each iteration
-     * gathers up to VLE_LOOKUP_BATCH not-already-in-path candidate edges,
-     * then issues their edge_table (agehash) and edge_state_hashtable
-     * (dynahash) lookups in two tight back-to-back loops. The CPU's
-     * out-of-order engine overlaps the K independent cache misses inside
-     * each loop, hiding memory latency that the original one-edge-at-a-time
-     * loop serialized.
-     */
-    graphid           batch_eids[VLE_LOOKUP_BATCH];
-    uint32            batch_hashes[VLE_LOOKUP_BATCH];
-    edge_entry       *batch_ee[VLE_LOOKUP_BATCH];
-    edge_state_entry *batch_ese[VLE_LOOKUP_BATCH];
+    vce = (vertex_edge_cache_entry *) hash_search(vlelctx->vertex_edge_cache,
+                                                  &vertex_id, HASH_ENTER,
+                                                  &found);
+    if (found)
+    {
+        return vce;
+    }
 
     /* get the vertex entry */
     ve = get_vertex_entry(vlelctx->ggctx, vertex_id);
     /* there better be a valid vertex */
     if (ve == NULL)
     {
-        elog(ERROR, "add_valid_vertex_edges: no vertex found");
+        elog(ERROR, "get_or_build_vertex_edge_cache: no vertex found");
     }
-
-    /* point to stacks */
-    vertex_stack = vlelctx->dfs_vertex_stack;
-    edge_stack = vlelctx->dfs_edge_stack;
 
     /* set up walked arrays for the requested direction(s) */
     if (vlelctx->edge_direction == CYPHER_REL_DIR_RIGHT ||
@@ -1527,62 +1661,51 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
     arr_self = vea->array;
     sz_self  = vea->size;
 
+    scratch_cap = sz_out + sz_in + sz_self;
+
     /*
-     * Outer loop: drain the three flat arrays via a 5-phase pipeline.
-     *   1. Gather: pull up to VLE_LOOKUP_BATCH next edge_ids that survive
-     *      the cheap is_edge_in_path() early-skip.
-     *   2. Hash:   compute graphid_hash for the batch (pure compute).
-     *   3. Lookup: K back-to-back edge_table (agehash) lookups via
-     *      get_edge_entry_with_hash() — MLP window 1 (the CPU overlaps
-     *      the K slot misses).
-     *   4. State:  K back-to-back edge_state_hashtable (dynahash) HASH_ENTER
-     *      calls — MLP window 2 (different table, different bucket misses).
-     *   5. Apply:  per-edge match/state-update/stack-push, now operating
-     *      on cache-warm ee/ese pointers.
-     * Phase 5 preserves the exact processing order of the original loop
-     * (out direction first, then in, then self), so DFS stack ordering and
-     * therefore path enumeration are identical to the previous version.
+     * The result array must outlive this SRF call (it is read on every
+     * future visit to this vertex, across many successive age_vle()
+     * invocations), so it must be allocated in
+     * vlelctx->vertex_edge_cache_mcxt, not whatever the ambient
+     * CurrentMemoryContext happens to be here.
+     */
+    oldcontext = MemoryContextSwitchTo(vlelctx->vertex_edge_cache_mcxt);
+    scratch = (scratch_cap > 0) ? palloc(sizeof(graphid) * scratch_cap) : NULL;
+    MemoryContextSwitchTo(oldcontext);
+
+    /*
+     * Same 5-phase MLP-batched pipeline as before (gather/hash/lookup ee/
+     * lookup ese/apply) -- the only change is that it now runs exactly once
+     * per vertex for the lifetime of this VLE_local_context, instead of once
+     * per *visit*. The dynamic used_in_path / is_edge_in_path check is
+     * deliberately NOT done here -- see add_valid_vertex_edges() below.
      */
     while (idx_out < sz_out || idx_in < sz_in || idx_self < sz_self)
     {
+        graphid           batch_eids[VLE_LOOKUP_BATCH];
+        uint32            batch_hashes[VLE_LOOKUP_BATCH];
+        edge_entry       *batch_ee[VLE_LOOKUP_BATCH];
+        edge_state_entry *batch_ese[VLE_LOOKUP_BATCH];
         int batch_n = 0;
         int i;
 
-        /* Phase 1: gather */
+        /* Phase 1: gather (no is_edge_in_path check -- that's dynamic) */
         while (batch_n < VLE_LOOKUP_BATCH &&
                (idx_out < sz_out || idx_in < sz_in || idx_self < sz_self))
         {
-            graphid edge_id;
-
             if (idx_out < sz_out)
             {
-                edge_id = arr_out[idx_out++];
+                batch_eids[batch_n++] = arr_out[idx_out++];
             }
             else if (idx_in < sz_in)
             {
-                edge_id = arr_in[idx_in++];
+                batch_eids[batch_n++] = arr_in[idx_in++];
             }
             else
             {
-                edge_id = arr_self[idx_self++];
+                batch_eids[batch_n++] = arr_self[idx_self++];
             }
-
-            /*
-             * Fast early-skip when the path stack is small: avoids two
-             * hashtable lookups for edges already on the path.
-             */
-            if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
-                is_edge_in_path(vlelctx, edge_id))
-            {
-                continue;
-            }
-
-            batch_eids[batch_n++] = edge_id;
-        }
-
-        if (batch_n == 0)
-        {
-            break;
         }
 
         /* Phase 2: compute hashes (pure compute, no misses) */
@@ -1607,18 +1730,160 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                                     batch_hashes[i]);
         }
 
-        /* Phase 5: process the batch sequentially */
+        /* Phase 5: classify and collect into scratch[] */
         for (i = 0; i < batch_n; i++)
         {
             edge_entry       *ee  = batch_ee[i];
             edge_state_entry *ese = batch_ese[i];
-            graphid           edge_id = batch_eids[i];
 
-            /* it better exist */
             if (ee == NULL)
             {
-                elog(ERROR, "add_valid_vertex_edges: no edge found");
+                elog(ERROR, "get_or_build_vertex_edge_cache: no edge found");
             }
+
+            /*
+             * has_been_matched may already be true here -- this edge could
+             * have been classified earlier via its OTHER endpoint (only
+             * possible for CYPHER_REL_DIR_NONE, where the same edge appears
+             * in both endpoints' adjacency arrays). is_an_edge_match()'s
+             * result depends only on the edge's own label/properties and
+             * this grammar node's constraints -- never on which endpoint
+             * triggered classification -- so it is safe to reuse. Only
+             * classify (and cache start/end) the first time, ever.
+             */
+            if (!ese->has_been_matched)
+            {
+                ese->has_been_matched = true;
+                ese->matched = is_an_edge_match(vlelctx, ee);
+                ese->start_vertex_id = get_edge_entry_start_vertex_id(ee);
+                ese->end_vertex_id = get_edge_entry_end_vertex_id(ee);
+            }
+
+            if (ese->matched)
+            {
+                scratch[nscratch++] = batch_eids[i];
+            }
+        }
+    }
+
+    /*
+     * Shrink to the actual number of statically-valid edges. scratch_cap is
+     * the raw (unfiltered) adjacency count; on a dense graph with a
+     * selective edge predicate nscratch can be far smaller, and this array
+     * lives for the remaining lifetime of vlelctx (potentially the lifetime
+     * of a long-running, cached, reused-across-many-SRF-calls backend --
+     * see the note at the top of this function), so the gap matters.
+     */
+    if (scratch != NULL)
+    {
+        oldcontext = MemoryContextSwitchTo(vlelctx->vertex_edge_cache_mcxt);
+        if (nscratch > 0 && nscratch < scratch_cap)
+        {
+            scratch = repalloc(scratch, sizeof(graphid) * nscratch);
+        }
+        else if (nscratch == 0)
+        {
+            pfree(scratch);
+            scratch = NULL;
+        }
+        MemoryContextSwitchTo(oldcontext);
+    }
+
+    vce->vertex_id = vertex_id;
+    vce->nvalid = nscratch;
+    vce->valid_edges = scratch;
+
+    return vce;
+}
+
+/*
+ * Helper function to add in valid vertex edges as part of the dfs path
+ * algorithm. What constitutes a valid edge is the following -
+ *
+ *     1) Edge matches the correct direction specified.
+ *     2) Edge is not currently in the path.
+ *     3) Edge matches minimum edge properties specified.
+ *
+ * Note: The vertex must exist.
+ *
+ * Static classification (which of this vertex's edges match at all) is
+ * handled by get_or_build_vertex_edge_cache() above and computed at most
+ * once per vertex. This function only re-checks the DYNAMIC used_in_path
+ * state, which must be re-checked on every visit, but now only for the
+ * pre-filtered set of statically-valid edges -- not the full adjacency
+ * list -- and with no edge_entry (agehash) lookups at all on repeat visits.
+ *
+ * The dynamic edge_state_hashtable lookups below are still run through the
+ * same batched gather/hash/lookup/apply pipeline as
+ * get_or_build_vertex_edge_cache() uses, for the same MLP reason: even
+ * though only one hashtable is involved now (not two), a repeat visit to a
+ * hot, highly-connected vertex can still re-check dozens of edges, and
+ * batching the dynahash HASH_ENTER calls hides their miss latency the same
+ * way it did before this vertex's edges were split out of the per-visit
+ * pipeline.
+ */
+static void add_valid_vertex_edges(VLE_local_context *vlelctx,
+                                   graphid vertex_id)
+{
+    GraphIdStack *vertex_stack = vlelctx->dfs_vertex_stack;
+    GraphIdStack *edge_stack = vlelctx->dfs_edge_stack;
+    vertex_edge_cache_entry *vce;
+    int32 pos = 0;
+
+    vce = get_or_build_vertex_edge_cache(vlelctx, vertex_id);
+
+    while (pos < vce->nvalid)
+    {
+        graphid           batch_eids[VLE_LOOKUP_BATCH];
+        uint32            batch_hashes[VLE_LOOKUP_BATCH];
+        edge_state_entry *batch_ese[VLE_LOOKUP_BATCH];
+        int batch_n = 0;
+        int i;
+
+        /* Phase 1: gather, applying the dynamic is_edge_in_path early-skip */
+        while (batch_n < VLE_LOOKUP_BATCH && pos < vce->nvalid)
+        {
+            graphid edge_id = vce->valid_edges[pos++];
+
+            /*
+             * Fast early-skip when the path stack is small: avoids an
+             * edge_state_hashtable lookup for edges already on the path.
+             * (Kept exactly as before -- for the common, small-stack case
+             * this bounded linear scan beats a hashtable lookup.)
+             */
+            if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
+                is_edge_in_path(vlelctx, edge_id))
+            {
+                continue;
+            }
+
+            batch_eids[batch_n++] = edge_id;
+        }
+
+        if (batch_n == 0)
+        {
+            continue;
+        }
+
+        /* Phase 2: compute hashes (pure compute, no misses) */
+        for (i = 0; i < batch_n; i++)
+        {
+            batch_hashes[i] = graphid_hash(&batch_eids[i], sizeof(int64));
+        }
+
+        /* Phase 3: K back-to-back edge_state_hashtable lookups (MLP wave) */
+        for (i = 0; i < batch_n; i++)
+        {
+            batch_ese[i] = get_edge_state_with_hash(vlelctx,
+                                                    batch_eids[i],
+                                                    batch_hashes[i]);
+        }
+
+        /* Phase 4: apply, in the same order the edges were discovered in */
+        for (i = 0; i < batch_n; i++)
+        {
+            edge_state_entry *ese = batch_ese[i];
+            graphid           edge_id = batch_eids[i];
 
             /*
              * Don't add any edges that we have already seen because they
@@ -1630,37 +1895,20 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
             }
 
             /*
-             * Validate the edge if it hasn't been already. Cache the edge
-             * endpoints at the same time, so the DFS can resolve the next
-             * vertex without another edge_entry lookup.
+             * We need to maintain our source vertex for each edge added if
+             * the edge_direction is CYPHER_REL_DIR_NONE. This is due to the
+             * edges having a fixed direction and the dfs algorithm working
+             * strictly through edges. With an un-directional VLE edge, you
+             * don't know the vertex that you just came from. So, we need to
+             * store it.
              */
-            if (!ese->has_been_matched)
+            if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
             {
-                ese->has_been_matched = true;
-                ese->matched = is_an_edge_match(vlelctx, ee);
-                ese->start_vertex_id = get_edge_entry_start_vertex_id(ee);
-                ese->end_vertex_id = get_edge_entry_end_vertex_id(ee);
+                gid_stack_push(vertex_stack, vertex_id);
             }
-
-            /* if it is a match, add it */
-            if (ese->matched)
-            {
-                /*
-                 * We need to maintain our source vertex for each edge
-                 * added if the edge_direction is CYPHER_REL_DIR_NONE. This
-                 * is due to the edges having a fixed direction and the dfs
-                 * algorithm working strictly through edges. With an
-                 * un-directional VLE edge, you don't know the vertex that
-                 * you just came from. So, we need to store it.
-                 */
-                if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
-                {
-                    gid_stack_push(vertex_stack, get_vertex_entry_id(ve));
-                }
-                gid_stack_push(edge_stack, edge_id);
-                Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
-                       gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
-            }
+            gid_stack_push(edge_stack, edge_id);
+            Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
+                   gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
         }
     }
 }
