@@ -88,31 +88,11 @@
 typedef struct edge_state_entry
 {
     graphid edge_id;               /* edge id, it is also the hash key */
+    graphid start_vertex_id;       /* Topology cache for edge endpoints; */
+    graphid end_vertex_id;         /* used for direction resolution in DFS. */
     bool used_in_path;             /* like visited but more descriptive */
     bool has_been_matched;         /* have we checked for a  match */
     bool matched;                  /* is it a match */
-    /*
-     * Topology cache, populated once (alongside has_been_matched/matched)
-     * the first time this edge is classified in get_or_build_vertex_edge_cache().
-     * Both endpoints are cached -- NOT a single pre-resolved "next vertex" --
-     * because for CYPHER_REL_DIR_NONE the correct next vertex depends on
-     * which endpoint the DFS is currently standing on, which can differ
-     * between the first time an edge is classified and a later, unrelated
-     * point in the same traversal where it is approached from the other
-     * side. See get_next_vertex_from_state() for the direction-resolution
-     * logic, which mirrors get_next_vertex() but reads from this cache
-     * instead of re-fetching the edge_entry.
-     *
-     * Valid if and only if has_been_matched is true. Zeroed (not left
-     * uninitialized) on a fresh entry in get_edge_state_with_hash(): they
-     * are only ever read once has_been_matched is true (asserted in
-     * get_next_vertex_from_state() for cassert builds), but zeroing means
-     * any accidental early read in a production build resolves to graphid
-     * 0 -- which cannot be a real vertex id -- instead of uninitialized
-     * palloc'd memory.
-     */
-    graphid start_vertex_id;
-    graphid end_vertex_id;
 } edge_state_entry;
 
 /*
