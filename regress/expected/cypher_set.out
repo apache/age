@@ -1228,6 +1228,96 @@ $$) AS (a agtype);
 (1 row)
 
 --
+-- Issue 2493: a clause that reads must see every update a preceding SET
+-- made, not only the updates from that clause's first input row.
+--
+SELECT create_graph('issue_2493_set');
+NOTICE:  graph "issue_2493_set" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2493_set', $$
+    UNWIND [1, 2, 3] AS i CREATE (:x {id: i})
+$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+-- all three updates must be visible to the later MATCH
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.marked = true
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.marked = true
+    RETURN count(m)
+$$) as (visible agtype);
+ visible 
+---------
+ 3
+(1 row)
+
+-- the same for REMOVE, which shares the SET executor
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) REMOVE n.marked
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.marked = true
+    RETURN count(m)
+$$) as (still_marked agtype);
+ still_marked 
+--------------
+ 0
+(1 row)
+
+-- updates written earlier drive a later CREATE
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.ready = true
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.ready = true
+    CREATE (:derived {from: m.id})
+$$) as (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (d:derived) RETURN count(d)
+$$) as (derived agtype);
+ derived 
+---------
+ 3
+(1 row)
+
+-- a SET must still not see its own writes: this updates each vertex once
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.pass = 1 RETURN count(*)
+$$) as (updated agtype);
+ updated 
+---------
+ 3
+(1 row)
+
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (m:x) WHERE m.pass = 1 RETURN count(m)
+$$) as (persisted agtype);
+ persisted 
+-----------
+ 3
+(1 row)
+
+SELECT drop_graph('issue_2493_set', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table issue_2493_set._ag_label_vertex
+drop cascades to table issue_2493_set._ag_label_edge
+drop cascades to table issue_2493_set.x
+drop cascades to table issue_2493_set.derived
+NOTICE:  graph "issue_2493_set" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+--
 -- Clean up
 --
 DROP TABLE tbl;

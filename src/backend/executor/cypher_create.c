@@ -244,6 +244,29 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
      */
     if (!used)
     {
+        /*
+         * This clause is finished. Make everything it wrote visible to the
+         * clauses that read after it.
+         *
+         * Entities are inserted with the global command id (see
+         * insert_entity_tuple), and CommandCounterIncrement() above advances
+         * that id once per input row. es_snapshot->curcid does not follow it,
+         * so without this it stays one step past the command id used by the
+         * first input row, and everything written by the remaining rows is
+         * invisible for the rest of the statement (issue #2493).
+         *
+         * Syncing here, rather than after each row, is what keeps the clause
+         * from seeing its own writes: by this point the subtree is exhausted,
+         * so raising curcid cannot feed a created row back into the pattern
+         * that created it.
+         *
+         * Max() because Increment_Estate_CommandId can push curcid above the
+         * global command id, and lowering it would hide tuples that are
+         * already visible.
+         */
+        estate->es_snapshot->curcid = Max(estate->es_snapshot->curcid,
+                                          GetCurrentCommandId(false));
+
         return NULL;
     }
 

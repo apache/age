@@ -476,6 +476,67 @@ SELECT * FROM cypher('cypher_create', $$
 $$) as (m agtype);
 
 --
+-- Issue 2493: a clause that reads must see everything a preceding clause
+-- wrote, not only the rows written by that clause's first input row.
+--
+SELECT create_graph('issue_2493');
+
+-- all three created vertices must be visible to the later MATCH
+SELECT * FROM cypher('issue_2493', $$
+    UNWIND [1, 2, 3] AS i
+    CREATE (:vis {id: i})
+    WITH count(*) AS ignored
+    MATCH (n:vis)
+    RETURN count(n)
+$$) as (visible agtype);
+
+-- pre-existing and newly created vertices are both visible
+SELECT * FROM cypher('issue_2493', $$ CREATE (:pre {id: 0}) $$) as (a agtype);
+
+SELECT * FROM cypher('issue_2493', $$
+    UNWIND [1, 2] AS i
+    CREATE (:pre {id: i})
+    WITH count(*) AS ignored
+    MATCH (n:pre)
+    RETURN count(n)
+$$) as (visible agtype);
+
+-- as originally reported: OPTIONAL MATCH binds every created vertex
+SELECT * FROM cypher('issue_2493', $$
+    UNWIND [1, 2, 3] AS i
+    CREATE (:opt {id: i})
+    WITH count(*) AS ignored
+    OPTIONAL MATCH (a:opt)
+    RETURN count(*) AS rows, count(a) AS bound
+$$) as (rows agtype, bound agtype);
+
+-- vertices written earlier drive a later CREATE (6 ordered pairs of 3)
+SELECT * FROM cypher('issue_2493', $$
+    UNWIND [1, 2, 3] AS i
+    CREATE (:src {id: i})
+    WITH count(*) AS ignored
+    MATCH (a:src), (b:src) WHERE a.id <> b.id
+    CREATE (a)-[:rel]->(b)
+$$) as (a agtype);
+
+SELECT * FROM cypher('issue_2493', $$
+    MATCH ()-[r:rel]->() RETURN count(r)
+$$) as (edges agtype);
+
+-- a CREATE must still not see its own writes: this creates 3 vertices, not
+-- an unbounded number
+SELECT * FROM cypher('issue_2493', $$
+    MATCH (n:src)
+    CREATE (:copy {from: n.id})
+$$) as (a agtype);
+
+SELECT * FROM cypher('issue_2493', $$
+    MATCH (n:copy) RETURN count(n)
+$$) as (copies agtype);
+
+SELECT drop_graph('issue_2493', true);
+
+--
 -- Clean up
 --
 DROP TABLE simple_path;
