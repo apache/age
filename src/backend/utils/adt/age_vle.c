@@ -80,6 +80,7 @@
             (graphid *) (&vpc->graphid_array_data)
 #define EDGE_STATE_HTAB_NAME "Edge state "
 #define EDGE_STATE_HTAB_INITIAL_SIZE 100000
+#define VERTEX_EDGE_HTAB_INITIAL_SIZE 5000
 #define EXISTS_HTAB_NAME "known edges"
 #define EXISTS_HTAB_NAME_INITIAL_SIZE 1000
 #define MAXIMUM_NUMBER_OF_CACHED_LOCAL_CONTEXTS 5
@@ -90,11 +91,30 @@ typedef struct edge_state_entry
     graphid edge_id;               /* edge id, it is also the hash key */
     graphid start_vertex_id;       /* Topology cache for edge endpoints; */
     graphid end_vertex_id;         /* used for direction resolution in DFS. */
-    bool used_in_path;             /* like visited but more descriptive */
-    bool has_been_matched;         /* have we checked for a  match */
-    bool matched;                  /* is it a match */
+    uint8 flags;                   /* used_in_path: like visited but more descriptive */
+                                   /* has_been_matched: have we checked for a  match */
+                                   /* matched: is it a match */
 } edge_state_entry;
 
+
+/*
+ * Macros for manipulating edge_state_entry flags: used_in_path,
+ * has_been_matched stored, matched in a single uint8 field.
+ * These replace three separate booleans to save space in the hash table.
+*/
+#define USE_IN_PATH_FLAGS_MASK 0b00000001
+#define HAS_BEEN_MATCHED_FLAGS_MASK 0b00000010
+#define MATCHED_FLAGS_MASK 0b00000100
+
+#define EDGE_STATE_ENTRY_USE_IN_PATH(ese) ((ese)->flags & USE_IN_PATH_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_HAS_BEEN_MATCHED(ese) ((ese)->flags & HAS_BEEN_MATCHED_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_MATCHED(ese) ((ese)->flags & MATCHED_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_SET_USE_IN_PATH(ese) ((ese)->flags |= USE_IN_PATH_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_SET_HAS_BEEN_MATCHED(ese) ((ese)->flags |= HAS_BEEN_MATCHED_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_SET_MATCHED(ese) ((ese)->flags |= MATCHED_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_UNSET_USE_IN_PATH(ese) ((ese)->flags &= ~USE_IN_PATH_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_UNSET_HAS_BEEN_MATCHED(ese) ((ese)->flags &= ~HAS_BEEN_MATCHED_FLAGS_MASK)
+#define EDGE_STATE_ENTRY_UNSET_MATCHED(ese) ((ese)->flags &= ~MATCHED_FLAGS_MASK)
 /*
  * Vertex-level cache of statically-valid adjacent edges (see
  * get_or_build_vertex_edge_cache). "Statically valid" means the edge passed
@@ -528,7 +548,7 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
         vertex_edge_ctl.entrysize = sizeof(vertex_edge_cache_entry);
         vertex_edge_ctl.hash = graphid_hash;
         vlelctx->vertex_edge_cache = hash_create("VLE vertex edge cache",
-                                                 EDGE_STATE_HTAB_INITIAL_SIZE,
+                                                 VERTEX_EDGE_HTAB_INITIAL_SIZE,
                                                  &vertex_edge_ctl,
                                                  HASH_ELEM | HASH_FUNCTION);
     }
@@ -1162,9 +1182,7 @@ static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
     if (!found)
     {
         ese->edge_id = edge_id;
-        ese->used_in_path = false;
-        ese->has_been_matched = false;
-        ese->matched = false;
+        ese->flags = 0;
         /*
          * start_vertex_id/end_vertex_id are only ever read once
          * has_been_matched is true -- see get_next_vertex_from_state(),
@@ -1366,7 +1384,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          * in the path (loop - we need to remove the edge from the edge stack
          * and start with the next edge).
          */
-        if (ese->used_in_path)
+        if (EDGE_STATE_ENTRY_USE_IN_PATH(ese))
         {
             graphid path_edge_id;
 
@@ -1379,7 +1397,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
             if (edge_id == path_edge_id)
             {
                 gid_stack_pop(path_stack);
-                ese->used_in_path = false;
+                EDGE_STATE_ENTRY_UNSET_USE_IN_PATH(ese);
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
@@ -1403,7 +1421,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
          * Mark it and push it on the path stack. There is no need to push it on
          * the edge stack as it is already there.
          */
-        ese->used_in_path = true;
+        EDGE_STATE_ENTRY_SET_USE_IN_PATH(ese);
         gid_stack_push(path_stack, edge_id);
 
         /*
@@ -1513,7 +1531,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          * in the path (loop - we need to remove the edge from the edge stack
          * and start with the next edge).
          */
-        if (ese->used_in_path)
+        if (EDGE_STATE_ENTRY_USE_IN_PATH(ese))
         {
             graphid path_edge_id;
 
@@ -1526,7 +1544,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
             if (edge_id == path_edge_id)
             {
                 gid_stack_pop(path_stack);
-                ese->used_in_path = false;
+                EDGE_STATE_ENTRY_UNSET_USE_IN_PATH(ese);
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
@@ -1550,7 +1568,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
          * Mark it and push it on the path stack. There is no need to push it on
          * the edge stack as it is already there.
          */
-        ese->used_in_path = true;
+        EDGE_STATE_ENTRY_SET_USE_IN_PATH(ese);
         gid_stack_push(path_stack, edge_id);
 
         /*
@@ -1802,15 +1820,22 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
              * triggered classification -- so it is safe to reuse. Only
              * classify (and cache start/end) the first time, ever.
              */
-            if (!ese->has_been_matched)
+            if (!EDGE_STATE_ENTRY_HAS_BEEN_MATCHED(ese))
             {
-                ese->has_been_matched = true;
-                ese->matched = is_an_edge_match(vlelctx, ee);
+                EDGE_STATE_ENTRY_SET_HAS_BEEN_MATCHED(ese);
+                if (is_an_edge_match(vlelctx, ee))
+                {
+                    EDGE_STATE_ENTRY_SET_MATCHED(ese);
+                }
+                else
+                {
+                    EDGE_STATE_ENTRY_UNSET_MATCHED(ese);
+                }
                 ese->start_vertex_id = get_edge_entry_start_vertex_id(ee);
                 ese->end_vertex_id = get_edge_entry_end_vertex_id(ee);
             }
 
-            if (ese->matched)
+            if (EDGE_STATE_ENTRY_MATCHED(ese))
             {
                 scratch[nscratch++] = batch_eids[i];
             }
@@ -2228,15 +2253,22 @@ static void rdist_expand_vertex(VLE_local_context *vlelctx, graphid u,
                 elog(ERROR, "rdist_expand_vertex: no edge found");
             }
 
-            if (!ese->has_been_matched)
+            if (!EDGE_STATE_ENTRY_HAS_BEEN_MATCHED(ese))
             {
-                ese->has_been_matched = true;
-                ese->matched = is_an_edge_match(vlelctx, ee);
+                EDGE_STATE_ENTRY_SET_HAS_BEEN_MATCHED(ese);
+                if (is_an_edge_match(vlelctx, ee))
+                {
+                    EDGE_STATE_ENTRY_SET_MATCHED(ese);
+                }
+                else
+                {
+                    EDGE_STATE_ENTRY_UNSET_MATCHED(ese);
+                }
                 ese->start_vertex_id = get_edge_entry_start_vertex_id(ee);
                 ese->end_vertex_id = get_edge_entry_end_vertex_id(ee);
             }
 
-            if (!ese->matched)
+            if (!EDGE_STATE_ENTRY_MATCHED(ese))
             {
                 continue;
             }
@@ -2418,7 +2450,7 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
              * Don't add any edges that we have already seen because they
              * will cause a loop to form.
              */
-            if (ese->used_in_path)
+            if (EDGE_STATE_ENTRY_USE_IN_PATH(ese))
             {
                 continue;
             }
