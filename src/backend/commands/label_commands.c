@@ -1036,7 +1036,7 @@ static void range_var_callback_for_remove_relation(const RangeVar *rel,
 
     /* relkind == expected_relkind */
 
-    if (!object_ownercheck(rel_oid, get_rel_namespace(rel_oid), GetUserId()))
+    if (!object_ownercheck(RelationRelationId, rel_oid, GetUserId()))
     {
         aclcheck_error(ACLCHECK_NOT_OWNER,
                        get_relkind_objtype(get_rel_relkind(rel_oid)),

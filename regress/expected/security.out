@@ -1655,3 +1655,61 @@ NOTICE:  graph "rls_graph" has been dropped
  
 (1 row)
 
+-- ============================================================================
+-- NON-SUPERUSER drop_label REGRESSION TEST
+--
+-- Regression test for object_ownercheck() argument order in
+-- range_var_callback_for_remove_relation(). A non-superuser that OWNS a
+-- graph/label previously failed drop_label() with "unrecognized class ID"
+-- because rel_oid was passed as the classid instead of RelationRelationId.
+-- ============================================================================
+DROP ROLE IF EXISTS age_nonsuper;
+NOTICE:  role "age_nonsuper" does not exist, skipping
+CREATE ROLE age_nonsuper LOGIN NOSUPERUSER;
+-- create_graph() creates a new schema in the current database, so the role
+-- needs CREATE on the database; managing labels needs USAGE + CREATE on
+-- ag_catalog. Grant CREATE on whatever database the tests run in.
+SELECT format('GRANT CREATE ON DATABASE %I TO age_nonsuper', current_database())
+\gexec
+GRANT CREATE ON DATABASE contrib_regression TO age_nonsuper
+GRANT USAGE  ON SCHEMA ag_catalog TO age_nonsuper;
+GRANT CREATE ON SCHEMA ag_catalog TO age_nonsuper;
+-- Reproduce as the non-superuser role: it creates (and therefore OWNS) the
+-- graph and the label, then drops the label. Before the fix this raised
+-- "unrecognized class ID"; after the fix the label is dropped successfully.
+SET ROLE age_nonsuper;
+SELECT create_graph('repro_graph');
+NOTICE:  graph "repro_graph" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT create_vlabel('repro_graph', 'repro_label');
+NOTICE:  VLabel "repro_label" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+SELECT drop_label('repro_graph', 'repro_label');
+NOTICE:  label "repro_graph"."repro_label" has been dropped
+ drop_label 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('repro_graph', true);
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table repro_graph._ag_label_vertex
+drop cascades to table repro_graph._ag_label_edge
+NOTICE:  graph "repro_graph" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+RESET ROLE;
+-- Cleanup
+DROP OWNED BY age_nonsuper CASCADE;
+DROP ROLE age_nonsuper;
