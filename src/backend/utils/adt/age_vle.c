@@ -3565,7 +3565,7 @@ Datum age_vle(PG_FUNCTION_ARGS)
         if (!is_zero_bound)
         {
             /* the path_stack should have something in it if we have a path */
-            Assert(vlelctx->dfs_path_stack > 0);
+            Assert(gid_stack_size(vlelctx->dfs_path_stack) > 0);
 
             /*
              * Build the graphid array into a VLE_path_container from the
@@ -3740,7 +3740,7 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-            errmsg("argument 1 of age_match_vle_edge_to_edge_qual must be a VLE_Path_Container")));
+            errmsg("argument 1 of age_match_vle_edge_to_id_qual must be a VLE_Path_Container")));
     }
 
     /* cast argument as a VLE_Path_Container and extract graphid array */
@@ -3768,7 +3768,7 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("argument 2 of age_match_vle_edge_to_edge_qual must be an integer")));
+                     errmsg("argument 2 of age_match_vle_edge_to_id_qual must be an integer")));
         }
 
         id = get_ith_agtype_value_from_container(&edge_id->root, 0);
@@ -3777,7 +3777,7 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                     errmsg("argument 2 of age_match_vle_edge_to_edge_qual must be an integer")));
+                     errmsg("argument 2 of age_match_vle_edge_to_id_qual must be an integer")));
         }
 
         gid = id->val.int_value;
@@ -3799,7 +3799,7 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("argument 3 of age_match_vle_edge_to_edge_qual must be an integer")));
+                 errmsg("argument 3 of age_match_vle_edge_to_id_qual must be a boolean")));
     }
 
     position = get_ith_agtype_value_from_container(&pos_agt->root, 0);
@@ -3808,7 +3808,7 @@ Datum age_match_vle_edge_to_id_qual(PG_FUNCTION_ARGS)
     {
         ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-                 errmsg("argument 3 of age_match_vle_edge_to_edge_qual must be an integer")));
+                 errmsg("argument 3 of age_match_vle_edge_to_id_qual must be a boolean")));
     }
 
     vle_is_on_left = position->val.boolean;
