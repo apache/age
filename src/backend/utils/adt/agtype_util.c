@@ -61,6 +61,9 @@
 #define AGTYPE_MAX_ELEMS (Min(MaxAllocSize / sizeof(agtype_value), AGT_CMASK))
 #define AGTYPE_MAX_PAIRS (Min(MaxAllocSize / sizeof(agtype_pair), AGT_CMASK))
 
+
+#define AGTYPE_OBJECT_LINEAR_SEARCH_THRESHOLD 8
+
 static void fill_agtype_value(agtype_container *container, int index,
                               char *base_addr, uint32 offset,
                               agtype_value *result);
@@ -602,47 +605,104 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
     }
     else if ((flags & AGT_FOBJECT) && AGTYPE_CONTAINER_IS_OBJECT(container))
     {
-        /* Since this is an object, account for *Pairs* of AGTentrys */
+        /* Since this is an object, account for Pairs of AGTentrys */
         char *base_addr = (char *)(children + count * 2);
-        uint32 stop_low = 0;
-        uint32 stop_high = count;
 
         /* Object key passed by caller must be a string */
         Assert(key->type == AGTV_STRING);
 
-        /* Binary search on object/pair keys *only* */
-        while (stop_low < stop_high)
+        if (count <= AGTYPE_OBJECT_LINEAR_SEARCH_THRESHOLD)
         {
-            uint32 stop_middle;
-            int difference;
-            agtype_value candidate;
+            uint32 key_offset = 0;
+            int i;
 
-            stop_middle = stop_low + (stop_high - stop_low) / 2;
-
-            candidate.type = AGTV_STRING;
-            candidate.val.string.val =
-                base_addr + get_agtype_offset(container, stop_middle);
-            candidate.val.string.len = get_agtype_length(container,
-                                                         stop_middle);
-
-            difference = length_compare_agtype_string_value(&candidate, key);
-
-            if (difference == 0)
+            for (i = 0; i < count; i++)
             {
-                /* Found our key, return corresponding value */
-                int index = stop_middle + count;
+                uint32 next_key_offset = key_offset;
+                agtype_value candidate;
+                int difference;
 
-                fill_agtype_value(container, index, base_addr,
-                                  get_agtype_offset(container, index), result);
+                /*
+                * Advance to the offset after this key entry.
+                * The key length is the distance between current key offset
+                * and next key offset.
+                */
+                AGTE_ADVANCE_OFFSET(next_key_offset, children[i]);
 
-                return result;
+                candidate.type = AGTV_STRING;
+                candidate.val.string.val = base_addr + key_offset;
+                candidate.val.string.len = next_key_offset - key_offset;
+
+                difference = length_compare_agtype_string_value(&candidate, key);
+
+                if (difference == 0)
+                {
+                    /* Found our key, return corresponding value */
+                    int index = i + count;
+
+                    fill_agtype_value(container,
+                                    index,
+                                    base_addr,
+                                    get_agtype_offset(container, index),
+                                    result);
+
+                    return result;
+                }
+
+                /*
+                * Object keys are sorted. If current key is greater than the
+                * searched key, no later key can match.
+                */
+                if (difference > 0)
+                    break;
+
+                key_offset = next_key_offset;
             }
-            else
+        }
+        else
+        {
+            uint32 stop_low = 0;
+            uint32 stop_high = count;
+
+            /* Binary search on object/pair keys *only* */
+            while (stop_low < stop_high)
             {
-                if (difference < 0)
-                    stop_low = stop_middle + 1;
+                uint32 stop_middle;
+                int difference;
+                agtype_value candidate;
+
+                stop_middle = stop_low + (stop_high - stop_low) / 2;
+
+                candidate.type = AGTV_STRING;
+
+                candidate.val.string.val =
+                    base_addr + get_agtype_offset(container, stop_middle);
+
+                candidate.val.string.len =
+                    get_agtype_length(container, stop_middle);
+
+                difference = length_compare_agtype_string_value(&candidate, key);
+
+                if (difference == 0)
+                {
+                    /* Found our key, return corresponding value */
+                    int index = stop_middle + count;
+
+                    fill_agtype_value(container,
+                                    index,
+                                    base_addr,
+                                    get_agtype_offset(container, index),
+                                    result);
+
+                    return result;
+                }
                 else
-                    stop_high = stop_middle;
+                {
+                    if (difference < 0)
+                        stop_low = stop_middle + 1;
+                    else
+                        stop_high = stop_middle;
+                }
             }
         }
     }
