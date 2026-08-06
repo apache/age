@@ -1465,8 +1465,12 @@ CREATE ROLE age_nonsuper LOGIN NOSUPERUSER;
 -- create_graph() creates a new schema in the current database, so the role
 -- needs CREATE on the database; managing labels needs USAGE + CREATE on
 -- ag_catalog. Grant CREATE on whatever database the tests run in.
-SELECT format('GRANT CREATE ON DATABASE %I TO age_nonsuper', current_database())
-\gexec
+DO $$
+BEGIN
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO age_nonsuper',
+                   current_database());
+END
+$$;
 GRANT USAGE  ON SCHEMA ag_catalog TO age_nonsuper;
 GRANT CREATE ON SCHEMA ag_catalog TO age_nonsuper;
 
