@@ -731,6 +731,39 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
 }
 
 /*
+ * Get i-th value of an agtype array without allocating memory.
+ *
+ * Fills *result with references into the container data.
+ * Returns false if the element does not exist.
+ * The returned agtype_value is valid only while the container exists.
+ */
+bool get_ith_agtype_value_from_container_no_copy(agtype_container *container,
+                                                  uint32 i,
+                                                  agtype_value* result)
+{
+    char *base_addr;
+    uint32 nelements;
+
+    if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+        ereport(ERROR, (errmsg("container is not an agtype array")));
+
+    nelements = AGTYPE_CONTAINER_SIZE(container);
+    base_addr = (char *)&container->children[nelements];
+
+    if (i >= nelements)
+    {
+        return false;
+    }
+
+
+    fill_agtype_value_no_copy(container, i, base_addr, get_agtype_offset(container, i),
+                      result);
+
+    return true;
+}
+
+
+/*
  * Get type of i-th value of an agtype array.
  */
 enum agtype_value_type get_ith_agtype_value_type(agtype_container *container,

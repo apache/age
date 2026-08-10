@@ -3847,14 +3847,14 @@ static agtype_value *execute_map_access_operator(agtype *map,
                                                  agtype_value *map_value,
                                                  agtype *key)
 {
-    agtype_value *key_value;
+    agtype_value key_value;
     char *key_str;
     int key_len = 0;
 
     /* get the key from the container */
-    key_value = get_ith_agtype_value_from_container(&key->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&key->root, 0, &key_value);
 
-    switch (key_value->type)
+    switch (key_value.type)
     {
     case AGTV_NULL:
         return NULL;
@@ -3876,8 +3876,8 @@ static agtype_value *execute_map_access_operator(agtype *map,
                         errmsg("AGTV_BOOL is not a valid key type")));
         break;
     case AGTV_STRING:
-        key_str = key_value->val.string.val;
-        key_len = key_value->val.string.len;
+        key_str = key_value.val.string.val;
+        key_len = key_value.val.string.len;
         break;
     default:
         ereport(ERROR, (errmsg("unknown agtype scalar type")));
