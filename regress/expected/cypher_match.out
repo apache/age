@@ -2597,10 +2597,10 @@ SELECT count(*) FROM cypher('test_enable_containment', $$ MATCH (x:Customer {pho
 (1 row)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (COSTS OFF) MATCH (x:Customer {school:{name:'XYZ',program:{degree:'BSc'}},phone:[987654321],parents:{}}) RETURN x $$) as (a agtype);
-                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Seq Scan on "Customer" x
-   Filter: ((agtype_access_operator(VARIADIC ARRAY[properties, '"school"'::agtype, '"name"'::agtype]) = '"XYZ"'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"school"'::agtype, '"program"'::agtype, '"degree"'::agtype]) = '"BSc"'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"phone"'::agtype]) @> '[987654321]'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"parents"'::agtype]) @> '{}'::agtype))
+   Filter: ((agtype_access_operator(properties, '"school"'::agtype, '"name"'::agtype) = '"XYZ"'::agtype) AND (agtype_access_operator(properties, '"school"'::agtype, '"program"'::agtype, '"degree"'::agtype) = '"BSc"'::agtype) AND (agtype_access_operator(properties, '"phone"'::agtype) @> '[987654321]'::agtype) AND (agtype_access_operator(properties, '"parents"'::agtype) @> '{}'::agtype))
 (2 rows)
 
 --
@@ -3512,12 +3512,12 @@ SELECT count(*) FROM cypher('test_enable_containment', $$ MATCH p=(x:Customer)-[
 (1 row)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer)-[:bought ={store: 'Amazon', addr:{city: 'Vancouver', street: 30}}]->(y:Product) RETURN 0 $$) as (a agtype);
-                                                                                                                   QUERY PLAN                                                                                                                    
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                   QUERY PLAN                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    ->  Nested Loop
          ->  Seq Scan on bought _age_default_alias_0
-               Filter: ((agtype_access_operator(VARIADIC ARRAY[properties, '"store"'::agtype]) = '"Amazon"'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"addr"'::agtype]) = '{"city": "Vancouver", "street": 30}'::agtype))
+               Filter: ((agtype_access_operator(properties, '"store"'::agtype) = '"Amazon"'::agtype) AND (agtype_access_operator(properties, '"addr"'::agtype) = '{"city": "Vancouver", "street": 30}'::agtype))
          ->  Index Only Scan using "Customer_pkey" on "Customer" x
                Index Cond: (id = _age_default_alias_0.start_id)
    ->  Index Only Scan using "Product_pkey" on "Product" y
@@ -3525,10 +3525,10 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 (8 rows)
 
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
-                                                                                                                                            QUERY PLAN                                                                                                                                             
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Seq Scan on "Customer" x
-   Filter: ((agtype_access_operator(VARIADIC ARRAY[properties, '"school"'::agtype]) = '{"name": "XYZ College", "program": {"major": "Psyc", "degree": "BSc"}}'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[properties, '"phone"'::agtype]) = '[123456789, 987654321, 456987123]'::agtype))
+   Filter: ((agtype_access_operator(properties, '"school"'::agtype) = '{"name": "XYZ College", "program": {"major": "Psyc", "degree": "BSc"}}'::agtype) AND (agtype_access_operator(properties, '"phone"'::agtype) = '[123456789, 987654321, 456987123]'::agtype))
 (2 rows)
 
 --
