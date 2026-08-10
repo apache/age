@@ -36,6 +36,7 @@
 #include "utils/float.h"
 #include "utils/builtins.h"
 #include "utils/varlena.h"
+#include "utils/agtype_traversal.h"
 
 typedef struct PathHashStack
 {
@@ -100,7 +101,7 @@ Datum gin_extract_agtype(PG_FUNCTION_ARGS)
     agtype *agt;
     int32 *nentries;
     int total;
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_value v;
     agtype_iterator_token r;
     int i = 0;
@@ -125,9 +126,9 @@ Datum gin_extract_agtype(PG_FUNCTION_ARGS)
     /* Otherwise, use 2 * root count as initial estimate of result size */
     entries = (Datum *) palloc(sizeof(Datum) * total);
 
-    it = agtype_iterator_init(&agt->root);
+    agtype_traversal_init(&agt->root, &traversal);
 
-    while ((r = agtype_iterator_next(&it, &v, false)) != WAGT_DONE)
+    while ((r = agtype_iterator_next(&traversal, &v, false)) != WAGT_DONE)
     {
         /* Since we recurse into the object, we might need more space */
         if (i >= total)
@@ -224,7 +225,7 @@ Datum gin_extract_agtype_query(PG_FUNCTION_ARGS)
     {
         /* Query is a text array; each element is treated as a key */
         agtype *agt = AG_GET_ARG_AGTYPE_P(0);
-        agtype_iterator *it = NULL;
+        agtype_traversal traversal;
         agtype_value elem;
         agtype_iterator_token itok;
         int key_count = AGTYPE_CONTAINER_SIZE(&agt->root);
@@ -237,16 +238,15 @@ Datum gin_extract_agtype_query(PG_FUNCTION_ARGS)
         }
 
         entries = (Datum *) palloc(sizeof(Datum) * key_count);
-        it = agtype_iterator_init(&agt->root);
-
+        agtype_traversal_init(&agt->root, &traversal);
         /* it should be WAGT_BEGIN_ARRAY */
-        itok = agtype_iterator_next(&it, &elem, true);
+        itok = agtype_iterator_next(&traversal, &elem, true);
         if (itok != WAGT_BEGIN_ARRAY)
         {
             elog(ERROR, "unexpected iterator token: %d", itok);
         }
 
-        while (WAGT_END_ARRAY != agtype_iterator_next(&it, &elem, true))
+        while (WAGT_END_ARRAY != agtype_iterator_next(&traversal, &elem, true))
         {
             if (elem.type != AGTV_STRING)
             {

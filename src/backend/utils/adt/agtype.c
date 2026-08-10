@@ -64,7 +64,7 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "utils/ag_func.h"
-
+#include "utils/agtype_traversal.h"
 /* State structure for Percentile aggregate functions */
 typedef struct PercentileGroupAggState
 {
@@ -182,7 +182,7 @@ agtype *get_one_agtype_from_variadic_args(FunctionCallInfo fcinfo,
 static int64 get_int64_from_int_datums(Datum d, Oid type, char *funcname,
                                        bool *is_agnull);
 
-static agtype_iterator *get_next_object_key(agtype_iterator *it,
+static agtype_iterator *get_next_object_key(agtype_traversal *traversal,
                                             agtype_container *agtc,
                                             agtype_value *key);
 static int extract_variadic_args_min(FunctionCallInfo fcinfo,
@@ -1186,7 +1186,7 @@ static char *agtype_to_cstring_worker(StringInfo out, agtype_container *in,
                                       bool extend)
 {
     bool first = true;
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_value v;
     agtype_iterator_token type = WAGT_DONE;
     int level = 0;
@@ -1208,10 +1208,10 @@ static char *agtype_to_cstring_worker(StringInfo out, agtype_container *in,
 
     enlargeStringInfo(out, (estimated_len >= 0) ? estimated_len : 64);
 
-    it = agtype_iterator_init(in);
+    agtype_traversal_init(in, &traversal);
 
     while (redo_switch ||
-           ((type = agtype_iterator_next(&it, &v, false)) != WAGT_DONE))
+           ((type = agtype_iterator_next(&traversal, &v, false)) != WAGT_DONE))
     {
         redo_switch = false;
         switch (type)
@@ -1254,7 +1254,7 @@ static char *agtype_to_cstring_worker(StringInfo out, agtype_container *in,
             agtype_put_escaped_value(out, &v, extend);
             appendBinaryStringInfo(out, ": ", 2);
 
-            type = agtype_iterator_next(&it, &v, false);
+            type = agtype_iterator_next(&traversal, &v, false);
             if (type == WAGT_VALUE)
             {
                 first = false;
@@ -1733,7 +1733,7 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
         case AGT_TYPE_JSONB:
         {
             agtype *jsonb;
-            agtype_iterator *it;
+            agtype_traversal traversal;
 
             if (OidIsValid(outfuncoid))
                 val = OidFunctionCall1(outfuncoid, val);
@@ -1743,20 +1743,20 @@ static void datum_to_agtype(Datum val, bool is_null, agtype_in_state *result,
              * datum because agtype is currently an extension of jsonb.
              */
             jsonb = DATUM_GET_AGTYPE_P(val);
-            it = agtype_iterator_init(&jsonb->root);
+            agtype_traversal_init(&jsonb->root, &traversal);
 
             if (AGT_ROOT_IS_SCALAR(jsonb))
             {
-                agtype_iterator_next(&it, &agtv, true);
+                agtype_iterator_next(&traversal, &agtv, true);
                 Assert(agtv.type == AGTV_ARRAY);
-                agtype_iterator_next(&it, &agtv, true);
+                agtype_iterator_next(&traversal, &agtv, true);
                 scalar_agtype = true;
             }
             else
             {
                 agtype_iterator_token type;
 
-                while ((type = agtype_iterator_next(&it, &agtv, false)) !=
+                while ((type = agtype_iterator_next(&traversal, &agtv, false)) !=
                        WAGT_DONE)
                 {
                     if (type == WAGT_END_ARRAY || type == WAGT_END_OBJECT ||
@@ -3075,7 +3075,7 @@ Datum agtype_build_list_noargs(PG_FUNCTION_ARGS)
  */
 static bool agtype_extract_scalar(agtype_container *agtc, agtype_value *res)
 {
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_iterator_token tok PG_USED_FOR_ASSERTS_ONLY;
     agtype_value tmp;
 
@@ -3090,20 +3090,20 @@ static bool agtype_extract_scalar(agtype_container *agtc, agtype_value *res)
      * A root scalar is stored as an array of one element, so we get the array
      * and then its first (and only) member.
      */
-    it = agtype_iterator_init(agtc);
+    agtype_traversal_init(agtc, &traversal);
 
-    tok = agtype_iterator_next(&it, &tmp, true);
+    tok = agtype_iterator_next(&traversal, &tmp, true);
     Assert(tok == WAGT_BEGIN_ARRAY);
     Assert(tmp.val.array.num_elems == 1 && tmp.val.array.raw_scalar);
 
-    tok = agtype_iterator_next(&it, res, true);
+    tok = agtype_iterator_next(&traversal, res, true);
     Assert(tok == WAGT_ELEM);
     Assert(IS_A_AGTYPE_SCALAR(res));
 
-    tok = agtype_iterator_next(&it, &tmp, true);
+    tok = agtype_iterator_next(&traversal, &tmp, true);
     Assert(tok == WAGT_END_ARRAY);
 
-    tok = agtype_iterator_next(&it, &tmp, true);
+    tok = agtype_iterator_next(&traversal, &tmp, true);
     Assert(tok == WAGT_DONE);
 
     return true;
@@ -3781,7 +3781,7 @@ PG_FUNCTION_INFO_V1(agtype_to_int4_array);
  */
 Datum agtype_to_int4_array(PG_FUNCTION_ARGS)
 {
-    agtype_iterator *agtype_iterator = NULL;
+    agtype_traversal traversal;
     agtype *agtype_in = NULL;
     agtype_value agtv;
     agtype_iterator_token agtv_token;
@@ -3804,8 +3804,8 @@ Datum agtype_to_int4_array(PG_FUNCTION_ARGS)
 
     agtype_in = AG_GET_ARG_AGTYPE_P(0);
 
-    agtype_iterator = agtype_iterator_init(&agtype_in->root);
-    agtv_token = agtype_iterator_next(&agtype_iterator, &agtv, false);
+    agtype_traversal_init(&agtype_in->root, &traversal);
+    agtv_token = agtype_iterator_next(&traversal, &agtv, false);
 
     if (agtv.type != AGTV_ARRAY)
     {
@@ -3816,7 +3816,7 @@ Datum agtype_to_int4_array(PG_FUNCTION_ARGS)
     array_value = (Datum *) palloc(sizeof(Datum) * element_size);
 
     i = 0;
-    while ((agtv_token = agtype_iterator_next(&agtype_iterator, &agtv, true)) != WAGT_END_ARRAY)
+    while ((agtv_token = agtype_iterator_next(&traversal, &agtv, true)) != WAGT_END_ARRAY)
     {
         int32 element_value = 0;
         if (agtv.type == AGTV_INTEGER)
@@ -4920,7 +4920,7 @@ PG_FUNCTION_INFO_V1(agtype_in_operator);
 Datum agtype_in_operator(PG_FUNCTION_ARGS)
 {
     agtype *agt_arg, *agt_item;
-    agtype_iterator *it_array, *it_item;
+    agtype_traversal traversal_array, traversal_item;
     agtype_value *agtv_arg, agtv_item, agtv_elem;
     uint32 array_size = 0;
     bool result = false;
@@ -4955,13 +4955,13 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         agt_item = AG_GET_ARG_AGTYPE_P(1);
 
         /* init item iterator */
-        it_item = agtype_iterator_init(&agt_item->root);
+        agtype_traversal_init(&agt_item->root, &traversal_item);
 
         /* get value of item */
-        agtype_iterator_next(&it_item, &agtv_item, false);
+        agtype_iterator_next(&traversal_item, &agtv_item, false);
         if (agtv_item.type == AGTV_ARRAY && agtv_item.val.array.raw_scalar)
         {
-            agtype_iterator_next(&it_item, &agtv_item, false);
+            agtype_iterator_next(&traversal_item, &agtv_item, false);
             /* check for AGTYPE NULL */
             if (agtv_item.type == AGTV_NULL)
             {
@@ -4994,13 +4994,13 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
     else
     {
         /* init array iterator */
-        it_array = agtype_iterator_init(&agt_arg->root);
+        agtype_traversal_init(&agt_arg->root, &traversal_array);
         /* open array container */
-        agtype_iterator_next(&it_array, &agtv_elem, false);
+        agtype_iterator_next(&traversal_array, &agtv_elem, false);
         /* check for an array scalar value */
         if (agtv_elem.type == AGTV_ARRAY && agtv_elem.val.array.raw_scalar)
         {
-            agtype_iterator_next(&it_array, &agtv_elem, false);
+            agtype_iterator_next(&traversal_array, &agtv_elem, false);
             /* check for AGTYPE NULL */
             if (agtv_elem.type == AGTV_NULL)
             {
@@ -5022,13 +5022,13 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         agt_item = AG_GET_ARG_AGTYPE_P(1);
 
         /* init item iterator */
-        it_item = agtype_iterator_init(&agt_item->root);
+        agtype_traversal_init(&agt_item->root, &traversal_item);
 
         /* get value of item */
-        agtype_iterator_next(&it_item, &agtv_item, false);
+        agtype_iterator_next(&traversal_item, &agtv_item, false);
         if (agtv_item.type == AGTV_ARRAY && agtv_item.val.array.raw_scalar)
         {
-            agtype_iterator_next(&it_item, &agtv_item, false);
+            agtype_iterator_next(&traversal_item, &agtv_item, false);
             /* check for AGTYPE NULL */
             if (agtv_item.type == AGTV_NULL)
             {
@@ -5040,7 +5040,7 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         for (i = 0; i < array_size && !result; i++)
         {
             /* get next element */
-            agtype_iterator_next(&it_array, &agtv_elem, true);
+            agtype_iterator_next(&traversal_array, &agtv_elem, true);
             /* if both are containers, compare containers */
             if (!IS_A_AGTYPE_SCALAR(&agtv_item) && !IS_A_AGTYPE_SCALAR(&agtv_elem))
             {
@@ -5230,7 +5230,7 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
 {
     uint64 hash = 0;
     agtype *agt;
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_iterator_token tok;
     agtype_value *r;
     uint64 seed = 0xF0F0F0F0;
@@ -5261,8 +5261,8 @@ Datum agtype_hash_cmp(PG_FUNCTION_ARGS)
 
     r = palloc0(sizeof(agtype_value));
 
-    it = agtype_iterator_init(&agt->root);
-    while ((tok = agtype_iterator_next(&it, r, false)) != WAGT_DONE)
+    agtype_traversal_init(&agt->root, &traversal);
+    while ((tok = agtype_iterator_next(&traversal, r, false)) != WAGT_DONE)
     {
         if (IS_A_AGTYPE_SCALAR(r) && AGTYPE_ITERATOR_TOKEN_IS_HASHABLE(tok))
             agtype_hash_scalar_value_extended(r, &hash, seed);
@@ -8155,7 +8155,7 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(agtype_value_to_agtype(agis_result.res));
 }
 
-agtype_iterator *get_next_list_element(agtype_iterator *it,
+bool get_next_list_element(agtype_traversal *traversal,
                            agtype_container *agtc, agtype_value *elem)
 {
     agtype_iterator_token itok;
@@ -8171,25 +8171,21 @@ agtype_iterator *get_next_list_element(agtype_iterator *it,
        return NULL;
     }
 
-    /* if the passed iterator is NULL, this is the first time, create it */
-    if (it == NULL)
+    /* if iterator state is AGTI_ARRAY_START, this is the first time */
+    if (traversal->it->state == AGTI_ARRAY_START)
     {
-        /* initial the iterator */
-        it = agtype_iterator_init(agtc);
-        /* get the first token */
-        itok = agtype_iterator_next(&it, &tmp, true);
-        /* it should be WAGT_BEGIN_ARRAY */
+        itok = agtype_iterator_next(traversal, &tmp, true);
         Assert(itok == WAGT_BEGIN_ARRAY);
     }
 
     /* the next token should be an element or the end of the array */
-    itok = agtype_iterator_next(&it, &tmp, true);
+    itok = agtype_iterator_next(traversal, &tmp, true);
     Assert(itok == WAGT_ELEM || itok == WAGT_END_ARRAY);
 
     /* if this is the end of the array return NULL */
     if (itok == WAGT_END_ARRAY)
     {
-        return NULL;
+        return false;
     }
 
     /* this should be the element, copy it */
@@ -8198,7 +8194,7 @@ agtype_iterator *get_next_list_element(agtype_iterator *it,
         *elem = tmp;
     }
 
-    return it;
+    return true;
 }
 
 PG_FUNCTION_INFO_V1(age_reverse);
@@ -8259,7 +8255,7 @@ Datum age_reverse(PG_FUNCTION_ARGS)
         agtype_in_state result;
         agtype_parse_state *parse_state = NULL;
         agtype_value elem = {0};
-        agtype_iterator *it = NULL;
+        agtype_traversal traversal;
         agtype_value tmp;
         agtype_value *elems = NULL;
         int num_elems;
@@ -8292,7 +8288,8 @@ Datum age_reverse(PG_FUNCTION_ARGS)
         {
             agtv_value = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY, NULL);
 
-            while ((it = get_next_list_element(it, &agt_arg->root, &elem)))
+            agtype_traversal_init(&agt_arg->root, &traversal);
+            while (get_next_list_element(&traversal, &agt_arg->root, &elem))
             {
                 agtv_value = push_agtype_value(&parse_state, WAGT_ELEM, &elem);
             }
@@ -10942,7 +10939,7 @@ agtype_value *agtype_composite_to_agtype_value_binary(agtype *a)
 agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                                    agtype *new_v, bool remove_property)
 {
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
     agtype_value *r;
@@ -10966,8 +10963,8 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
     r = palloc0(sizeof(agtype_value));
 
     prop_agtype = agtype_value_to_agtype(properties);
-    it = agtype_iterator_init(&prop_agtype->root);
-    tok = agtype_iterator_next(&it, r, true);
+    agtype_traversal_init(&prop_agtype->root, &traversal);
+    tok = agtype_iterator_next(&traversal, r, true);
 
     parsed_agtype_value = push_agtype_value(&parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
 
@@ -10985,7 +10982,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
     {
         char *str;
 
-        tok = agtype_iterator_next(&it, r, true);
+        tok = agtype_iterator_next(&traversal, r, true);
 
         if (tok == WAGT_DONE || tok == WAGT_END_OBJECT)
         {
@@ -11007,7 +11004,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                 &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
 
             /* get the value and push the value */
-            tok = agtype_iterator_next(&it, r, true);
+            tok = agtype_iterator_next(&traversal, r, true);
             parsed_agtype_value = push_agtype_value(&parse_state, tok, r);
         }
         else
@@ -11018,7 +11015,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
             if(remove_property)
             {
                 /* skip the value */
-                tok = agtype_iterator_next(&it, r, true);
+                tok = agtype_iterator_next(&traversal, r, true);
                 continue;
             }
 
@@ -11027,7 +11024,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
                 &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
 
             /* skip the existing value for the key */
-            tok = agtype_iterator_next(&it, r, true);
+            tok = agtype_iterator_next(&traversal, r, true);
 
             /*
              * If the new agtype is scalar, push the agtype_value to the
@@ -11105,7 +11102,7 @@ agtype_value *alter_property_value(agtype_value *properties, char *var_name,
 agtype_value *alter_properties(agtype_value *original_properties,
                                agtype *new_properties)
 {
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
     agtype_value *key;
@@ -11131,8 +11128,8 @@ agtype_value *alter_properties(agtype_value *original_properties,
     /* Append new properties. */
     key = palloc0(sizeof(agtype_value));
     value = palloc0(sizeof(agtype_value));
-    it = agtype_iterator_init(&new_properties->root);
-    tok = agtype_iterator_next(&it, key, true);
+    agtype_traversal_init(&new_properties->root, &traversal);
+    tok = agtype_iterator_next(&traversal, key, true);
 
     if (tok != WAGT_BEGIN_OBJECT)
     {
@@ -11142,14 +11139,14 @@ agtype_value *alter_properties(agtype_value *original_properties,
 
     while (true)
     {
-        tok = agtype_iterator_next(&it, key, true);
+        tok = agtype_iterator_next(&traversal, key, true);
 
         if (tok == WAGT_DONE || tok == WAGT_END_OBJECT)
         {
             break;
         }
 
-        agtype_iterator_next(&it, value, true);
+        agtype_iterator_next(&traversal, value, true);
 
         parsed_agtype_value = push_agtype_value(&parse_state, WAGT_KEY,
                                                 key);
@@ -12475,7 +12472,7 @@ Datum age_eq_tilde(PG_FUNCTION_ARGS)
  * Helper function to step through and retrieve keys from an object.
  * borrowed and modified from get_next_object_pair() in agtype_vle.c
  */
-static agtype_iterator *get_next_object_key(agtype_iterator *it,
+static agtype_iterator *get_next_object_key(agtype_traversal *traversal,
                                              agtype_container *agtc,
                                              agtype_value *key)
 {
@@ -12493,18 +12490,18 @@ static agtype_iterator *get_next_object_key(agtype_iterator *it,
     }
 
     /* if the passed iterator is NULL, this is the first time, create it */
-    if (it == NULL)
+    if (traversal->it == NULL)
     {
         /* initial the iterator */
-        it = agtype_iterator_init(agtc);
+        agtype_traversal_init(agtc, traversal);
         /* get the first token */
-        itok = agtype_iterator_next(&it, &tmp, false);
+        itok = agtype_iterator_next(traversal, &tmp, false);
         /* it should be WAGT_BEGIN_OBJECT */
         Assert(itok == WAGT_BEGIN_OBJECT);
     }
 
     /* the next token should be a key or the end of the object */
-    itok = agtype_iterator_next(&it, &tmp, false);
+    itok = agtype_iterator_next(traversal, &tmp, false);
     Assert(itok == WAGT_KEY || itok == WAGT_END_OBJECT);
     /* if this is the end of the object return NULL */
     if (itok == WAGT_END_OBJECT)
@@ -12522,11 +12519,11 @@ static agtype_iterator *get_next_object_key(agtype_iterator *it,
      * The next token should be a value but, it could be a begin tokens for
      * arrays or objects. For those we just return NULL to ignore them.
      */
-    itok = agtype_iterator_next(&it, &tmp, true);
+    itok = agtype_iterator_next(traversal, &tmp, true);
     Assert(itok == WAGT_VALUE);
 
     /* return the iterator */
-    return it;
+    return traversal->it;
 }
 
 PG_FUNCTION_INFO_V1(age_keys);
@@ -12540,6 +12537,10 @@ Datum age_keys(PG_FUNCTION_ARGS)
     agtype_value obj_key = {0};
     agtype_iterator *it = NULL;
     agtype_parse_state *parse_state = NULL;
+
+    agtype_traversal traversal;
+
+    traversal.it = NULL;
 
     /* check for null */
     if (PG_ARGISNULL(0))
@@ -12591,7 +12592,7 @@ Datum age_keys(PG_FUNCTION_ARGS)
     agtv_result = push_agtype_value(&parse_state, WAGT_BEGIN_ARRAY, NULL);
 
     /* populate the array with keys */
-    while ((it = get_next_object_key(it, &agt_arg->root, &obj_key)))
+    while ((it = get_next_object_key(&traversal, &agt_arg->root, &obj_key)))
     {
         agtv_result = push_agtype_value(&parse_state, WAGT_ELEM, &obj_key);
     }
@@ -13023,7 +13024,7 @@ Datum age_unnest(PG_FUNCTION_ARGS)
     TupleDesc ret_tdesc;
     MemoryContext old_cxt, tmp_cxt;
     bool skipNested = false;
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_value v;
     agtype_iterator_token r;
 
@@ -13062,9 +13063,9 @@ Datum age_unnest(PG_FUNCTION_ARGS)
                                     "age_unnest temporary cxt",
                                     ALLOCSET_DEFAULT_SIZES);
 
-    it = agtype_iterator_init(&agtype_arg->root);
+    agtype_traversal_init(&agtype_arg->root, &traversal);
 
-    while ((r = agtype_iterator_next(&it, &v, skipNested)) != WAGT_DONE)
+    while ((r = agtype_iterator_next(&traversal, &v, skipNested)) != WAGT_DONE)
     {
         skipNested = true;
 
