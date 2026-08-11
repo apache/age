@@ -97,6 +97,8 @@ static bool compare_2_paths(path_entry **lhs, path_entry **rhs,
 static path_entry **find_duplicate_path(CustomScanState *node,
                                         path_entry **path_array);
 static void free_path_entry_array(path_entry **path_array, int length);
+static void preserve_path_properties(path_entry **path_array, int length,
+                                     MemoryContext memory_context);
 
 /*
  * Initializes the MERGE Execution Node at the beginning of the execution
@@ -426,6 +428,35 @@ static void free_path_entry_array(path_entry **path_array, int length)
     {
         pfree_if_not_null(path_array[index]);
     }
+
+    /* free up the array container */
+    pfree_if_not_null(path_array);
+}
+
+/*
+ * Copy new-entity properties into created_paths_list's memory context.
+ * prebuild_path() evaluates these Datums in the per-row expression context,
+ * but created_paths_list is retained until node shutdown.
+ */
+static void preserve_path_properties(path_entry **path_array, int length,
+                                     MemoryContext memory_context)
+{
+    MemoryContext old_context;
+    int index;
+
+    old_context = MemoryContextSwitchTo(memory_context);
+
+    for (index = 0; index < length; index++)
+    {
+        path_entry *entry = path_array[index];
+
+        if (!entry->actual && !entry->prop_isNull)
+        {
+            entry->prop = datumCopy(entry->prop, false, -1);
+        }
+    }
+
+    MemoryContextSwitchTo(old_context);
 }
 
 /*
@@ -690,6 +721,10 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                 TupleTableSlot *projected;
                 HeapTuple htup;
 
+                /* Release scratch retained by the preceding input row. */
+                ResetExprContext(econtext);
+                ResetPerTupleExprContext(estate);
+
                 /* Process the subtree first */
                 Decrement_Estate_CommandId(estate)
                 slot = ExecProcNode(node->ss.ps.lefttree);
@@ -737,6 +772,9 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                         created_path *new_path =
                             palloc0(sizeof(created_path));
 
+                        preserve_path_properties(
+                            prebuilt_path_array, path_length,
+                            estate->es_query_cxt);
                         new_path->next = css->created_paths_list;
                         new_path->entry = prebuilt_path_array;
                         css->created_paths_list = new_path;
@@ -795,6 +833,10 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
          */
         do
         {
+            /* Release scratch retained by the preceding input row. */
+            ResetExprContext(econtext);
+            ResetPerTupleExprContext(estate);
+
             /* Process the subtree first */
             Decrement_Estate_CommandId(estate)
             slot = ExecProcNode(node->ss.ps.lefttree);
@@ -837,6 +879,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
                 {
                     created_path *new_path = palloc0(sizeof(created_path));
 
+                    preserve_path_properties(prebuilt_path_array, path_length,
+                                             estate->es_query_cxt);
                     new_path->next = css->created_paths_list;
                     new_path->entry = prebuilt_path_array;
                     css->created_paths_list = new_path;
@@ -912,6 +956,8 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
          * Process the subtree. The subtree will only consist of the MERGE
          * path.
          */
+        ResetExprContext(econtext);
+        ResetPerTupleExprContext(estate);
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
         Increment_Estate_CommandId(estate)
@@ -1083,9 +1129,6 @@ static void end_cypher_merge(CustomScanState *node)
 
         /* free up the path array elements */
         free_path_entry_array(entry, path_length);
-
-        /* free up the array container */
-        pfree_if_not_null(entry);
 
         /* free up the created_path container */
         pfree_if_not_null(css->created_paths_list);
