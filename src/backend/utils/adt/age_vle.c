@@ -103,76 +103,57 @@ bool vle_edge_state_eviction_enabled = true;
 void vle_define_guc_variables(void)
 {
     DefineCustomIntVariable("age.vle_edge_state_htab_initial_size",
-                            "Initial bucket count for the per-query VLE edge-state hash table.",
-                            "Lower values reduce baseline memory for small VLE queries; "
-                            "the table still grows on demand for larger ones.",
+                            "Initial size of the VLE edge-state hash table.",
+                            "Lower values save memory for small queries; grows dynamically.",
                             &vle_edge_state_htab_initial_size,
                             vle_edge_state_htab_initial_size, 16, 10000000,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_vertex_edge_htab_initial_size",
-                            "Initial bucket count for the per-query VLE vertex->edges cache.",
+                            "Initial size of the VLE vertex-edges cache.",
                             NULL,
                             &vle_vertex_edge_htab_initial_size,
                             vle_vertex_edge_htab_initial_size, 16, 10000000,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_edge_state_max_entries",
-                            "Soft cap on live entries in the VLE edge-state hash table "
-                            "before background eviction of unreferenced entries kicks in.",
-                            "Entries currently pinned (part of the active DFS path or "
-                            "still sitting unresolved on the DFS edge stack) are never "
-                            "evicted, so actual memory can still exceed this in the "
-                            "worst case -- see age.vle_edge_state_eviction_enabled.",
+                            "Soft limit on VLE edge-state hash table entries.",
+                            "Triggers eviction. Pinned entries are never evicted, so actual memory may exceed this.",
                             &vle_edge_state_max_entries,
                             vle_edge_state_max_entries, 1000, INT_MAX,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_vertex_edge_cache_max_entries",
-                            "Soft cap on the number of vertices whose statically-valid "
-                            "adjacent edges are cached at once (VLE vertex_edge_cache).",
-                            "Unlike the edge-state cache, this one is a pure "
-                            "performance cache with no pinning constraints, so it is "
-                            "always evicted down to the cap using an LRU/clock policy.",
+                            "Soft limit on cached vertices in the VLE vertex-edges cache.",
+                            "Evicts entries down to the limit using an LRU/clock policy.",
                             &vle_vertex_edge_cache_max_entries,
                             vle_vertex_edge_cache_max_entries, 1000, INT_MAX,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_vertex_edge_cache_max_kb",
-                            "Soft cap, in kilobytes, on the memory backing "
-                            "VLE vertex_edge_cache's cached adjacency arrays.",
-                            "A single high-degree (hub) vertex can hold far more "
-                            "memory than age.vle_vertex_edge_cache_max_entries alone "
-                            "would suggest; this bounds the cache by its actual "
-                            "footprint.",
+                            "Soft limit on memory for VLE vertex-edges cache.",
+                            "Bounds the cache by actual memory footprint rather than entry count.",
                             &vle_vertex_edge_cache_max_kb,
                             vle_vertex_edge_cache_max_kb, 1024, INT_MAX,
-                            PGC_USERSET, 0, NULL, NULL, NULL);
+                            PGC_USERSET, GUC_UNIT_KB, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_reverse_dist_max_entries",
-                            "Cap on the reverse-BFS distance table used to prune "
-                            "PATHS_BETWEEN VLE queries.",
-                            "Once reached, the reverse BFS simply stops advancing "
-                            "(graceful degradation of pruning power, never a "
-                            "correctness issue -- under-pruning only costs speed).",
+                            "Limit on the reverse-BFS distance table used for pruning.",
+                            "If exceeded, pruning gracefully degrades without affecting correctness.",
                             &vle_reverse_dist_max_entries,
                             vle_reverse_dist_max_entries, 1000, INT_MAX,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomIntVariable("age.vle_max_cached_contexts",
-                            "Maximum number of VLE_local_context objects (one per "
-                            "distinct VLE grammar node) kept cached per backend.",
+                            "Max cached VLE local contexts per backend.",
                             NULL,
                             &vle_max_cached_contexts,
                             vle_max_cached_contexts, 1, 1000,
                             PGC_USERSET, 0, NULL, NULL, NULL);
 
     DefineCustomBoolVariable("age.vle_edge_state_eviction_enabled",
-                            "Enable clock-style eviction of unreferenced entries in "
-                            "the VLE edge-state hash table once "
-                            "age.vle_edge_state_max_entries is exceeded.",
-                            "When disabled, the edge-state cache grows without a "
-                            "hard bound (still only ever holding matched edges).",
+                            "Enable eviction in the VLE edge-state hash table.",
+                            "If disabled, the cache grows without a hard bound.",
                             &vle_edge_state_eviction_enabled,
                             vle_edge_state_eviction_enabled,
                             PGC_USERSET, 0, NULL, NULL, NULL);
@@ -185,31 +166,18 @@ void vle_define_guc_variables(void)
  * is_an_edge_match() -- see get_or_build_vertex_edge_cache() and
  * rdist_expand_vertex(). Presence in the table therefore implies
  * "matched"; there is no separate matched flag.
- *
- * pin_count is the number of times this edge_id currently sits,
- * unpopped, somewhere on vlelctx->dfs_edge_stack. Because vertices (not
- * just edges) can be revisited by the DFS, the SAME edge_id can be
- * pushed onto dfs_edge_stack more than once while an older, still-open
- * copy is buried deeper in the stack (see add_valid_vertex_edges() and
- * the single gid_stack_pop(edge_stack) sites in dfs_find_a_path_between/
- * from()). used_in_path alone is therefore NOT sufficient to know an
- * entry is safe to evict -- a pin_count of 0 is: it means no live
- * occurrence of this edge remains anywhere on the stack, in any state.
  */
 typedef struct edge_state_entry
 {
     graphid edge_id;               /* edge id, it is also the hash key */
     graphid start_vertex_id;       /* Topology cache for edge endpoints; */
     graphid end_vertex_id;         /* used for direction resolution in DFS. */
-    uint32 state;               /* bits 0-29: live occurrences on dfs_edge_stack; */
-                                    /* 0 <=> safe to evict (see above)    */
-                                /* bit 30: used_in_path; bit 31: clock_ref (eviction) */
+    uint32 state;                  /* [0-29]: pin_count, [30]: used_in_path, [31]: clock_ref */
 } edge_state_entry;
-
 
 /*
  * Macros for manipulating edge_state_entry flags: used_in_path and
- * clock_ref, packed into a single uint8 field.
+ * clock_ref, packed into a single uint32 field.
  */
 #define PIN_COUNT_MASK 0b00111111111111111111111111111111U /* bits 0-29 */
 #define USE_IN_PATH_FLAGS_MASK 0b01000000000000000000000000000000U /* bit 30 */
@@ -227,33 +195,15 @@ typedef struct edge_state_entry
 #define EDGE_STATE_ENTRY_PIN_COUNT_INC(ese) ((ese)->state = ((ese)->state & ~PIN_COUNT_MASK) | (EDGE_STATE_ENTRY_PIN_COUNT(ese) + 1))
 #define EDGE_STATE_ENTRY_PIN_COUNT_DEC(ese) ((ese)->state = ((ese)->state & ~PIN_COUNT_MASK) | (EDGE_STATE_ENTRY_PIN_COUNT(ese) - 1))
 /*
- * Vertex-level cache of statically-valid adjacent edges (see
- * get_or_build_vertex_edge_cache). "Statically valid" means the edge passed
- * is_an_edge_match() -- it says nothing about whether the edge is currently
- * usable in the DFS (that is path-dependent and re-checked on every visit
- * by add_valid_vertex_edges()).
+ * Vertex cache of edges that passed is_an_edge_match().
+ * Path validity is re-checked dynamically by add_valid_vertex_edges().
  */
 typedef struct vertex_edge_cache_entry
 {
-    graphid vertex_id;              /* vertex id, it is also the hash key */
-    int32 nvalid;                   /* number of entries in valid_edges */
-    graphid *valid_edges;           /* palloc'd array (in
-                                      * vlelctx->vertex_edge_cache_mcxt) of
-                                      * edge ids that passed is_an_edge_match
-                                      * for this vertex, in the same relative
-                                      * order they were discovered (out, then
-                                      * in, then self). Sized to exactly
-                                      * nvalid, not to the raw adjacency
-                                      * count -- see the repalloc in
-                                      * get_or_build_vertex_edge_cache(). */
-    bool clock_ref;                 /* eviction: touched since last sweep?
-                                      * Unlike edge_state_entry, this cache
-                                      * has NO pinning requirement -- the
-                                      * returned pointer is only ever used
-                                      * synchronously within a single
-                                      * add_valid_vertex_edges() call, never
-                                      * retained -- so any entry is always
-                                      * safe to evict and rebuild later. */
+    graphid vertex_id;      /* Hash key */
+    int32 nvalid;           /* Count of valid_edges */
+    graphid *valid_edges;   /* palloc'd array size nvalid */
+    bool clock_ref;         /* Eviction marker. */
 } vertex_edge_cache_entry;
 
 /*
@@ -312,41 +262,19 @@ typedef struct VLE_local_context
     bool uidx_infinite;            /* flag if the upper bound is omitted */
     cypher_rel_dir edge_direction; /* the direction of the edge */
     HTAB *edge_state_hashtable;    /* local state hashtable for our edges */
-    HTAB *vertex_edge_cache;       /* vertex_id -> statically-valid adjacent
-                                     * edges (see get_or_build_vertex_edge_cache) */
-    MemoryContext vertex_edge_cache_mcxt; /* Child context for valid_edges[]; managed explicitly. */
+    HTAB *vertex_edge_cache;       /* vertex_id -> statically-valid adjacent */
+    MemoryContext vertex_edge_cache_mcxt; /* Child context for valid_edges[] */
 
-    /*
-     * Lazy reverse-BFS state for VLE_FUNCTION_PATHS_BETWEEN pruning.
-     *
-     * This state is target-specific: reverse_dist_table is valid only
-     * for the current veid and is rebuilt when veid changes.  It is
-     * deliberately separate from vertex_edge_cache, whose entries are
-     * valid for the whole VLE_local_context.
-     */
-    HTAB *reverse_dist_table;       /* vertex_id -> reverse_dist_entry,
-                                      * valid only for the current veid */
-    MemoryContext reverse_dist_mcxt; /* owns reverse_dist_table and
-                                      * reverse_dist_queue.data */
-    bool reverse_dist_initialized;  /* true after reverse_dist_table has
-                                      * been created for this vlelctx */
-    graphid reverse_dist_target;    /* veid for reverse_dist_table */
-    bool reverse_dist_exhausted;    /* true once the reverse-BFS frontier
-                                      * is fully drained (or past the uidx
-                                      * budget) -- a PROOF that any vertex
-                                      * not already in reverse_dist_table
-                                      * is unreachable within scope. Only
-                                      * this flag may make
-                                      * get_or_advance_reverse_dist() return
-                                      * PG_INT64_MAX for an unknown vertex. */
-    bool reverse_dist_capped;       /* true once age.vle_reverse_dist_max_entries
-                                      * stopped the reverse BFS from
-                                      * admitting new frontier vertices.
-                                      * This is NOT a reachability proof --
-                                      * it just means we gave up early to
-                                      * respect a memory budget -- so it
-                                      * must never be treated the way
-                                      * reverse_dist_exhausted is. */
+    /* Lazy reverse-BFS state for VLE_FUNCTION_PATHS_BETWEEN pruning.
+     * Target-specific: valid only for current reverse_dist_target. */
+    HTAB *reverse_dist_table;           /* vertex_id -> reverse_dist_entry */
+    MemoryContext reverse_dist_mcxt;    /* Owns reverse_dist_table and queue data */
+    bool reverse_dist_initialized;      /* Table created for this vlelctx */
+    graphid reverse_dist_target;        /* Current target veid */
+    bool reverse_dist_exhausted;        /* Frontier fully drained: unreachable vertices
+                                         * are proven unreachable within scope.
+                                         * Only this flag allows returning PG_INT64_MAX. */
+    bool reverse_dist_capped;           /* BFS stopped by memory budget */
     rdist_queue reverse_dist_queue; /* reverse-BFS frontier */
     GraphIdStack *dfs_vertex_stack; /* dfs stack for vertices (array-based) */
     GraphIdStack *dfs_edge_stack;   /* dfs stack for edges (array-based) */
@@ -446,7 +374,7 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
                                                     VLE_local_context *vlelctx,
                                                     graphid vertex_id);
 static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id);
-/* reverse-BFS pruning for VLE_FUNCTION_PATHS_BETWEEN (see add_valid_vertex_edges) */
+/* reverse-BFS pruning for VLE_FUNCTION_PATHS_BETWEEN */
 static cypher_rel_dir flip_edge_direction(cypher_rel_dir dir);
 static void reset_reverse_dist_state_if_needed(VLE_local_context *vlelctx);
 static void set_reverse_dist(VLE_local_context *vlelctx, graphid vertex_id,
@@ -653,30 +581,7 @@ static void create_VLE_local_state_hashtable(VLE_local_context *vlelctx)
                                                 HASH_ELEM | HASH_FUNCTION);
     pfree_if_not_null(eshn);
 
-    /*
-     * Create a dedicated child context to own every valid_edges[] array
-     * that will ever be allocated by get_or_build_vertex_edge_cache().
-     *
-     * We deliberately do NOT just capture CurrentMemoryContext into a bare
-     * MemoryContext field and palloc directly into it: this function is
-     * called from three different sites (the LRU-cached path in
-     * build_local_vle_context(), which runs under TopMemoryContext; the
-     * uncached SRF path, which runs under funcctx->multi_call_memory_ctx;
-     * and sp_minhops_fallback(), which runs under its own private scratch
-     * context). All three currently do the right thing, but relying on
-     * "whichever context the caller happened to switch to before calling
-     * in here" is exactly the kind of ambient-context assumption that
-     * silently breaks under refactoring. Creating our OWN child context
-     * here means its lifetime is entirely our responsibility, symmetric
-     * with hash_destroy() below: we explicitly MemoryContextDelete() it in
-     * free_VLE_local_context(), the same way hash_destroy() explicitly
-     * frees edge_state_hashtable's storage. Correctness no longer depends
-     * on what CurrentMemoryContext happens to be, here or at any future
-     * call site -- we still parent off it (so it is reclaimed for free if
-     * an ancestor context is ever deleted first, e.g. via
-     * sp_minhops_fallback()'s MemoryContextDelete(tmpctx)), but we never
-     * depend on that parent to be the one doing the cleanup.
-     */
+    /* Dedicated child context for valid_edges[] */
     vlelctx->vertex_edge_cache_mcxt = AllocSetContextCreate(CurrentMemoryContext,
                                                             "VLE vertex edge cache",
                                                             ALLOCSET_DEFAULT_SIZES);
@@ -860,36 +765,21 @@ static void free_VLE_local_context(VLE_local_context *vlelctx)
     hash_destroy(vlelctx->edge_state_hashtable);
     vlelctx->edge_state_hashtable = NULL;
 
-    /*
-     * Free the vertex edge cache's own hashtable storage (its entries --
-     * fixed-size vertex_edge_cache_entry structs, held in dynahash's own
-     * private child context). This does NOT free the valid_edges[] arrays
-     * those entries point to.
-     */
+    /* Free vertex edge cache hashtable (entries only, not valid_edges[]). */
     if (vlelctx->vertex_edge_cache != NULL)
     {
         hash_destroy(vlelctx->vertex_edge_cache);
         vlelctx->vertex_edge_cache = NULL;
     }
 
-    /*
-     * Explicitly delete the dedicated context that owns every valid_edges[]
-     * array. This is what actually reclaims that memory -- hash_destroy()
-     * above never touches it. Symmetric, on purpose, with the hash_destroy()
-     * calls: every allocator this function uses gets an explicit, owned
-     * teardown call here, none of them are left to an ambient parent
-     * context to clean up "eventually".
-     */
+    /* Free context owning valid_edges[] arrays. */
     if (vlelctx->vertex_edge_cache_mcxt != NULL)
     {
         MemoryContextDelete(vlelctx->vertex_edge_cache_mcxt);
         vlelctx->vertex_edge_cache_mcxt = NULL;
     }
 
-    /*
-     * Free the reverse-BFS pruning state.  The dedicated context owns
-     * both the distance table storage and the queue data.
-     */
+    /* Free reverse-BFS state: context owns both table and queue data. */
     if (vlelctx->reverse_dist_table != NULL)
     {
         hash_destroy(vlelctx->reverse_dist_table);
@@ -1310,23 +1200,6 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
  * both the dynahash edge_state_hashtable here and the agehash-backed
  * edge_table on the global-graph lookup path elsewhere.
  */
-/*
- * Get (creating if necessary) the edge_state_entry for edge_id.
- *
- * Every caller -- the DFS peek at the top of dfs_find_a_path_between()/
- * from(), and the dynamic used_in_path re-check in
- * add_valid_vertex_edges() -- only ever asks about an edge already known
- * to be statically valid (matched): it came out of
- * vertex_edge_cache_entry->valid_edges[], or it is already sitting on
- * dfs_edge_stack. A lookup miss therefore never means "not yet
- * classified" (that only happens in get_or_build_vertex_edge_cache() /
- * rdist_expand_vertex(), which gate insertion on is_an_edge_match()); it
- * means the entry was reclaimed by evict_edge_state_entries_if_needed()
- * while unreferenced (pin_count == 0, not used_in_path). On a miss we
- * re-derive start/end from the underlying edge and recreate the entry in
- * the same neutral state (pin_count 0, flags 0) it was evicted in, which
- * makes eviction transparent to every caller.
- */
 static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
                                                   graphid edge_id,
                                                   uint32 hashvalue)
@@ -1348,13 +1221,6 @@ static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
             elog(ERROR, "get_edge_state_with_hash: no edge found");
         }
 
-        /*
-         * Callers only ever pass an edge_id already known to be a match
-         * (see above), so it is not re-verified in production builds --
-         * only re-confirmed here under assertions, to catch any future
-         * caller that violates the precondition instead of silently
-         * fabricating state for a non-matching edge.
-         */
         Assert(is_an_edge_match(vlelctx, ee));
 
         ese->edge_id = edge_id;
@@ -1369,15 +1235,7 @@ static edge_state_entry *get_edge_state_with_hash(VLE_local_context *vlelctx,
     return ese;
 }
 
-/*
- * HASH_FIND-only counterpart of get_edge_state_with_hash(), used by the
- * classification call sites (get_or_build_vertex_edge_cache(),
- * rdist_expand_vertex()) to check whether edge_id has already been
- * classified as a match, without creating an entry as a side effect --
- * an edge that fails is_an_edge_match() must never get an entry, or
- * edge_state_hashtable would grow with every rejected edge instead of
- * just the matched ones.
- */
+/* HASH_FIND-only lookup; avoids creating entries for non-matching edges. */
 static edge_state_entry *find_edge_state_with_hash(VLE_local_context *vlelctx,
                                                     graphid edge_id,
                                                     uint32 hashvalue)
@@ -1398,17 +1256,10 @@ static edge_state_entry *find_edge_state_with_hash(VLE_local_context *vlelctx,
 }
 
 /*
- * Record edge_id as a freshly-matched edge in edge_state_hashtable. Only
- * called right after is_an_edge_match() returned true for it (see
- * get_or_build_vertex_edge_cache() and rdist_expand_vertex()), and only
- * when a prior find_edge_state_with_hash() call already established that
- * no entry exists yet -- so found is expected to come back false here.
- *
- * found is still checked rather than assumed: if it ever does come back
- * true (e.g. a future caller stops honoring that precondition), the
- * existing entry -- and in particular its pin_count and used_in_path,
- * which encode live DFS state -- must be left untouched. Overwriting them
- * unconditionally would silently corrupt in-progress path tracking.
+ * Insert a freshly-matched edge into edge_state_hashtable.
+ * Called only after is_an_edge_match() succeeded and find_edge_state_with_hash()
+ * confirmed no entry exists. If an entry unexpectedly exists, it is left
+ * untouched to preserve live DFS state (pin_count, used_in_path).
  */
 static edge_state_entry *insert_matched_edge_state(VLE_local_context *vlelctx,
                                                     graphid edge_id,
@@ -1435,37 +1286,12 @@ static edge_state_entry *insert_matched_edge_state(VLE_local_context *vlelctx,
 }
 
 /*
- * Clock-style eviction for edge_state_hashtable, triggered once the table
- * exceeds age.vle_edge_state_max_entries.
- *
- * Safety: an entry is only ever removed when BOTH pin_count == 0 (no live
- * occurrence anywhere on dfs_edge_stack -- see the struct comment on
- * edge_state_entry) AND it is not used_in_path. used_in_path can only be
- * set while at least one occurrence is pinned, so the pin_count check
- * alone is sufficient in a correctly-functioning traversal; the
- * used_in_path check is kept as a cheap, defensive belt-and-braces
- * condition. Every eviction is followed, on next access, by a transparent
- * re-derivation in get_edge_state_with_hash() -- see that function's
- * comment for why this is fully safe.
- *
- * A sweep evicts down to a low-water mark below the cap rather than
- * stopping the instant it dips under it, so the table has room to absorb
- * a batch of further insertions before the next full sweep is needed.
- * Without this, a workload that hovers right at the cap can end up
- * paying for a full table scan on every single insertion.
- *
- * At most two passes are made per call: a clock algorithm's first pass
- * may do no more than clear the "recently used" bit on every remaining
- * candidate (giving each one more reprieve), in which case a second pass
- * is what actually reclaims them. A third pass could never find anything
- * a second pass didn't already make eligible, so two is both necessary
- * and sufficient. If two passes still leave the table above the
- * low-water mark, everything left is pinned, and no amount of sweeping
- * will free more -- the table is simply that busy right now.
- *
- * hash_seq_search() explicitly supports removing the just-returned
- * element mid-scan (documented dynahash behavior), so HASH_REMOVE here is
- * safe to call from inside the scan loop.
+ * Clock-style eviction for edge_state_hashtable when exceeding max_entries.
+ * Evicts only entries with pin_count == 0 and !used_in_path; safe because
+ * get_edge_state_with_hash() transparently re-derives evicted entries.
+ * Sweeps down to a low-water mark (7/8 of cap) to avoid per-insertion scans.
+ * At most two passes: first clears clock_ref bits, second performs removal.
+ * hash_seq_search() safely supports HASH_REMOVE mid-scan.
  */
 static void evict_edge_state_entries_if_needed(VLE_local_context *vlelctx)
 {
@@ -1576,19 +1402,10 @@ static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
 }
 
 /*
- * Cache-based counterpart to get_next_vertex(). Resolves the vertex the DFS
- * moves to when it takes edge `ese`, using only start_vertex_id/end_vertex_id
- * already cached on the edge_state_entry -- no edge_entry lookup required.
- *
- * Precondition: ese must represent a matched edge (guaranteed for any edge
- * that ever reaches the DFS hot loop, since only matched edges are ever
- * pushed onto dfs_edge_stack -- see get_or_build_vertex_edge_cache() and the
- * push site in add_valid_vertex_edges()).
- *
- * Mirrors get_next_vertex()'s branching exactly; see that function's
- * comments for why CYPHER_REL_DIR_NONE must consult the vertex stack (the
- * next vertex for an undirected edge depends on which endpoint the DFS is
- * currently standing on, not on the edge alone).
+ * Cached counterpart to get_next_vertex(). Resolves next vertex using
+ * endpoints stored in edge_state_entry, avoiding edge_entry lookup.
+ * For CYPHER_REL_DIR_NONE, consults dfs_vertex_stack (must be in lockstep
+ * with dfs_edge_stack) to determine direction based on current position.
  */
 static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
                                           edge_state_entry *ese)
@@ -1607,18 +1424,6 @@ static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
         {
             graphid parent_vertex_id;
 
-            /*
-             * The whole vertex-stack scheme for CYPHER_REL_DIR_NONE relies
-             * on dfs_vertex_stack and dfs_edge_stack staying in lockstep
-             * (one vertex pushed/popped per edge pushed/popped -- see
-             * add_valid_vertex_edges() and the backtracking branches in
-             * dfs_find_a_path_between()/dfs_find_a_path_from()). Cheap
-             * enough to check on every step in cassert builds, and it
-             * would catch a future refactor breaking that invariant
-             * immediately instead of manifesting as a confusing
-             * "get_next_vertex_from_state: no parent match" error (or
-             * worse, a wrong-but-plausible path) far away from the bug.
-             */
             Assert(gid_stack_size(vlelctx->dfs_vertex_stack) ==
                    gid_stack_size(vlelctx->dfs_edge_stack));
 
@@ -1721,12 +1526,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
-            /*
-             * This occurrence of edge_id is done -- see the
-             * pin_count comment on edge_state_entry. Once this
-             * reaches 0 and used_in_path is clear, the entry
-             * becomes eligible for eviction.
-             */
+
             Assert(EDGE_STATE_ENTRY_PIN_COUNT(ese) > 0);
             EDGE_STATE_ENTRY_PIN_COUNT_DEC(ese);
             /*
@@ -1752,12 +1552,7 @@ static bool dfs_find_a_path_between(VLE_local_context *vlelctx)
         EDGE_STATE_ENTRY_SET_USE_IN_PATH(ese);
         gid_stack_push(path_stack, edge_id);
 
-        /*
-         * Resolve the next vertex directly from the cache populated by
-         * get_or_build_vertex_edge_cache() when this edge was first
-         * classified. No edge_entry lookup needed here -- that lookup
-         * already happened once, ever, per edge, not once per DFS step.
-         */
+        /* Resolve next vertex from cached edge state */
         next_vertex_id = get_next_vertex_from_state(vlelctx, ese);
 
         /*
@@ -1876,12 +1671,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx)
             }
             /* now remove it from the edge stack */
             gid_stack_pop(edge_stack);
-            /*
-             * This occurrence of edge_id is done -- see the
-             * pin_count comment on edge_state_entry. Once this
-             * reaches 0 and used_in_path is clear, the entry
-             * becomes eligible for eviction.
-             */
+
             Assert(EDGE_STATE_ENTRY_PIN_COUNT(ese) > 0);
             EDGE_STATE_ENTRY_PIN_COUNT_DEC(ese);
             /*
@@ -1974,39 +1764,15 @@ static bool is_edge_in_path(VLE_local_context *vlelctx, graphid edge_id)
 #define VLE_LOOKUP_BATCH 8
 
 /*
- * Build (on first visit) or fetch (on every subsequent visit) the static
- * classification cache for `vertex_id`: the subset of its adjacent edges
- * that pass is_an_edge_match(), independent of anything path-dependent.
+ * Build or fetch the static classification cache for vertex_id: adjacent
+ * edges passing is_an_edge_match(), independent of path state.
  *
- * This is the "vertex-level adjacency cache" optimization. It is deliberately
- * split apart from the DYNAMIC used_in_path/is_edge_in_path check, which
- * changes constantly as the DFS advances and backtracks and can therefore
- * never be cached at the vertex level -- only the *static* match result can.
- *
- * On the very first visit to a vertex, this runs the same 5-phase MLP-batched
- * pipeline that add_valid_vertex_edges used to run on *every* visit: gather,
- * hash, look up edge_entry (agehash), look up/create edge_state_entry
- * (dynahash), classify. On every subsequent visit, this is a single dynahash
- * lookup that returns the already-built array -- the adjacency arrays are
- * never re-walked, and get_edge_entry_with_hash() (the expensive, L3-miss
- * prone lookup) is never called again for any edge already classified,
- * whether it was classified from this vertex or from its other endpoint.
- *
- * Note that because this cache lives in vlelctx and, for a grammar-node
- * backed VLE call (the normal Cypher path -- see build_local_vle_context()'s
- * use_cache handling), vlelctx itself is reused across many separate
- * age_vle() SRF invocations (e.g. once per outer-loop row feeding into a
- * VLE join), this cache's benefit compounds far beyond a single path
- * enumeration: a vertex visited by row 1's traversal is already fully
- * classified, for free, if row 2's traversal ever reaches it too. This
- * also means the cache can grow large over the lifetime of a long-running
- * backend, which is exactly why vertex_edge_cache_mcxt's lifetime has to be
- * managed explicitly rather than left to an ambient context -- see
- * create_VLE_local_state_hashtable() and free_VLE_local_context().
- *
- * The returned array and its length are only ever read by the caller
- * (add_valid_vertex_edges) below; they are never mutated after this
- * function returns.
+ * First visit runs a 5-phase MLP-batched pipeline (gather, hash, edge_state
+ * lookup, edge_entry lookup, classify). Subsequent visits are a single
+ * dynahash lookup; get_edge_entry_with_hash() is never called again for
+ * already-classified edges. Cache persists across SRF invocations when
+ * vlelctx is reused, so memory is managed via vertex_edge_cache_mcxt.
+ * Returned array is read-only after this function returns.
  */
 static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
                                                     VLE_local_context *vlelctx,
@@ -2030,13 +1796,6 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
     int32     scratch_cap;
     MemoryContext oldcontext;
 
-    /*
-     * Keep the cache within its cap BEFORE inserting a new key, not
-     * after -- evicting after insertion would risk immediately evicting
-     * the entry we are about to build. This is a pure performance cache
-     * with no pinning constraints (see the clock_ref field comment on
-     * vertex_edge_cache_entry), so eviction here is always safe.
-     */
     evict_vertex_edge_cache_entries_if_needed(vlelctx);
 
     vce = (vertex_edge_cache_entry *) hash_search(vlelctx->vertex_edge_cache,
@@ -2078,13 +1837,8 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
 
     scratch_cap = sz_out + sz_in + sz_self;
 
-    /*
-     * The result array must outlive this SRF call (it is read on every
-     * future visit to this vertex, across many successive age_vle()
-     * invocations), so it must be allocated in
-     * vlelctx->vertex_edge_cache_mcxt, not whatever the ambient
-     * CurrentMemoryContext happens to be here.
-     */
+
+    /* Result must outlive this SRF call; allocate in dedicated context. */
     oldcontext = MemoryContextSwitchTo(vlelctx->vertex_edge_cache_mcxt);
     scratch = (scratch_cap > 0) ? palloc(sizeof(graphid) * scratch_cap) : NULL;
     MemoryContextSwitchTo(oldcontext);
@@ -2095,9 +1849,7 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
      * pipelined across five phases -- gather, hash, look up any existing
      * classification, look up the underlying edge for anything not yet
      * classified, then classify and collect -- so that the latency of
-     * independent hash/heap lookups within a batch can overlap. The
-     * dynamic used_in_path / is_edge_in_path check is deliberately NOT
-     * done here -- see add_valid_vertex_edges() below.
+     * independent hash/heap lookups within a batch can overlap.
      */
     while (idx_out < sz_out || idx_in < sz_in || idx_self < sz_self)
     {
@@ -2181,17 +1933,7 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
 
                 if (!is_an_edge_match(vlelctx, ee))
                 {
-                    /*
-                     * Not a match: no edge_state_entry is created for
-                     * it. edge_state_hashtable's size is thus bounded by
-                     * the number of matched edges ever seen, not by
-                     * every edge ever scanned -- the dominant factor on
-                     * a low-selectivity VLE predicate over a dense or
-                     * hub-heavy graph. The cost is that a rejected edge
-                     * encountered a second time (undirected traversal,
-                     * or overlap with the PATHS_BETWEEN reverse-BFS
-                     * walk) is re-classified rather than remembered.
-                     */
+                    /* Rejected edges get no entry; re-classified on revisit */
                     continue;
                 }
 
@@ -2205,14 +1947,7 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
 
     evict_edge_state_entries_if_needed(vlelctx);
 
-    /*
-     * Shrink to the actual number of statically-valid edges. scratch_cap is
-     * the raw (unfiltered) adjacency count; on a dense graph with a
-     * selective edge predicate nscratch can be far smaller, and this array
-     * lives for the remaining lifetime of vlelctx (potentially the lifetime
-     * of a long-running, cached, reused-across-many-SRF-calls backend --
-     * see the note at the top of this function), so the gap matters.
-     */
+    /* Shrink to actual matched count */
     if (scratch != NULL)
     {
         oldcontext = MemoryContextSwitchTo(vlelctx->vertex_edge_cache_mcxt);
@@ -2237,25 +1972,11 @@ static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
 }
 
 /*
- * Clock-style eviction for vertex_edge_cache, triggered once the table
- * exceeds age.vle_vertex_edge_cache_max_entries, or the memory actually
- * backing its cached adjacency arrays exceeds age.vle_vertex_edge_cache_max_kb
- * -- an entry-count cap alone under-protects against a small number of
- * high-degree (hub) vertices, each with a disproportionately large
- * valid_edges[] array.
- *
- * No pinning is needed here (unlike edge_state_hashtable): the
- * vertex_edge_cache_entry pointer returned by get_or_build_vertex_edge_cache()
- * is only ever used synchronously, within a single call to
- * add_valid_vertex_edges(), and never retained past it -- so any entry can
- * be evicted (and its valid_edges[] array freed) at any time between
- * calls. A revisited vertex simply gets its cache rebuilt from the
- * underlying adjacency arrays, which is deterministic and correct, just
- * not free -- exactly the ordinary LRU-cache-miss cost/memory trade-off.
- *
- * See evict_edge_state_entries_if_needed() for why eviction targets a
- * low-water mark below the cap, and why two passes are both necessary and
- * sufficient for a clock sweep.
+ * Clock-style eviction for vertex_edge_cache when exceeding entry count
+ * or memory (max_kb) caps. Memory cap protects against hub vertices with
+ * large valid_edges[] arrays. No pinning needed: entries are used only
+ * synchronously within add_valid_vertex_edges() and can always be rebuilt.
+ * Sweeps to low-water mark (7/8 of cap) over at most two passes.
  */
 static void evict_vertex_edge_cache_entries_if_needed(VLE_local_context *vlelctx)
 {
@@ -2447,24 +2168,14 @@ static graphid rdist_queue_pop(rdist_queue *q)
 }
 
 /*
- * Rewind to an empty queue for a new generation (new veid). If the
- * PREVIOUS generation used far less of the array than its current capacity
- * -- e.g. one huge query on a dense graph, followed on a cached vlelctx by
- * many small ones on unrelated later queries -- shrink the backing array
- * back down instead of holding the peak-ever size for the rest of this
- * vlelctx's lifetime. Hysteresis (4x threshold + a floor) avoids
- * reallocating on every single reset for queries of similar size run
- * back-to-back.
+ * Reset queue for new generation. Shrinks backing array if previous peak
+ * was < 1/4 capacity (with hysteresis floor) to avoid holding peak size
+ * across unrelated cached queries.
  */
 static void rdist_queue_reset(VLE_local_context *vlelctx, rdist_queue *q)
 {
     int64 peak = q->max_count;
 
-    /*
-     * Shrink if the previous generation's peak frontier was much smaller
-     * than the current capacity. Keep a minimum size to avoid reallocating
-     * for small/typical queries.
-     */
     if (q->data != NULL && q->cap > RDIST_QUEUE_MIN_CAP &&
         peak < q->cap / 4)
     {
@@ -2508,12 +2219,8 @@ static void set_reverse_dist(VLE_local_context *vlelctx, graphid vertex_id,
 }
 
 /*
- * Read-only: true and *dist set iff vertex_id's reverse distance is
- * already known for the CURRENT target. A vertex the reverse BFS has never
- * reached simply isn't known, which is a very different thing from "known
- * to be unreachable" -- see reverse_dist_exhausted in
- * get_or_advance_reverse_dist(). Never returns the entry pointer to the
- * caller -- see the invariant in the block comment above.
+ * Read-only lookup: returns true and sets *dist if vertex is known for
+ * current target. Unknown != unreachable (see reverse_dist_exhausted).
  */
 static bool try_get_reverse_dist(VLE_local_context *vlelctx, graphid vertex_id,
                                  int64 *dist)
@@ -2727,35 +2434,13 @@ static void rdist_expand_vertex(VLE_local_context *vlelctx, graphid u,
 
             new_dist = du + 1;
 
-            /*
-             * A reverse distance of exactly uidx or more can never help
-             * add_valid_vertex_edges() prune a candidate: that check is
-             *   depth_so_far + 1 + dnext > uidx
-             * and for dnext == uidx this reduces to depth_so_far + 1 > 0,
-             * which holds for every depth_so_far >= 0. Such a distance
-             * therefore behaves exactly like the "unreachable"
-             * PG_INT64_MAX sentinel for pruning purposes, and is not worth
-             * a reverse_dist_table entry -- typically the single widest
-             * layer of the reverse BFS. Only applies when uidx is finite.
-             */
+            /* Distance >= uidx is useless for pruning; treat as unreachable. */
             if (!vlelctx->uidx_infinite && new_dist >= vlelctx->uidx)
             {
                 continue;
             }
 
-            /*
-             * The reverse-BFS distance table is a pruning heuristic, not
-             * a source of truth: an entry missing from it is read by
-             * get_or_advance_reverse_dist() as "prune this candidate",
-             * so it must never be capped by simply refusing to insert
-             * without also recording that the search stopped early.
-             * age.vle_reverse_dist_max_entries bounds it by degrading the
-             * reverse BFS to a fail-open state instead: once reached, no
-             * further frontier vertices are admitted, and unresolved
-             * vertices are treated by get_or_advance_reverse_dist() as
-             * "not provably prunable" rather than "unreachable" -- see
-             * reverse_dist_capped's field comment.
-             */
+            /* Cap table size by degrading to fail-open (not false-unreachable). */
             if (hash_get_num_entries(vlelctx->reverse_dist_table) >=
                 vle_reverse_dist_max_entries)
             {
@@ -2772,84 +2457,44 @@ static void rdist_expand_vertex(VLE_local_context *vlelctx, graphid u,
 }
 
 /*
- * Resolve w's distance from veid along the flipped-direction adjacency,
- * advancing the lazy reverse BFS only as far as necessary to answer this
- * specific query.
- *
- * The reverse BFS is a pruning heuristic for VLE_FUNCTION_PATHS_BETWEEN:
- * add_valid_vertex_edges() discards a candidate edge once it can prove
- * the remaining budget can no longer reach veid. Proving unreachability
- * requires having actually exhausted the search (reverse_dist_exhausted);
- * merely stopping early to respect age.vle_reverse_dist_max_entries
- * (reverse_dist_capped) proves nothing, so the two must not be treated
- * alike. Returning PG_INT64_MAX in the capped-but-not-exhausted case
- * would make a memory limit silently discard valid paths, so this
- * function instead fails open: a distance of 0 for an unresolved vertex
- * never triggers pruning by itself (see add_valid_vertex_edges()), it
- * just forfeits the pruning benefit for that particular candidate.
+ * Resolve w's reverse distance, advancing lazy BFS only as needed.
+ * Returns PG_INT64_MAX only if search is exhausted (proven unreachable).
+ * If capped by memory limit, returns 0 (fail-open: forfeits pruning but
+ * never silently discards valid paths). Unresolved vertices with dist=0
+ * do not trigger pruning in add_valid_vertex_edges().
  */
 static int64 get_or_advance_reverse_dist(VLE_local_context *vlelctx, graphid w)
 {
     int64 dist;
 
     if (try_get_reverse_dist(vlelctx, w, &dist))
-    {
         return dist;
-    }
 
     if (vlelctx->reverse_dist_exhausted)
-    {
         return PG_INT64_MAX;
-    }
 
     if (vlelctx->reverse_dist_capped)
-    {
-        return 0;
-    }
+        return 0; /* Fail-open: cap proves nothing about reachability */
 
     while (!rdist_queue_is_empty(&vlelctx->reverse_dist_queue))
     {
         graphid u = rdist_queue_pop(&vlelctx->reverse_dist_queue);
-        int64   du;
-        cypher_rel_dir flipped_dir;
+        int64 du;
 
         if (!try_get_reverse_dist(vlelctx, u, &du))
-        {
             elog(ERROR, "get_or_advance_reverse_dist: frontier vertex has no distance");
-        }
 
-        /*
-         * BFS pop order is non-decreasing in depth. Every neighbour of u
-         * would land at du + 1, and rdist_expand_vertex() already refuses
-         * to record any distance >= uidx as useless for pruning -- so
-         * once du + 1 >= uidx, expanding u (and everything still queued
-         * behind it) cannot add anything, and there is no point walking
-         * its adjacency at all.
-         */
+        /* BFS is non-decreasing; once du+1 >= uidx, further expansion is useless. */
         if (!vlelctx->uidx_infinite && du + 1 >= vlelctx->uidx)
-        {
             break;
-        }
 
-        flipped_dir = flip_edge_direction(vlelctx->edge_direction);
-        rdist_expand_vertex(vlelctx, u, du, flipped_dir);
+        rdist_expand_vertex(vlelctx, u, du, flip_edge_direction(vlelctx->edge_direction));
 
         if (try_get_reverse_dist(vlelctx, w, &dist))
-        {
             return dist;
-        }
 
         if (vlelctx->reverse_dist_capped)
-        {
-            /*
-             * The cap was already reached (permanently, for this target
-             * -- reverse_dist_table never shrinks below it once hit, see
-             * rdist_expand_vertex()), so continuing to pop and expand the
-             * rest of the queue would just repeat the same no-op cap
-             * check for every remaining candidate.
-             */
-            return 0;
-        }
+            return 0; /* Cap is permanent for this target; stop early */
     }
 
     vlelctx->reverse_dist_exhausted = true;
@@ -2857,115 +2502,66 @@ static int64 get_or_advance_reverse_dist(VLE_local_context *vlelctx, graphid w)
 }
 
 /*
- * Helper function to add in valid vertex edges as part of the dfs path
- * algorithm. What constitutes a valid edge is the following -
- *
- *     1) Edge matches the correct direction specified.
- *     2) Edge is not currently in the path.
- *     3) Edge matches minimum edge properties specified.
- *
- * Note: The vertex must exist.
- *
- * Static classification (which of this vertex's edges match at all) is
- * handled by get_or_build_vertex_edge_cache() above and computed at most
- * once per vertex. This function only re-checks the DYNAMIC used_in_path
- * state, which must be re-checked on every visit, but now only for the
- * pre-filtered set of statically-valid edges -- not the full adjacency
- * list -- and with no edge_entry (agehash) lookups at all on repeat visits.
- *
- * The dynamic edge_state_hashtable lookups below are still run through the
- * same batched gather/hash/lookup/apply pipeline as
- * get_or_build_vertex_edge_cache() uses, for the same MLP reason: even
- * though only one hashtable is involved now (not two), a repeat visit to a
- * hot, highly-connected vertex can still re-check dozens of edges, and
- * batching the dynahash HASH_ENTER calls hides their miss latency the same
- * way it did before this vertex's edges were split out of the per-visit
- * pipeline.
+ * Add valid edges to DFS stack. Validity requires: correct direction,
+ * not currently in path, and matching edge properties. Static classification
+ * (direction + properties) is pre-filtered by get_or_build_vertex_edge_cache()
+ * and computed at most once per vertex. This function only re-checks the
+ * DYNAMIC used_in_path state for that pre-filtered set -- no edge_entry
+ * lookups on repeat visits. Uses batched MLP pipeline for edge_state
+ * lookups to hide latency when hot vertices have many statically-valid edges.
  */
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id)
 {
     GraphIdStack *vertex_stack = vlelctx->dfs_vertex_stack;
     GraphIdStack *edge_stack = vlelctx->dfs_edge_stack;
-    vertex_edge_cache_entry *vce;
+    vertex_edge_cache_entry *vce = get_or_build_vertex_edge_cache(vlelctx, vertex_id);
     int32 pos = 0;
-
-    vce = get_or_build_vertex_edge_cache(vlelctx, vertex_id);
 
     while (pos < vce->nvalid)
     {
-        graphid           batch_eids[VLE_LOOKUP_BATCH];
-        uint32            batch_hashes[VLE_LOOKUP_BATCH];
+        graphid batch_eids[VLE_LOOKUP_BATCH];
+        uint32 batch_hashes[VLE_LOOKUP_BATCH];
         edge_state_entry *batch_ese[VLE_LOOKUP_BATCH];
         int batch_n = 0;
-        int i;
 
-        /* Phase 1: gather, applying the dynamic is_edge_in_path early-skip */
+        /* Gather with early-skip for small stacks (linear scan beats hash lookup) */
         while (batch_n < VLE_LOOKUP_BATCH && pos < vce->nvalid)
         {
             graphid edge_id = vce->valid_edges[pos++];
 
-            /*
-             * Fast early-skip when the path stack is small: avoids an
-             * edge_state_hashtable lookup for edges already on the path.
-             * (Kept exactly as before -- for the common, small-stack case
-             * this bounded linear scan beats a hashtable lookup.)
-             */
             if (gid_stack_size(vlelctx->dfs_path_stack) < 10 &&
                 is_edge_in_path(vlelctx, edge_id))
-            {
                 continue;
-            }
 
             batch_eids[batch_n++] = edge_id;
         }
 
         if (batch_n == 0)
-        {
             continue;
-        }
 
-        /* Phase 2: compute hashes (pure compute, no misses) */
-        for (i = 0; i < batch_n; i++)
-        {
+        /* Hash */
+        for (int i = 0; i < batch_n; i++)
             batch_hashes[i] = graphid_hash(&batch_eids[i], sizeof(int64));
-        }
 
-        /* Phase 3: K back-to-back edge_state_hashtable lookups (MLP wave) */
-        for (i = 0; i < batch_n; i++)
-        {
-            batch_ese[i] = get_edge_state_with_hash(vlelctx,
-                                                    batch_eids[i],
-                                                    batch_hashes[i]);
-        }
+        /* Batched edge_state lookups (MLP) */
+        for (int i = 0; i < batch_n; i++)
+            batch_ese[i] = get_edge_state_with_hash(vlelctx, batch_eids[i], batch_hashes[i]);
 
-        /* Phase 4: apply, in the same order the edges were discovered in */
-        for (i = 0; i < batch_n; i++)
+        /* Apply: filter and push valid edges */
+        for (int i = 0; i < batch_n; i++)
         {
             edge_state_entry *ese = batch_ese[i];
-            graphid           edge_id = batch_eids[i];
+            graphid edge_id = batch_eids[i];
 
-            /*
-             * Don't add any edges that we have already seen because they
-             * will cause a loop to form.
-             */
             if (EDGE_STATE_ENTRY_USE_IN_PATH(ese))
-            {
-                continue;
-            }
+                continue; /* Already in current path */
 
-            /*
-             * PATHS_BETWEEN only: prune this candidate if it provably
-             * cannot reach veid within the remaining hop budget. Checked
-             * here, after the cheaper is_edge_in_path/used_in_path checks
-             * have already had a chance to skip the edge for free, and
-             * using ese->start_vertex_id/end_vertex_id (already resolved,
-             * no extra lookup) rather than a fresh edge_entry fetch.
-             */
+            /* PATHS_BETWEEN: prune if target unreachable within remaining budget */
             if (vlelctx->path_function == VLE_FUNCTION_PATHS_BETWEEN)
             {
                 graphid next_vertex_id;
-                int64   dnext;
+                int64 dnext;
 
                 switch (vlelctx->edge_direction)
                 {
@@ -2978,56 +2574,31 @@ static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                     case CYPHER_REL_DIR_NONE:
                     default:
                         next_vertex_id = (ese->start_vertex_id == vertex_id)
-                                            ? ese->end_vertex_id
-                                            : ese->start_vertex_id;
-                        break;
+                                                ? ese->end_vertex_id
+                                                : ese->start_vertex_id;
                 }
 
                 dnext = get_or_advance_reverse_dist(vlelctx, next_vertex_id);
 
-                /*
-                 * dnext == PG_INT64_MAX is checked before the budget
-                 * arithmetic, and short-circuits it via ||, specifically
-                 * to avoid overflowing depth_so_far + 1 + dnext.
-                 */
+                /* Check PG_INT64_MAX first to avoid overflow in budget arithmetic */
                 if (dnext == PG_INT64_MAX ||
                     (!vlelctx->uidx_infinite &&
-                     gid_stack_size(vlelctx->dfs_path_stack) + 1 + dnext >
-                         vlelctx->uidx))
-                {
+                     gid_stack_size(vlelctx->dfs_path_stack) + 1 + dnext > vlelctx->uidx))
                     continue;
-                }
             }
 
-            /*
-             * We need to maintain our source vertex for each edge added if
-             * the edge_direction is CYPHER_REL_DIR_NONE. This is due to the
-             * edges having a fixed direction and the dfs algorithm working
-             * strictly through edges. With an un-directional VLE edge, you
-             * don't know the vertex that you just came from. So, we need to
-             * store it.
-             */
+            /* Track source vertex for undirected traversal */
             if (vlelctx->edge_direction == CYPHER_REL_DIR_NONE)
-            {
                 gid_stack_push(vertex_stack, vertex_id);
-            }
+
             gid_stack_push(edge_stack, edge_id);
-            /*
-             * This edge_id now has a live, unpopped occurrence on
-             * dfs_edge_stack. pin_count protects its edge_state_entry
-             * from eviction until every such occurrence is popped again
-             * (see the struct comment on edge_state_entry) -- vertices
-             * can be revisited, so the SAME edge_id can end up pushed
-             * more than once while an older copy is still buried deeper
-             * in the stack.
-             */
-            EDGE_STATE_ENTRY_PIN_COUNT_INC(ese);
+            EDGE_STATE_ENTRY_PIN_COUNT_INC(ese); /* Protects entry from eviction */
+
             Assert(vlelctx->edge_direction != CYPHER_REL_DIR_NONE ||
                    gid_stack_size(vertex_stack) == gid_stack_size(edge_stack));
         }
     }
 }
-
 /*
  * Helper function to create the VLE path container that holds the graphid array
  * containing the found path. The path_size is the total number of vertices and
