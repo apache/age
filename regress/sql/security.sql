@@ -1524,3 +1524,41 @@ DROP ROLE rls_admin;
 
 -- Drop test graph
 SELECT drop_graph('rls_graph', true);
+
+-- ============================================================================
+-- NON-SUPERUSER drop_label REGRESSION TEST
+--
+-- Regression test for object_ownercheck() argument order in
+-- range_var_callback_for_remove_relation(). A non-superuser that OWNS a
+-- graph/label previously failed drop_label() with "unrecognized class ID"
+-- because rel_oid was passed as the classid instead of RelationRelationId.
+-- ============================================================================
+
+DROP ROLE IF EXISTS age_nonsuper;
+CREATE ROLE age_nonsuper LOGIN NOSUPERUSER;
+
+-- create_graph() creates a new schema in the current database, so the role
+-- needs CREATE on the database; managing labels needs USAGE + CREATE on
+-- ag_catalog. Grant CREATE on whatever database the tests run in.
+DO $$
+BEGIN
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO age_nonsuper',
+                   current_database());
+END
+$$;
+GRANT USAGE  ON SCHEMA ag_catalog TO age_nonsuper;
+GRANT CREATE ON SCHEMA ag_catalog TO age_nonsuper;
+
+-- Reproduce as the non-superuser role: it creates (and therefore OWNS) the
+-- graph and the label, then drops the label. Before the fix this raised
+-- "unrecognized class ID"; after the fix the label is dropped successfully.
+SET ROLE age_nonsuper;
+SELECT create_graph('repro_graph');
+SELECT create_vlabel('repro_graph', 'repro_label');
+SELECT drop_label('repro_graph', 'repro_label');
+SELECT drop_graph('repro_graph', true);
+RESET ROLE;
+
+-- Cleanup
+DROP OWNED BY age_nonsuper CASCADE;
+DROP ROLE age_nonsuper;
