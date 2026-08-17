@@ -76,7 +76,22 @@ SELECT * FROM age_create_barbell_graph('gp5',5,0,'vertices',NULL,NULL,NULL);
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 
+/*
+ * node_label is declared with a NULL default, so passing NULL for it - either
+ * explicitly or by leaving the trailing arguments out - has to fall back to
+ * the default vertex label rather than crash the backend.
+ */
+SELECT * FROM age_create_barbell_graph('gp7',5,0,NULL,NULL,'edges',NULL);
+
+SELECT COUNT(*) FROM gp7."_ag_label_vertex";
+SELECT COUNT(*) FROM gp7."edges";
+SELECT * FROM cypher('gp7', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+
+-- SHOULD FAIL, but with an error rather than a crash
+SELECT * FROM age_create_barbell_graph('gp8',5,0);
+
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
 SELECT drop_graph('gp2', true);
+SELECT drop_graph('gp7', true);
 

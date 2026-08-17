@@ -203,6 +203,60 @@ ERROR:  edge label can not be NULL
 -- Should error out because same labels are used for both vertices and edges
 SELECT * FROM age_create_barbell_graph('gp6',5,10,'label',NULL,'label',NULL);
 ERROR:  vertex and edge label can not be same
+/*
+ * node_label is declared with a NULL default, so passing NULL for it - either
+ * explicitly or by leaving the trailing arguments out - has to fall back to
+ * the default vertex label rather than crash the backend.
+ */
+SELECT * FROM age_create_barbell_graph('gp7',5,0,NULL,NULL,'edges',NULL);
+NOTICE:  graph "gp7" has been created
+NOTICE:  ELabel "edges" has been created
+ age_create_barbell_graph 
+--------------------------
+ 
+(1 row)
+
+SELECT COUNT(*) FROM gp7."_ag_label_vertex";
+ count 
+-------
+    10
+(1 row)
+
+SELECT COUNT(*) FROM gp7."edges";
+ count 
+-------
+    21
+(1 row)
+
+SELECT * FROM cypher('gp7', $$MATCH (a)-[e]->(b) RETURN e$$) as (n agtype);
+                                                             n                                                             
+---------------------------------------------------------------------------------------------------------------------------
+ {"id": 844424930131969, "label": "edges", "end_id": 281474976710658, "start_id": 281474976710657, "properties": {}}::edge
+ {"id": 844424930131970, "label": "edges", "end_id": 281474976710659, "start_id": 281474976710657, "properties": {}}::edge
+ {"id": 844424930131971, "label": "edges", "end_id": 281474976710660, "start_id": 281474976710657, "properties": {}}::edge
+ {"id": 844424930131972, "label": "edges", "end_id": 281474976710661, "start_id": 281474976710657, "properties": {}}::edge
+ {"id": 844424930131973, "label": "edges", "end_id": 281474976710659, "start_id": 281474976710658, "properties": {}}::edge
+ {"id": 844424930131974, "label": "edges", "end_id": 281474976710660, "start_id": 281474976710658, "properties": {}}::edge
+ {"id": 844424930131975, "label": "edges", "end_id": 281474976710661, "start_id": 281474976710658, "properties": {}}::edge
+ {"id": 844424930131976, "label": "edges", "end_id": 281474976710660, "start_id": 281474976710659, "properties": {}}::edge
+ {"id": 844424930131977, "label": "edges", "end_id": 281474976710661, "start_id": 281474976710659, "properties": {}}::edge
+ {"id": 844424930131978, "label": "edges", "end_id": 281474976710661, "start_id": 281474976710660, "properties": {}}::edge
+ {"id": 844424930131979, "label": "edges", "end_id": 281474976710663, "start_id": 281474976710662, "properties": {}}::edge
+ {"id": 844424930131980, "label": "edges", "end_id": 281474976710664, "start_id": 281474976710662, "properties": {}}::edge
+ {"id": 844424930131981, "label": "edges", "end_id": 281474976710665, "start_id": 281474976710662, "properties": {}}::edge
+ {"id": 844424930131982, "label": "edges", "end_id": 281474976710666, "start_id": 281474976710662, "properties": {}}::edge
+ {"id": 844424930131983, "label": "edges", "end_id": 281474976710664, "start_id": 281474976710663, "properties": {}}::edge
+ {"id": 844424930131984, "label": "edges", "end_id": 281474976710665, "start_id": 281474976710663, "properties": {}}::edge
+ {"id": 844424930131985, "label": "edges", "end_id": 281474976710666, "start_id": 281474976710663, "properties": {}}::edge
+ {"id": 844424930131986, "label": "edges", "end_id": 281474976710665, "start_id": 281474976710664, "properties": {}}::edge
+ {"id": 844424930131987, "label": "edges", "end_id": 281474976710666, "start_id": 281474976710664, "properties": {}}::edge
+ {"id": 844424930131988, "label": "edges", "end_id": 281474976710666, "start_id": 281474976710665, "properties": {}}::edge
+ {"id": 844424930131989, "label": "edges", "end_id": 281474976710666, "start_id": 281474976710657, "properties": {}}::edge
+(21 rows)
+
+-- SHOULD FAIL, but with an error rather than a crash
+SELECT * FROM age_create_barbell_graph('gp8',5,0);
+ERROR:  edge label can not be NULL
 -- DROPPING GRAPHS
 SELECT drop_graph('gp1', true);
 NOTICE:  drop cascades to 4 other objects
@@ -223,6 +277,17 @@ drop cascades to table gp2._ag_label_edge
 drop cascades to table gp2.vertices
 drop cascades to table gp2.edges
 NOTICE:  graph "gp2" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+SELECT drop_graph('gp7', true);
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table gp7._ag_label_vertex
+drop cascades to table gp7._ag_label_edge
+drop cascades to table gp7.edges
+NOTICE:  graph "gp7" has been dropped
  drop_graph 
 ------------
  
