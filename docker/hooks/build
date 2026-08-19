@@ -1,4 +1,7 @@
 #!/bin/bash
 
-docker buildx create --name multiarch --use --platform linux/amd64,linux/arm64/v8
+# Pinned: buildx-stable-1 ships runc 1.4.3, which fails masked-path setup on the build host (runc#5348).
+docker buildx create --name multiarch --use --platform linux/amd64,linux/arm64/v8 \
+    --driver-opt image=moby/buildkit:v0.31.2
+
 docker buildx build ../ -t $IMAGE_NAME -f Dockerfile --platform linux/amd64,linux/arm64/v8 --push
