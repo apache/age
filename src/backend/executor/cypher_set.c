@@ -883,6 +883,29 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
 
     if (TupIsNull(slot))
     {
+        /*
+         * This clause is finished. Make everything it wrote visible to the
+         * clauses that read after it.
+         *
+         * Updated tuples are written with the global command id (see the cid
+         * in update_entity_tuple), and CommandCounterIncrement() advances that
+         * id once per input row. es_snapshot->curcid does not follow it, so
+         * without this it stays one step past the command id used by the first
+         * input row, and every later row's update is invisible for the rest of
+         * the statement. Same defect as the CREATE path (issue #2493).
+         *
+         * Syncing here, rather than after each row, is what keeps the clause
+         * from seeing its own writes: by this point the subtree is exhausted,
+         * so raising curcid cannot feed an updated row back into the pattern
+         * that updated it.
+         *
+         * Max() because Increment_Estate_CommandId can push curcid above the
+         * global command id, and lowering it would hide tuples that are
+         * already visible.
+         */
+        estate->es_snapshot->curcid = Max(estate->es_snapshot->curcid,
+                                          GetCurrentCommandId(false));
+
         return NULL;
     }
 

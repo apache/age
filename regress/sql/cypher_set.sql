@@ -543,6 +543,55 @@ SELECT * FROM cypher('issue_1884', $$
 $$) AS (a agtype);
 
 --
+-- Issue 2493: a clause that reads must see every update a preceding SET
+-- made, not only the updates from that clause's first input row.
+--
+SELECT create_graph('issue_2493_set');
+
+SELECT * FROM cypher('issue_2493_set', $$
+    UNWIND [1, 2, 3] AS i CREATE (:x {id: i})
+$$) as (a agtype);
+
+-- all three updates must be visible to the later MATCH
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.marked = true
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.marked = true
+    RETURN count(m)
+$$) as (visible agtype);
+
+-- the same for REMOVE, which shares the SET executor
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) REMOVE n.marked
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.marked = true
+    RETURN count(m)
+$$) as (still_marked agtype);
+
+-- updates written earlier drive a later CREATE
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.ready = true
+    WITH count(*) AS ignored
+    MATCH (m:x) WHERE m.ready = true
+    CREATE (:derived {from: m.id})
+$$) as (a agtype);
+
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (d:derived) RETURN count(d)
+$$) as (derived agtype);
+
+-- a SET must still not see its own writes: this updates each vertex once
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (n:x) SET n.pass = 1 RETURN count(*)
+$$) as (updated agtype);
+
+SELECT * FROM cypher('issue_2493_set', $$
+    MATCH (m:x) WHERE m.pass = 1 RETURN count(m)
+$$) as (persisted agtype);
+
+SELECT drop_graph('issue_2493_set', true);
+
+--
 -- Clean up
 --
 DROP TABLE tbl;
