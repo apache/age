@@ -1,4 +1,12 @@
 #!/bin/bash
 
-docker buildx create --name multiarch --use --platform linux/amd64,linux/arm64/v8
+# Pinned: every BuildKit >= v0.31.0 bundles a runc whose maskDir() mounts masked paths
+# with "nr_blocks=1,nr_inodes=1", which the Docker Hub build host's Ubuntu 20.04 5.4
+# kernel rejects with EINVAL, failing every RUN step in container init (runc#5348).
+# v0.31.x ships runc 1.3.6 and v0.32.x ships runc 1.4.3, both affected; v0.30.0 ships
+# runc 1.3.5, the last release before maskDir(). Drop the pin once BuildKit ships
+# runc >= 1.4.4 (note runc 1.5.0 predates the backport and is also affected).
+docker buildx create --name multiarch --use --platform linux/amd64,linux/arm64/v8 \
+    --driver-opt image=moby/buildkit:v0.30.0
+
 docker buildx build ../ -t $IMAGE_NAME -f Dockerfile --platform linux/amd64,linux/arm64/v8 --push
