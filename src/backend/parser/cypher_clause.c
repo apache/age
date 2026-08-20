@@ -5908,6 +5908,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 {
     ParseState *pstate = (ParseState *)cpstate;
     ListCell *lc = NULL;
+    ListCell *next_lc = NULL;
     List *entities = NIL;
     int i = 0;
     bool node_declared_in_prev_clause = false;
@@ -6201,7 +6202,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                  * the agtype vertex variable itself. The VLE execution
                  * logic will handle extracting the id from it.
                  */
-                ListCell *next_lc = lnext(path->path, lc);
+                next_lc = lnext(path->path, lc);
 
                 if (next_lc != NULL)
                 {

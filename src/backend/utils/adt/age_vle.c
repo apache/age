@@ -367,7 +367,7 @@ static bool dfs_find_a_path_from(VLE_local_context *vlelctx);
 static bool do_vsid_and_veid_exist(VLE_local_context *vlelctx);
 static void add_valid_vertex_edges(VLE_local_context *vlelctx,
                                    graphid vertex_id);
-static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
+static __attribute__((unused)) graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee);
 static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
                                           edge_state_entry *ese);
 static vertex_edge_cache_entry *get_or_build_vertex_edge_cache(
@@ -1350,7 +1350,7 @@ static void evict_edge_state_entries_if_needed(VLE_local_context *vlelctx)
  * Helper function to get the id of the next vertex to move to. This is to
  * simplify finding the next vertex due to the VLE edge's direction.
  */
-static graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
+static __attribute__((unused)) graphid get_next_vertex(VLE_local_context *vlelctx, edge_entry *ee)
 {
     graphid terminal_vertex_id;
 
@@ -1440,7 +1440,7 @@ static graphid get_next_vertex_from_state(VLE_local_context *vlelctx,
 
             elog(ERROR, "get_next_vertex_from_state: no parent match");
         }
-
+        /* fall through */
         default:
             elog(ERROR, "get_next_vertex_from_state: unknown edge direction");
     }
