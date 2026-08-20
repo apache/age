@@ -238,6 +238,8 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     int64 start_node_index, end_node_index, nextval;
 
     Name node_label_name = NULL;
+    NameData default_node_label;
+    Datum node_label_datum;
     int32 node_label_id;
     char* node_label_str;
 
@@ -284,16 +286,22 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
                 errmsg("Bridge size cannot be NULL or lower than 0")));
     }
 
-    /* node label: if null, gets default label, which is "_ag_label_vertex" */
+    /*
+     * node label: if null, gets default label, which is "_ag_label_vertex".
+     * The default needs storage of its own - namestrcpy() writes through the
+     * pointer it is given and does not allocate.
+     */
     if (PG_ARGISNULL(3))
     {
-        namestrcpy(node_label_name, AG_DEFAULT_LABEL_VERTEX);
+        namestrcpy(&default_node_label, AG_DEFAULT_LABEL_VERTEX);
+        node_label_name = &default_node_label;
     }
     else
     {
         node_label_name = PG_GETARG_NAME(3);
     }
     node_label_str = NameStr(*node_label_name);
+    node_label_datum = NameGetDatum(node_label_name);
 
     /* Name edge_label */
     if (PG_ARGISNULL(5))
@@ -306,15 +314,20 @@ Datum age_create_barbell_graph(PG_FUNCTION_ARGS)
     edge_label_str = NameStr(*edge_label_name);
 
 
-    /* create two separate complete graphs */
+    /*
+     * Create two separate complete graphs. node_label_datum is used rather
+     * than args[3].value because DirectFunctionCall4() marks every argument
+     * as not null, so a null node label would reach create_complete_graph()
+     * as a non-null NULL pointer.
+     */
     DirectFunctionCall4(create_complete_graph, arguments->args[0].value,
                                                arguments->args[1].value,
                                                arguments->args[5].value,
-                                               arguments->args[3].value);
+                                               node_label_datum);
     DirectFunctionCall4(create_complete_graph, arguments->args[0].value,
                                                arguments->args[1].value,
                                                arguments->args[5].value,
-                                               arguments->args[3].value);
+                                               node_label_datum);
 
     graph_oid = get_graph_oid(graph_name_str);
     node_label_id = get_label_id(node_label_str, graph_oid);
