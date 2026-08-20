@@ -5294,6 +5294,75 @@ static A_Expr *filter_vertices_on_label_id(cypher_parsestate *cpstate,
 }
 
 /*
+ * Build a raw parser-node qual for relationship-type alternation patterns
+ * such as `[:A|B|C]`. Resolves each listed label against the graph catalog,
+ * keeps only those that exist as edge labels, and emits
+ *
+ *     ag_catalog._extract_label_id(<edge>.id) IN (id_A, id_B, ...)
+ *
+ * which is semantically equivalent to `WHERE type(r) IN ['A','B',...]`. 
+ * If no listed label resolves to an existing edge label, the qual 
+ * short-circuits to FALSE.
+ *
+ * The pattern's `rel->label` is set to NULL by the parser action, so the
+ * edge variable is already resolved against the generic edge parent table;
+ * this qual narrows it back to the requested set.
+ */
+static Node *make_edge_label_alternation_qual(cypher_parsestate *cpstate,
+                                              transform_entity *entity)
+{
+    cypher_relationship *rel;
+    Node *id_field;
+    FuncCall *extract_id_fc;
+    List *id_consts = NIL;
+    ListCell *lc;
+
+    Assert(entity != NULL && entity->type == ENT_EDGE);
+    rel = entity->entity.rel;
+    Assert(list_length(rel->labels) > 1);
+
+    foreach (lc, rel->labels)
+    {
+        char *label_name = strVal((String *) lfirst(lc));
+        label_cache_data *lcd;
+        A_Const *c;
+
+        lcd = search_label_name_graph_cache(label_name, cpstate->graph_oid);
+        if (lcd == NULL || lcd->kind != LABEL_KIND_EDGE)
+        {
+            /* Unknown or non-edge label contributes no rows; keep walking
+             * the alternation so any valid sibling can still match. */
+            continue;
+        }
+
+        c = makeNode(A_Const);
+        c->val.ival.type = T_Integer;
+        c->val.ival.ival = lcd->id;
+        c->location = -1;
+        id_consts = lappend(id_consts, c);
+    }
+
+    /*
+     * No listed label corresponds to an existing edge label. Emit a constant
+     * FALSE qual so the edge produces no rows but planning still succeeds.
+     */
+    if (id_consts == NIL)
+    {
+        return make_bool_a_const(false);
+    }
+
+    id_field = make_qual(cpstate, entity, AG_EDGE_COLNAME_ID);
+
+    extract_id_fc = makeFuncCall(list_make2(makeString("ag_catalog"),
+                                            makeString("_extract_label_id")),
+                                 list_make1(id_field),
+                                 COERCE_EXPLICIT_CALL, -1);
+
+    return (Node *) makeSimpleA_Expr(AEXPR_IN, "=", (Node *) extract_id_fc,
+                                     (Node *) id_consts, rel->location);
+}
+
+/*
  * Makes property constraint using indirection(s). This is an
  * alternative to using the containment operator (@>).
  * 
@@ -5664,6 +5733,29 @@ static List *transform_match_path(cypher_parsestate *cpstate, Query *query,
     join_quals = make_path_join_quals(cpstate, entities);
     qual = list_concat(qual, join_quals);
 
+    /*
+     * For each edge in the pattern that used relationship-type alternation
+     * (`[:A|B|...]`), emit a synthetic qual restricting the edge's label to
+     * the listed set. Single-label and unlabeled edges are unaffected.
+     */
+    {
+        ListCell *lc;
+
+        foreach (lc, entities)
+        {
+            transform_entity *entity = lfirst(lc);
+
+            if (entity->type == ENT_EDGE &&
+                entity->entity.rel != NULL &&
+                list_length(entity->entity.rel->labels) > 1)
+            {
+                qual = lappend(qual,
+                               make_edge_label_alternation_qual(cpstate,
+                                                                entity));
+            }
+        }
+    }
+
     /* construct the qual to prevent duplicate edges */
     if (list_length(entities) > 3)
     {
@@ -5686,6 +5778,20 @@ static transform_entity *transform_VLE_edge_entity(cypher_parsestate *cpstate,
     Node *var = NULL;
     transform_entity *vle_entity = NULL;
     ParseNamespaceItem *pnsi;
+
+    /*
+     * Relationship-type alternation (`[:A|B*..]`) is not yet wired into the
+     * VLE path: the per-hop matcher built here ignores the new `labels`
+     * list, so silently accepting it would return all edges. Reject early
+     * until VLE matching learns to honour the alternation.
+     */
+    if (list_length(rel->labels) > 1)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("variable length relationships with type alternation are not yet supported"),
+                 parser_errposition(&cpstate->pstate, rel->location)));
+    }
 
     /* it better be a function call node */
     Assert(IsA(rel->varlen, FuncCall));
