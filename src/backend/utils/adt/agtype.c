@@ -213,8 +213,10 @@ static Datum agtype_object_field_impl(FunctionCallInfo fcinfo,
                                       char *key, int key_len, bool as_text);
 static agtype * get_agtype_arg(FunctionCallInfo fcinfo, Oid type, Datum datum);
 static agtype_value * agtype_access_operator_impl(FunctionCallInfo fcinfo,
+                                                  Datum *args,
                                                   int nargs,
-                                                  Datum *args);
+                                                  Oid* oids,
+                                                  bool is_variadic);
 static Datum agtype_array_element_impl(FunctionCallInfo fcinfo,
                                        agtype *agtype_in, int element,
                                        bool as_text);
@@ -4746,16 +4748,20 @@ static agtype * get_agtype_arg(FunctionCallInfo fcinfo, Oid type, Datum datum)
 }
 
 static agtype_value * agtype_access_operator_impl(FunctionCallInfo fcinfo,
+                            Datum *args,
                             int nargs,
-                            Datum *args)
+                            Oid* oids,
+                            bool is_variadic)
 {
     int i;
+    Oid type_oid;
     agtype *container = NULL;
     agtype_value *container_value = NULL;
 
 
     /* get the container argument. It could be an object or array */
-    container = get_agtype_arg(fcinfo, get_fn_expr_argtype(fcinfo->flinfo, 0), args[0]);
+    type_oid = is_variadic ? oids[0] : get_fn_expr_argtype(fcinfo->flinfo, 0);
+    container = get_agtype_arg(fcinfo, type_oid, args[0]);
 
     /* if it is a binary container, check for a VLE vpc */
     if (AGT_ROOT_IS_BINARY(container))
@@ -4799,7 +4805,8 @@ static agtype_value * agtype_access_operator_impl(FunctionCallInfo fcinfo,
         agtype *key = NULL;
 
         /* get the key */
-        key = get_agtype_arg(fcinfo, get_fn_expr_argtype(fcinfo->flinfo, i), args[i]);
+        type_oid = is_variadic ? oids[i] : get_fn_expr_argtype(fcinfo->flinfo, i);
+        key = get_agtype_arg(fcinfo, type_oid, args[i]);
 
         /* the key must be a scalar */
         if (!(AGT_ROOT_IS_SCALAR(key)))
@@ -4900,7 +4907,7 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
             }
         }
 
-        container_value = agtype_access_operator_impl(fcinfo, nargs, args_local);
+        container_value = agtype_access_operator_impl(fcinfo, args_local, nargs, NULL, false);
     }
 
     else
@@ -4943,7 +4950,7 @@ Datum agtype_access_operator(PG_FUNCTION_ARGS)
             }
         }
         
-        container_value = agtype_access_operator_impl(fcinfo, nargs, args);
+        container_value = agtype_access_operator_impl(fcinfo, args, nargs, types, true);
 
         pfree_if_not_null(args);
         pfree_if_not_null(types);
