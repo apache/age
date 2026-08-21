@@ -1246,6 +1246,70 @@ SELECT * FROM cypher('rls_graph', $$
     MATCH ()-[k:KNOWS]->(b:Person {name: 'DetachFn2'}) RETURN k.since
 $$) AS (since agtype);
 
+-- Exercise function-based edge RLS through the default endpoint indexes.
+SELECT * FROM cypher('rls_graph', $$
+    CREATE (:Person {name: 'DetachFnIndexHub', owner: 'rls_user1', department: 'DetachFn'})
+$$) AS (a agtype);
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH (hub:Person {name: 'DetachFnIndexHub'})
+    UNWIND range(1, 16) AS ident
+    CREATE (hub)-[:KNOWS {owner: 'rls_user1'}]->
+           (:Person {owner: 'rls_user1', department: 'DetachFn', leaf: ident})
+$$) AS (a agtype);
+
+SET ROLE rls_user1;
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH (p:Person {name: 'DetachFnIndexHub'}) DETACH DELETE p
+$$) AS (a agtype);
+
+RESET ROLE;
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH ()-[k:KNOWS]->() WHERE k.owner = 'rls_user1' RETURN count(k)
+$$) AS (count agtype);
+
+-- Drop the endpoint indexes to exercise the connected-edge sequential scan.
+DO $$
+DECLARE
+    index_to_drop regclass;
+BEGIN
+    FOR index_to_drop IN
+        SELECT indexrelid
+        FROM pg_index
+        WHERE indrelid = 'rls_graph."KNOWS"'::regclass
+          AND indnatts = 1
+          AND indkey[0] IN (2, 3)
+    LOOP
+        EXECUTE format('DROP INDEX %s', index_to_drop);
+    END LOOP;
+END
+$$;
+
+SELECT * FROM cypher('rls_graph', $$
+    CREATE (:Person {name: 'DetachFnSeqHub', owner: 'rls_user1', department: 'DetachFn'})
+$$) AS (a agtype);
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH (hub:Person {name: 'DetachFnSeqHub'})
+    UNWIND range(1, 16) AS ident
+    CREATE (hub)-[:KNOWS {owner: 'rls_user1'}]->
+           (:Person {owner: 'rls_user1', department: 'DetachFn', seq_leaf: ident})
+$$) AS (a agtype);
+
+SET ROLE rls_user1;
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH (p:Person {name: 'DetachFnSeqHub'}) DETACH DELETE p
+$$) AS (a agtype);
+
+RESET ROLE;
+
+SELECT * FROM cypher('rls_graph', $$
+    MATCH ()-[k:KNOWS]->() WHERE k.owner = 'rls_user1' RETURN count(k)
+$$) AS (count agtype);
+
 -- cleanup
 DROP POLICY detach_fn_knows_owner ON rls_graph."KNOWS";
 DROP POLICY detach_fn_person_all ON rls_graph."Person";

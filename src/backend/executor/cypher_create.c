@@ -209,6 +209,9 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
      */
     do
     {
+        /* Release generated-column scratch from the preceding row. */
+        ResetPerTupleExprContext(estate);
+
         /*Process the subtree first */
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);

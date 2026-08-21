@@ -113,6 +113,12 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 
     estate->es_result_relations = &resultRelInfo;
 
+    /*
+     * Initialize generated-column state in the per-tuple context before
+     * lock-mode selection can initialize it in the query context.
+     */
+    init_result_rel_info_generated(resultRelInfo, estate);
+
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
 
     lock_result = heap_lock_tuple(resultRelInfo->ri_RelationDesc, old_tuple,
@@ -237,18 +243,24 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
 }
 
 /*
- * When the CREATE clause is the last cypher clause, consume all input from the
- * previous clause(s) in the first call of exec_cypher_create.
+ * When SET or REMOVE is the last Cypher clause, consume all input from the
+ * previous clauses in the first call of exec_cypher_set.
  */
 static void process_all_tuples(CustomScanState *node)
 {
     cypher_set_custom_scan_state *css = (cypher_set_custom_scan_state *)node;
     TupleTableSlot *slot;
     EState *estate = css->css.ss.ps.state;
+    ExprContext *econtext = css->css.ss.ps.ps_ExprContext;
 
     do
     {
+        /* Release scratch retained by the preceding input row. */
+        ResetExprContext(econtext);
         process_update_list(node);
+
+        /* Release generated-column scratch before reading the next row. */
+        ResetPerTupleExprContext(estate);
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
         Increment_Estate_CommandId(estate)
@@ -415,6 +427,10 @@ void apply_update_list(CustomScanState *node,
     HASHCTL hashctl;
     HTAB *index_cache = NULL;
     HASHCTL idx_hashctl;
+    MemoryContext old_context;
+
+    /* Allocate transient update state in the per-tuple context. */
+    old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
@@ -625,8 +641,9 @@ void apply_update_list(CustomScanState *node,
         }
         index_oid = idx_entry->index_oid;
 
-        slot = ExecInitExtraTupleSlot(
-            estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+        /* Do not accumulate per-row slots in estate->es_tupleTable. */
+        slot = MakeSingleTupleTableSlot(
+            RelationGetDescr(resultRelInfo->ri_RelationDesc),
             &TTSOpsHeapTuple);
 
         /* Setup RLS policies if RLS is enabled */
@@ -648,8 +665,10 @@ void apply_update_list(CustomScanState *node,
                 /* Setup security quals */
                 entry->qualExprs = setup_security_quals(resultRelInfo, estate,
                                                         node, CMD_UPDATE);
-                entry->slot = ExecInitExtraTupleSlot(
-                    estate, RelationGetDescr(resultRelInfo->ri_RelationDesc),
+
+                /* The per-row RLS cache owns this standalone slot. */
+                entry->slot = MakeSingleTupleTableSlot(
+                    RelationGetDescr(resultRelInfo->ri_RelationDesc),
                     &TTSOpsHeapTuple);
             }
             else
@@ -843,6 +862,7 @@ void apply_update_list(CustomScanState *node,
         }
 
         estate->es_snapshot->curcid = cid;
+        ExecDropSingleTupleTableSlot(slot);
         /* close relation */        
         ExecCloseIndices(resultRelInfo);
         table_close(resultRelInfo->ri_RelationDesc, RowExclusiveLock);
@@ -851,12 +871,29 @@ void apply_update_list(CustomScanState *node,
         lidx++;
     }
 
+    /* Release standalone RLS slots before destroying their owning cache. */
+    {
+        HASH_SEQ_STATUS seq;
+        RLSCacheEntry *entry;
+
+        hash_seq_init(&seq, qual_cache);
+        while ((entry = (RLSCacheEntry *)hash_seq_search(&seq)) != NULL)
+        {
+            if (entry->slot != NULL)
+            {
+                ExecDropSingleTupleTableSlot(entry->slot);
+            }
+        }
+    }
+
     /* Clean up the cache */
     hash_destroy(qual_cache);
     hash_destroy(index_cache);
 
     /* free our lookup array */
     pfree_if_not_null(luindex);
+
+    MemoryContextSwitchTo(old_context);
 }
 
 static void process_update_list(CustomScanState *node)
@@ -875,6 +912,9 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
     TupleTableSlot *slot;
 
     saved_resultRels = estate->es_result_relations;
+
+    /* Release EState per-tuple scratch before fetching the next input row. */
+    ResetPerTupleExprContext(estate);
 
     /* Process the subtree first */
     Decrement_Estate_CommandId(estate);
@@ -927,6 +967,8 @@ static TupleTableSlot *exec_cypher_set(CustomScanState *node)
         return NULL;
     }
 
+    /* Release scratch allocated by this CustomScan for the preceding row. */
+    ResetExprContext(econtext);
     process_update_list(node);
 
     /* increment the command counter to reflect the updates */
