@@ -319,6 +319,50 @@ $$RETURN 1 IN [[null]]$$) AS r(c boolean);
  f
 (1 row)
 
+-- edge/vertex IN relationships()/nodes() (issue #2542 regression)
+SELECT * FROM create_graph('expr_in_op');
+NOTICE:  graph "expr_in_op" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('expr_in_op',
+$$CREATE (a:L)-[:R]->(b)$$) AS r(c agtype);
+ c 
+---
+(0 rows)
+
+SELECT * FROM cypher('expr_in_op',
+$$MATCH ()-[r0]->()
+MATCH p0 = (:L)-[:R]->()
+RETURN r0 IN relationships(p0)$$) AS r(c boolean);
+ c 
+---
+ t
+(1 row)
+
+SELECT * FROM cypher('expr_in_op',
+$$MATCH (a:L)
+MATCH p0 = (:L)-[:R]->()
+RETURN a IN nodes(p0)$$) AS r(c boolean);
+ c 
+---
+ t
+(1 row)
+
+SELECT * FROM drop_graph('expr_in_op', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table expr_in_op._ag_label_vertex
+drop cascades to table expr_in_op._ag_label_edge
+drop cascades to table expr_in_op."L"
+drop cascades to table expr_in_op."R"
+NOTICE:  graph "expr_in_op" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
 -- empty list: x IN [] should always return false
 SELECT * FROM cypher('expr',
 $$RETURN 1 IN []$$) AS r(c boolean);
