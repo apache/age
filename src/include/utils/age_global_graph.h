@@ -77,6 +77,11 @@ edge_entry *get_edge_entry_with_hash(GRAPH_global_context *ggctx,
 graphid get_vertex_entry_id(vertex_entry *ve);
 Oid get_vertex_entry_label_table_oid(vertex_entry *ve);
 Datum get_vertex_entry_properties(vertex_entry *ve);
+/* tolerant variants for VLE path materialization: return empty object ({})
+ * when the referenced tuple is no longer visible instead of raising
+ * a stale-TID error (see age_vle.c build_path) */
+Datum get_vertex_entry_properties_graceful(vertex_entry *ve);
+Datum get_edge_entry_properties_graceful(edge_entry *ee);
 
 /*
  * Flat-array adjacency accessors. Returned pointer is into the entry's

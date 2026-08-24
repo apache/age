@@ -41,6 +41,7 @@
 
 #include "utils/age_global_graph.h"
 #include "utils/agehash.h"
+#include "utils/agtype.h"
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
@@ -1426,6 +1427,74 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
     return result;
 }
 
+/*
+ * Tolerant variant of get_vertex_entry_properties used by the VLE path
+ * materializer.
+ *
+ * The VLE SRF stores paths as interleaved graphid arrays and only lazily
+ * fetches vertex properties when the path datum is projected (build_path).
+ * When the path's bound vertices were deleted earlier in the same query
+ * (e.g. `MATCH p = ... DETACH DELETE ... RETURN p`), the stored TID no
+ * longer resolves to a visible tuple. The non-VLE path executor builds its
+ * path datums eagerly (before DELETE runs), so it never hits this case;
+ * build_path must tolerate it instead of raising an internal error.
+ *
+ * Returns an empty agtype object ({}) as the properties when the tuple is
+ * no longer visible, so the path can still be projected with the vertex
+ * present but its properties empty.
+ */
+Datum get_vertex_entry_properties_graceful(vertex_entry *ve)
+{
+    Relation rel;
+    HeapTupleData tuple;
+    Buffer buffer = InvalidBuffer;
+    Datum result = (Datum) 0;
+
+    rel = table_open(ve->vertex_label_table_oid, AccessShareLock);
+    tuple.t_self = ve->tid;
+
+    if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
+    {
+        TupleDesc tupdesc = RelationGetDescr(rel);
+        bool isnull;
+        Datum props;
+
+        /* properties is column 2 (1-indexed) */
+        props = heap_getattr(&tuple, 2, tupdesc, &isnull);
+        if (!isnull)
+        {
+            result = datumCopy(props, false, -1);
+        }
+
+        ReleaseBuffer(buffer);
+        buffer = InvalidBuffer;
+    }
+
+    table_close(rel, AccessShareLock);
+
+    /* defensive: release any leftover pin (PG 18 heap_fetch may pin
+     * buffer in some failure paths) */
+    if (BufferIsValid(buffer))
+        ReleaseBuffer(buffer);
+
+    if (result == (Datum) 0)
+    {
+        agtype_in_state result_state;
+
+        /* build an empty object ({}) as the properties */
+        memset(&result_state, 0, sizeof(agtype_in_state));
+        push_agtype_value(&result_state.parse_state, WAGT_BEGIN_OBJECT, NULL);
+        result_state.res = push_agtype_value(&result_state.parse_state,
+                                             WAGT_END_OBJECT, NULL);
+
+        result = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(result_state.res));
+
+        pfree_agtype_in_state(&result_state);
+    }
+
+    return result;
+}
+
 /* edge_entry accessor functions */
 graphid get_edge_entry_id(edge_entry *ee)
 {
@@ -1481,6 +1550,65 @@ Datum get_edge_entry_properties(edge_entry *ee)
     {
         elog(ERROR, "get_edge_entry_properties: stale TID - "
              "edge entry references a tuple that is no longer visible");
+    }
+
+    return result;
+}
+
+/*
+ * Tolerant variant of get_edge_entry_properties used by the VLE path
+ * materializer. See get_vertex_entry_properties_graceful for rationale:
+ * when the path's bound edges were deleted earlier in the same query, the
+ * stored TID no longer resolves to a visible tuple, and the path must be
+ * projectable with an empty properties object ({}) instead of raising an
+ * internal error.
+ */
+Datum get_edge_entry_properties_graceful(edge_entry *ee)
+{
+    Relation rel;
+    HeapTupleData tuple;
+    Buffer buffer = InvalidBuffer;
+    Datum result = (Datum) 0;
+
+    rel = table_open(ee->edge_label_table_oid, AccessShareLock);
+    tuple.t_self = ee->tid;
+
+    if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
+    {
+        TupleDesc tupdesc = RelationGetDescr(rel);
+        bool isnull;
+        Datum props;
+
+        /* properties is column 4 (1-indexed) */
+        props = heap_getattr(&tuple, 4, tupdesc, &isnull);
+        if (!isnull)
+        {
+            result = datumCopy(props, false, -1);
+        }
+
+        ReleaseBuffer(buffer);
+        buffer = InvalidBuffer;
+    }
+
+    table_close(rel, AccessShareLock);
+
+    /* defensive: release any leftover pin */
+    if (BufferIsValid(buffer))
+        ReleaseBuffer(buffer);
+
+    if (result == (Datum) 0)
+    {
+        agtype_in_state result_state;
+
+        /* build an empty object ({}) as the properties */
+        memset(&result_state, 0, sizeof(agtype_in_state));
+        push_agtype_value(&result_state.parse_state, WAGT_BEGIN_OBJECT, NULL);
+        result_state.res = push_agtype_value(&result_state.parse_state,
+                                             WAGT_END_OBJECT, NULL);
+
+        result = AGTYPE_P_GET_DATUM(agtype_value_to_agtype(result_state.res));
+
+        pfree_agtype_in_state(&result_state);
     }
 
     return result;
