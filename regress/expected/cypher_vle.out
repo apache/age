@@ -1335,5 +1335,51 @@ NOTICE:  graph "issue_2382" has been dropped
 (1 row)
 
 --
+-- Issue #2549: VLE path + DETACH DELETE + RETURN p should not raise
+-- stale TID error.  When the path's bound vertices are deleted before
+-- the path datum is materialized, build_path must tolerate the stale
+-- TID and return the path with empty properties ({}) for the deleted
+-- entities.
+--
+SELECT create_graph('issue_2549');
+NOTICE:  graph "issue_2549" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-(b {id: 2}),
+           (a)<-[:R]-(c {id: 3})
+    RETURN a
+$$) AS (v agtype);
+                                   v                                   
+-----------------------------------------------------------------------
+ {"id": 281474976710657, "label": "", "properties": {"id": 1}}::vertex
+(1 row)
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+                                                                                                                                                      p                                                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"id": 281474976710657, "label": "_ag_label_vertex", "properties": {"id": 1}}::vertex, {"id": 844424930131970, "label": "R", "end_id": 281474976710657, "start_id": 281474976710659, "properties": {}}::edge, {"id": 281474976710659, "label": "_ag_label_vertex", "properties": {"id": 3}}::vertex]::path
+ [{"id": 281474976710657, "label": "_ag_label_vertex", "properties": {}}::vertex, {"id": 844424930131969, "label": "R", "end_id": 281474976710657, "start_id": 281474976710658, "properties": {}}::edge, {"id": 281474976710658, "label": "_ag_label_vertex", "properties": {"id": 2}}::vertex]::path
+(2 rows)
+
+SELECT drop_graph('issue_2549', true);
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table issue_2549._ag_label_vertex
+drop cascades to table issue_2549._ag_label_edge
+drop cascades to table issue_2549."R"
+NOTICE:  graph "issue_2549" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+--
 -- End
 --

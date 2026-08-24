@@ -488,5 +488,25 @@ $$) AS (person agtype, friend agtype);
 SELECT drop_graph('issue_2382', true);
 
 --
+-- Issue #2549: VLE path + DETACH DELETE + RETURN p should not raise
+-- stale TID error.  When the path's bound vertices are deleted before
+-- the path datum is materialized, build_path must tolerate the stale
+-- TID and return the path with empty properties ({}) for the deleted
+-- entities.
+--
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-(b {id: 2}),
+           (a)<-[:R]-(c {id: 3})
+    RETURN a
+$$) AS (v agtype);
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+SELECT drop_graph('issue_2549', true);
+
+--
 -- End
 --

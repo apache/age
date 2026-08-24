@@ -1782,7 +1782,7 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),
                                             get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties(ee));
+                                            get_edge_entry_properties_graceful(ee));
         /* push the edge*/
         edges_result.res = push_agtype_value(&edges_result.parse_state,
                                              WAGT_ELEM, agtv_edge);
@@ -1847,7 +1847,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
         /* reconstruct the vertex */
         agtv_vertex = agtype_value_build_vertex(get_vertex_entry_id(ve),
                                                 label_name,
-                                                get_vertex_entry_properties(ve));
+                                                get_vertex_entry_properties_graceful(ve));
         /* push the vertex */
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_vertex);
@@ -1869,7 +1869,7 @@ static agtype_value *build_path(VLE_path_container *vpc)
         agtv_edge = agtype_value_build_edge(get_edge_entry_id(ee), label_name,
                                             get_edge_entry_end_vertex_id(ee),
                                             get_edge_entry_start_vertex_id(ee),
-                                            get_edge_entry_properties(ee));
+                                            get_edge_entry_properties_graceful(ee));
         /* push the edge*/
         path_result.res = push_agtype_value(&path_result.parse_state, WAGT_ELEM,
                                             agtv_edge);
