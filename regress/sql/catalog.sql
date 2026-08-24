@@ -235,3 +235,21 @@ SELECT count(*) FROM ag_label;
 -- dropping the graphs
 SELECT drop_graph('issue_2245', true);
 SELECT drop_graph('graph', true);
+
+--
+-- create_label() must not resolve graphid_ops through the search_path
+--
+-- Every AGE object is referenced with an ag_catalog qualified name here, so
+-- these statements have to work with ag_catalog off the search_path.
+--
+SET search_path TO public;
+SELECT ag_catalog.create_graph('graphid_ops_search_path');
+-- vertex labels index id, edge labels index start_id and end_id
+SELECT ag_catalog.create_vlabel('graphid_ops_search_path', 'v');
+SELECT ag_catalog.create_elabel('graphid_ops_search_path', 'e');
+-- label creation at query time goes through the same path
+SELECT * FROM ag_catalog.cypher('graphid_ops_search_path',
+    $$CREATE (:query_time_v)-[:query_time_e]->(:query_time_v)$$)
+  AS (result ag_catalog.agtype);
+SELECT ag_catalog.drop_graph('graphid_ops_search_path', true);
+SET search_path TO ag_catalog;
