@@ -416,6 +416,10 @@ void apply_update_list(CustomScanState *node,
     HTAB *index_cache = NULL;
     HASHCTL idx_hashctl;
 
+    /* if scanTupleSlot is NULL, there is no data to update */
+    if (scanTupleSlot == NULL)
+        return;
+
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
 
