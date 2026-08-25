@@ -19,7 +19,11 @@
 
 #include "postgres.h"
 
+#include "fmgr.h"
+
 #include "access/heapam.h"
+#include "access/htup_details.h"
+#include "access/xact.h"
 #include "catalog/namespace.h"
 #include "commands/trigger.h"
 #include "common/hashfn.h"
@@ -51,8 +55,17 @@
 #define VERTEX_HTAB_INITIAL_SIZE 10000
 #define EDGE_HTAB_INITIAL_SIZE 10000
 
-/* Maximum number of graphs tracked for version counting */
-#define AGE_MAX_GRAPHS 128
+/*
+ * Maximum number of graphs tracked for version counting.
+ *
+ * There is no hard limit behind this number. An entry is 16 bytes, so the whole
+ * table is about 4 KB of shared memory, and it is sized for headroom. Because a
+ * slot is released when its graph is dropped, this bounds the graphs that exist
+ * at one time rather than the graphs ever created. Lookups are linear scans of
+ * the slots in use, which is the reason not to raise it much further without
+ * replacing the scan with a hash.
+ */
+#define AGE_MAX_GRAPHS 256
 
 /*
  * Graph version counter entry. Stored in shared memory (DSM or shmem)
@@ -1372,52 +1385,133 @@ Oid get_vertex_entry_label_table_oid(vertex_entry *ve)
 }
 
 /*
- * Fetch vertex properties on demand from the heap via stored TID.
- *
- * Returns a datumCopy of the properties in the current memory context.
- * The caller does not need to free the result explicitly — it will be
- * freed when the memory context is reset (typically the SRF multi-call
- * context for VLE, which is cleaned up when the SRF completes).
- *
- * If the tuple is no longer visible (e.g., concurrent mutation between
- * cache build and fetch), the version counter should have invalidated
- * the cache. If we get here with a stale TID, it indicates a bug in
- * the invalidation logic.
+ * Outcome of fetch_entry_properties(). A missing row and a row whose properties
+ * are NULL are different failures: the first means the cache is stale, the
+ * second means the label table no longer satisfies the NOT NULL that AGE
+ * creates it with. Reporting them apart keeps a schema problem from being
+ * described as a cache problem.
  */
-Datum get_vertex_entry_properties(vertex_entry *ve)
+typedef enum entry_fetch_status
+{
+    ENTRY_FETCH_OK,
+    ENTRY_FETCH_GONE,
+    ENTRY_FETCH_NULL_PROPS
+} entry_fetch_status;
+
+/*
+ * Read one cached entry's properties out of the heap.
+ *
+ * The stored TID normally resolves under the active snapshot. It does not once
+ * this statement has deleted the tuple: cypher_delete() advances
+ * es_snapshot->curcid past every delete, so a path bound by an earlier MATCH
+ * can no longer see its own endpoints by the time it is projected (issue
+ * #2549). That tuple is still physically present -- our transaction has not
+ * committed, so nothing may prune it -- and the properties it carried when the
+ * path was matched are what the path should report, so it is read anyway.
+ *
+ * The relaxation is deliberately narrow: only a tuple deleted by our own
+ * transaction qualifies, and only while the row still holds the entity that was
+ * cached, so a line pointer recycled by vacuum cannot be mistaken for the
+ * original. Anything else leaves *found false and the caller reports a stale
+ * entry, which is what keeps a genuine cache-invalidation bug visible.
+ *
+ * The value is detoasted here, under the buffer pin, so no caller is left
+ * holding an external pointer into a tuple that is logically gone.
+ */
+static Datum fetch_entry_properties(Oid label_table_oid, ItemPointer tid,
+                                    graphid expected_id, AttrNumber id_attnum,
+                                    AttrNumber props_attnum,
+                                    entry_fetch_status *status)
 {
     Relation rel;
+    TupleDesc tupdesc;
     HeapTupleData tuple;
-    Buffer buffer;
+    Buffer buffer = InvalidBuffer;
     Datum result = (Datum) 0;
+    bool usable;
+    bool isnull;
 
-    rel = table_open(ve->vertex_label_table_oid, AccessShareLock);
-    tuple.t_self = ve->tid;
+    *status = ENTRY_FETCH_GONE;
 
-    if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
+    rel = table_open(label_table_oid, AccessShareLock);
+    tupdesc = RelationGetDescr(rel);
+    tuple.t_self = *tid;
+
+    /*
+     * keep_buf leaves the tuple readable when the fetch fails on visibility
+     * alone; a line pointer that is gone clears t_data and returns no buffer.
+     */
+    usable = heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true);
+
+    if (!usable && BufferIsValid(buffer))
     {
-        TupleDesc tupdesc = RelationGetDescr(rel);
-        bool isnull;
-        Datum props;
+        TransactionId xmax = HeapTupleHeaderGetUpdateXid(tuple.t_data);
 
-        /* properties is column 2 (1-indexed) */
-        props = heap_getattr(&tuple, 2, tupdesc, &isnull);
-        if (!isnull)
+        if (TransactionIdIsValid(xmax) &&
+            TransactionIdIsCurrentTransactionId(xmax))
         {
-            result = datumCopy(props, false, -1);
-        }
+            Datum id = heap_getattr(&tuple, id_attnum, tupdesc, &isnull);
 
+            usable = !isnull && DATUM_GET_GRAPHID(id) == expected_id;
+        }
+    }
+
+    if (usable)
+    {
+        Datum props = heap_getattr(&tuple, props_attnum, tupdesc, &isnull);
+
+        if (isnull)
+        {
+            *status = ENTRY_FETCH_NULL_PROPS;
+        }
+        else
+        {
+            result = PointerGetDatum(PG_DETOAST_DATUM_COPY(props));
+            *status = ENTRY_FETCH_OK;
+        }
+    }
+
+    if (BufferIsValid(buffer))
+    {
         ReleaseBuffer(buffer);
     }
 
     table_close(rel, AccessShareLock);
 
-    /*
-     * If heap_fetch failed, the tuple is no longer visible. This should
-     * not happen under normal operation because the version counter
-     * invalidates the cache when the graph is mutated.
-     */
-    if (result == (Datum) 0)
+    return result;
+}
+
+/*
+ * Fetch vertex properties on demand from the heap via stored TID.
+ *
+ * Returns a detoasted copy of the properties in the current memory context.
+ * The caller does not need to free the result explicitly — it will be
+ * freed when the memory context is reset (typically the SRF multi-call
+ * context for VLE, which is cleaned up when the SRF completes).
+ *
+ * A tuple this transaction has already deleted is still reported, carrying the
+ * properties it held when the path was matched; see fetch_entry_properties.
+ * Any other unreachable TID means the version counter failed to invalidate the
+ * cache, and is raised as an error.
+ */
+Datum get_vertex_entry_properties(vertex_entry *ve)
+{
+    Datum result;
+    entry_fetch_status status;
+
+    result = fetch_entry_properties(ve->vertex_label_table_oid, &ve->tid,
+                                    ve->vertex_id,
+                                    Anum_ag_label_vertex_table_id,
+                                    Anum_ag_label_vertex_table_properties,
+                                    &status);
+
+    if (status == ENTRY_FETCH_NULL_PROPS)
+    {
+        elog(ERROR, "get_vertex_entry_properties: vertex " INT64_FORMAT
+             " has null properties", ve->vertex_id);
+    }
+
+    if (status != ENTRY_FETCH_OK)
     {
         elog(ERROR, "get_vertex_entry_properties: stale TID - "
              "vertex entry references a tuple that is no longer visible");
@@ -1451,33 +1545,22 @@ Oid get_edge_entry_label_table_oid(edge_entry *ee)
  */
 Datum get_edge_entry_properties(edge_entry *ee)
 {
-    Relation rel;
-    HeapTupleData tuple;
-    Buffer buffer;
-    Datum result = (Datum) 0;
+    Datum result;
+    entry_fetch_status status;
 
-    rel = table_open(ee->edge_label_table_oid, AccessShareLock);
-    tuple.t_self = ee->tid;
+    result = fetch_entry_properties(ee->edge_label_table_oid, &ee->tid,
+                                    get_edge_entry_id(ee),
+                                    Anum_ag_label_edge_table_id,
+                                    Anum_ag_label_edge_table_properties,
+                                    &status);
 
-    if (heap_fetch(rel, GetActiveSnapshot(), &tuple, &buffer, true))
+    if (status == ENTRY_FETCH_NULL_PROPS)
     {
-        TupleDesc tupdesc = RelationGetDescr(rel);
-        bool isnull;
-        Datum props;
-
-        /* properties is column 4 (1-indexed) */
-        props = heap_getattr(&tuple, 4, tupdesc, &isnull);
-        if (!isnull)
-        {
-            result = datumCopy(props, false, -1);
-        }
-
-        ReleaseBuffer(buffer);
+        elog(ERROR, "get_edge_entry_properties: edge " INT64_FORMAT
+             " has null properties", get_edge_entry_id(ee));
     }
 
-    table_close(rel, AccessShareLock);
-
-    if (result == (Datum) 0)
+    if (status != ENTRY_FETCH_OK)
     {
         elog(ERROR, "get_edge_entry_properties: stale TID - "
              "edge entry references a tuple that is no longer visible");
@@ -1933,30 +2016,161 @@ void increment_graph_version(Oid graph_oid)
         }
     }
 
-    /* add new entry */
-    if (state->num_entries < AGE_MAX_GRAPHS)
+    /* take a slot, preferring one left behind by a dropped graph */
     {
-        int idx = state->num_entries;
+        int idx = -1;
+        bool appending;
 
-        state->entries[idx].graph_oid = graph_oid;
-        pg_atomic_init_u64(&state->entries[idx].version, 1);
+        for (i = 0; i < state->num_entries; i++)
+        {
+            if (state->entries[i].graph_oid == InvalidOid)
+            {
+                idx = i;
+                break;
+            }
+        }
+
+        if (idx < 0 && state->num_entries < AGE_MAX_GRAPHS)
+        {
+            idx = state->num_entries;
+        }
+
+        if (idx < 0)
+        {
+            elog(WARNING, "AGE: graph version counter table full (%d graphs)",
+                 AGE_MAX_GRAPHS);
+            LWLockRelease(&state->lock);
+            return;
+        }
+
+        appending = (idx == state->num_entries);
 
         /*
-         * Write barrier ensures the entry fields are fully visible to
-         * other backends before num_entries is incremented. This prevents
-         * readers on weak memory-ordering architectures (e.g., ARM) from
-         * seeing the incremented count before the entry is initialized.
+         * Seed above every version this table has ever issued, freed slots
+         * included, so the sequence never repeats a value. A context cached
+         * against this slot's previous occupant -- or against an earlier graph
+         * that happened to reuse this OID -- then cannot compare equal by
+         * coincidence and be mistaken for current.
+         */
+        {
+            uint64 seed = 0;
+            int j;
+
+            for (j = 0; j < state->num_entries; j++)
+            {
+                uint64 v = pg_atomic_read_u64(&state->entries[j].version);
+
+                if (v > seed)
+                {
+                    seed = v;
+                }
+            }
+
+            if (appending)
+            {
+                pg_atomic_init_u64(&state->entries[idx].version, seed + 1);
+            }
+            else
+            {
+                pg_atomic_write_u64(&state->entries[idx].version, seed + 1);
+            }
+        }
+
+        /*
+         * Publish the version before the oid: readers match on the oid without
+         * the lock and must never find a slot whose version is not yet set.
          */
         pg_write_barrier();
-        state->num_entries++;
-    }
-    else
-    {
-        elog(WARNING, "AGE: graph version counter table full (%d graphs)",
-             AGE_MAX_GRAPHS);
+        state->entries[idx].graph_oid = graph_oid;
+
+        if (appending)
+        {
+            /*
+             * Write barrier ensures the entry fields are fully visible to
+             * other backends before num_entries is incremented. This prevents
+             * readers on weak memory-ordering architectures (e.g., ARM) from
+             * seeing the incremented count before the entry is initialized.
+             */
+            pg_write_barrier();
+            state->num_entries++;
+        }
     }
 
     LWLockRelease(&state->lock);
+}
+
+/*
+ * Release a dropped graph's slot so another graph can use it.
+ *
+ * Without this the table is a tally of every graph ever mutated, and a server
+ * that cycles graphs eventually fills it: further graphs go untracked, every
+ * mutation warns, and their contexts fall back to snapshot comparison, which is
+ * correct but invalidates far more often.
+ *
+ * The version is deliberately left in the freed slot. It is part of the
+ * high-water mark the next occupant seeds above, which is what stops a stale
+ * context from matching a later graph.
+ */
+void release_graph_version(Oid graph_oid)
+{
+    GraphVersionState *state = get_version_state();
+    int i;
+
+    if (state == NULL || !OidIsValid(graph_oid))
+    {
+        return;
+    }
+
+    LWLockAcquire(&state->lock, LW_EXCLUSIVE);
+
+    for (i = 0; i < state->num_entries; i++)
+    {
+        if (state->entries[i].graph_oid == graph_oid)
+        {
+            /*
+             * Clearing the oid is enough to retire the slot: a lock-free
+             * reader matches on it, so it stops finding this graph and falls
+             * back to snapshot comparison until the graph is registered again.
+             */
+            state->entries[i].graph_oid = InvalidOid;
+            break;
+        }
+    }
+
+    LWLockRelease(&state->lock);
+}
+
+/*
+ * Bump the version of every tracked graph.
+ *
+ * For commands that rewrite a heap without naming one: VACUUM FULL or CLUSTER
+ * over a whole database. A graph absent from this table has never been mutated
+ * through the counter, so its contexts are still validated by snapshot
+ * comparison in is_ggctx_invalid() and need no bump.
+ */
+void increment_all_graph_versions(void)
+{
+    GraphVersionState *state = get_version_state();
+    int i;
+
+    if (state == NULL)
+    {
+        return;
+    }
+
+    /*
+     * num_entries only grows, and entries are published with a write barrier
+     * before it is incremented, so reading it without the lock can miss a
+     * brand-new graph but never sees a half-built entry. A graph added after
+     * this read has no cached context to invalidate yet.
+     */
+    for (i = 0; i < state->num_entries; i++)
+    {
+        if (state->entries[i].graph_oid != InvalidOid)
+        {
+            pg_atomic_fetch_add_u64(&state->entries[i].version, 1);
+        }
+    }
 }
 
 /*

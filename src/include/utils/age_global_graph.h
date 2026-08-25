@@ -96,6 +96,8 @@ graphid get_edge_entry_end_vertex_id(edge_entry *ee);
 /* Graph version counter functions — shared memory (DSM or shmem) */
 uint64 get_graph_version(Oid graph_oid);
 void increment_graph_version(Oid graph_oid);
+void increment_all_graph_versions(void);
+void release_graph_version(Oid graph_oid);
 Oid get_graph_oid_for_table(Oid table_oid);
 
 /*

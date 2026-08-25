@@ -488,5 +488,272 @@ $$) AS (person agtype, friend agtype);
 SELECT drop_graph('issue_2382', true);
 
 --
+-- Issue #2549: a VLE path bound before a DETACH DELETE must still project.
+--
+-- Entries in the VLE cache hold a TID and fetch properties lazily when the path
+-- is materialized. cypher_delete() advances es_snapshot->curcid past every
+-- delete, so by projection time a path's own endpoints are no longer visible
+-- under the active snapshot. They are still readable, because the deleting
+-- transaction has not committed, so the path reports the properties it was
+-- matched with.
+--
+-- Row order here is scan order, so every query that can return more than one
+-- path orders on a scalar key: the point of several of these cases is that the
+-- result does NOT depend on which row is projected first.
+--
+SELECT create_graph('issue_2549');
+
+-- 2549.1  the reported case: both endpoints deleted, path projected
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2}), (a)<-[:R]-({id: 3})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN id(n1) AS k, p
+$$) AS (k agtype, p agtype) ORDER BY k;
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.2  fan-out: the shared vertex must read the same in every row, whichever
+--         row the executor projects first
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2}), (a)<-[:R]-({id: 3}),
+           (a)<-[:R]-({id: 4}), (a)<-[:R]-({id: 5})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN id(n1) AS k, p
+$$) AS (k agtype, p agtype) ORDER BY k;
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.3  only one endpoint deleted; the survivor is unaffected
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2}), (a)<-[:R]-({id: 3})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n1
+    RETURN id(n1) AS k, p
+$$) AS (k agtype, p agtype) ORDER BY k;
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.4  edge deleted rather than a vertex: exercises the edge accessor
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R {w: 7}]-({id: 2})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[e:R*..2]-(n1)
+    DELETE e
+    RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.5  edge-list projection (build_edge_list) after the endpoints are gone
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE ({id: 1})-[:R {k: 1}]->({id: 2})-[:R {k: 2}]->({id: 3})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH (n0)-[e:R*2]->(n1)
+    DETACH DELETE n0, n1
+    RETURN e
+$$) AS (e agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.6  edge property constraint: the accessor is also reached during
+--         traversal, not only when the path is built
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R {w: 7}]-({id: 2}), (a)<-[:R {w: 9}]-({id: 3})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R* {w: 7}]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.7  zero-length bound: the zero-hop paths carry the deleted vertex too
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*0..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN id(n0) AS k0, id(n1) AS k1, length(p) AS len, p
+$$) AS (k0 agtype, k1 agtype, len agtype, p agtype) ORDER BY k0, k1, len;
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.8  self-loop
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$ CREATE (a {id: 1}) $$) AS (v agtype);
+SELECT * FROM cypher('issue_2549', $$
+    MATCH (a {id: 1}) CREATE (a)-[:R {s: 1}]->(a)
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)-[:R*..2]->(n1)
+    DETACH DELETE n0
+    RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.9  labelled vertices keep their labels
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a:Person {id: 1})<-[:R]-(b:Company {id: 2})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.10  multi-hop chain: every vertex and edge on the path is deleted
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE ({id: 1})-[:R]->({id: 2})-[:R]->({id: 3})-[:R]->({id: 4})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)-[:R*3]->(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.11  an entity deleted by an EARLIER statement must stay gone: the
+--          relaxation must not resurrect it on a later read
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2}), (a)<-[:R]-({id: 3})
+$$) AS (v agtype);
+
+BEGIN;
+SELECT * FROM cypher('issue_2549', $$
+    MATCH (n) WHERE n.id = 2 DETACH DELETE n
+$$) AS (v agtype);
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    RETURN id(n1) AS k, p
+$$) AS (k agtype, p agtype) ORDER BY k;
+COMMIT;
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.12  a delete undone by ROLLBACK TO leaves the entity live
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2})
+$$) AS (v agtype);
+
+BEGIN;
+SAVEPOINT s1;
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+ROLLBACK TO s1;
+
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    RETURN p
+$$) AS (p agtype);
+COMMIT;
+
+SELECT count(*) AS vertices_still_present
+FROM issue_2549."_ag_label_vertex";
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.13  projecting a deleted path does not persist anything on rollback
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2})
+$$) AS (v agtype);
+
+BEGIN;
+SELECT * FROM cypher('issue_2549', $$
+    MATCH p = (n0)<-[:R*..2]-(n1)
+    DETACH DELETE n0, n1
+    RETURN p
+$$) AS (p agtype);
+ROLLBACK;
+
+SELECT count(*) AS vertices_after_rollback
+FROM issue_2549."_ag_label_vertex";
+
+SELECT drop_graph('issue_2549', true);
+
+-- 2549.14  properties stored out of line (TOAST) must come back intact: the
+--          value is read from a tuple that is no longer visible, so it is
+--          detoasted while the buffer is still pinned
+SELECT create_graph('issue_2549');
+SELECT * FROM cypher('issue_2549', $$
+    CREATE (a {id: 1})<-[:R]-({id: 2})
+$$) AS (v agtype);
+
+-- deterministic and poorly compressible, so it is pushed out of line
+UPDATE issue_2549."_ag_label_vertex"
+   SET properties = ('{"id": 1, "blob": "' ||
+       (SELECT string_agg(md5(g::text), '' ORDER BY g)
+          FROM generate_series(1, 2000) g) || '"}')::agtype;
+UPDATE issue_2549."R"
+   SET properties = ('{"blob": "' ||
+       (SELECT string_agg(md5(g::text), '' ORDER BY g)
+          FROM generate_series(1, 2000) g) || '"}')::agtype;
+
+-- if this ever reports false the case below stops proving anything
+SELECT pg_relation_size(reltoastrelid) > 0 AS vertex_properties_out_of_line
+  FROM pg_class WHERE oid = 'issue_2549."_ag_label_vertex"'::regclass;
+
+BEGIN;
+CREATE TEMP TABLE vle_live AS
+    SELECT p FROM cypher('issue_2549', $$
+        MATCH p = (n0)<-[:R*..2]-(n1) RETURN p
+    $$) AS (p agtype);
+
+CREATE TEMP TABLE vle_deleted AS
+    SELECT p FROM cypher('issue_2549', $$
+        MATCH p = (n0)<-[:R*..2]-(n1) DETACH DELETE n0, n1 RETURN p
+    $$) AS (p agtype);
+
+SELECT (SELECT count(*) FROM vle_live)    AS live_rows,
+       (SELECT count(*) FROM vle_deleted) AS deleted_rows,
+       (SELECT count(*) FROM (SELECT p FROM vle_live
+                              EXCEPT SELECT p FROM vle_deleted) d) AS only_live,
+       (SELECT count(*) FROM (SELECT p FROM vle_deleted
+                              EXCEPT SELECT p FROM vle_live) d) AS only_deleted;
+ROLLBACK;
+
+SELECT drop_graph('issue_2549', true);
+
+--
 -- End
 --
