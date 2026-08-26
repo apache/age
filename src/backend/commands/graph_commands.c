@@ -31,6 +31,7 @@
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "commands/graph_commands.h"
+#include "utils/age_global_graph.h"
 #include "utils/name_validation.h"
 
 /*
@@ -194,6 +195,7 @@ Datum drop_graph(PG_FUNCTION_ARGS)
     Name graph_name;
     char *graph_name_str;
     bool cascade;
+    Oid graph_oid;
 
     if (PG_ARGISNULL(0))
     {
@@ -210,10 +212,16 @@ Datum drop_graph(PG_FUNCTION_ARGS)
                         errmsg("graph \"%s\" does not exist", graph_name_str)));
     }
 
+    /* read while the ag_graph row is still there */
+    graph_oid = get_graph_oid(graph_name_str);
+
     drop_schema_for_graph(graph_name_str, cascade);
 
     delete_graph(graph_name);
     CommandCounterIncrement();
+
+    /* the graph is gone, so let another one reuse its version counter slot */
+    release_graph_version(graph_oid);
 
     ereport(NOTICE, (errmsg("graph \"%s\" has been dropped", graph_name_str)));
 

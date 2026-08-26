@@ -356,6 +356,237 @@ SELECT * FROM drop_graph('vle_trigger_test', true);
 
 -----------------------------------------------------------------------------------------------------------------------------
 --
+-- Heap rewrites must invalidate cached graph contexts
+--
+-- A rewrite moves every TID a cached context holds and announces itself through
+-- no trigger and no version counter. Left untracked, the context keeps
+-- resolving stale TIDs against the new file: it reads the wrong tuple, or a
+-- block past the end of a now shorter relation.
+--
+-- Every rewrite below is preceded by a read that caches the context and
+-- followed by a read in the SAME session; a fresh session would rebuild and
+-- prove nothing. The low ids are deleted first so the survivors sit at high
+-- offsets and a rewrite has to move them. Ground truth throughout is the
+-- 59 -> 60 path.
+--
+-----------------------------------------------------------------------------------------------------------------------------
+
+SELECT create_graph('rewrite_inval');
+
+SELECT * FROM cypher('rewrite_inval', $$
+    UNWIND range(1, 60) AS i CREATE ({id: i})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH (a), (b) WHERE a.id = 59 AND b.id = 60 CREATE (a)-[:R]->(b)
+$$) AS (v agtype);
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH (n) WHERE n.id < 51 DETACH DELETE n
+$$) AS (v agtype);
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- CLUSTER rewrites in index order, moving the survivors to the front
+CLUSTER rewrite_inval."_ag_label_vertex" USING "_ag_label_vertex_pkey";
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- make dead space again so VACUUM FULL has something to compact away
+SELECT * FROM cypher('rewrite_inval', $$
+    UNWIND range(100, 119) AS i CREATE ({id: i})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH (n) WHERE n.id >= 100 AND n.id < 110 DETACH DELETE n
+$$) AS (v agtype);
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+VACUUM FULL rewrite_inval."_ag_label_vertex";
+VACUUM FULL rewrite_inval."R";
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- plain VACUUM and ANALYZE leave tuples in place, so they are not rewrites and
+-- the cached context stays usable
+VACUUM rewrite_inval."_ag_label_vertex";
+ANALYZE rewrite_inval."_ag_label_vertex";
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- the parenthesised spelling is a rewrite too
+VACUUM (FULL) rewrite_inval."_ag_label_vertex";
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- and FULL turned off explicitly is not
+VACUUM (FULL false) rewrite_inval."_ag_label_vertex";
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- naming no relation rewrites the whole database, which has to invalidate
+-- every tracked graph rather than a named one
+VACUUM FULL;
+
+SELECT * FROM cypher('rewrite_inval', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('rewrite_inval', true);
+
+-----------------------------------------------------------------------------------------------------------------------------
+--
+-- NULL properties are a schema problem, not a stale cache
+--
+-- Label tables are created with properties NOT NULL, so a NULL there means the
+-- table was altered out from under AGE. Reporting that as a stale TID sends the
+-- reader after the wrong thing.
+--
+-----------------------------------------------------------------------------------------------------------------------------
+
+SELECT create_graph('null_props');
+
+SELECT * FROM cypher('null_props', $$
+    CREATE ({id: 1})-[:R {w: 1}]->({id: 2})
+$$) AS (v agtype);
+
+ALTER TABLE null_props."_ag_label_vertex"
+    ALTER COLUMN properties DROP NOT NULL;
+UPDATE null_props."_ag_label_vertex" SET properties = NULL;
+
+SELECT * FROM cypher('null_props', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+UPDATE null_props."_ag_label_vertex"
+    SET properties = ag_catalog.agtype_build_map();
+
+-- the edge constraint is inherited from _ag_label_edge, so it is dropped there
+ALTER TABLE null_props."_ag_label_edge"
+    ALTER COLUMN properties DROP NOT NULL;
+UPDATE null_props."R" SET properties = NULL;
+
+SELECT * FROM cypher('null_props', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- restored: projection works again
+UPDATE null_props."R" SET properties = ag_catalog.agtype_build_map();
+
+SELECT * FROM cypher('null_props', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('null_props', true);
+
+-----------------------------------------------------------------------------------------------------------------------------
+--
+-- A dropped graph releases its version counter slot
+--
+-- The counter table is a fixed size. While slots were never released it was a
+-- tally of every graph ever mutated, so a server that cycles graphs filled it,
+-- warned on every later mutation, and fell back to snapshot invalidation --
+-- correct, but far more eager. Cycling well past the cap must now be silent.
+--
+-- NOTICEs are muted so the loop does not bury the output; a WARNING from a full
+-- table would still come through and fail this test, which is the assertion.
+--
+-----------------------------------------------------------------------------------------------------------------------------
+
+SET client_min_messages = warning;
+
+DO $slots$
+DECLARE
+    i int;
+BEGIN
+    FOR i IN 1..260 LOOP
+        PERFORM ag_catalog.create_graph('slot_churn_' || i);
+        EXECUTE format('SELECT * FROM ag_catalog.cypher(%L, $c$ CREATE ({id: 1}) $c$) AS (v ag_catalog.agtype)',
+                       'slot_churn_' || i);
+        PERFORM ag_catalog.drop_graph('slot_churn_' || i, true);
+    END LOOP;
+END
+$slots$;
+
+RESET client_min_messages;
+
+SELECT count(*) AS churn_graphs_left
+FROM ag_catalog.ag_graph WHERE name::text LIKE 'slot_churn_%';
+
+-- a drop that is rolled back must leave the graph tracked and usable
+SELECT create_graph('drop_rollback');
+
+SELECT * FROM cypher('drop_rollback', $$
+    CREATE ({id: 1})-[:R]->({id: 2})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('drop_rollback', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+BEGIN;
+SELECT drop_graph('drop_rollback', true);
+ROLLBACK;
+
+SELECT * FROM cypher('drop_rollback', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+-- and a later mutation still invalidates correctly
+SELECT * FROM cypher('drop_rollback', $$ CREATE ({id: 3}) $$) AS (v agtype);
+
+SELECT * FROM cypher('drop_rollback', $$
+    MATCH p = (n0)-[:R*..2]->(n1) RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('drop_rollback', true);
+
+-- a graph recreated under the same name must not inherit the old one's
+-- context. The freed slot may be handed straight back, so the new occupant's
+-- version has to be distinguishable from whatever was cached for the previous
+-- one.
+SELECT create_graph('slot_reuse');
+
+SELECT * FROM cypher('slot_reuse', $$
+    CREATE ({id: 111})-[:R]->({id: 222})
+$$) AS (v agtype);
+
+SELECT * FROM cypher('slot_reuse', $$
+    MATCH p = (a)-[:R*..2]->(b) RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('slot_reuse', true);
+
+SELECT create_graph('slot_reuse');
+
+SELECT * FROM cypher('slot_reuse', $$
+    CREATE ({id: 333})-[:R]->({id: 444})
+$$) AS (v agtype);
+
+-- 333 -> 444, never the dropped graph's 111 -> 222
+SELECT * FROM cypher('slot_reuse', $$
+    MATCH p = (a)-[:R*..2]->(b) RETURN p
+$$) AS (p agtype);
+
+SELECT drop_graph('slot_reuse', true);
+
+-----------------------------------------------------------------------------------------------------------------------------
+--
 -- End of tests
 --
 

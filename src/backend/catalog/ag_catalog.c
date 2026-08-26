@@ -52,6 +52,8 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString, bool re
                             QueryCompletion *qc);
 
 static bool is_age_drop(DropStmt *drop_stmt);
+static bool vacuum_rewrites_heap(VacuumStmt *vacuum_stmt);
+static void invalidate_graph_for_rangevar(RangeVar *relation);
 
 static void
 invalidate_extension_cache_callback(Datum argument, Oid relationId)
@@ -119,6 +121,60 @@ void process_utility_hook_init(void)
 void process_utility_hook_fini(void)
 {
     ProcessUtility_hook = prev_process_utility_hook;
+}
+
+/*
+ * True when this VACUUM rewrites the heap, which only FULL does. Plain VACUUM
+ * and ANALYZE leave live tuples where they are, so cached TIDs stay correct.
+ */
+static bool vacuum_rewrites_heap(VacuumStmt *vacuum_stmt)
+{
+    ListCell *lc;
+
+    foreach(lc, vacuum_stmt->options)
+    {
+        DefElem *def = (DefElem *) lfirst(lc);
+
+        if (strcmp(def->defname, "full") == 0)
+        {
+            return defGetBoolean(def);
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Invalidate the graph owning this relation, if it owns one.
+ *
+ * Resolved without taking a lock: the caller is about to run a command that
+ * wants AccessExclusiveLock on the same relation, and the OID is only used to
+ * find a graph and bump a counter. If the name no longer resolves we simply do
+ * not bump, which is what would happen if the command failed anyway.
+ */
+static void invalidate_graph_for_rangevar(RangeVar *relation)
+{
+    Oid rel_oid;
+    Oid graph_oid;
+
+    if (relation == NULL)
+    {
+        return;
+    }
+
+    rel_oid = RangeVarGetRelid(relation, NoLock, true);
+
+    if (!OidIsValid(rel_oid))
+    {
+        return;
+    }
+
+    graph_oid = get_graph_oid_for_table(rel_oid);
+
+    if (OidIsValid(graph_oid))
+    {
+        increment_graph_version(graph_oid);
+    }
 }
 
 /*
@@ -197,6 +253,54 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
                                 increment_graph_version(graph_oid);
                             }
                         }
+                    }
+                }
+                break;
+            case T_VacuumStmt:
+                {
+                    /*
+                     * VACUUM FULL rewrites the heap, so every TID the VLE
+                     * cache holds moves. Nothing else reports that: it fires
+                     * no trigger and touches no version counter, so a cached
+                     * context would keep resolving stale TIDs against the new
+                     * file and read the wrong tuple, or a block past the end
+                     * of a now shorter relation.
+                     */
+                    VacuumStmt *vstmt = (VacuumStmt *) parsetree;
+
+                    if (vacuum_rewrites_heap(vstmt))
+                    {
+                        if (vstmt->rels == NIL)
+                        {
+                            increment_all_graph_versions();
+                        }
+                        else
+                        {
+                            ListCell *lc;
+
+                            foreach(lc, vstmt->rels)
+                            {
+                                VacuumRelation *vrel =
+                                    (VacuumRelation *) lfirst(lc);
+
+                                invalidate_graph_for_rangevar(vrel->relation);
+                            }
+                        }
+                    }
+                }
+                break;
+            case T_ClusterStmt:
+                {
+                    /* CLUSTER rewrites the heap for the same reason. */
+                    ClusterStmt *cstmt = (ClusterStmt *) parsetree;
+
+                    if (cstmt->relation == NULL)
+                    {
+                        increment_all_graph_versions();
+                    }
+                    else
+                    {
+                        invalidate_graph_for_rangevar(cstmt->relation);
                     }
                 }
                 break;
