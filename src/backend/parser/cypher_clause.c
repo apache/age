@@ -5908,6 +5908,7 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
 {
     ParseState *pstate = (ParseState *)cpstate;
     ListCell *lc = NULL;
+    ListCell *next_lc = NULL;
     List *entities = NIL;
     int i = 0;
     bool node_declared_in_prev_clause = false;
@@ -6191,6 +6192,34 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                     Assert(list_length(cr->fields) == 2);
 
                     cr->fields = list_make1(linitial(cr->fields));
+                }
+
+                /*
+                 * Check if the next node (the target vertex) was originally
+                 * declared in a preceding clause. If it was, we need to
+                 * modify the second argument of the VLE function call.
+                 * Instead of referencing a table column, we just reference
+                 * the agtype vertex variable itself. The VLE execution
+                 * logic will handle extracting the id from it.
+                 */
+                next_lc = lnext(path->path, lc);
+
+                if (next_lc != NULL)
+                {
+                    cypher_node *next_node = lfirst(next_lc);
+
+                    if (next_node->name != NULL &&
+                        colNameToVar(pstate, next_node->name, false, -1) != NULL)
+                    {
+                        FuncCall *func = (FuncCall*)rel->varlen;
+                        ColumnRef *veid_cr = makeNode(ColumnRef);
+                        ListCell *veid_cell = list_nth_cell(func->args, 1);
+
+                        veid_cr->fields = list_make1(makeString(next_node->name));
+                        veid_cr->location = -1;
+
+                        lfirst(veid_cell) = (Node *) veid_cr;
+                    }
                 }
 
                 /* make a transform entity for the vle */
