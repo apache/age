@@ -41,6 +41,8 @@
 
 #include "utils/agtype_ext.h"
 
+#include "utils/agtype_traversal.h"
+
 /*
  * Extended type header macros - must match definitions in agtype_ext.c.
  * These are used for deserializing extended agtype values (INTEGER, FLOAT,
@@ -60,6 +62,9 @@
  */
 #define AGTYPE_MAX_ELEMS (Min(MaxAllocSize / sizeof(agtype_value), AGT_CMASK))
 #define AGTYPE_MAX_PAIRS (Min(MaxAllocSize / sizeof(agtype_pair), AGT_CMASK))
+
+
+#define AGTYPE_OBJECT_LINEAR_SEARCH_THRESHOLD 8
 
 static void fill_agtype_value(agtype_container *container, int index,
                               char *base_addr, uint32 offset,
@@ -84,9 +89,8 @@ static void append_to_buffer(StringInfo buffer, const char *data, int len);
 static void copy_to_buffer(StringInfo buffer, int offset, const char *data,
                            int len);
 
-static agtype_iterator *iterator_from_container(agtype_container *container,
-                                                agtype_iterator *parent);
-static agtype_iterator *free_and_get_parent(agtype_iterator *it);
+static void iterator_from_container(agtype_container *container,
+                                                agtype_iterator* iterator);
 static agtype_parse_state *push_state(agtype_parse_state **pstate);
 static void append_key(agtype_parse_state *pstate, agtype_value *string);
 static void append_value(agtype_parse_state *pstate, agtype_value *scalar_val);
@@ -333,8 +337,8 @@ static void pfree_iterator_agtype_value_token(agtype_iterator_token token,
 int compare_agtype_containers_orderability(agtype_container *a,
                                            agtype_container *b)
 {
-    agtype_iterator *ita;
-    agtype_iterator *itb;
+    agtype_traversal traversal_a;
+    agtype_traversal traversal_b;
     int res = 0;
 
     /*
@@ -355,8 +359,8 @@ int compare_agtype_containers_orderability(agtype_container *a,
         return compare_agtype_scalar_containers(a, b);
     }
 
-    ita = agtype_iterator_init(a);
-    itb = agtype_iterator_init(b);
+    agtype_traversal_init(a, &traversal_a);
+    agtype_traversal_init(b, &traversal_b);
 
     do
     {
@@ -365,8 +369,8 @@ int compare_agtype_containers_orderability(agtype_container *a,
         agtype_iterator_token ra;
         agtype_iterator_token rb;
 
-        ra = agtype_iterator_next(&ita, &va, false);
-        rb = agtype_iterator_next(&itb, &vb, false);
+        ra = agtype_iterator_next(&traversal_a, &va, false);
+        rb = agtype_iterator_next(&traversal_b, &vb, false);
 
         if (ra == rb)
         {
@@ -427,7 +431,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
                         if (va.val.array.raw_scalar)
                         {
                             /* advance iterator ita and get contained type */
-                            ra = agtype_iterator_next(&ita, &va, false);
+                            ra = agtype_iterator_next(&traversal_a, &va, false);
                             res = (get_type_sort_priority(va.type) <
                                    get_type_sort_priority(vb.type)) ?
                                       -1 :
@@ -436,7 +440,7 @@ int compare_agtype_containers_orderability(agtype_container *a,
                         else
                         {
                             /* advance iterator itb and get contained type */
-                            rb = agtype_iterator_next(&itb, &vb, false);
+                            rb = agtype_iterator_next(&traversal_b, &vb, false);
                             res = (get_type_sort_priority(va.type) <
                                    get_type_sort_priority(vb.type)) ?
                                       -1 :
@@ -498,12 +502,12 @@ int compare_agtype_containers_orderability(agtype_container *a,
             /* Case 1: left side is assigned to an array, right is an object */
             if(va.type == AGTV_ARRAY && vb.type == AGTV_OBJECT)
             {
-                ra = agtype_iterator_next(&ita, &va, false);
+                ra = agtype_iterator_next(&traversal_a, &va, false);
             }
             /* Case 2: left side is an object, right side is assigned to an array */
             else if(va.type == AGTV_OBJECT && vb.type == AGTV_ARRAY)
             {
-                rb = agtype_iterator_next(&itb, &vb, false);
+                rb = agtype_iterator_next(&traversal_b, &vb, false);
             }
 
             Assert(va.type != vb.type);
@@ -520,20 +524,8 @@ int compare_agtype_containers_orderability(agtype_container *a,
         pfree_iterator_agtype_value_token(rb, &vb);
     } while (res == 0);
 
-    while (ita != NULL)
-    {
-        agtype_iterator *i = ita->parent;
-
-        pfree_if_not_null(ita);
-        ita = i;
-    }
-    while (itb != NULL)
-    {
-        agtype_iterator *i = itb->parent;
-
-        pfree_if_not_null(itb);
-        itb = i;
-    }
+    free_agtype_traversal(&traversal_a);
+    free_agtype_traversal(&traversal_b);
 
     return res;
 }
@@ -602,47 +594,104 @@ agtype_value *find_agtype_value_from_container(agtype_container *container,
     }
     else if ((flags & AGT_FOBJECT) && AGTYPE_CONTAINER_IS_OBJECT(container))
     {
-        /* Since this is an object, account for *Pairs* of AGTentrys */
+        /* Since this is an object, account for Pairs of AGTentrys */
         char *base_addr = (char *)(children + count * 2);
-        uint32 stop_low = 0;
-        uint32 stop_high = count;
 
         /* Object key passed by caller must be a string */
         Assert(key->type == AGTV_STRING);
 
-        /* Binary search on object/pair keys *only* */
-        while (stop_low < stop_high)
+        if (count <= AGTYPE_OBJECT_LINEAR_SEARCH_THRESHOLD)
         {
-            uint32 stop_middle;
-            int difference;
-            agtype_value candidate;
+            uint32 key_offset = 0;
+            int i;
 
-            stop_middle = stop_low + (stop_high - stop_low) / 2;
-
-            candidate.type = AGTV_STRING;
-            candidate.val.string.val =
-                base_addr + get_agtype_offset(container, stop_middle);
-            candidate.val.string.len = get_agtype_length(container,
-                                                         stop_middle);
-
-            difference = length_compare_agtype_string_value(&candidate, key);
-
-            if (difference == 0)
+            for (i = 0; i < count; i++)
             {
-                /* Found our key, return corresponding value */
-                int index = stop_middle + count;
+                uint32 next_key_offset = key_offset;
+                agtype_value candidate;
+                int difference;
 
-                fill_agtype_value(container, index, base_addr,
-                                  get_agtype_offset(container, index), result);
+                /*
+                * Advance to the offset after this key entry.
+                * The key length is the distance between current key offset
+                * and next key offset.
+                */
+                AGTE_ADVANCE_OFFSET(next_key_offset, children[i]);
 
-                return result;
+                candidate.type = AGTV_STRING;
+                candidate.val.string.val = base_addr + key_offset;
+                candidate.val.string.len = next_key_offset - key_offset;
+
+                difference = length_compare_agtype_string_value(&candidate, key);
+
+                if (difference == 0)
+                {
+                    /* Found our key, return corresponding value */
+                    int index = i + count;
+
+                    fill_agtype_value(container,
+                                    index,
+                                    base_addr,
+                                    get_agtype_offset(container, index),
+                                    result);
+
+                    return result;
+                }
+
+                /*
+                * Object keys are sorted. If current key is greater than the
+                * searched key, no later key can match.
+                */
+                if (difference > 0)
+                    break;
+
+                key_offset = next_key_offset;
             }
-            else
+        }
+        else
+        {
+            uint32 stop_low = 0;
+            uint32 stop_high = count;
+
+            /* Binary search on object/pair keys *only* */
+            while (stop_low < stop_high)
             {
-                if (difference < 0)
-                    stop_low = stop_middle + 1;
+                uint32 stop_middle;
+                int difference;
+                agtype_value candidate;
+
+                stop_middle = stop_low + (stop_high - stop_low) / 2;
+
+                candidate.type = AGTV_STRING;
+
+                candidate.val.string.val =
+                    base_addr + get_agtype_offset(container, stop_middle);
+
+                candidate.val.string.len =
+                    get_agtype_length(container, stop_middle);
+
+                difference = length_compare_agtype_string_value(&candidate, key);
+
+                if (difference == 0)
+                {
+                    /* Found our key, return corresponding value */
+                    int index = stop_middle + count;
+
+                    fill_agtype_value(container,
+                                    index,
+                                    base_addr,
+                                    get_agtype_offset(container, index),
+                                    result);
+
+                    return result;
+                }
                 else
-                    stop_high = stop_middle;
+                {
+                    if (difference < 0)
+                        stop_low = stop_middle + 1;
+                    else
+                        stop_high = stop_middle;
+                }
             }
         }
     }
@@ -680,6 +729,39 @@ agtype_value *get_ith_agtype_value_from_container(agtype_container *container,
 
     return result;
 }
+
+/*
+ * Get i-th value of an agtype array without allocating memory.
+ *
+ * Fills *result with references into the container data.
+ * Returns false if the element does not exist.
+ * The returned agtype_value is valid only while the container exists.
+ */
+bool get_ith_agtype_value_from_container_no_copy(agtype_container *container,
+                                                  uint32 i,
+                                                  agtype_value* result)
+{
+    char *base_addr;
+    uint32 nelements;
+
+    if (!AGTYPE_CONTAINER_IS_ARRAY(container))
+        ereport(ERROR, (errmsg("container is not an agtype array")));
+
+    nelements = AGTYPE_CONTAINER_SIZE(container);
+    base_addr = (char *)&container->children[nelements];
+
+    if (i >= nelements)
+    {
+        return false;
+    }
+
+
+    fill_agtype_value_no_copy(container, i, base_addr, get_agtype_offset(container, i),
+                      result);
+
+    return true;
+}
+
 
 /*
  * Get type of i-th value of an agtype array.
@@ -1218,7 +1300,7 @@ agtype_value *push_agtype_value(agtype_parse_state **pstate,
                                 agtype_iterator_token seq,
                                 agtype_value *agtval)
 {
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_value *res = NULL;
     agtype_value v;
     agtype_iterator_token tok;
@@ -1231,8 +1313,8 @@ agtype_value *push_agtype_value(agtype_parse_state **pstate,
     }
 
     /* unpack the binary and add each piece to the pstate */
-    it = agtype_iterator_init(agtval->val.binary.data);
-    while ((tok = agtype_iterator_next(&it, &v, false)) != WAGT_DONE)
+    agtype_traversal_init(agtval->val.binary.data, &traversal);
+    while ((tok = agtype_iterator_next(&traversal, &v, false)) != WAGT_DONE)
     {
         res = push_agtype_value_scalar(pstate, tok,
                                        tok < WAGT_BEGIN_ARRAY ? &v : NULL);
@@ -1430,9 +1512,11 @@ static void append_element(agtype_parse_state *pstate,
  *
  * See agtype_iterator_next() for notes on memory management.
  */
-agtype_iterator *agtype_iterator_init(agtype_container *container)
+void agtype_traversal_init(agtype_container *container, agtype_traversal* traversal_entity)
 {
-    return iterator_from_container(container, NULL);
+    Assert(traversal_entity != NULL);
+    init_agtype_traversal(traversal_entity);
+    iterator_from_container(container, traversal_entity->it);
 }
 
 /*
@@ -1465,11 +1549,14 @@ agtype_iterator *agtype_iterator_init(agtype_container *container)
  * WAGT_END_OBJECT, on the assumption that it's only useful to access values
  * when recursing in.
  */
-agtype_iterator_token agtype_iterator_next(agtype_iterator **it,
+agtype_iterator_token agtype_iterator_next(agtype_traversal* traversal,
                                            agtype_value *val, bool skip_nested)
 {
-    if (*it == NULL)
+    if (traversal->it == NULL)
+    {
+        free_agtype_traversal(traversal);
         return WAGT_DONE;
+    }
 
     /*
      * When stepping into a nested container, we jump back here to start
@@ -1478,27 +1565,27 @@ agtype_iterator_token agtype_iterator_next(agtype_iterator **it,
      * AGTI_OBJECT_START state.
      */
 recurse:
-    switch ((*it)->state)
+    switch (traversal->it->state)
     {
     case AGTI_ARRAY_START:
         /* Set v to array on first array call */
         val->type = AGTV_ARRAY;
-        val->val.array.num_elems = (*it)->num_elems;
+        val->val.array.num_elems = traversal->it->num_elems;
 
         /*
          * v->val.array.elems is not actually set, because we aren't doing
          * a full conversion
          */
-        val->val.array.raw_scalar = (*it)->is_scalar;
-        (*it)->curr_index = 0;
-        (*it)->curr_data_offset = 0;
-        (*it)->curr_value_offset = 0; /* not actually used */
+        val->val.array.raw_scalar = traversal->it->is_scalar;
+        traversal->it->curr_index = 0;
+        traversal->it->curr_data_offset = 0;
+        traversal->it->curr_value_offset = 0; /* not actually used */
         /* Set state for next call */
-        (*it)->state = AGTI_ARRAY_ELEM;
+        traversal->it->state = AGTI_ARRAY_ELEM;
         return WAGT_BEGIN_ARRAY;
 
     case AGTI_ARRAY_ELEM:
-        if ((*it)->curr_index >= (*it)->num_elems)
+        if (traversal->it->curr_index >= traversal->it->num_elems)
         {
             /*
              * All elements within array already processed.  Report this
@@ -1506,21 +1593,21 @@ recurse:
              * independently tracks iteration progress at its level of
              * nesting).
              */
-            *it = free_and_get_parent(*it);
+            traversal->it = free_and_get_parent(traversal);
             return WAGT_END_ARRAY;
         }
 
-        fill_agtype_value((*it)->container, (*it)->curr_index,
-                          (*it)->data_proper, (*it)->curr_data_offset, val);
+        fill_agtype_value(traversal->it->container, traversal->it->curr_index,
+                          traversal->it->data_proper, traversal->it->curr_data_offset, val);
 
-        AGTE_ADVANCE_OFFSET((*it)->curr_data_offset,
-                            (*it)->children[(*it)->curr_index]);
-        (*it)->curr_index++;
+        AGTE_ADVANCE_OFFSET(traversal->it->curr_data_offset,
+                            traversal->it->children[traversal->it->curr_index]);
+        traversal->it->curr_index++;
 
         if (!IS_A_AGTYPE_SCALAR(val) && !skip_nested)
         {
             /* Recurse into container. */
-            *it = iterator_from_container(val->val.binary.data, *it);
+            iterator_from_container(val->val.binary.data, prepare_next_iter(traversal));
             goto recurse;
         }
         else
@@ -1535,22 +1622,22 @@ recurse:
     case AGTI_OBJECT_START:
         /* Set v to object on first object call */
         val->type = AGTV_OBJECT;
-        val->val.object.num_pairs = (*it)->num_elems;
+        val->val.object.num_pairs = traversal->it->num_elems;
 
         /*
          * v->val.object.pairs is not actually set, because we aren't
          * doing a full conversion
          */
-        (*it)->curr_index = 0;
-        (*it)->curr_data_offset = 0;
-        (*it)->curr_value_offset = get_agtype_offset((*it)->container,
-                                                     (*it)->num_elems);
+        traversal->it->curr_index = 0;
+        traversal->it->curr_data_offset = 0;
+        traversal->it->curr_value_offset = get_agtype_offset(traversal->it->container,
+                                                     traversal->it->num_elems);
         /* Set state for next call */
-        (*it)->state = AGTI_OBJECT_KEY;
+        traversal->it->state = AGTI_OBJECT_KEY;
         return WAGT_BEGIN_OBJECT;
 
     case AGTI_OBJECT_KEY:
-        if ((*it)->curr_index >= (*it)->num_elems)
+        if (traversal->it->curr_index >= traversal->it->num_elems)
         {
             /*
              * All pairs within object already processed.  Report this to
@@ -1558,14 +1645,14 @@ recurse:
              * (which independently tracks iteration progress at its level
              * of nesting).
              */
-            *it = free_and_get_parent(*it);
+            traversal->it = free_and_get_parent(traversal);
             return WAGT_END_OBJECT;
         }
         else
         {
             /* Return key of a key/value pair.  */
-            fill_agtype_value((*it)->container, (*it)->curr_index,
-                              (*it)->data_proper, (*it)->curr_data_offset,
+            fill_agtype_value(traversal->it->container, traversal->it->curr_index,
+                              traversal->it->data_proper, traversal->it->curr_data_offset,
                               val);
             if (val->type != AGTV_STRING)
                 ereport(ERROR,
@@ -1573,24 +1660,24 @@ recurse:
                                 val->type)));
 
             /* Set state for next call */
-            (*it)->state = AGTI_OBJECT_VALUE;
+            traversal->it->state = AGTI_OBJECT_VALUE;
             return WAGT_KEY;
         }
 
     case AGTI_OBJECT_VALUE:
         /* Set state for next call */
-        (*it)->state = AGTI_OBJECT_KEY;
+        traversal->it->state = AGTI_OBJECT_KEY;
 
-        fill_agtype_value((*it)->container,
-                          (*it)->curr_index + (*it)->num_elems,
-                          (*it)->data_proper, (*it)->curr_value_offset, val);
+        fill_agtype_value(traversal->it->container,
+                          traversal->it->curr_index + traversal->it->num_elems,
+                          traversal->it->data_proper, traversal->it->curr_value_offset, val);
 
-        AGTE_ADVANCE_OFFSET((*it)->curr_data_offset,
-                            (*it)->children[(*it)->curr_index]);
+        AGTE_ADVANCE_OFFSET(traversal->it->curr_data_offset,
+                            traversal->it->children[traversal->it->curr_index]);
         AGTE_ADVANCE_OFFSET(
-            (*it)->curr_value_offset,
-            (*it)->children[(*it)->curr_index + (*it)->num_elems]);
-        (*it)->curr_index++;
+            traversal->it->curr_value_offset,
+            traversal->it->children[traversal->it->curr_index + traversal->it->num_elems]);
+        traversal->it->curr_index++;
 
         /*
          * Value may be a container, in which case we recurse with new,
@@ -1599,7 +1686,7 @@ recurse:
          */
         if (!IS_A_AGTYPE_SCALAR(val) && !skip_nested)
         {
-            *it = iterator_from_container(val->val.binary.data, *it);
+            iterator_from_container(val->val.binary.data, prepare_next_iter(traversal));
             goto recurse;
         }
         else
@@ -1608,42 +1695,38 @@ recurse:
         }
     }
 
-    ereport(ERROR, (errmsg("invalid iterator state %d", (*it)->state)));
+    ereport(ERROR, (errmsg("invalid iterator state %d", traversal->it->state)));
     return -1;
 }
 
 /*
  * Initialize an iterator for iterating all elements in a container.
  */
-static agtype_iterator *iterator_from_container(agtype_container *container,
-                                                agtype_iterator *parent)
+static void iterator_from_container(agtype_container *container,
+                                                agtype_iterator* iterator)
 {
-    agtype_iterator *it;
-
-    it = palloc0(sizeof(agtype_iterator));
-    it->container = container;
-    it->parent = parent;
-    it->num_elems = AGTYPE_CONTAINER_SIZE(container);
+    iterator->container = container;
+    iterator->num_elems = AGTYPE_CONTAINER_SIZE(container);
 
     /* Array starts just after header */
-    it->children = container->children;
+    iterator->children = container->children;
 
     switch (container->header & (AGT_FARRAY | AGT_FOBJECT))
     {
     case AGT_FARRAY:
-        it->data_proper = (char *)it->children +
-                          it->num_elems * sizeof(agtentry);
-        it->is_scalar = AGTYPE_CONTAINER_IS_SCALAR(container);
+        iterator->data_proper = (char *)iterator->children +
+                          iterator->num_elems * sizeof(agtentry);
+        iterator->is_scalar = AGTYPE_CONTAINER_IS_SCALAR(container);
         /* This is either a "raw scalar", or an array */
-        Assert(!it->is_scalar || it->num_elems == 1);
+        Assert(!iterator->is_scalar || iterator->num_elems == 1);
 
-        it->state = AGTI_ARRAY_START;
+        iterator->state = AGTI_ARRAY_START;
         break;
 
     case AGT_FOBJECT:
-        it->data_proper = (char *)it->children +
-                          it->num_elems * sizeof(agtentry) * 2;
-        it->state = AGTI_OBJECT_START;
+        iterator->data_proper = (char *)iterator->children +
+                          iterator->num_elems * sizeof(agtentry) * 2;
+        iterator->state = AGTI_OBJECT_START;
         break;
 
     default:
@@ -1651,20 +1734,6 @@ static agtype_iterator *iterator_from_container(agtype_container *container,
                 (errmsg("unknown type of agtype container %d",
                         container->header & (AGT_FARRAY | AGT_FOBJECT))));
     }
-
-    return it;
-}
-
-/*
- * agtype_iterator_next() worker: Return parent, while freeing memory for
- *                                current iterator
- */
-static agtype_iterator *free_and_get_parent(agtype_iterator *it)
-{
-    agtype_iterator *v = it->parent;
-
-    pfree_if_not_null(it);
-    return v;
 }
 
 /*
@@ -1679,8 +1748,8 @@ static agtype_iterator *free_and_get_parent(agtype_iterator *it)
  * "val" is lhs agtype, and m_contained is rhs agtype when called from top
  * level. We determine if m_contained is contained within val.
  */
-bool agtype_deep_contains(agtype_iterator **val,
-                          agtype_iterator **m_contained,
+bool agtype_deep_contains(agtype_traversal *val,
+                          agtype_traversal *m_contained,
                           bool skip_nested)
 {
     agtype_value vval;
@@ -1745,7 +1814,7 @@ bool agtype_deep_contains(agtype_iterator **val,
 
             /* First, find value by key... */
             lhs_val = find_agtype_value_from_container(
-                (*val)->container, AGT_FOBJECT, &vcontained);
+                val->it->container, AGT_FOBJECT, &vcontained);
 
             if (!lhs_val)
                 return false;
@@ -1787,15 +1856,14 @@ bool agtype_deep_contains(agtype_iterator **val,
             else
             {
                 /* Nested container value (object or array) */
-                agtype_iterator *nestval;
-                agtype_iterator *nest_contained;
+                agtype_traversal nestval;
+                agtype_traversal nest_contained;
 
                 Assert(lhs_val->type == AGTV_BINARY);
                 Assert(vcontained.type == AGTV_BINARY);
 
-                nestval = agtype_iterator_init(lhs_val->val.binary.data);
-                nest_contained =
-                    agtype_iterator_init(vcontained.val.binary.data);
+                agtype_traversal_init(lhs_val->val.binary.data, &nestval);
+                agtype_traversal_init(vcontained.val.binary.data, &nest_contained);
 
                 /*
                  * Match "value" side of rhs datum object's pair recursively.
@@ -1862,7 +1930,7 @@ bool agtype_deep_contains(agtype_iterator **val,
 
             if (IS_A_AGTYPE_SCALAR(&vcontained))
             {
-                if (!find_agtype_value_from_container((*val)->container,
+                if (!find_agtype_value_from_container(val->it->container,
                                                       AGT_FARRAY, &vcontained))
                     return false;
             }
@@ -1903,21 +1971,15 @@ bool agtype_deep_contains(agtype_iterator **val,
                 for (i = 0; i < num_lhs_elems; i++)
                 {
                     /* Nested container value (object or array) */
-                    agtype_iterator *nestval;
-                    agtype_iterator *nest_contained;
+                    agtype_traversal nestval;
+                    agtype_traversal nest_contained;
                     bool contains;
 
-                    nestval =
-                        agtype_iterator_init(lhs_conts[i].val.binary.data);
-                    nest_contained =
-                        agtype_iterator_init(vcontained.val.binary.data);
+                    agtype_traversal_init(lhs_conts[i].val.binary.data, &nestval);
+                    agtype_traversal_init(vcontained.val.binary.data, &nest_contained);
 
                     contains = agtype_deep_contains(&nestval, &nest_contained, false);
 
-                    if (nestval)
-                        pfree_if_not_null(nestval);
-                    if (nest_contained)
-                        pfree_if_not_null(nest_contained);
                     if (contains)
                         break;
                 }

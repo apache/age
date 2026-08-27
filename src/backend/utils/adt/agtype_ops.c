@@ -29,10 +29,11 @@
 #include "utils/agtype.h"
 #include "utils/datum.h"
 #include "utils/builtins.h"
+#include "utils/agtype_traversal.h"
 
 static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2);
-static agtype_value *iterator_concat(agtype_iterator **it1,
-                                     agtype_iterator **it2,
+static agtype_value *iterator_concat(agtype_traversal *it1,
+                                     agtype_traversal *it2,
                                      agtype_parse_state **state);
 static void concat_to_agtype_string(agtype_value *result, char *lhs, int llen,
                                     char *rhs, int rlen);
@@ -149,8 +150,8 @@ Datum agtype_add(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     /* If both are not scalars */
@@ -162,11 +163,11 @@ Datum agtype_add(PG_FUNCTION_ARGS)
     }
 
     /* Both are scalar */
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
@@ -175,54 +176,54 @@ Datum agtype_add(PG_FUNCTION_ARGS)
      * One or both values is a string OR one is a string and the other is
      * either an integer, float, or numeric. If so, concatenate them.
      */
-    if ((agtv_lhs->type == AGTV_STRING || agtv_rhs->type == AGTV_STRING) &&
-        (agtv_lhs->type == AGTV_INTEGER || agtv_lhs->type == AGTV_FLOAT ||
-         agtv_lhs->type == AGTV_NUMERIC || agtv_lhs->type == AGTV_STRING ||
-         agtv_rhs->type == AGTV_INTEGER || agtv_rhs->type == AGTV_FLOAT ||
-         agtv_rhs->type == AGTV_NUMERIC || agtv_rhs->type == AGTV_STRING))
+    if ((agtv_lhs.type == AGTV_STRING || agtv_rhs.type == AGTV_STRING) &&
+        (agtv_lhs.type == AGTV_INTEGER || agtv_lhs.type == AGTV_FLOAT ||
+         agtv_lhs.type == AGTV_NUMERIC || agtv_lhs.type == AGTV_STRING ||
+         agtv_rhs.type == AGTV_INTEGER || agtv_rhs.type == AGTV_FLOAT ||
+         agtv_rhs.type == AGTV_NUMERIC || agtv_rhs.type == AGTV_STRING))
     {
         int llen = 0;
-        char *lhs = get_string_from_agtype_value(agtv_lhs, &llen);
+        char *lhs = get_string_from_agtype_value(&agtv_lhs, &llen);
         int rlen = 0;
-        char *rhs = get_string_from_agtype_value(agtv_rhs, &rlen);
+        char *rhs = get_string_from_agtype_value(&agtv_rhs, &rlen);
 
         concat_to_agtype_string(&agtv_result, lhs, llen, rhs, rlen);
     }
     /* Both are integers - regular addition */
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value +
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = agtv_lhs.val.int_value +
+                                    agtv_rhs.val.int_value;
     }
     /* Both are floats - regular addition */
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value +
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value +
+                                      agtv_rhs.val.float_value;
     }
     /* The left is a float, the right is an integer - regular addition */
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value +
-                                      agtv_rhs->val.int_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value +
+                                      agtv_rhs.val.int_value;
     }
     /* The right is a float, the left is an integer - regular addition */
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.int_value +
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.int_value +
+                                      agtv_rhs.val.float_value;
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_add, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -276,7 +277,7 @@ Datum agtype_any_add(PG_FUNCTION_ARGS)
 static agtype *delete_from_array(agtype *agt, agtype *indexes)
 {
     agtype_parse_state *state = NULL;
-    agtype_iterator *it, *it_indexes = NULL;
+    agtype_traversal traversal, traversal_indexes;
     uint32 i = 0, n;
     agtype_value v, *res = NULL;
     agtype_iterator_token r;
@@ -296,16 +297,16 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
     }
 
     /* start buidiling the result agtype array */
-    it = agtype_iterator_init(&agt->root);
+    agtype_traversal_init(&agt->root, &traversal);
 
-    r = agtype_iterator_next(&it, &v, false);
+    r = agtype_iterator_next(&traversal, &v, false);
     Assert(r == WAGT_BEGIN_ARRAY);
 
     n = v.val.array.num_elems;
 
     push_agtype_value(&state, r, NULL);
 
-    while ((r = agtype_iterator_next(&it, &v, true)) != WAGT_DONE)
+    while ((r = agtype_iterator_next(&traversal, &v, true)) != WAGT_DONE)
     {
         if (r == WAGT_ELEM)
         {
@@ -318,7 +319,7 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
              */
             agtype_value cur_idx, neg_idx;
             agtype *cur_idx_agt, *neg_idx_agt;
-            agtype_iterator *it_cur_idx, *it_neg_idx;
+            agtype_traversal it_cur_idx, it_neg_idx;
             bool contains_idx, contains_neg_idx;
 
             cur_idx.type = AGTV_INTEGER;
@@ -329,15 +330,15 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
             neg_idx.val.int_value = cur_idx.val.int_value - n;
             neg_idx_agt = agtype_value_to_agtype(&neg_idx);
 
-            it_cur_idx = agtype_iterator_init(&cur_idx_agt->root);
-            it_neg_idx = agtype_iterator_init(&neg_idx_agt->root);
+            agtype_traversal_init(&cur_idx_agt->root, &it_cur_idx);
+            agtype_traversal_init(&neg_idx_agt->root, &it_neg_idx);
 
-            it_indexes = agtype_iterator_init(&indexes->root);
-            contains_idx = agtype_deep_contains(&it_indexes, &it_cur_idx, false);
+            agtype_traversal_init(&indexes->root, &traversal_indexes);
+            contains_idx = agtype_deep_contains(&traversal_indexes, &it_cur_idx, false);
 
             /* re-initialize indexes array iterator */
-            it_indexes = agtype_iterator_init(&indexes->root);
-            contains_neg_idx = agtype_deep_contains(&it_indexes, &it_neg_idx, false);
+            agtype_traversal_init(&indexes->root, &traversal_indexes);
+            contains_neg_idx = agtype_deep_contains(&traversal_indexes, &it_neg_idx, false);
 
             if (contains_idx || contains_neg_idx)
             {
@@ -360,7 +361,7 @@ static agtype *delete_from_array(agtype *agt, agtype *indexes)
 static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen)
 {
     agtype_parse_state *state = NULL;
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_value v, *res = NULL;
     bool skipNested = false;
     agtype_iterator_token r;
@@ -378,9 +379,9 @@ static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen)
         return agt;
     }
 
-    it = agtype_iterator_init(&agt->root);
+    agtype_traversal_init(&agt->root, &traversal);
 
-    while ((r = agtype_iterator_next(&it, &v, skipNested)) != WAGT_DONE)
+    while ((r = agtype_iterator_next(&traversal, &v, skipNested)) != WAGT_DONE)
     {
         skipNested = true;
 
@@ -396,7 +397,7 @@ static agtype *delete_from_object(agtype *agt, char *keyptr, int keylen)
             /* skip corresponding value as well */
             if (r == WAGT_KEY)
             {
-                (void) agtype_iterator_next(&it, &v, true);
+                (void) agtype_iterator_next(&traversal, &v, true);
             }
 
             continue;
@@ -419,8 +420,8 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     /*
@@ -434,16 +435,16 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
      */
     if (AGT_ROOT_IS_ARRAY(rhs) && !AGT_ROOT_IS_SCALAR(rhs))
     {
-        agtype_iterator *it = NULL;
+        agtype_traversal traversal;
         agtype_value elem;
-
+        agtype_traversal_init(&rhs->root, &traversal);
         if (AGT_ROOT_IS_OBJECT(lhs))
         {
             /*
              * if rhs array contains any non-string element, error out
              * else delete the given keys in the rhs array from lhs object
              */
-            while ((it = get_next_list_element(it, &rhs->root, &elem)))
+            while (get_next_list_element(&traversal, &rhs->root, &elem))
             {
                 if (elem.type == AGTV_STRING)
                 {
@@ -466,7 +467,7 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
              * else delete the values at the given indexes in rhs array
              * from the lhs array
              */
-            while ((it = get_next_list_element(it, &rhs->root, &elem)))
+            while (get_next_list_element(&traversal, &rhs->root, &elem))
             {
                 if (elem.type != AGTV_INTEGER)
                 {
@@ -528,46 +529,46 @@ Datum agtype_sub(PG_FUNCTION_ARGS)
         }
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
 
-    if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value -
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = agtv_lhs.val.int_value -
+                                    agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value -
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value -
+                                      agtv_rhs.val.float_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value -
-                                      agtv_rhs->val.int_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value -
+                                      agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.int_value -
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.int_value -
+                                      agtv_rhs.val.float_value;
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_sub, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -669,8 +670,8 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
@@ -681,46 +682,46 @@ Datum agtype_mul(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
 
-    if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value *
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = agtv_lhs.val.int_value *
+                                    agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value *
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value *
+                                      agtv_rhs.val.float_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value *
-                                      agtv_rhs->val.int_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value *
+                                      agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.int_value *
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.int_value *
+                                      agtv_rhs.val.float_value;
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_mul, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -765,8 +766,8 @@ Datum agtype_div(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
@@ -777,18 +778,18 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
 
-    if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
-        if (agtv_rhs->val.int_value == 0)
+        if (agtv_rhs.val.int_value == 0)
         {
             ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
                             errmsg("division by zero")));
@@ -796,12 +797,12 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         }
 
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value /
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = agtv_lhs.val.int_value /
+                                    agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
-        if (agtv_rhs->val.float_value == 0)
+        if (agtv_rhs.val.float_value == 0)
         {
             ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
                             errmsg("division by zero")));
@@ -809,12 +810,12 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         }
 
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value /
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value /
+                                      agtv_rhs.val.float_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
-        if (agtv_rhs->val.int_value == 0)
+        if (agtv_rhs.val.int_value == 0)
         {
             ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
                             errmsg("division by zero")));
@@ -822,12 +823,12 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         }
 
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.float_value /
-                                      agtv_rhs->val.int_value;
+        agtv_result.val.float_value = agtv_lhs.val.float_value /
+                                      agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
-        if (agtv_rhs->val.float_value == 0)
+        if (agtv_rhs.val.float_value == 0)
         {
             ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
                             errmsg("division by zero")));
@@ -835,16 +836,16 @@ Datum agtype_div(PG_FUNCTION_ARGS)
         }
 
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = agtv_lhs->val.int_value /
-                                      agtv_rhs->val.float_value;
+        agtv_result.val.float_value = agtv_lhs.val.int_value /
+                                      agtv_rhs.val.float_value;
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_div, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -889,8 +890,8 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
@@ -901,46 +902,46 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
 
-    if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value %
-                                    agtv_rhs->val.int_value;
+        agtv_result.val.int_value = agtv_lhs.val.int_value %
+                                    agtv_rhs.val.int_value;
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = fmod(agtv_lhs->val.float_value,
-                                           agtv_rhs->val.float_value);
+        agtv_result.val.float_value = fmod(agtv_lhs.val.float_value,
+                                           agtv_rhs.val.float_value);
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = fmod(agtv_lhs->val.float_value,
-                                           agtv_rhs->val.int_value);
+        agtv_result.val.float_value = fmod(agtv_lhs.val.float_value,
+                                           agtv_rhs.val.int_value);
     }
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = fmod(agtv_lhs->val.int_value,
-                                           agtv_rhs->val.float_value);
+        agtv_result.val.float_value = fmod(agtv_lhs.val.int_value,
+                                           agtv_rhs.val.float_value);
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_mod, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -985,8 +986,8 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
 {
     agtype *lhs = AG_GET_ARG_AGTYPE_P(0);
     agtype *rhs = AG_GET_ARG_AGTYPE_P(1);
-    agtype_value *agtv_lhs;
-    agtype_value *agtv_rhs;
+    agtype_value agtv_lhs;
+    agtype_value agtv_rhs;
     agtype_value agtv_result;
 
     if (!(AGT_ROOT_IS_SCALAR(lhs)) || !(AGT_ROOT_IS_SCALAR(rhs)))
@@ -997,46 +998,46 @@ Datum agtype_pow(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    agtv_lhs = get_ith_agtype_value_from_container(&lhs->root, 0);
-    agtv_rhs = get_ith_agtype_value_from_container(&rhs->root, 0);
+    get_ith_agtype_value_from_container_no_copy(&lhs->root, 0, &agtv_lhs);
+    get_ith_agtype_value_from_container_no_copy(&rhs->root, 0, &agtv_rhs);
 
     /* openCypher: arithmetic over null yields null. */
-    if (agtv_lhs->type == AGTV_NULL || agtv_rhs->type == AGTV_NULL)
+    if (agtv_lhs.type == AGTV_NULL || agtv_rhs.type == AGTV_NULL)
     {
         PG_RETURN_NULL();
     }
 
-    if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
+    if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = pow(agtv_lhs->val.int_value,
-                                          agtv_rhs->val.int_value);
+        agtv_result.val.float_value = pow(agtv_lhs.val.int_value,
+                                          agtv_rhs.val.int_value);
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = pow(agtv_lhs->val.float_value,
-                                          agtv_rhs->val.float_value);
+        agtv_result.val.float_value = pow(agtv_lhs.val.float_value,
+                                          agtv_rhs.val.float_value);
     }
-    else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
+    else if (agtv_lhs.type == AGTV_FLOAT && agtv_rhs.type == AGTV_INTEGER)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = pow(agtv_lhs->val.float_value,
-                                          agtv_rhs->val.int_value);
+        agtv_result.val.float_value = pow(agtv_lhs.val.float_value,
+                                          agtv_rhs.val.int_value);
     }
-    else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
+    else if (agtv_lhs.type == AGTV_INTEGER && agtv_rhs.type == AGTV_FLOAT)
     {
         agtv_result.type = AGTV_FLOAT;
-        agtv_result.val.float_value = pow(agtv_lhs->val.int_value,
-                                          agtv_rhs->val.float_value);
+        agtv_result.val.float_value = pow(agtv_lhs.val.int_value,
+                                          agtv_rhs.val.float_value);
     }
     /* Is this a numeric result */
-    else if (is_numeric_result(agtv_lhs, agtv_rhs))
+    else if (is_numeric_result(&agtv_lhs, &agtv_rhs))
     {
         Datum numd, lhsd, rhsd;
 
-        lhsd = get_numeric_datum_from_agtype_value(agtv_lhs);
-        rhsd = get_numeric_datum_from_agtype_value(agtv_rhs);
+        lhsd = get_numeric_datum_from_agtype_value(&agtv_lhs);
+        rhsd = get_numeric_datum_from_agtype_value(&agtv_rhs);
         numd = DirectFunctionCall2(numeric_power, lhsd, rhsd);
 
         agtv_result.type = AGTV_NUMERIC;
@@ -1362,7 +1363,9 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     agtype *keys = AG_GET_ARG_AGTYPE_P(1);
     agtype_value elem;
-    agtype_iterator *it = NULL;
+    agtype_traversal traversal;
+
+    agtype_traversal_init(&keys->root, &traversal);
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
@@ -1371,7 +1374,7 @@ Datum agtype_exists_any_agtype(PG_FUNCTION_ARGS)
 
     if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
     {
-        while ((it = get_next_list_element(it, &keys->root, &elem)))
+        while (get_next_list_element(&traversal, &keys->root, &elem))
         {
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
@@ -1417,7 +1420,9 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
     agtype *agt = AG_GET_ARG_AGTYPE_P(0);
     agtype *keys = AG_GET_ARG_AGTYPE_P(1);
     agtype_value elem;
-    agtype_iterator *it = NULL;
+    agtype_traversal traversal;
+
+    agtype_traversal_init(&keys->root, &traversal);
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
@@ -1426,7 +1431,7 @@ Datum agtype_exists_all_agtype(PG_FUNCTION_ARGS)
 
     if (!AGT_ROOT_IS_SCALAR(keys) && !AGT_ROOT_IS_OBJECT(keys))
     {
-        while ((it = get_next_list_element(it, &keys->root, &elem)))
+        while (get_next_list_element(&traversal, &keys->root, &elem))
         {
             if (IS_A_AGTYPE_SCALAR(&elem))
             {
@@ -1476,8 +1481,10 @@ PG_FUNCTION_INFO_V1(agtype_contains);
  */
 Datum agtype_contains(PG_FUNCTION_ARGS)
 {
-    agtype_iterator *constraint_it = NULL;
-    agtype_iterator *property_it = NULL;
+
+    agtype_traversal constraint_traversal;
+    agtype_traversal property_traversal;
+
     agtype *properties = NULL;
     agtype *constraints = NULL;
 
@@ -1510,10 +1517,10 @@ Datum agtype_contains(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     }
 
-    property_it = agtype_iterator_init(&properties->root);
-    constraint_it = agtype_iterator_init(&constraints->root);
+    agtype_traversal_init(&properties->root, &property_traversal);
+    agtype_traversal_init(&constraints->root, &constraint_traversal);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it, false));
+    PG_RETURN_BOOL(agtype_deep_contains(&property_traversal, &constraint_traversal, false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_contained_by_top_level);
@@ -1525,7 +1532,7 @@ PG_FUNCTION_INFO_V1(agtype_contained_by_top_level);
  */
 Datum agtype_contained_by_top_level(PG_FUNCTION_ARGS)
 {
-    agtype_iterator *constraint_it, *property_it;
+    agtype_traversal constraint_traversal, property_traversal;
     agtype *properties, *constraints;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -1552,10 +1559,10 @@ Datum agtype_contained_by_top_level(PG_FUNCTION_ARGS)
                                                              false));
     }
 
-    constraint_it = agtype_iterator_init(&constraints->root);
-    property_it = agtype_iterator_init(&properties->root);
+    agtype_traversal_init(&constraints->root, &constraint_traversal);
+    agtype_traversal_init(&properties->root, &property_traversal);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&constraint_it, &property_it, true));
+    PG_RETURN_BOOL(agtype_deep_contains(&constraint_traversal, &property_traversal, true));
 }
 
 
@@ -1566,7 +1573,7 @@ PG_FUNCTION_INFO_V1(agtype_contained_by);
  */
 Datum agtype_contained_by(PG_FUNCTION_ARGS)
 {
-    agtype_iterator *constraint_it, *property_it;
+    agtype_traversal constraint_traversal, property_traversal;
     agtype *properties, *constraints;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -1593,10 +1600,10 @@ Datum agtype_contained_by(PG_FUNCTION_ARGS)
                                                              false));
     }
 
-    constraint_it = agtype_iterator_init(&constraints->root);
-    property_it = agtype_iterator_init(&properties->root);
+    agtype_traversal_init(&constraints->root, &constraint_traversal);
+    agtype_traversal_init(&properties->root, &property_traversal);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&constraint_it, &property_it, false));
+    PG_RETURN_BOOL(agtype_deep_contains(&constraint_traversal, &property_traversal, false));
 }
 
 PG_FUNCTION_INFO_V1(agtype_contains_top_level);
@@ -1608,8 +1615,8 @@ PG_FUNCTION_INFO_V1(agtype_contains_top_level);
  */
 Datum agtype_contains_top_level(PG_FUNCTION_ARGS)
 {
-    agtype_iterator *constraint_it = NULL;
-    agtype_iterator *property_it = NULL;
+    agtype_traversal constraint_traversal;
+    agtype_traversal property_traversal;
     agtype *properties = NULL;
     agtype *constraints = NULL;
 
@@ -1642,10 +1649,10 @@ Datum agtype_contains_top_level(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     }
 
-    property_it = agtype_iterator_init(&properties->root);
-    constraint_it = agtype_iterator_init(&constraints->root);
+    agtype_traversal_init(&properties->root, &property_traversal);
+    agtype_traversal_init(&constraints->root, &constraint_traversal);
 
-    PG_RETURN_BOOL(agtype_deep_contains(&property_it, &constraint_it, true));
+    PG_RETURN_BOOL(agtype_deep_contains(&property_traversal, &constraint_traversal, true));
 }
 
 PG_FUNCTION_INFO_V1(agtype_exists);
@@ -1781,8 +1788,8 @@ static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2)
 {
     agtype_parse_state *state = NULL;
     agtype_value *res;
-    agtype_iterator *it1;
-    agtype_iterator *it2;
+    agtype_traversal traversal1;
+    agtype_traversal traversal2;
 
     /*
      * If one of the agtype is empty, just return the other if it's not scalar
@@ -1802,10 +1809,10 @@ static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2)
         }
     }
 
-    it1 = agtype_iterator_init(&agt1->root);
-    it2 = agtype_iterator_init(&agt2->root);
+    agtype_traversal_init(&agt1->root, &traversal1);
+    agtype_traversal_init(&agt2->root, &traversal2);
 
-    res = iterator_concat(&it1, &it2, &state);
+    res = iterator_concat(&traversal1, &traversal2, &state);
 
     Assert(res != NULL);
 
@@ -1819,15 +1826,15 @@ static agtype *agtype_concat_impl(agtype *agt1, agtype *agt2)
  * In that case we just append the content of it2 to it1 without any
  * verifications.
  */
-static agtype_value *iterator_concat(agtype_iterator **it1,
-                                     agtype_iterator **it2,
+static agtype_value *iterator_concat(agtype_traversal *traversal11,
+                                     agtype_traversal *traversal2,
                                      agtype_parse_state **state)
 {
     agtype_value v1, v2, *res = NULL;
     agtype_iterator_token r1, r2, rk1, rk2;
 
-    r1 = rk1 = agtype_iterator_next(it1, &v1, false);
-    r2 = rk2 = agtype_iterator_next(it2, &v2, false);
+    r1 = rk1 = agtype_iterator_next(traversal11, &v1, false);
+    r2 = rk2 = agtype_iterator_next(traversal2, &v2, false);
 
     /*
      * Both elements are objects.
@@ -1840,7 +1847,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
          */
         push_agtype_value(state, r1, NULL);
 
-        while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_OBJECT)
+        while ((r1 = agtype_iterator_next(traversal11, &v1, true)) != WAGT_END_OBJECT)
         {
             Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
             push_agtype_value(state, r1, &v1);
@@ -1849,7 +1856,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         /*
          * Append all tokens from v2 to res, except last WAGT_END_OBJECT
          */
-        while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_OBJECT)
+        while ((r2 = agtype_iterator_next(traversal2, &v2, true)) != WAGT_END_OBJECT)
         {
             Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
             push_agtype_value(state, r2, &v2);
@@ -1867,13 +1874,13 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
     {
         push_agtype_value(state, r1, NULL);
 
-        while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_ARRAY)
+        while ((r1 = agtype_iterator_next(traversal11, &v1, true)) != WAGT_END_ARRAY)
         {
             Assert(r1 == WAGT_ELEM);
             push_agtype_value(state, r1, &v1);
         }
 
-        while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_ARRAY)
+        while ((r2 = agtype_iterator_next(traversal2, &v2, true)) != WAGT_END_ARRAY)
         {
             Assert(r2 == WAGT_ELEM);
             push_agtype_value(state, r2, &v2);
@@ -1882,13 +1889,13 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         res = push_agtype_value(state, WAGT_END_ARRAY, NULL);
     }
     /* have we got array || object or object || array? */
-    else if (((rk1 == WAGT_BEGIN_ARRAY && !(*it1)->is_scalar) &&
+    else if (((rk1 == WAGT_BEGIN_ARRAY && !traversal11->it->is_scalar) &&
               rk2 == WAGT_BEGIN_OBJECT) ||
              (rk1 == WAGT_BEGIN_OBJECT &&
-              (rk2 == WAGT_BEGIN_ARRAY && !(*it2)->is_scalar)))
+              (rk2 == WAGT_BEGIN_ARRAY && !traversal2->it->is_scalar)))
     {
-        agtype_iterator **it_array = rk1 == WAGT_BEGIN_ARRAY ? it1 : it2;
-        agtype_iterator **it_object = rk1 == WAGT_BEGIN_OBJECT ? it1 : it2;
+        agtype_traversal *array_traversal = rk1 == WAGT_BEGIN_ARRAY ? traversal11 : traversal2;
+        agtype_traversal *object_traversal = rk1 == WAGT_BEGIN_OBJECT ? traversal11 : traversal2;
 
         bool prepend = (rk1 == WAGT_BEGIN_OBJECT);
 
@@ -1898,7 +1905,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         {
             push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-            while ((r1 = agtype_iterator_next(it_object, &v1, true)) !=
+            while ((r1 = agtype_iterator_next(object_traversal, &v1, true)) !=
                     WAGT_END_OBJECT)
             {
                 Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
@@ -1907,7 +1914,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
             push_agtype_value(state, WAGT_END_OBJECT, NULL);
 
-            while ((r2 = agtype_iterator_next(it_array, &v2, true)) !=
+            while ((r2 = agtype_iterator_next(array_traversal, &v2, true)) !=
                     WAGT_END_ARRAY)
             {
                 Assert(r2 == WAGT_ELEM);
@@ -1918,7 +1925,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         }
         else
         {
-            while ((r1 = agtype_iterator_next(it_array, &v1, true)) !=
+            while ((r1 = agtype_iterator_next(array_traversal, &v1, true)) !=
                    WAGT_END_ARRAY)
             {
                 Assert(r1 == WAGT_ELEM);
@@ -1927,7 +1934,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
             push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-            while ((r2 = agtype_iterator_next(it_object, &v2, true)) !=
+            while ((r2 = agtype_iterator_next(object_traversal, &v2, true)) !=
                     WAGT_END_OBJECT)
             {
                 Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
@@ -1950,7 +1957,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
         push_agtype_value(state, WAGT_BEGIN_ARRAY, NULL);
         push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-        while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_OBJECT)
+        while ((r1 = agtype_iterator_next(traversal11, &v1, true)) != WAGT_END_OBJECT)
         {
             Assert(r1 == WAGT_KEY || r1 == WAGT_VALUE);
             push_agtype_value(state, r1, &v1);
@@ -1958,7 +1965,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
         push_agtype_value(state, WAGT_END_OBJECT, NULL);
 
-        while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_ARRAY)
+        while ((r2 = agtype_iterator_next(traversal2, &v2, true)) != WAGT_END_ARRAY)
         {
             if (v2.type < AGTV_VERTEX || v2.type > AGTV_PATH)
             {
@@ -1985,7 +1992,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
         push_agtype_value(state, WAGT_BEGIN_ARRAY, NULL);
 
-        while ((r1 = agtype_iterator_next(it1, &v1, true)) != WAGT_END_ARRAY)
+        while ((r1 = agtype_iterator_next(traversal11, &v1, true)) != WAGT_END_ARRAY)
         {
             if (v1.type < AGTV_VERTEX || v1.type > AGTV_PATH)
             {
@@ -2002,7 +2009,7 @@ static agtype_value *iterator_concat(agtype_iterator **it1,
 
         push_agtype_value(state, WAGT_BEGIN_OBJECT, NULL);
 
-        while ((r2 = agtype_iterator_next(it2, &v2, true)) != WAGT_END_OBJECT)
+        while ((r2 = agtype_iterator_next(traversal2, &v2, true)) != WAGT_END_OBJECT)
         {
             Assert(r2 == WAGT_KEY || r2 == WAGT_VALUE);
             push_agtype_value(state, r2, &v2);
@@ -2201,11 +2208,12 @@ static Datum get_agtype_path_all(FunctionCallInfo fcinfo, bool as_text)
         if (agtvp->type == AGTV_BINARY)
         {
             agtype_iterator_token r;
-            agtype_iterator *it =
-                agtype_iterator_init((agtype_container *)
-                                      agtvp->val.binary.data);
+            agtype_traversal traversal;
 
-            r = agtype_iterator_next(&it, &tv, true);
+                agtype_traversal_init((agtype_container *)
+                                      agtvp->val.binary.data, &traversal);
+
+            r = agtype_iterator_next(&traversal, &tv, true);
             container = (agtype_container *) agtvp->val.binary.data;
             have_object = r == WAGT_BEGIN_OBJECT;
             have_array = r == WAGT_BEGIN_ARRAY;

@@ -95,7 +95,6 @@ static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink);
 static Node *transform_FuncCall(cypher_parsestate *cpstate, FuncCall *fn);
 static Node *transform_WholeRowRef(ParseState *pstate, ParseNamespaceItem *pnsi,
                                    int location, int sublevels_up);
-static ArrayExpr *make_agtype_array_expr(List *args);
 static Node *transform_column_ref_for_indirection(cypher_parsestate *cpstate,
                                                   ColumnRef *cr);
 static Node *transform_external_ext_FuncCall(cypher_parsestate *cpstate,
@@ -865,7 +864,7 @@ static Node *transform_cypher_param(cypher_parsestate *cpstate,
 
     /* get the agtype_access_operator function */
     func_access_oid = get_ag_func_oid("agtype_access_operator", 1,
-                                      AGTYPEARRAYOID);
+                                      ANYOID);
 
     args = lappend(args, copyObject(cpstate->params));
 
@@ -935,7 +934,6 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
             {
                 Oid foid_access_op;
                 FuncExpr *fexpr_access_op;
-                ArrayExpr *args_access_op;
                 Const *key_agtype;
 
                 /* Makes key from elem->key */
@@ -946,15 +944,16 @@ static Node *transform_cypher_map_projection(cypher_parsestate *cpstate,
                 key_agtype = makeConst(AGTYPEOID, -1, InvalidOid, -1,
                                        string_to_agtype(elem->key), false,
                                        false);
-                foid_access_op = get_ag_func_oid("agtype_access_operator", 1,
-                                                 AGTYPEARRAYOID);
-                args_access_op = make_agtype_array_expr(
-                    list_make2(fexpr_orig_map, key_agtype));
-                fexpr_access_op = makeFuncExpr(foid_access_op, AGTYPEOID,
-                                               list_make1(args_access_op),
-                                               InvalidOid, InvalidOid,
-                                               COERCE_EXPLICIT_CALL);
-                fexpr_access_op->funcvariadic = true;
+                foid_access_op = get_ag_func_oid("agtype_access_operator", 1, ANYOID);
+
+                fexpr_access_op = makeFuncExpr(foid_access_op,
+                                            AGTYPEOID,
+                                            list_make2(fexpr_orig_map, key_agtype),
+                                            InvalidOid,
+                                            InvalidOid,
+                                            COERCE_EXPLICIT_CALL);
+
+                fexpr_access_op->funcvariadic = false;
                 fexpr_access_op->location = -1;
                 val = (Node *)fexpr_access_op;
 
@@ -1344,31 +1343,6 @@ static Node *transform_cypher_list(cypher_parsestate *cpstate, cypher_list *cl)
     return (Node *)fexpr;
 }
 
-/* makes a VARIADIC agtype array */
-static ArrayExpr *make_agtype_array_expr(List *args)
-{
-    ArrayExpr  *newa = makeNode(ArrayExpr);
-
-    newa->elements = args;
-
-    /* assume all the variadic arguments were coerced to the same type */
-    newa->element_typeid = AGTYPEOID;
-    newa->array_typeid = AGTYPEARRAYOID;
-
-    if (!OidIsValid(newa->array_typeid))
-    {
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_OBJECT),
-                 errmsg("could not find array type for data type %s",
-                        format_type_be(newa->element_typeid))));
-    }
-
-    /* array_collid will be set by parse_collate.c */
-    newa->multidims = false;
-
-    return newa;
-}
-
 /*
  * Transform a ColumnRef for indirection. Try to find the rte that the ColumnRef
  * references and pass the properties of that rte as what the ColumnRef is
@@ -1432,7 +1406,7 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
     Assert(a_ind != NULL && list_length(a_ind->indirection));
     /* get the agtype_access_operator function */
     func_access_oid = get_ag_func_oid("agtype_access_operator", 1,
-                                      AGTYPEARRAYOID);
+                                      ANYOID);
     /* get the agtype_access_slice function */
     func_slice_oid = get_ag_func_oid("agtype_access_slice", 3, AGTYPEOID,
                                      AGTYPEOID, AGTYPEOID);
@@ -1479,14 +1453,13 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
             /* were we working on an access? if so, wrap and close it */
             if (is_access)
             {
-                ArrayExpr *newa = make_agtype_array_expr(args);
 
                 func_expr = makeFuncExpr(func_access_oid, AGTYPEOID,
-                                         list_make1(newa),
+                                         args,
                                          InvalidOid, InvalidOid,
                                          COERCE_EXPLICIT_CALL);
 
-                func_expr->funcvariadic = true;
+                func_expr->funcvariadic = false;
                 func_expr->location = location;
 
                 /*
@@ -1576,12 +1549,11 @@ static Node *transform_A_Indirection(cypher_parsestate *cpstate,
     /* if we were doing an access, we need wrap the args with access func. */
     if (is_access)
     {
-        ArrayExpr *newa = make_agtype_array_expr(args);
 
-        func_expr = makeFuncExpr(func_access_oid, AGTYPEOID, list_make1(newa),
+        func_expr = makeFuncExpr(func_access_oid, AGTYPEOID, args,
                                  InvalidOid, InvalidOid,
                                  COERCE_EXPLICIT_CALL);
-        func_expr->funcvariadic = true;
+        func_expr->funcvariadic = false;
     }
 
     Assert(func_expr != NULL);
