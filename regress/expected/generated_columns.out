@@ -104,6 +104,58 @@ SELECT category, properties FROM generated_columns."Product" ORDER BY category N
           | {"type": "no-cat"}
 (3 rows)
 
+-- Exercise generated columns through multi-row CREATE, SET, and MERGE.
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['batch-a', 'batch-b', 'batch-c'] AS category
+    CREATE (p:Product {category: category, batch: 'create'})
+    RETURN count(p)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (p:Product)
+    SET p.checked = true
+    RETURN count(p)
+$$) AS (count agtype);
+ count 
+-------
+ 6
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['merge-a', 'merge-b', 'merge-c'] AS category
+    MERGE (p:Product {category: category})
+      ON CREATE SET p.batch = 'merge-create'
+    RETURN count(p)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['merge-a', 'merge-b', 'merge-c'] AS category
+    MERGE (p:Product {category: category})
+      ON MATCH SET p.batch = 'merge-match'
+    RETURN count(p)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT count(*) AS rows,
+       bool_and(category IS NOT DISTINCT FROM
+                agtype_access_operator(properties, '"category"')::varchar(25)) AS synchronized
+FROM generated_columns."Product";
+ rows | synchronized 
+------+--------------
+   12 | t
+(1 row)
+
 --
 -- GENERATED ALWAYS ... STORED column on an edge label
 --
@@ -123,7 +175,7 @@ SELECT * FROM cypher('generated_columns', $$
 $$) AS (r agtype);
                                                                    r                                                                    
 ----------------------------------------------------------------------------------------------------------------------------------------
- {"id": 1125899906842625, "label": "REL", "end_id": 844424930131973, "start_id": 844424930131972, "properties": {"kind": "link"}}::edge
+ {"id": 1125899906842625, "label": "REL", "end_id": 844424930131982, "start_id": 844424930131981, "properties": {"kind": "link"}}::edge
 (1 row)
 
 SELECT kind FROM generated_columns."REL";
@@ -203,17 +255,105 @@ FROM generated_columns."T";
  t
 (1 row)
 
+-- Exercise SET and DELETE on stored and virtual generated columns.
+SELECT create_vlabel('generated_columns', 'DeleteStored');
+NOTICE:  VLabel "DeleteStored" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+ALTER TABLE generated_columns."DeleteStored"
+    ADD COLUMN marker integer GENERATED ALWAYS AS (1) STORED;
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND [1, 2, 3] AS ident
+    CREATE (n:DeleteStored {id: ident})
+    RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteStored)
+    DELETE n
+$$) AS (n agtype);
+ n 
+---
+(0 rows)
+
+SELECT count(*) FROM generated_columns."DeleteStored";
+ count 
+-------
+     0
+(1 row)
+
+SELECT create_vlabel('generated_columns', 'DeleteVirtual');
+NOTICE:  VLabel "DeleteVirtual" has been created
+ create_vlabel 
+---------------
+ 
+(1 row)
+
+ALTER TABLE generated_columns."DeleteVirtual"
+    ADD COLUMN marker integer GENERATED ALWAYS AS (1) VIRTUAL;
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND [1, 2, 3] AS ident
+    CREATE (n:DeleteVirtual {id: ident})
+    RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteVirtual)
+    SET n.checked = true
+    RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT bool_and(marker = 1) AS virtual_ok
+FROM generated_columns."DeleteVirtual";
+ virtual_ok 
+------------
+ t
+(1 row)
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteVirtual)
+    DELETE n
+    RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 3
+(1 row)
+
+SELECT count(*) FROM generated_columns."DeleteVirtual";
+ count 
+-------
+     0
+(1 row)
+
 --
 -- Cleanup
 --
 SELECT drop_graph('generated_columns', true);
-NOTICE:  drop cascades to 6 other objects
+NOTICE:  drop cascades to 8 other objects
 DETAIL:  drop cascades to table generated_columns._ag_label_vertex
 drop cascades to table generated_columns._ag_label_edge
 drop cascades to table generated_columns."Product"
 drop cascades to table generated_columns."REL"
 drop cascades to table generated_columns."Plain"
 drop cascades to table generated_columns."T"
+drop cascades to table generated_columns."DeleteStored"
+drop cascades to table generated_columns."DeleteVirtual"
 NOTICE:  graph "generated_columns" has been dropped
  drop_graph 
 ------------
