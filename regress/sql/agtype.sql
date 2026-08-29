@@ -1064,6 +1064,12 @@ SELECT ag_catalog.agtype_volatile_wrapper(1::int2);
 SELECT ag_catalog.agtype_volatile_wrapper(32767::int2);
 SELECT ag_catalog.agtype_volatile_wrapper(-32767::int2);
 
+-- TID is packed as BlockNumber << 16 | OffsetNumber for hidden ctid transport.
+SELECT ag_catalog.agtype_volatile_wrapper('(0,1)'::tid);
+SELECT ag_catalog.agtype_volatile_wrapper('(42,7)'::tid);
+SELECT ag_catalog.agtype_volatile_wrapper('(65535,65535)'::tid);
+SELECT ag_catalog.agtype_volatile_wrapper('(4294967294,65535)'::tid);
+
 -- These should fail
 SELECT ag_catalog.agtype_volatile_wrapper(32768::int2);
 SELECT ag_catalog.agtype_volatile_wrapper(-32768::int2);

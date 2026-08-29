@@ -123,6 +123,9 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
     if (estate->es_output_cid == 0)
         estate->es_output_cid = estate->es_snapshot->curcid;
 
+    /* Build the per-statement index and fetch-slot lookup cache. */
+    css->entity_lookup_cache = create_entity_lookup_cache();
+
     Increment_Estate_CommandId(estate);
 }
 
@@ -204,6 +207,10 @@ static void end_cypher_delete(CustomScanState *node)
     increment_graph_version(css->delete_data->graph_oid);
 
     hash_destroy(((cypher_delete_custom_scan_state *)node)->vertex_id_htab);
+
+    /* Release cached index handles and fetch slots. */
+    destroy_entity_lookup_cache(
+        ((cypher_delete_custom_scan_state *)node)->entity_lookup_cache);
 
     ExecEndNode(node->ss.ps.lefttree);
 }
@@ -384,8 +391,6 @@ static void process_delete_list(CustomScanState *node)
     EState *estate = node->ss.ps.state;
     HTAB *qual_cache = NULL;
     HASHCTL hashctl;
-    HTAB *index_cache = NULL;
-    HASHCTL idx_hashctl;
 
     /* Hash table for caching compiled security quals per label */
     MemSet(&hashctl, 0, sizeof(hashctl));
@@ -395,19 +400,10 @@ static void process_delete_list(CustomScanState *node)
     qual_cache = hash_create("delete_qual_cache", 8, &hashctl,
                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
-    MemSet(&idx_hashctl, 0, sizeof(idx_hashctl));
-    idx_hashctl.keysize = sizeof(Oid);
-    idx_hashctl.entrysize = sizeof(IndexCacheEntry);
-    idx_hashctl.hcxt = CurrentMemoryContext;
-    index_cache = hash_create("delete_index_cache", 8, &idx_hashctl,
-                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-
     foreach(lc, css->delete_data->delete_items)
     {
         cypher_delete_item *item;
         agtype_value *original_entity_value, *id, *label;
-        ScanKeyData scan_keys[1];
-        TableScanDesc scan_desc = NULL;
         ResultRelInfo *resultRelInfo;
         HeapTuple heap_tuple = NULL;
         char *label_name;
@@ -415,14 +411,6 @@ static void process_delete_list(CustomScanState *node)
         int entity_position;
         Oid relid;
         Relation rel;
-        int id_attr_num;
-        Oid index_oid = InvalidOid;
-        TupleTableSlot *slot = NULL;
-        Relation index_rel = NULL;
-        IndexScanDesc index_scan_desc = NULL;
-        bool shouldFree = false;
-        IndexCacheEntry *idx_entry;
-        bool found_idx_entry;     
 
         item = lfirst(lc);
 
@@ -448,34 +436,12 @@ static void process_delete_list(CustomScanState *node)
          * Setup the scan key to require the id field on-disc to match the
          * entity's graphid.
          */
-        if (original_entity_value->type == AGTV_VERTEX)
-        {
-            id_attr_num = Anum_ag_label_vertex_table_id;
-            ScanKeyInit(&scan_keys[0], Anum_ag_label_vertex_table_id,
-                        BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
-        }
-        else if (original_entity_value->type == AGTV_EDGE)
-        {
-            id_attr_num = Anum_ag_label_edge_table_id;
-            ScanKeyInit(&scan_keys[0], Anum_ag_label_edge_table_id,
-                        BTEqualStrategyNumber, F_GRAPHIDEQ,
-                        GRAPHID_GET_DATUM(id->val.int_value));
-        }
-        else
+        if (original_entity_value->type != AGTV_VERTEX &&
+            original_entity_value->type != AGTV_EDGE)
         {
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                     errmsg("DELETE clause can only delete vertices and edges")));
         }
-
-        idx_entry = hash_search(index_cache, &relid, HASH_ENTER, &found_idx_entry);
-
-        if (!found_idx_entry)
-        {
-            idx_entry->index_oid = find_usable_btree_index_for_attr(rel, id_attr_num);
-        }
-
-        index_oid = idx_entry->index_oid;
 
         /*
          * Setup the scan description, with the correct snapshot and scan keys.
@@ -483,84 +449,49 @@ static void process_delete_list(CustomScanState *node)
         estate->es_snapshot->curcid = GetCurrentCommandId(false);
         estate->es_output_cid = GetCurrentCommandId(false);
 
-        if (OidIsValid(index_oid))
-        {
-            slot = table_slot_create(rel, NULL);
-
-            index_rel = index_open(index_oid, RowExclusiveLock);
-            index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
-            index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
-
-            if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
-            {
-                heap_tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-            }
-        }
-        else
-        {
-            scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
-            /* Retrieve the tuple. */
-            heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
-        }
-
+        heap_tuple = find_entity_tuple(
+            rel, estate->es_snapshot, id->val.int_value, scanTupleSlot,
+            item->ctid_position, css->entity_lookup_cache);
         if (HeapTupleIsValid(heap_tuple))
         {
             bool passed_rls = true;
 
-            /* Check RLS security quals (USING policy) before delete */
             if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
             {
                 RLSCacheEntry *entry;
                 bool found_rls;
 
-                entry = hash_search(qual_cache, &relid, HASH_ENTER, &found_rls);
+                entry = hash_search(qual_cache, &relid, HASH_ENTER,
+                                    &found_rls);
                 if (!found_rls)
                 {
-                    entry->qualExprs = setup_security_quals(resultRelInfo, estate, node, CMD_DELETE);
-                    entry->slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel), &TTSOpsHeapTuple);
+                    entry->qualExprs = setup_security_quals(
+                        resultRelInfo, estate, node, CMD_DELETE);
+                    entry->slot = ExecInitExtraTupleSlot(
+                        estate, RelationGetDescr(rel), &TTSOpsHeapTuple);
                 }
-
                 ExecStoreHeapTuple(heap_tuple, entry->slot, false);
-
-                if (!check_security_quals(entry->qualExprs, entry->slot, econtext))
-                {
-                    passed_rls = false;
-                }
+                passed_rls = check_security_quals(entry->qualExprs,
+                                                  entry->slot, econtext);
             }
-
             if (passed_rls)
             {
                 /*
-                 * For vertices, we insert the vertex ID in the hashtable
-                 * vertex_id_htab. This hashtable is used later to process
-                 * connected edges.
+                 * Save deleted vertex IDs for the later connected-edge check.
+                 * DETACH DELETE removes those edges; plain DELETE reports an
+                 * error if any remain.
                  */
                 if (original_entity_value->type == AGTV_VERTEX)
                 {
                     bool found;
-                    hash_search(css->vertex_id_htab, (void *)&(id->val.int_value),
+
+                    hash_search(css->vertex_id_htab,
+                                (void *)&id->val.int_value,
                                 HASH_ENTER, &found);
                 }
-
-                /* At this point, we are ready to delete the node/vertex. */
                 delete_entity(estate, resultRelInfo, heap_tuple);
             }
-
-            if (shouldFree)
-            {
-                heap_freetuple(heap_tuple);
-            }
-        }
-
-        if (OidIsValid(index_oid))
-        {
-            ExecDropSingleTupleTableSlot(slot);
-            index_endscan(index_scan_desc);
-            index_close(index_rel, RowExclusiveLock);
-        }
-        else
-        {
-            table_endscan(scan_desc);
+            heap_freetuple(heap_tuple);
         }
 
         destroy_entity_result_rel_info(resultRelInfo);
@@ -568,7 +499,6 @@ static void process_delete_list(CustomScanState *node)
 
     /* Clean up the cache */
     hash_destroy(qual_cache);
-    hash_destroy(index_cache);
 }
 
 /*

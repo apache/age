@@ -24,6 +24,8 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
+#include "access/tableam.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
 #include "miscadmin.h"
@@ -32,12 +34,20 @@
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rowsecurity.h"
 #include "utils/acl.h"
+#include "utils/hsearch.h"
+#include "utils/memutils.h"
+#include "utils/relcache.h"
 #include "utils/rls.h"
 
 #include "catalog/ag_label.h"
 #include "commands/label_commands.h"
 #include "executor/cypher_utils.h"
 #include "utils/ag_cache.h"
+
+StaticAssertDecl(Anum_ag_label_vertex_table_id ==
+                     Anum_ag_label_edge_table_id,
+                 "vertex and edge id columns must have the same attribute "
+                 "number");
 
 /* RLS helper function declarations */
 static void get_policies_for_relation(Relation relation, CmdType cmd,
@@ -218,6 +228,357 @@ TupleTableSlot *populate_edge_tts(
     return elemTupleSlot;
 }
 
+/* Create the per-statement lookup cache in its own memory context. */
+EntityLookupCache *create_entity_lookup_cache(void)
+{
+    EntityLookupCache *cache;
+    MemoryContext mcxt;
+    MemoryContext old;
+    HASHCTL hashctl;
+
+    mcxt = AllocSetContextCreate(CurrentMemoryContext,
+                                 "AGE entity lookup cache",
+                                 ALLOCSET_SMALL_SIZES);
+    old = MemoryContextSwitchTo(mcxt);
+
+    cache = palloc0(sizeof(EntityLookupCache));
+    cache->mcxt = mcxt;
+
+    MemSet(&hashctl, 0, sizeof(hashctl));
+    hashctl.keysize = sizeof(Oid);
+    hashctl.entrysize = sizeof(EntityLookupCacheEntry);
+    hashctl.hcxt = mcxt;
+    cache->htab = hash_create("AGE entity lookup htab", 8, &hashctl,
+                              HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+    MemoryContextSwitchTo(old);
+    return cache;
+}
+
+/* Release slots and index handles before deleting the memory context. */
+void destroy_entity_lookup_cache(EntityLookupCache *cache)
+{
+    HASH_SEQ_STATUS seq;
+    EntityLookupCacheEntry *entry;
+    MemoryContext mcxt;
+
+    if (cache == NULL)
+        return;
+
+    mcxt = cache->mcxt;
+    hash_seq_init(&seq, cache->htab);
+    while ((entry = (EntityLookupCacheEntry *) hash_seq_search(&seq)) != NULL)
+    {
+        if (entry->fetch_slot != NULL)
+            ExecDropSingleTupleTableSlot(entry->fetch_slot);
+        if (entry->id_index != NULL)
+            index_close(entry->id_index, AccessShareLock);
+    }
+
+    MemoryContextDelete(mcxt);
+}
+
+static EntityLookupCacheEntry *get_entity_lookup_cache_entry(
+    EntityLookupCache *cache, Relation rel)
+{
+    Oid relid = RelationGetRelid(rel);
+    bool found;
+    EntityLookupCacheEntry *entry;
+
+    entry = hash_search(cache->htab, &relid, HASH_ENTER, &found);
+    if (!found)
+    {
+        entry->relid = relid;
+        entry->index_initialized = false;
+        entry->fetch_slot = NULL;
+        entry->id_index = NULL;
+    }
+
+    return entry;
+}
+
+bool get_entity_ctid_hint(TupleTableSlot *scanTupleSlot,
+                          AttrNumber ctid_position, ItemPointer ctid)
+{
+    agtype *ctid_agt;
+    agtype_value *ctid_val;
+    OffsetNumber ctid_offset;
+    bool ctid_isnull;
+    Datum ctid_datum;
+    int64 packed;
+
+    if (ctid_position <= 0 || scanTupleSlot == NULL ||
+        ctid_position > scanTupleSlot->tts_tupleDescriptor->natts)
+        return false;
+
+    ctid_datum = slot_getattr(scanTupleSlot, ctid_position, &ctid_isnull);
+    if (ctid_isnull)
+        return false;
+
+    /*
+     * These checks validate the internal ctid transport format. A
+     * mismatch here means parser/targetlist metadata is broken, not that the
+     * hint merely went stale, so fail the statement instead of falling back.
+     */
+    if (TupleDescAttr(scanTupleSlot->tts_tupleDescriptor,
+                      ctid_position - 1)->atttypid != AGTYPEOID)
+        elog(ERROR, "unexpected ctid hint type");
+
+    ctid_agt = DATUM_GET_AGTYPE_P(ctid_datum);
+    if (!AGTYPE_CONTAINER_IS_SCALAR(&ctid_agt->root))
+        elog(ERROR, "unexpected non-scalar ctid hint");
+
+    ctid_val = get_ith_agtype_value_from_container(&ctid_agt->root, 0);
+    if (ctid_val == NULL || ctid_val->type != AGTV_INTEGER)
+        elog(ERROR, "unexpected non-integer ctid hint");
+
+    packed = ctid_val->val.int_value;
+    ctid_offset = AGE_CTID_UNPACK_OFFSET(packed);
+    if (ctid_offset == InvalidOffsetNumber)
+        elog(ERROR, "unexpected invalid ctid hint offset");
+
+    ItemPointerSetBlockNumber(ctid, AGE_CTID_UNPACK_BLOCK(packed));
+    ItemPointerSetOffsetNumber(ctid, ctid_offset);
+
+    return true;
+}
+
+/* Try a tuple lookup using the hidden packed ctid hint. */
+static HeapTuple try_ctid_fetch_tuple(Relation rel, Snapshot snapshot,
+                                      graphid entity_id,
+                                      TupleTableSlot *scanTupleSlot,
+                                      AttrNumber ctid_position,
+                                      EntityLookupCache *cache)
+{
+    HeapTuple result = NULL;
+    ItemPointerData ctid_data;
+    EntityLookupCacheEntry *entry = NULL;
+    TupleTableSlot *fetch_slot = NULL;
+    TupleTableSlot *slot;
+    bool id_isnull;
+    Datum id_datum;
+
+    if (!get_entity_ctid_hint(scanTupleSlot, ctid_position, &ctid_data))
+        return NULL;
+
+    if (cache != NULL)
+    {
+        entry = get_entity_lookup_cache_entry(cache, rel);
+        if (entry->fetch_slot == NULL)
+        {
+            MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
+
+            entry->fetch_slot = MakeSingleTupleTableSlot(
+                RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
+            MemoryContextSwitchTo(old);
+        }
+        fetch_slot = entry->fetch_slot;
+    }
+
+    slot = fetch_slot;
+    if (slot == NULL)
+        slot = MakeSingleTupleTableSlot(RelationGetDescr(rel),
+                                        &TTSOpsBufferHeapTuple);
+    else
+        ExecClearTuple(slot);
+
+    if (table_tuple_fetch_row_version(rel, &ctid_data, snapshot, slot))
+    {
+        id_datum = slot_getattr(slot, Anum_ag_label_vertex_table_id,
+                                &id_isnull);
+
+        /*
+         * table_tuple_fetch_row_version() only proves that the tuple at
+         * this TID is visible to the current snapshot. AGE writable clauses do
+         * not run the full PG UPDATE/DELETE recheck chain here, so Tier-1 must
+         * still verify logical identity itself. The ctid hint can be unreliable
+         * when an earlier writable clause in the same statement has already
+         * moved the tuple version, or when parser/alias propagation paired a
+         * well-formed but wrong ctid with this entity. Since ctid is only a
+         * physical locator, a visible tuple fetched here must still match
+         * entity_id before Tier-1 can use it.
+         */
+        if (id_isnull || DATUM_GET_GRAPHID(id_datum) != entity_id)
+            result = NULL;
+        else
+            result = ExecCopySlotHeapTuple(slot);
+    }
+
+    if (fetch_slot == NULL)
+        ExecDropSingleTupleTableSlot(slot);
+    else
+        ExecClearTuple(slot);
+
+    return result;
+}
+
+/*
+ * Try ctid lookup first, then a usable B-tree index on id. Use SeqScan only
+ * when the relation has no such index.
+ *
+ * The ctid hint must come from the same statement. If the tuple at that ctid
+ * is no longer visible, fall back to graphid lookup. A visible tuple fetched
+ * by ctid must still match entity_id.
+ *
+ * Returns a copied tuple, or NULL if not found.
+ * The caller must heap_freetuple() the result when done.
+ */
+HeapTuple find_entity_tuple(Relation rel, Snapshot snapshot,
+                            graphid entity_id,
+                            TupleTableSlot *scanTupleSlot,
+                            AttrNumber ctid_position,
+                            EntityLookupCache *cache)
+{
+    HeapTuple result = NULL;
+    EntityLookupCacheEntry *entry = NULL;
+    TupleTableSlot *fetch_slot = NULL;
+    Relation id_index = NULL;
+    bool own_index = false;
+
+    /* Tier 1: ctid direct fetch */
+    if (ctid_position > 0 && scanTupleSlot != NULL &&
+        ctid_position <= scanTupleSlot->tts_tupleDescriptor->natts)
+    {
+        result = try_ctid_fetch_tuple(rel, snapshot, entity_id,
+                                      scanTupleSlot, ctid_position, cache);
+        if (result != NULL)
+            return result;
+    }
+
+    /*
+     * Tier 2: use any valid, non-partial B-tree index whose first key is id.
+     * Edge labels do not inherit a primary key, but users can create an id
+     * index explicitly.
+     */
+    if (cache != NULL)
+    {
+        entry = get_entity_lookup_cache_entry(cache, rel);
+        if (!entry->index_initialized)
+        {
+            Oid index_oid;
+
+            index_oid = find_usable_btree_index_for_attr(
+                rel, Anum_ag_label_vertex_table_id);
+            if (OidIsValid(index_oid))
+            {
+                /*
+                 * This handle is only scanned. ExecOpenIndices() separately
+                 * opens indexes that may be changed by UPDATE or DELETE.
+                 */
+                entry->id_index = index_open(index_oid, AccessShareLock);
+            }
+            entry->index_initialized = true;
+        }
+        id_index = entry->id_index;
+    }
+    else
+    {
+        Oid index_oid;
+
+        index_oid = find_usable_btree_index_for_attr(
+            rel, Anum_ag_label_vertex_table_id);
+        if (OidIsValid(index_oid))
+        {
+            /* The lookup scan itself does not modify the index. */
+            id_index = index_open(index_oid, AccessShareLock);
+            own_index = true;
+        }
+    }
+
+    if (id_index != NULL)
+    {
+        ScanKeyData index_keys[1];
+        IndexScanDesc index_scan;
+        TupleTableSlot *slot;
+
+        /* Attribute 1 is the first key of the selected id index. */
+        ScanKeyInit(&index_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
+                    GRAPHID_GET_DATUM(entity_id));
+
+        if (cache != NULL)
+        {
+            if (entry->fetch_slot == NULL)
+            {
+                MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
+
+                entry->fetch_slot = MakeSingleTupleTableSlot(
+                    RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
+                MemoryContextSwitchTo(old);
+            }
+            fetch_slot = entry->fetch_slot;
+        }
+
+        slot = fetch_slot;
+        if (slot == NULL)
+            slot = MakeSingleTupleTableSlot(RelationGetDescr(rel),
+                                            &TTSOpsBufferHeapTuple);
+        else
+            ExecClearTuple(slot);
+
+        index_scan = index_beginscan(rel, id_index, snapshot, NULL, 1, 0);
+        index_rescan(index_scan, index_keys, 1, NULL, 0);
+
+        if (index_getnext_slot(index_scan, ForwardScanDirection, slot))
+            result = ExecCopySlotHeapTuple(slot);
+
+        index_endscan(index_scan);
+
+        if (fetch_slot == NULL)
+            ExecDropSingleTupleTableSlot(slot);
+        else
+            ExecClearTuple(slot);
+        if (own_index)
+            index_close(id_index, AccessShareLock);
+
+        return result;
+    }
+
+    /* Tier 3: SeqScan fallback for relations without a usable id index. */
+    {
+        ScanKeyData heap_keys[1];
+        TableScanDesc scan_desc;
+        TupleTableSlot *slot;
+
+        /* attno here is the table column number of the id column */
+        ScanKeyInit(&heap_keys[0], Anum_ag_label_vertex_table_id,
+                    BTEqualStrategyNumber, F_GRAPHIDEQ,
+                    GRAPHID_GET_DATUM(entity_id));
+
+        if (cache != NULL)
+        {
+            if (entry->fetch_slot == NULL)
+            {
+                MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
+
+                entry->fetch_slot = MakeSingleTupleTableSlot(
+                    RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
+                MemoryContextSwitchTo(old);
+            }
+            fetch_slot = entry->fetch_slot;
+        }
+
+        slot = fetch_slot;
+        if (slot == NULL)
+            slot = MakeSingleTupleTableSlot(RelationGetDescr(rel),
+                                            &TTSOpsBufferHeapTuple);
+        else
+            ExecClearTuple(slot);
+
+        scan_desc = table_beginscan(rel, snapshot, 1, heap_keys);
+
+        if (table_scan_getnextslot(scan_desc, ForwardScanDirection, slot))
+            result = ExecCopySlotHeapTuple(slot);
+
+        table_endscan(scan_desc);
+
+        if (fetch_slot == NULL)
+            ExecDropSingleTupleTableSlot(slot);
+        else
+            ExecClearTuple(slot);
+    }
+
+    return result;
+}
 
 /*
  * Find out if the entity still exists. This is for 'implicit' deletion

@@ -59,12 +59,33 @@ typedef struct cypher_create_custom_scan_state
     Oid graph_oid;
 } cypher_create_custom_scan_state;
 
+/*
+ * Per-statement lookup cache keyed by table relid. The fetch slot and usable
+ * B-tree index on id are initialized lazily.
+ */
+typedef struct EntityLookupCacheEntry
+{
+    Oid relid;                  /* hash key */
+    bool index_initialized;     /* includes a negative lookup result */
+    Relation id_index;          /* usable id index opened once */
+    TupleTableSlot *fetch_slot; /* reusable TTSOpsBufferHeapTuple slot */
+} EntityLookupCacheEntry;
+
+typedef struct EntityLookupCache
+{
+    HTAB *htab;                 /* relid -> EntityLookupCacheEntry */
+    MemoryContext mcxt;         /* context for cached handles and slots */
+} EntityLookupCache;
+
 typedef struct cypher_set_custom_scan_state
 {
     CustomScanState css;
     CustomScan *cs;
     cypher_update_information *set_list;
     int flags;
+
+    /* Per-statement index and fetch-slot cache for tuple lookup. */
+    EntityLookupCache *entity_lookup_cache;
 } cypher_set_custom_scan_state;
 
 typedef struct cypher_delete_custom_scan_state
@@ -92,6 +113,9 @@ typedef struct cypher_delete_custom_scan_state
      * and end_id column.
      */
     HTAB *vertex_id_htab;
+
+    /* Per-statement index and fetch-slot cache for tuple lookup. */
+    EntityLookupCache *entity_lookup_cache;
 } cypher_delete_custom_scan_state;
 
 typedef struct cypher_merge_custom_scan_state
@@ -113,6 +137,9 @@ typedef struct cypher_merge_custom_scan_state
     bool eager_buffer_filled;
     cypher_update_information *on_match_set_info;   /* NULL if not specified */
     cypher_update_information *on_create_set_info;   /* NULL if not specified */
+
+    /* Per-statement index and fetch-slot cache for ON MATCH/CREATE SET. */
+    EntityLookupCache *entity_lookup_cache;
 } cypher_merge_custom_scan_state;
 
 /* Reusable SET logic callable from MERGE executor */
@@ -129,6 +156,24 @@ TupleTableSlot *populate_edge_tts(
 ResultRelInfo *create_entity_result_rel_info(EState *estate, char *graph_name,
                                              char *label_name);
 void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info);
+
+EntityLookupCache *create_entity_lookup_cache(void);
+void destroy_entity_lookup_cache(EntityLookupCache *cache);
+
+/* Decode a hidden packed ctid hint. Return false when no hint is available. */
+bool get_entity_ctid_hint(TupleTableSlot *scanTupleSlot,
+                          AttrNumber ctid_position, ItemPointer ctid);
+
+/*
+ * Look up an entity by ctid, then by a usable B-tree index on id. Use a
+ * sequential scan only when no such index exists. cache may be NULL for
+ * one-shot use.
+ */
+HeapTuple find_entity_tuple(Relation rel, Snapshot snapshot,
+                            graphid entity_id,
+                            TupleTableSlot *scanTupleSlot,
+                            AttrNumber ctid_position,
+                            EntityLookupCache *cache);
 
 bool entity_exists(EState *estate, Oid graph_oid, graphid id);
 HeapTuple insert_entity_tuple(ResultRelInfo *resultRelInfo,
