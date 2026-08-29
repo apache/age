@@ -960,15 +960,7 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              * So we will need to create a TupleTableSlot and populate with the
              * information from the newly created path that the query needs.
              */
-            SubqueryScanState *sss = NULL;
             econtext = node->ss.ps.ps_ExprContext;
-            sss = (SubqueryScanState *)node->ss.ps.lefttree;
-
-            /*
-             * Our child execution node is always a subquery. If not there
-             * is an issue.
-             */
-            Assert(IsA(sss, SubqueryScanState));
 
             /*
              * found_a_path should only be set to true if MERGE is following
@@ -985,51 +977,96 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
             Assert(css->created_new_path == false);
 
             /*
-             *  Postgres cleared the child tuple table slot, we need to remake
-             *  it.
+             * Postgres cleared the child tuple table slot, we need to remake
+             * it.  The child may be a SubqueryScan (when the MERGE path
+             * pattern involves a scan) or a plain Result plan (when the MERGE
+             * pattern produces no base-relation scan, e.g. on an empty graph).
+             * Use the correct API for each case.
              */
-            ExecInitScanTupleSlot(estate, &sss->ss,
-                                  ExecGetResultType(sss->subplan),
-                                  &TTSOpsVirtual);
+            if (IsA(node->ss.ps.lefttree, SubqueryScanState))
+            {
+                SubqueryScanState *sss = (SubqueryScanState *)node->ss.ps.lefttree;
 
-            /* setup the scantuple that the process_path needs */
-            econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;
+                ExecInitScanTupleSlot(estate, &sss->ss,
+                                      ExecGetResultType(sss->subplan),
+                                      &TTSOpsVirtual);
+                econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;
 
-            /*
-             * Initialize the scan tuple slot as all-null before process_path
-             * populates it with the created entities. This ensures the slot
-             * is properly set up for apply_update_list.
-             */
-            mark_tts_isnull(econtext->ecxt_scantuple);
+                mark_tts_isnull(econtext->ecxt_scantuple);
 
-            /* create the path */
-            process_path(css, NULL, true);
+                /* create the path */
+                process_path(css, NULL, true);
 
-            /* mark the slot as valid so tts_nvalid reflects natts */
-            mark_scan_slot_valid(econtext->ecxt_scantuple);
+                mark_scan_slot_valid(econtext->ecxt_scantuple);
 
-            /* ON CREATE SET: path was just created */
-            if (css->on_create_set_info)
-                apply_update_list(&css->css, css->on_create_set_info);
+                /* ON CREATE SET: path was just created */
+                if (css->on_create_set_info)
+                    apply_update_list(&css->css, css->on_create_set_info);
 
-            /* mark the create_new_path flag to true. */
-            css->created_new_path = true;
+                /* mark the create_new_path flag to true. */
+                css->created_new_path = true;
 
-            /*
-             * make the subquery's projection scan slot be the tuple table we
-             * created and run the projection logic.
-             */
-            sss->ss.ps.ps_ProjInfo->pi_exprContext->ecxt_scantuple =
-                                                        econtext->ecxt_scantuple;
+                /*
+                 * make the subquery's projection scan slot be the tuple table
+                 * we created and run the projection logic.
+                 */
+                sss->ss.ps.ps_ProjInfo->pi_exprContext->ecxt_scantuple =
+                                                            econtext->ecxt_scantuple;
 
-            /* assign this to be our scantuple */
-            econtext->ecxt_scantuple = ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
+                /* assign this to be our scantuple */
+                econtext->ecxt_scantuple =
+                    ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
 
-            /*
-             *  run the merge's projection logic and pass to its parent
-             *  execution node
-             */
-            return ExecProject(node->ss.ps.ps_ProjInfo);
+                /*
+                 *  run the merge's projection logic and pass to its parent
+                 *  execution node
+                 */
+                return ExecProject(node->ss.ps.ps_ProjInfo);
+            }
+            else
+            {
+                /*
+                 * The child is a plain Result plan (no base-relation scan).
+                 * Use the generic PlanState API — SubqueryScanState internals
+                 * would read through the wrong struct layout and crash
+                 * (NULL subplan -> ExecGetResultType(NULL)).
+                 */
+                ExecInitScanTupleSlot(estate, &node->ss,
+                                      ExecGetResultType(node->ss.ps.lefttree),
+                                      &TTSOpsVirtual);
+                econtext->ecxt_scantuple = node->ss.ss_ScanTupleSlot;
+
+                mark_tts_isnull(econtext->ecxt_scantuple);
+
+                /* create the path */
+                process_path(css, NULL, true);
+
+                mark_scan_slot_valid(econtext->ecxt_scantuple);
+
+                /* ON CREATE SET: path was just created */
+                if (css->on_create_set_info)
+                    apply_update_list(&css->css, css->on_create_set_info);
+
+                /* mark the create_new_path flag to true. */
+                css->created_new_path = true;
+
+                /*
+                 * make the subquery's projection scan slot be the tuple table
+                 * we created and run the projection logic.
+                 */
+                node->ss.ps.lefttree->ps_ProjInfo->pi_exprContext->ecxt_scantuple =
+                                                            econtext->ecxt_scantuple;
+
+                /* assign this to be our scantuple */
+                econtext->ecxt_scantuple =
+                    ExecProject(node->ss.ps.lefttree->ps_ProjInfo);
+
+                /*
+                 *  run the merge's projection logic and pass to its parent
+                 *  execution node
+                 */
+                return ExecProject(node->ss.ps.ps_ProjInfo);
+            }
         }
     }
 }

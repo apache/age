@@ -10711,3 +10711,38 @@ NOTICE:  graph "issue_2391" has been dropped
 --
 -- End of tests
 --
+-- Issue #2536: Full-path MERGE with WITH followed by WHERE
+-- on a non-existing pattern (empty graph). The child plan is a
+-- Result node, not a SubqueryScan, and the code must not assume
+-- SubqueryScanState internals when remaking the scan tuple slot.
+SELECT * FROM create_graph('issue_2536');
+NOTICE:  graph "issue_2536" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('issue_2536', $$
+  MERGE p = (:a)-[:r]->(n)
+  WITH 1 AS y
+  WHERE ('a' STARTS WITH 'a')
+  RETURN y
+$$) AS (y agtype);
+ y 
+---
+ 1
+(1 row)
+
+SELECT * FROM drop_graph('issue_2536', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table issue_2536._ag_label_vertex
+drop cascades to table issue_2536._ag_label_edge
+drop cascades to table issue_2536.a
+drop cascades to table issue_2536.r
+NOTICE:  graph "issue_2536" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+-- End of tests
