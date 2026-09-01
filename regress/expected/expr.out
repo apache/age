@@ -9744,6 +9744,104 @@ $$) AS (name agtype);
 
 -- type() comparison on edge
 SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.id, r.end_id
+         ->  Nested Loop
+               Output: r.id, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+-- A different relationship type is not redundant.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'LIKES'
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 0
+(1 row)
+
+-- Removing the redundant conjunct must preserve the remaining predicate.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' AND r.since = 2020
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 1
+(1 row)
+
+-- A redundant predicate nested under OR must not be removed.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' OR r.since = -1
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 1
+(1 row)
+
+-- OPTIONAL MATCH must continue to emit unmatched left-hand rows.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n:Person)
+    OPTIONAL MATCH (n)-[r:KNOWS]->(m)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(n), count(r)
+$$) AS (nodes agtype, relationships agtype);
+ nodes | relationships 
+-------+---------------
+ 2     | 1
+(1 row)
+
+-- A variable-length relationship is a list, so its type predicate is not
+-- equivalent to the static relationship label and must remain untouched.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS*1..1]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+ERROR:  type() argument must resolve to a scalar value
+-- A relationship variable reused through WITH keeps its original binding.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (a:Person)-[r:KNOWS]->(b)
+    WITH a, b, r
+    OPTIONAL MATCH (a)-[r]->(b)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 1
+(1 row)
+
+SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
     RETURN id(r)
