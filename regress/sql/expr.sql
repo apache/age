@@ -3896,6 +3896,13 @@ $$) AS (name agtype);
 
 -- type() comparison on edge
 SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (plan agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
     RETURN id(r)

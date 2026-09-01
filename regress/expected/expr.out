@@ -9744,6 +9744,38 @@ $$) AS (name agtype);
 
 -- type() comparison on edge
 SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (plan agtype);
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (r.id)::agtype
+   Merge Cond: (_age_default_alias_1.id = r.end_id)
+   ->  Merge Append
+         Sort Key: _age_default_alias_1.id
+         ->  Index Only Scan using _ag_label_vertex_pkey on accessor_opt._ag_label_vertex _age_default_alias_1_1
+               Output: _age_default_alias_1_1.id
+         ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_1_2
+               Output: _age_default_alias_1_2.id
+   ->  Materialize
+         Output: r.id, r.end_id
+         ->  Nested Loop
+               Output: r.id, r.end_id
+               ->  Index Scan using "KNOWS_end_id_idx" on accessor_opt."KNOWS" r
+                     Output: r.id, r.start_id, r.end_id, r.properties
+               ->  Append
+                     ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                           Output: _age_default_alias_0_1.id
+                           Filter: (_age_default_alias_0_1.id = r.start_id)
+                     ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                           Output: _age_default_alias_0_2.id
+                           Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(22 rows)
+
+SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
     RETURN id(r)
