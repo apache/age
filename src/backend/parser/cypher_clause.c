@@ -129,6 +129,10 @@ static List *transform_match_entities(cypher_parsestate *cpstate, Query *query,
                                       cypher_path *path);
 static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
                                     List *pattern, Node *where);
+static Node *simplify_redundant_edge_type_qual(List *pattern, Node *where);
+static bool is_redundant_edge_type_qual(List *pattern, Node *qual);
+static const char *find_static_edge_label(List *pattern,
+                                          const char *variable_name);
 static List *transform_match_path(cypher_parsestate *cpstate, Query *query,
                                   cypher_path *path);
 static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
@@ -4009,6 +4013,7 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
     ParseNamespaceItem *jnsitem;
     cypher_match *match_self = (cypher_match *) clause->self;
     Node *saved_where = match_self->where;
+    Node *join_where;
     int i = 0;
 
     j->jointype = JOIN_LEFT;
@@ -4063,11 +4068,14 @@ static RangeTblEntry *transform_cypher_optional_match_clause(cypher_parsestate *
      * out all matches for a given outer row, that outer row is still
      * emitted with nulls in the optional columns.
      */
-    if (saved_where != NULL)
+    join_where = simplify_redundant_edge_type_qual(match_self->pattern,
+                                                   saved_where);
+
+    if (join_where != NULL)
     {
         Node *where_qual;
 
-        where_qual = transform_cypher_expr(cpstate, saved_where,
+        where_qual = transform_cypher_expr(cpstate, join_where,
                                            EXPR_KIND_WHERE);
         where_qual = coerce_to_boolean(pstate, where_qual, "WHERE");
         j->quals = where_qual;
@@ -4621,6 +4629,132 @@ static ParseNamespaceItem *transform_RangeFunction(cypher_parsestate *cpstate,
     return pnsi;
 }
 
+static const char *find_static_edge_label(List *pattern,
+                                          const char *variable_name)
+{
+    ListCell *path_cell;
+    const char *label = NULL;
+
+    foreach (path_cell, pattern)
+    {
+        cypher_path *path = lfirst(path_cell);
+        ListCell *entity_cell;
+
+        foreach (entity_cell, path->path)
+        {
+            Node *entity = lfirst(entity_cell);
+            cypher_relationship *rel;
+
+            if (!is_ag_node(entity, cypher_relationship))
+                continue;
+
+            rel = (cypher_relationship *)entity;
+            if (rel->name == NULL ||
+                strcmp(rel->name, variable_name) != 0)
+                continue;
+
+            if (rel->varlen != NULL || rel->parsed_label == NULL)
+                return NULL;
+
+            if (label != NULL && strcmp(label, rel->parsed_label) != 0)
+                return NULL;
+
+            label = rel->parsed_label;
+        }
+    }
+
+    return label;
+}
+
+static bool is_redundant_edge_type_qual(List *pattern, Node *qual)
+{
+    cypher_comparison_aexpr *comparison;
+    FuncCall *function;
+    ColumnRef *column;
+    A_Const *constant;
+    String *operator_name;
+    String *function_name;
+    String *variable_name;
+    const char *static_label;
+
+    if (qual == NULL || !is_ag_node(qual, cypher_comparison_aexpr))
+        return false;
+
+    comparison = (cypher_comparison_aexpr *)qual;
+    if (comparison->kind != AEXPR_OP ||
+        list_length(comparison->name) != 1)
+        return false;
+
+    operator_name = linitial(comparison->name);
+    if (!IsA(operator_name, String) ||
+        strcmp(strVal(operator_name), "=") != 0 ||
+        !IsA(comparison->lexpr, FuncCall) ||
+        !IsA(comparison->rexpr, A_Const))
+        return false;
+
+    function = (FuncCall *)comparison->lexpr;
+    constant = (A_Const *)comparison->rexpr;
+    if (list_length(function->funcname) != 1 ||
+        list_length(function->args) != 1 ||
+        constant->isnull ||
+        constant->val.sval.type != T_String)
+        return false;
+
+    function_name = linitial(function->funcname);
+    if (!IsA(function_name, String) ||
+        pg_strcasecmp(strVal(function_name), "type") != 0 ||
+        !IsA(linitial(function->args), ColumnRef))
+        return false;
+
+    column = linitial(function->args);
+    if (list_length(column->fields) != 1 ||
+        !IsA(linitial(column->fields), String))
+        return false;
+
+    variable_name = linitial(column->fields);
+    static_label = find_static_edge_label(pattern, strVal(variable_name));
+
+    return static_label != NULL &&
+           strcmp(static_label, strVal(&constant->val)) == 0;
+}
+
+static Node *simplify_redundant_edge_type_qual(List *pattern, Node *where)
+{
+    BoolExpr *expression;
+    List *args = NIL;
+    ListCell *cell;
+
+    if (where == NULL)
+        return NULL;
+
+    if (is_redundant_edge_type_qual(pattern, where))
+        return NULL;
+
+    if (!IsA(where, BoolExpr))
+        return where;
+
+    expression = (BoolExpr *)where;
+    if (expression->boolop != AND_EXPR)
+        return where;
+
+    foreach (cell, expression->args)
+    {
+        Node *arg = lfirst(cell);
+
+        if (!is_redundant_edge_type_qual(pattern, arg))
+            args = lappend(args, arg);
+    }
+
+    if (args == NIL)
+        return NULL;
+    if (list_length(args) == 1)
+        return linitial(args);
+    if (list_length(args) == list_length(expression->args))
+        return where;
+
+    return (Node *)makeBoolExpr(AND_EXPR, args, expression->location);
+}
+
 static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
                                     List *pattern, Node *where)
 {
@@ -4645,6 +4779,8 @@ static void transform_match_pattern(cypher_parsestate *cpstate, Query *query,
 
         quals = list_concat(quals, qual);
     }
+
+    where = simplify_redundant_edge_type_qual(pattern, where);
 
     if (quals != NIL)
     {

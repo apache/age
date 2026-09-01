@@ -3902,6 +3902,52 @@ SELECT * FROM cypher('accessor_opt', $$
     RETURN id(r)
 $$) AS (plan agtype);
 
+-- A different relationship type is not redundant.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'LIKES'
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- Removing the redundant conjunct must preserve the remaining predicate.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' AND r.since = 2020
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- A redundant predicate nested under OR must not be removed.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' OR r.since = -1
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- OPTIONAL MATCH must continue to emit unmatched left-hand rows.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n:Person)
+    OPTIONAL MATCH (n)-[r:KNOWS]->(m)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(n), count(r)
+$$) AS (nodes agtype, relationships agtype);
+
+-- A variable-length relationship is a list, so its type predicate is not
+-- equivalent to the static relationship label and must remain untouched.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS*1..1]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- A relationship variable reused through WITH keeps its original binding.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (a:Person)-[r:KNOWS]->(b)
+    WITH a, b, r
+    OPTIONAL MATCH (a)-[r]->(b)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+
 SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
