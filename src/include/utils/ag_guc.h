@@ -39,6 +39,15 @@
  */
 extern bool age_enable_containment;
 
+/*
+ * If set true (the default), variable-length edge (VLE) traversal and other
+ * global-graph readers enforce row-level security (RLS) policies (and
+ * table/column ACL) on the graph label tables. When false, the global graph
+ * cache is loaded with a direct heap scan that bypasses RLS (legacy behavior:
+ * faster, but not RLS-aware).
+ */
+extern bool age_enforce_rls_in_traversal;
+
 void define_config_params(void);
 
 #endif

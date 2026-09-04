@@ -225,6 +225,7 @@ REGRESS = scan \
           direct_field_access \
           generated_columns \
           security \
+          rls_vle \
           reserved_keyword_alias \
           agtype_jsonb_cast \
           containment_selectivity \
