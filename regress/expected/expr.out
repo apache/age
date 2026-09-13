@@ -5014,6 +5014,56 @@ ERROR:  function age_split() does not exist
 LINE 1: SELECT * FROM age_split();
                       ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-- regex metacharacters should be treated as literal delimiters (#2568)
+SELECT * FROM cypher('expr', $$
+    RETURN split("a.b.c", ".")
+$$) AS (results agtype);
+    results     
+---------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN split("a|b|c", "|")
+$$) AS (results agtype);
+    results     
+---------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN split("a+b+c", "+")
+$$) AS (results agtype);
+    results     
+---------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT * FROM cypher('expr', $$
+    RETURN split("a.b.c.d", ".")
+$$) AS (results agtype);
+      results       
+--------------------
+ ["a", "b", "c", "d"]
+(1 row)
+
+SELECT * FROM age_split('a.b.c', '.');
+      results       
+--------------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT * FROM age_split('a|b|c', '|');
+      results       
+--------------------
+ ["a", "b", "c"]
+(1 row)
+
+SELECT * FROM age_split('a+b+c', '+');
+      results       
+--------------------
+ ["a", "b", "c"]
+(1 row)
 --
 -- replace()
 --
