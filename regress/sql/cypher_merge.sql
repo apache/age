@@ -1085,6 +1085,73 @@ SELECT * FROM cypher('merge_actions', $$
   RETURN b.source_name, b.last_seen_by
 $$) AS (src agtype, last agtype);
 
+-- Exercise eager MERGE ON CREATE and ON MATCH SET over consecutive rows.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 3] AS ident
+  MERGE (n:Batch {id: ident})
+    ON CREATE SET n.payload = {nested: [ident, {active: true}]}
+  RETURN n.id, n.payload
+$$) AS (id agtype, payload agtype);
+
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 3] AS ident
+  MERGE (n:Batch {id: ident})
+    ON MATCH SET n.payload = {updated: [ident, false]}
+  RETURN n.id, n.payload
+$$) AS (id agtype, payload agtype);
+
+-- Reuse a path created by an earlier input row.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 1] AS ident
+  MERGE (n:DedupBatch {
+    id: ident,
+    payload: {nested: [ident]}
+  })
+  RETURN ident, n.id, n.payload
+$$) AS (input agtype, id agtype, payload agtype);
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+
+-- Reuse a path created by an earlier input row in terminal MERGE.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [3, 4, 3] AS ident
+  MERGE (:DedupBatch {
+    id: ident,
+    payload: {nested: [ident]}
+  })
+$$) AS (result agtype);
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+
+-- Exercise repeated duplicate candidates in eager and terminal MERGE.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND range(1, 1000) AS ident
+  MERGE (n:DedupBatch {
+    id: 20,
+    payload: {nested: [20]}
+  })
+  RETURN count(n)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND range(1, 1000) AS ident
+  MERGE (:DedupBatch {
+    id: 21,
+    payload: {nested: [21]}
+  })
+$$) AS (result agtype);
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
 

@@ -2231,6 +2231,113 @@ $$) AS (src agtype, last agtype);
  "Anchor" | "Anchor"
 (1 row)
 
+-- Exercise eager MERGE ON CREATE and ON MATCH SET over consecutive rows.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 3] AS ident
+  MERGE (n:Batch {id: ident})
+    ON CREATE SET n.payload = {nested: [ident, {active: true}]}
+  RETURN n.id, n.payload
+$$) AS (id agtype, payload agtype);
+ id |              payload              
+----+-----------------------------------
+ 1  | {"nested": [1, {"active": true}]}
+ 2  | {"nested": [2, {"active": true}]}
+ 3  | {"nested": [3, {"active": true}]}
+(3 rows)
+
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 3] AS ident
+  MERGE (n:Batch {id: ident})
+    ON MATCH SET n.payload = {updated: [ident, false]}
+  RETURN n.id, n.payload
+$$) AS (id agtype, payload agtype);
+ id |         payload         
+----+-------------------------
+ 1  | {"updated": [1, false]}
+ 2  | {"updated": [2, false]}
+ 3  | {"updated": [3, false]}
+(3 rows)
+
+-- Reuse a path created by an earlier input row.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [1, 2, 1] AS ident
+  MERGE (n:DedupBatch {
+    id: ident,
+    payload: {nested: [ident]}
+  })
+  RETURN ident, n.id, n.payload
+$$) AS (input agtype, id agtype, payload agtype);
+ input | id |     payload     
+-------+----+-----------------
+ 1     | 1  | {"nested": [1]}
+ 2     | 2  | {"nested": [2]}
+ 1     | 1  | {"nested": [1]}
+(3 rows)
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 2
+(1 row)
+
+-- Reuse a path created by an earlier input row in terminal MERGE.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND [3, 4, 3] AS ident
+  MERGE (:DedupBatch {
+    id: ident,
+    payload: {nested: [ident]}
+  })
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 4
+(1 row)
+
+-- Exercise repeated duplicate candidates in eager and terminal MERGE.
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND range(1, 1000) AS ident
+  MERGE (n:DedupBatch {
+    id: 20,
+    payload: {nested: [20]}
+  })
+  RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 1000
+(1 row)
+
+SELECT * FROM cypher('merge_actions', $$
+  UNWIND range(1, 1000) AS ident
+  MERGE (:DedupBatch {
+    id: 21,
+    payload: {nested: [21]}
+  })
+$$) AS (result agtype);
+ result 
+--------
+(0 rows)
+
+SELECT * FROM cypher('merge_actions', $$
+  MATCH (n:DedupBatch)
+  RETURN count(n)
+$$) AS (count agtype);
+ count 
+-------
+ 6
+(1 row)
+
 -- cleanup
 SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agtype);
  a 
@@ -2241,12 +2348,14 @@ SELECT * FROM cypher('merge_actions', $$ MATCH (n) DETACH DELETE n $$) AS (a agt
 -- delete graphs
 --
 SELECT drop_graph('merge_actions', true);
-NOTICE:  drop cascades to 5 other objects
+NOTICE:  drop cascades to 7 other objects
 DETAIL:  drop cascades to table merge_actions._ag_label_vertex
 drop cascades to table merge_actions._ag_label_edge
 drop cascades to table merge_actions."Person"
 drop cascades to table merge_actions."KNOWS"
 drop cascades to table merge_actions."on"
+drop cascades to table merge_actions."Batch"
+drop cascades to table merge_actions."DedupBatch"
 NOTICE:  graph "merge_actions" has been dropped
  drop_graph 
 ------------

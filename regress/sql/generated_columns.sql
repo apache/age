@@ -71,6 +71,38 @@ $$) AS (p agtype);
 -- The stored generated column always mirrors properties.category
 SELECT category, properties FROM generated_columns."Product" ORDER BY category NULLS LAST;
 
+-- Exercise generated columns through multi-row CREATE, SET, and MERGE.
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['batch-a', 'batch-b', 'batch-c'] AS category
+    CREATE (p:Product {category: category, batch: 'create'})
+    RETURN count(p)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (p:Product)
+    SET p.checked = true
+    RETURN count(p)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['merge-a', 'merge-b', 'merge-c'] AS category
+    MERGE (p:Product {category: category})
+      ON CREATE SET p.batch = 'merge-create'
+    RETURN count(p)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND ['merge-a', 'merge-b', 'merge-c'] AS category
+    MERGE (p:Product {category: category})
+      ON MATCH SET p.batch = 'merge-match'
+    RETURN count(p)
+$$) AS (count agtype);
+
+SELECT count(*) AS rows,
+       bool_and(category IS NOT DISTINCT FROM
+                agtype_access_operator(properties, '"category"')::varchar(25)) AS synchronized
+FROM generated_columns."Product";
+
 --
 -- GENERATED ALWAYS ... STORED column on an edge label
 --
@@ -122,6 +154,51 @@ $$) AS (n agtype);
 -- tbl must equal the real label-table OID on both the CREATE and SET paths
 SELECT tbl = 'generated_columns."T"'::regclass::oid AS tableoid_ok
 FROM generated_columns."T";
+
+-- Exercise SET and DELETE on stored and virtual generated columns.
+SELECT create_vlabel('generated_columns', 'DeleteStored');
+ALTER TABLE generated_columns."DeleteStored"
+    ADD COLUMN marker integer GENERATED ALWAYS AS (1) STORED;
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND [1, 2, 3] AS ident
+    CREATE (n:DeleteStored {id: ident})
+    RETURN count(n)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteStored)
+    DELETE n
+$$) AS (n agtype);
+
+SELECT count(*) FROM generated_columns."DeleteStored";
+
+SELECT create_vlabel('generated_columns', 'DeleteVirtual');
+ALTER TABLE generated_columns."DeleteVirtual"
+    ADD COLUMN marker integer GENERATED ALWAYS AS (1) VIRTUAL;
+
+SELECT * FROM cypher('generated_columns', $$
+    UNWIND [1, 2, 3] AS ident
+    CREATE (n:DeleteVirtual {id: ident})
+    RETURN count(n)
+$$) AS (count agtype);
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteVirtual)
+    SET n.checked = true
+    RETURN count(n)
+$$) AS (count agtype);
+
+SELECT bool_and(marker = 1) AS virtual_ok
+FROM generated_columns."DeleteVirtual";
+
+SELECT * FROM cypher('generated_columns', $$
+    MATCH (n:DeleteVirtual)
+    DELETE n
+    RETURN count(n)
+$$) AS (count agtype);
+
+SELECT count(*) FROM generated_columns."DeleteVirtual";
 
 --
 -- Cleanup

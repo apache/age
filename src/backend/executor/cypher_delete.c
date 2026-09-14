@@ -149,6 +149,10 @@ static TupleTableSlot *exec_cypher_delete(CustomScanState *node)
          */
         while(true)
         {
+            /* Release CustomScan and EState scratch from the preceding row. */
+            ResetExprContext(econtext);
+            ResetPerTupleExprContext(estate);
+
             /* Process the subtree first */
             Decrement_Estate_CommandId(estate)
             slot = ExecProcNode(node->ss.ps.lefttree);
@@ -168,6 +172,10 @@ static TupleTableSlot *exec_cypher_delete(CustomScanState *node)
     }
     else
     {
+        /* Release CustomScan and EState scratch from the preceding row. */
+        ResetExprContext(econtext);
+        ResetPerTupleExprContext(estate);
+
         /* Process the subtree first */
         Decrement_Estate_CommandId(estate)
         slot = ExecProcNode(node->ss.ps.lefttree);
@@ -301,6 +309,12 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     saved_resultRels = estate->es_result_relations;
     estate->es_result_relations = &resultRelInfo;
 
+    /*
+     * Initialize generated-column state in the per-tuple context before
+     * lock-mode selection can initialize it in the query context.
+     */
+    init_result_rel_info_generated(resultRelInfo, estate);
+
     lockmode = ExecUpdateLockMode(estate, resultRelInfo);
 
     lock_result = heap_lock_tuple(resultRelInfo->ri_RelationDesc, tuple,
@@ -386,6 +400,10 @@ static void process_delete_list(CustomScanState *node)
     HASHCTL hashctl;
     HTAB *index_cache = NULL;
     HASHCTL idx_hashctl;
+    MemoryContext old_context;
+
+    /* Allocate transient delete state in the per-tuple context. */
+    old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
     /* Hash table for caching compiled security quals per label */
     MemSet(&hashctl, 0, sizeof(hashctl));
@@ -517,7 +535,8 @@ static void process_delete_list(CustomScanState *node)
                 if (!found_rls)
                 {
                     entry->qualExprs = setup_security_quals(resultRelInfo, estate, node, CMD_DELETE);
-                    entry->slot = ExecInitExtraTupleSlot(estate, RelationGetDescr(rel), &TTSOpsHeapTuple);
+                    entry->slot = MakeSingleTupleTableSlot(
+                        RelationGetDescr(rel), &TTSOpsHeapTuple);
                 }
 
                 ExecStoreHeapTuple(heap_tuple, entry->slot, false);
@@ -566,9 +585,26 @@ static void process_delete_list(CustomScanState *node)
         destroy_entity_result_rel_info(resultRelInfo);
     }
 
+    /* Release standalone RLS slots before destroying their owning cache. */
+    {
+        HASH_SEQ_STATUS seq;
+        RLSCacheEntry *entry;
+
+        hash_seq_init(&seq, qual_cache);
+        while ((entry = (RLSCacheEntry *)hash_seq_search(&seq)) != NULL)
+        {
+            if (entry->slot != NULL)
+            {
+                ExecDropSingleTupleTableSlot(entry->slot);
+            }
+        }
+    }
+
     /* Clean up the cache */
     hash_destroy(qual_cache);
     hash_destroy(index_cache);
+
+    MemoryContextSwitchTo(old_context);
 }
 
 /*
@@ -645,6 +681,9 @@ static void process_edges_by_index(Oid index_oid,
                 /* Check RLS security quals (USING policy) before delete */
                 if (rls_enabled)
                 {
+                    /* Reset RLS expression scratch for each edge. */
+                    ResetExprContext(econtext);
+
                     if (!check_security_quals(qualExprs, slot, econtext))
                     {
                         ereport(ERROR,
@@ -823,6 +862,9 @@ static void check_for_connected_edges(CustomScanState *node)
                         /* Check RLS security quals (USING policy) before delete */
                         if (rls_enabled)
                         {
+                            /* Reset RLS expression scratch for each edge. */
+                            ResetExprContext(econtext);
+
                             /*
                              * For DETACH DELETE, error out if edge RLS check fails.
                              * Unlike normal DELETE which silently skips, we cannot

@@ -32,6 +32,7 @@
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rowsecurity.h"
 #include "utils/acl.h"
+#include "utils/memutils.h"
 #include "utils/rls.h"
 
 #include "catalog/ag_label.h"
@@ -127,6 +128,52 @@ void destroy_entity_result_rel_info(ResultRelInfo *result_rel_info)
 
     /* close the rel */
     table_close(result_rel_info->ri_RelationDesc, RowExclusiveLock);
+}
+
+/*
+ * Initialize generated-column state in the EState per-tuple context.
+ *
+ * PostgreSQL's ModifyTable keeps this state in es_query_cxt because it reuses
+ * each ResultRelInfo for the statement. SET/REMOVE and DELETE instead create
+ * a temporary ResultRelInfo for each input row, so allocating the state there
+ * would retain one copy per row.
+ */
+void init_result_rel_info_generated(ResultRelInfo *result_rel_info,
+                                    EState *estate)
+{
+    TupleConstr *constr =
+        result_rel_info->ri_RelationDesc->rd_att->constr;
+    MemoryContext old_query_context;
+    MemoryContext per_tuple_context;
+
+    if (constr == NULL ||
+        (!constr->has_generated_stored && !constr->has_generated_virtual) ||
+        result_rel_info->ri_extraUpdatedCols_valid)
+    {
+        return;
+    }
+
+    /* Direct ExecInitGenerated() allocations to the per-tuple context. */
+    old_query_context = estate->es_query_cxt;
+    per_tuple_context = GetPerTupleMemoryContext(estate);
+
+    PG_TRY();
+    {
+        estate->es_query_cxt = per_tuple_context;
+        ExecInitGenerated(result_rel_info, estate, CMD_UPDATE);
+
+        Assert(result_rel_info->ri_GeneratedExprsU == NULL ||
+               GetMemoryChunkContext(result_rel_info->ri_GeneratedExprsU) ==
+                   per_tuple_context);
+        Assert(result_rel_info->ri_extraUpdatedCols == NULL ||
+               GetMemoryChunkContext(result_rel_info->ri_extraUpdatedCols) ==
+                   per_tuple_context);
+    }
+    PG_FINALLY();
+    {
+        estate->es_query_cxt = old_query_context;
+    }
+    PG_END_TRY();
 }
 
 /*
