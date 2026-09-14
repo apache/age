@@ -218,10 +218,8 @@ BEGIN
         CREATE INDEX movie_vector_idx ON graph."Movie"
         USING hnsw (((
           agtype_access_operator(
-            VARIADIC ARRAY[
               properties,
               '"embedding"'::agtype
-            ]
           )::text
         )::vector(4)) vector_cosine_ops);
     $f$, graph_oid);
@@ -273,10 +271,8 @@ BEGIN
         CREATE INDEX movie_vector_idx ON graph."Movie"
         USING hnsw ((
           agtype_access_operator(
-            VARIADIC ARRAY[
               properties,
               '"embedding"'::agtype
-            ]
         )::vector(4)) vector_cosine_ops);
     $f$, graph_oid);
 END;

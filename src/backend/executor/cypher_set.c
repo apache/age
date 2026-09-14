@@ -31,6 +31,8 @@
 #include "catalog/ag_graph.h"
 #include "utils/agtype.h"
 
+#include "utils/agtype_traversal.h"
+
 static void begin_cypher_set(CustomScanState *node, EState *estate,
                                 int eflags);
 static TupleTableSlot *exec_cypher_set(CustomScanState *node);
@@ -287,7 +289,7 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
                                             graphid updated_id,
                                             agtype *updated_entity)
 {
-    agtype_iterator *it;
+    agtype_traversal traversal;
     agtype_iterator_token tok = WAGT_DONE;
     agtype_parse_state *parse_state = NULL;
     agtype_value *r;
@@ -298,8 +300,8 @@ static agtype_value *replace_entity_in_path(agtype_value *path,
     r = palloc(sizeof(agtype_value));
 
     prop_agtype = agtype_value_to_agtype(path);
-    it = agtype_iterator_init(&prop_agtype->root);
-    tok = agtype_iterator_next(&it, r, true);
+    agtype_traversal_init(&prop_agtype->root, &traversal);
+    tok = agtype_iterator_next(&traversal, r, true);
 
     parsed_agtype_value = push_agtype_value(&parse_state, tok,
                                             tok < WAGT_BEGIN_ARRAY ? r : NULL);

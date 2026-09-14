@@ -75,6 +75,8 @@
 #include "catalog/ag_label.h"
 #include "nodes/cypher_nodes.h"
 
+#include "utils/agtype_traversal.h"
+
 /* defines */
 #define GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc) \
             (graphid *) (&vpc->graphid_array_data)
@@ -410,8 +412,8 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
     agtype *edge_property = NULL;
     agtype_container *agtc_edge_property = NULL;
     agtype_container *agtc_edge_property_constraint = NULL;
-    agtype_iterator *constraint_it = NULL;
-    agtype_iterator *property_it = NULL;
+    agtype_traversal constraint_traversal;
+    agtype_traversal property_traversal;
     Oid edge_label_name_oid = InvalidOid;
     int num_edge_property_constraints = 0;
     int num_edge_properties = 0;
@@ -515,11 +517,11 @@ static bool is_an_edge_match(VLE_local_context *vlelctx, edge_entry *ee)
         }
 
         /* get the iterators */
-        constraint_it = agtype_iterator_init(agtc_edge_property_constraint);
-        property_it = agtype_iterator_init(agtc_edge_property);
+        agtype_traversal_init(agtc_edge_property_constraint, &constraint_traversal);
+        agtype_traversal_init(agtc_edge_property, &property_traversal);
 
         /* return the value of deep contains */
-        return agtype_deep_contains(&property_it, &constraint_it, false);
+        return agtype_deep_contains(&property_traversal, &constraint_traversal, false);
     }
 }
 

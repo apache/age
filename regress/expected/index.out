@@ -475,10 +475,10 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE a.country_code = 'US'
     RETURN a
 $$) as (plan agtype);
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Index Scan using city_country_code_idx on "City" a
-   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"country_code"'::agtype]) = '"US"'::agtype)
+   Index Cond: (agtype_access_operator(properties, '"country_code"'::agtype) = '"US"'::agtype)
 (2 rows)
 
 -- Test WHERE with indexed string property
@@ -528,10 +528,10 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE a.city_id = 1
     RETURN a
 $$) as (plan agtype);
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Index Scan using city_id_idx on "City" a
-   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"city_id"'::agtype]) = '1'::agtype)
+   Index Cond: (agtype_access_operator(properties, '"city_id"'::agtype) = '1'::agtype)
 (2 rows)
 
 -- Test WHERE with indexed integer property
@@ -589,10 +589,10 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE a.west_coast = true
     RETURN a
 $$) as (plan agtype);
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Index Scan using city_west_coast_idx on "City" a
-   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"west_coast"'::agtype]) = 'true'::agtype)
+   Index Cond: (agtype_access_operator(properties, '"west_coast"'::agtype) = 'true'::agtype)
 (2 rows)
 
 -- Test WHERE with indexed boolean property
@@ -632,11 +632,11 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE a.country_code = 'US' AND a.west_coast = true
     RETURN a
 $$) as (plan agtype);
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Index Scan using city_west_coast_idx on "City" a
-   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"west_coast"'::agtype]) = 'true'::agtype)
-   Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"country_code"'::agtype]) = '"US"'::agtype)
+   Index Cond: (agtype_access_operator(properties, '"west_coast"'::agtype) = 'true'::agtype)
+   Filter: (agtype_access_operator(properties, '"country_code"'::agtype) = '"US"'::agtype)
 (3 rows)
 
 -- Test WHERE with multiple conditions (AND)
@@ -686,10 +686,10 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE c.life_expectancy > 80.0
     RETURN c
 $$) as (plan agtype);
-                                                    QUERY PLAN                                                    
-------------------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
  Index Scan using country_life_exp_idx on "Country" c
-   Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"life_expectancy"'::agtype]) > '80.0'::agtype)
+   Index Cond: (agtype_access_operator(properties, '"life_expectancy"'::agtype) > '80.0'::agtype)
 (2 rows)
 
 -- Test WHERE with float property
@@ -719,19 +719,19 @@ SELECT * FROM cypher('cypher_index', $$
     WHERE country.country_code = 'CA' AND city.west_coast = true
     RETURN city.name
 $$) as (plan agtype);
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Nested Loop
    ->  Nested Loop
          ->  Index Scan using city_west_coast_idx on "City" city
-               Index Cond: (agtype_access_operator(VARIADIC ARRAY[properties, '"west_coast"'::agtype]) = 'true'::agtype)
+               Index Cond: (agtype_access_operator(properties, '"west_coast"'::agtype) = 'true'::agtype)
          ->  Bitmap Heap Scan on has_city _age_default_alias_0
                Recheck Cond: (start_id = city.id)
                ->  Bitmap Index Scan on has_city_start_id_idx
                      Index Cond: (start_id = city.id)
    ->  Index Scan using "Country_pkey" on "Country" country
          Index Cond: (id = _age_default_alias_0.end_id)
-         Filter: (agtype_access_operator(VARIADIC ARRAY[properties, '"country_code"'::agtype]) = '"CA"'::agtype)
+         Filter: (agtype_access_operator(properties, '"country_code"'::agtype) = '"CA"'::agtype)
 (11 rows)
 
 -- Test WHERE in combination with pattern matching

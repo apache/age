@@ -144,9 +144,8 @@ CREATE OPERATOR #>> (
 --
 -- agtype - access operators
 --
-
 -- for series of `map.key` and `container[expr]`
-CREATE FUNCTION ag_catalog.agtype_access_operator(VARIADIC agtype[])
+CREATE FUNCTION ag_catalog.agtype_access_operator(VARIADIC "any")
     RETURNS agtype
     LANGUAGE c
     IMMUTABLE
