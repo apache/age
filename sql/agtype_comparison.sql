@@ -1440,8 +1440,8 @@ CREATE OPERATOR CLASS agtype_ops_btree
   OPERATOR 1 <,
   OPERATOR 2 <=,
   OPERATOR 3 =,
-  OPERATOR 4 >,
-  OPERATOR 5 >=,
+  OPERATOR 4 >=,
+  OPERATOR 5 >,
   FUNCTION 1 ag_catalog.agtype_btree_cmp(agtype, agtype);
 
 CREATE FUNCTION ag_catalog.agtype_hash_cmp(agtype)
