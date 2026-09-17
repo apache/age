@@ -199,6 +199,26 @@ SELECT agtype_any_div('1.0', 0);
 SELECT agtype_any_div('-1::numeric', 0);
 SELECT agtype_any_div('-1.0::numeric', 0);
 
+SELECT agtype_mod('1', '0');
+SELECT agtype_mod('1', '0.0');
+SELECT agtype_mod('1.0', '0');
+SELECT agtype_mod('1.0', '0.0');
+SELECT agtype_mod('1', '0::numeric');
+SELECT agtype_mod('1.0', '0::numeric');
+SELECT agtype_mod('1::numeric', '0');
+SELECT agtype_mod('1::numeric', '0.0');
+SELECT agtype_mod('1::numeric', '0::numeric');
+
+SELECT agtype_any_mod('1', 0);
+SELECT agtype_any_mod('1.0', 0);
+SELECT agtype_any_mod('-1::numeric', 0);
+SELECT agtype_any_mod('-1.0::numeric', 0);
+
+--
+-- Should get 0 - INT64_MIN % -1 is well defined
+--
+SELECT agtype_mod('-9223372036854775808', '-1');
+
 --
 -- Should get Infinity
 --

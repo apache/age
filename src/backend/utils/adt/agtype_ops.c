@@ -912,24 +912,64 @@ Datum agtype_mod(PG_FUNCTION_ARGS)
 
     if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_INTEGER)
     {
+        if (agtv_rhs->val.int_value == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
+                            errmsg("division by zero")));
+            PG_RETURN_NULL();
+        }
+
         agtv_result.type = AGTV_INTEGER;
-        agtv_result.val.int_value = agtv_lhs->val.int_value %
-                                    agtv_rhs->val.int_value;
+
+        /*
+         * INT64_MIN % -1 is zero but overflows the quotient, which traps on
+         * some platforms. int8mod special cases it the same way.
+         */
+        if (agtv_rhs->val.int_value == -1)
+        {
+            agtv_result.val.int_value = 0;
+        }
+        else
+        {
+            agtv_result.val.int_value = agtv_lhs->val.int_value %
+                                        agtv_rhs->val.int_value;
+        }
     }
     else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_FLOAT)
     {
+        if (agtv_rhs->val.float_value == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
+                            errmsg("division by zero")));
+            PG_RETURN_NULL();
+        }
+
         agtv_result.type = AGTV_FLOAT;
         agtv_result.val.float_value = fmod(agtv_lhs->val.float_value,
                                            agtv_rhs->val.float_value);
     }
     else if (agtv_lhs->type == AGTV_FLOAT && agtv_rhs->type == AGTV_INTEGER)
     {
+        if (agtv_rhs->val.int_value == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
+                            errmsg("division by zero")));
+            PG_RETURN_NULL();
+        }
+
         agtv_result.type = AGTV_FLOAT;
         agtv_result.val.float_value = fmod(agtv_lhs->val.float_value,
                                            agtv_rhs->val.int_value);
     }
     else if (agtv_lhs->type == AGTV_INTEGER && agtv_rhs->type == AGTV_FLOAT)
     {
+        if (agtv_rhs->val.float_value == 0)
+        {
+            ereport(ERROR, (errcode(ERRCODE_DIVISION_BY_ZERO),
+                            errmsg("division by zero")));
+            PG_RETURN_NULL();
+        }
+
         agtv_result.type = AGTV_FLOAT;
         agtv_result.val.float_value = fmod(agtv_lhs->val.int_value,
                                            agtv_rhs->val.float_value);
