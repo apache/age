@@ -161,7 +161,7 @@ typedef enum
     CYPHER_REL_DIR_RIGHT = 1
 } cypher_rel_dir;
 
-/* -[ name :label props ]- */
+/* -[ name :label|... props ]- */
 typedef struct cypher_relationship
 {
     ExtensibleNode extensible;
@@ -174,6 +174,21 @@ typedef struct cypher_relationship
     Node *varlen; /* variable length relationships (A_Indices) */
     cypher_rel_dir dir;
     int location;
+    /*
+     * Relationship-type alternation: [:A|B|C]. NIL or a single-element
+     * list means the pattern carries at most one label; in that case
+     * `label`/`parsed_label` above are used as before. When the list has
+     * more than one element, `label` is NULL (so the edge resolves to the
+     * generic edge parent table) and the transform layer injects a
+     * type-filter qual equivalent to `type(rel) IN (...)`.
+     *
+     * NOTE: This field MUST stay at the end of the struct. Several call
+     * sites type-pun an edge through `cypher_node` (a union member) and
+     * read shared prefix fields such as `use_equals`/`props`; those fields
+     * must keep the same offsets as in cypher_node, so new fields can only
+     * be appended after the shared prefix.
+     */
+    List *labels; /* List of String; >1 element enables alternation */
 } cypher_relationship;
 
 /*
