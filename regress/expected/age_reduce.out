@@ -833,6 +833,22 @@ $$) AS (result agtype);
  {"any": 2, "none": 3, "reduce": 1}
 (1 row)
 
+SELECT * FROM cypher('reduce', $$
+    RETURN 1 LIMIT reduce(a = 1, b IN [0] | a + b)
+$$) AS (result agtype);
+ result 
+--------
+ 1
+(1 row)
+
+SELECT * FROM cypher('reduce', $$
+    RETURN 1 SKIP reduce(a = 0, b IN [0] | a + b)
+$$) AS (result agtype);
+ result 
+--------
+ 1
+(1 row)
+
 --
 -- Cleanup
 --
