@@ -75,6 +75,17 @@ typedef struct
      * declared by itself or a previous clause.
      */
     bool declared_in_current_clause;
+
+    /*
+     * S5: for ENT_VLE_EDGE entities, the auto-generated alias of the
+     * RangeFunction added to the FROM clause for the age_vle SRF.
+     * Used to build ColumnRefs for the SRF's start_id/end_id output
+     * columns when emitting the terminal-edge join quals as plain
+     * graphid equality A_Exprs (replacing the per-row
+     * age_match_vle_terminal_edge function call).  NULL for non-VLE
+     * entities.
+     */
+    char *vle_alias;
     /* The parse data structure that we transformed */
     union
     {

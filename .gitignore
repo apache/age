@@ -1,4 +1,5 @@
 *.o
+*.d
 *.so
 build.sh
 .idea
@@ -11,5 +12,8 @@ age--*.*.*.sql
 !age--*--*sql
 __pycache__
 **/__pycache__
+**/.venv
+**/apache_age_python.egg-info
 
 drivers/python/build
+*.bc

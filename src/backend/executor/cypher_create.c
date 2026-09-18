@@ -19,9 +19,13 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
+#include "utils/rls.h"
+
 #include "catalog/ag_label.h"
 #include "executor/cypher_executor.h"
 #include "executor/cypher_utils.h"
+#include "utils/age_global_graph.h"
 
 static void begin_cypher_create(CustomScanState *node, EState *estate,
                                 int eflags);
@@ -119,6 +123,12 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
             {
                 cypher_node->prop_expr_state = ExecInitExpr(cypher_node->prop_expr,
                                                             (PlanState *)node);
+            }
+
+            /* Setup RLS WITH CHECK policies if RLS is enabled */
+            if (check_enable_rls(rel->rd_id, InvalidOid, true) == RLS_ENABLED)
+            {
+                setup_wcos(cypher_node->resultRelInfo, estate, node, CMD_INSERT);
             }
         }
     }
@@ -239,6 +249,9 @@ static TupleTableSlot *exec_cypher_create(CustomScanState *node)
 
     /* update the current command Id */
     CommandCounterIncrement();
+
+    /* invalidate VLE cache — graph was mutated */
+    increment_graph_version(css->graph_oid);
 
     /* if this was a terminal CREATE just return NULL */
     if (terminal)
@@ -383,7 +396,7 @@ static void create_edge(cypher_create_custom_scan_state *css,
 
     estate->es_result_relations = &resultRelInfo;
 
-    ExecClearTuple(elemTupleSlot);
+    clear_entity_slot(elemTupleSlot);
 
     /* Graph Id for the edge */
     id = ExecEvalExpr(node->id_expr_state, econtext, &isNull);
@@ -423,8 +436,8 @@ static void create_edge(cypher_create_custom_scan_state *css,
         Datum result;
 
         result = make_edge(
-            id, start_id, end_id, CStringGetDatum(node->label_name),
-            PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+            id, start_id, end_id, string_to_agtype(node->label_name),
+            scanTupleSlot->tts_values[node->prop_attr_num]);
 
         if (CYPHER_TARGET_NODE_IN_PATH(node->flags))
         {
@@ -478,7 +491,7 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
         estate->es_result_relations = &resultRelInfo;
 
-        ExecClearTuple(elemTupleSlot);
+        clear_entity_slot(elemTupleSlot);
 
         /* get the next graphid for this vertex. */
         id = ExecEvalExpr(node->id_expr_state, econtext, &isNull);
@@ -513,8 +526,8 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
             scantuple = ps->ps_ExprContext->ecxt_scantuple;
 
             /* make the vertex agtype */
-            result = make_vertex(id, CStringGetDatum(node->label_name),
-                PointerGetDatum(scanTupleSlot->tts_values[node->prop_attr_num]));
+            result = make_vertex(id, string_to_agtype(node->label_name),
+                scanTupleSlot->tts_values[node->prop_attr_num]);
 
             /* append to the path list */
             if (CYPHER_TARGET_NODE_IN_PATH(node->flags))

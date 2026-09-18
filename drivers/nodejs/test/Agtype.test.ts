@@ -101,4 +101,31 @@ describe('Parsing', () => {
       }))
     })))
   })
+
+  it('Large integer uses BigInt when exceeding MAX_SAFE_INTEGER', () => {
+    // 2^53 = 9007199254740992 exceeds MAX_SAFE_INTEGER (2^53 - 1)
+    const result = AGTypeParse('{"id": 9007199254740993, "label": "test", "properties": {}}::vertex')
+    const id = (result as Map<string, any>).get('id')
+    expect(typeof id).toBe('bigint')
+    expect(id).toBe(BigInt('9007199254740993'))
+  })
+
+  it('Safe integers remain as Number type', () => {
+    const result = AGTypeParse('{"id": 844424930131969, "label": "test", "properties": {}}::vertex')
+    const id = (result as Map<string, any>).get('id')
+    expect(typeof id).toBe('number')
+    expect(id).toBe(844424930131969)
+  })
+
+  it('Small integers remain as Number type', () => {
+    const result = AGTypeParse('42')
+    expect(typeof result).toBe('number')
+    expect(result).toBe(42)
+  })
+
+  it('Negative integers parsed correctly', () => {
+    const result = AGTypeParse('-100')
+    expect(typeof result).toBe('number')
+    expect(result).toBe(-100)
+  })
 })

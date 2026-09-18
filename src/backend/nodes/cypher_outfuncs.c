@@ -34,11 +34,17 @@ static void outChar(StringInfo str, char c);
         outNode(str, _node->field_name); \
     } while (0)
 
+/* PG15 outToken conflates NULL and empty strings; preserve the distinction
+ * expected by nullable_string(), including an unlabeled vertex's empty label.
+ */
 #define WRITE_STRING_FIELD(field_name) \
     do \
     { \
         appendStringInfoString(str, " :" CppAsString(field_name) " "); \
-        outToken(str, _node->field_name); \
+        if (_node->field_name != NULL && _node->field_name[0] == '\0') \
+            appendStringInfoString(str, "\"\""); \
+        else \
+            outToken(str, _node->field_name); \
     } while (0)
 
 /* Write a char field (ie, one ascii character) */
@@ -105,6 +111,7 @@ void out_cypher_return(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(limit);
 
     WRITE_BOOL_FIELD(all_or_distinct);
+    WRITE_BOOL_FIELD(returnless_union);
     WRITE_ENUM_FIELD(op, SetOperation);
     WRITE_NODE_FIELD(larg);
     WRITE_NODE_FIELD(rarg);
@@ -188,12 +195,37 @@ void out_cypher_list_comprehension(StringInfo str, const ExtensibleNode *node)
 }
 
 
-/* serialization function for the cypher_delete ExtensibleNode. */
+/* serialization function for the cypher_predicate_function ExtensibleNode. */
+void out_cypher_predicate_function(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_predicate_function);
+
+    WRITE_ENUM_FIELD(kind, cypher_predicate_function_kind);
+    WRITE_STRING_FIELD(varname);
+    WRITE_NODE_FIELD(expr);
+    WRITE_NODE_FIELD(where);
+}
+
+/* serialization function for the cypher_reduce ExtensibleNode. */
+void out_cypher_reduce(StringInfo str, const ExtensibleNode *node)
+{
+    DEFINE_AG_NODE(cypher_reduce);
+
+    WRITE_STRING_FIELD(acc_varname);
+    WRITE_NODE_FIELD(init_expr);
+    WRITE_STRING_FIELD(elem_varname);
+    WRITE_NODE_FIELD(list_expr);
+    WRITE_NODE_FIELD(body_expr);
+}
+
+/* serialization function for the cypher_merge ExtensibleNode. */
 void out_cypher_merge(StringInfo str, const ExtensibleNode *node)
 {
     DEFINE_AG_NODE(cypher_merge);
 
     WRITE_NODE_FIELD(path);
+    WRITE_NODE_FIELD(on_match);
+    WRITE_NODE_FIELD(on_create);
 }
 
 /* serialization function for the cypher_path ExtensibleNode. */
@@ -426,6 +458,8 @@ void out_cypher_update_item(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(qualified_name);
     WRITE_BOOL_FIELD(remove_item);
     WRITE_BOOL_FIELD(is_add);
+    WRITE_NODE_FIELD(prop_expr);
+    WRITE_NODE_FIELD(prop_expr_state);
 }
 
 /* serialization function for the cypher_delete_information ExtensibleNode. */
@@ -458,6 +492,8 @@ void out_cypher_merge_information(StringInfo str, const ExtensibleNode *node)
     WRITE_INT32_FIELD(graph_oid);
     WRITE_INT32_FIELD(merge_function_attr);
     WRITE_NODE_FIELD(path);
+    WRITE_NODE_FIELD(on_match_set_info);
+    WRITE_NODE_FIELD(on_create_set_info);
 }
 
 /*

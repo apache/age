@@ -123,6 +123,12 @@ SELECT * FROM cypher('list_comprehension', $$ WITH 1 AS m RETURN [m IN [1, 2, 3]
 SELECT * FROM cypher('list_comprehension', $$ WITH [m IN [1,2,3]] AS m RETURN [m IN [1, 2, 3]], m $$) AS (result agtype, result2 agtype);
 SELECT * FROM cypher('list_comprehension', $$ CREATE n=()-[:edge]->() RETURN [n IN nodes(n)] $$) AS (u agtype);
 
+-- Property access on the list-comprehension loop variable
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{name:'a'}, {name:'b'}] | x.name] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [{n:1}, {n:2}, {n:3}] WHERE x.n > 1 | x.n] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH p=()-[:edge]->() RETURN [n IN nodes(p) | n.name] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ MATCH (u:csm_match) WITH collect(u) AS ns RETURN [x IN ns | x.list] $$) AS (result agtype);
+
 -- Multiple list comprehensions in RETURN and WITH clause
 SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN [1,2,3]], [u IN [1,2,3]] $$) AS (result agtype, result2 agtype);
 SELECT * FROM cypher('list_comprehension', $$ RETURN [u IN [1,2,3] WHERE u>1], [u IN [1,2,3] WHERE u>2] $$) AS (result agtype, result2 agtype);
@@ -173,6 +179,28 @@ SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) SET u.c = collect(u.list) RETURN u $$) AS (u agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list = [u IN [1, u]] RETURN u $$) AS (u agtype);
 SELECT * FROM cypher('list_comprehension', $$ MATCH (u {list: [0, 2, 4, 6, 8, 10, 12]}) WHERE u.list IN [u IN [1, u.list]] RETURN u $$) AS (u agtype);
+
+-- Issue 2394 - projection over a null element should propagate null,
+-- not concatenate the null and the projection result into a sublist and
+-- not error out for operators other than '+'.
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null] | x + 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x + 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | 1 + x] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x - 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x * 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x / 1] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x % 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | x ^ 2] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, null, 2] | -x] $$) AS (result agtype);
+
+-- Issue 2393 - WHERE filter over null elements should use openCypher's
+-- three-valued logic: IS NULL must keep nulls, IS NOT NULL must drop them.
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1, null] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS NOT NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, 2, 3] WHERE x IS NULL] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ UNWIND [null, 1] AS x RETURN x, x IS NULL, x IS NOT NULL $$) AS (x agtype, a agtype, b agtype);
 
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);

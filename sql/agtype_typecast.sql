@@ -70,10 +70,14 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 -- original VLE function definition
+-- S4: emit start_id/end_id as scalar columns to enable transformer rewrite
+-- of terminal-edge quals as integer equalities (see PERF_VLE_TERMINAL_QUAL_PLAN).
 CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
                                    IN agtype, IN agtype, IN agtype,
-                                   OUT edges agtype)
-    RETURNS SETOF agtype
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
 LANGUAGE C
 STABLE
 CALLED ON NULL INPUT
@@ -84,12 +88,45 @@ AS 'MODULE_PATHNAME';
 -- caching mechanism to coexist with the previous VLE version.
 CREATE FUNCTION ag_catalog.age_vle(IN agtype, IN agtype, IN agtype, IN agtype,
                                    IN agtype, IN agtype, IN agtype, IN agtype,
-                                   OUT edges agtype)
-    RETURNS SETOF agtype
+                                   OUT edges    agtype,
+                                   OUT start_id graphid,
+                                   OUT end_id   graphid)
+    RETURNS SETOF record
 LANGUAGE C
 STABLE
 CALLED ON NULL INPUT
 PARALLEL UNSAFE -- might be safe
+AS 'MODULE_PATHNAME';
+
+-- Unweighted (hop-count) shortest path between two vertices, computed over the
+-- cached global graph adjacency via BFS. Returns a single path (0 or 1 rows).
+-- Argument order mirrors the Cypher shortestPath() pattern
+-- (a)-[:type*min_hops..max_hops]->(b):
+--   (graph_name, start, end, edge_types, direction, min_hops, max_hops)
+CREATE FUNCTION ag_catalog.age_shortest_path(IN agtype, IN agtype, IN agtype,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL,
+                                             IN agtype DEFAULT NULL)
+    RETURNS SETOF agtype
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+AS 'MODULE_PATHNAME';
+
+-- All unweighted shortest paths between two vertices (one path per row).
+-- Same argument order as age_shortest_path.
+CREATE FUNCTION ag_catalog.age_all_shortest_paths(IN agtype, IN agtype, IN agtype,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL,
+                                                  IN agtype DEFAULT NULL)
+    RETURNS SETOF agtype
+LANGUAGE C
+STABLE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
 AS 'MODULE_PATHNAME';
 
 -- function to build an edge for a VLE match
@@ -97,15 +134,6 @@ CREATE FUNCTION ag_catalog.age_build_vle_match_edge(agtype, agtype)
     RETURNS agtype
     LANGUAGE C
     IMMUTABLE
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
-
--- function to match a terminal vle edge
-CREATE FUNCTION ag_catalog.age_match_vle_terminal_edge(variadic "any")
-    RETURNS boolean
-    LANGUAGE C
-    STABLE
-CALLED ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
@@ -128,14 +156,6 @@ PARALLEL SAFE
 AS 'MODULE_PATHNAME';
 
 CREATE FUNCTION ag_catalog.age_match_vle_edge_to_id_qual(variadic "any")
-    RETURNS boolean
-    LANGUAGE C
-    STABLE
-RETURNS NULL ON NULL INPUT
-PARALLEL SAFE
-AS 'MODULE_PATHNAME';
-
-CREATE FUNCTION ag_catalog.age_match_two_vle_edges(agtype, agtype)
     RETURNS boolean
     LANGUAGE C
     STABLE

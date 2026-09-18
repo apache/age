@@ -24,6 +24,8 @@
 #include "nodes/cypher_readfuncs.h"
 #include "nodes/cypher_nodes.h"
 
+static char *nullable_string(const char *token, int length);
+
 /*
  * Copied From Postgres
  *
@@ -111,7 +113,7 @@
 #define READ_STRING_FIELD(fldname) \
         token = pg_strtok(&length); \
         token = pg_strtok(&length); \
-        local_node->fldname = non_nullable_string(token, length)
+        local_node->fldname = nullable_string(token, length)
 
 /* Read a parse location field (and throw away the value, per notes above) */
 #define READ_LOCATION_FIELD(fldname) \
@@ -162,11 +164,22 @@
 
 #define strtobool(x)  ((*(x) == 't') ? true : false)
 
-#define nullable_string(token,length)  \
-        ((length) == 0 ? NULL : debackslash(token, length))
-
-#define non_nullable_string(token,length)  \
-        ((length) == 0 ? "" : debackslash(token, length))
+/* copied from PG16 function of the same name for consistency */
+static char *nullable_string(const char *token, int length)
+{
+    /* outToken emits <> for NULL, and pg_strtok makes that an empty string */
+    if (length == 0)
+    {
+        return NULL;
+    }
+    /* outToken emits "" for empty string */
+    if (length == 2 && token[0] == '"' && token[1] == '"')
+    {
+        return pstrdup("");
+    }
+    /* otherwise, we must remove protective backslashes added by outToken */
+    return debackslash(token, length);
+}
 
 /*
  * Default read function for cypher nodes. For most nodes, we don't expect
@@ -257,6 +270,8 @@ void read_cypher_update_item(struct ExtensibleNode *node)
     READ_NODE_FIELD(qualified_name);
     READ_BOOL_FIELD(remove_item);
     READ_BOOL_FIELD(is_add);
+    READ_NODE_FIELD(prop_expr);
+    READ_NODE_FIELD(prop_expr_state);
 }
 
 /*
@@ -298,4 +313,34 @@ void read_cypher_merge_information(struct ExtensibleNode *node)
     READ_UINT_FIELD(graph_oid);
     READ_INT_FIELD(merge_function_attr);
     READ_NODE_FIELD(path);
+    READ_NODE_FIELD(on_match_set_info);
+    READ_NODE_FIELD(on_create_set_info);
+}
+
+/*
+ * Deserialize a string representing the cypher_predicate_function
+ * data structure.
+ */
+void read_cypher_predicate_function(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_predicate_function);
+
+    READ_ENUM_FIELD(kind, cypher_predicate_function_kind);
+    READ_STRING_FIELD(varname);
+    READ_NODE_FIELD(expr);
+    READ_NODE_FIELD(where);
+}
+
+/*
+ * Deserialize a string representing the cypher_reduce data structure.
+ */
+void read_cypher_reduce(struct ExtensibleNode *node)
+{
+    READ_LOCALS(cypher_reduce);
+
+    READ_STRING_FIELD(acc_varname);
+    READ_NODE_FIELD(init_expr);
+    READ_STRING_FIELD(elem_varname);
+    READ_NODE_FIELD(list_expr);
+    READ_NODE_FIELD(body_expr);
 }

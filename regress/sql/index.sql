@@ -17,8 +17,6 @@
  * under the License.
  */
 
-\! cp -r regress/age_load/data regress/instance/data/age_load
-
 LOAD 'age';
 SET search_path TO ag_catalog;
 
@@ -166,26 +164,8 @@ SELECT * FROM cypher('cypher_index', $$
         (mx)<-[:has_city]-(:City {city_id: 10, name:"Tijuana", west_coast: false, country_code:"MX"})
 $$) as (n agtype);
 
-ALTER TABLE cypher_index."Country" ADD PRIMARY KEY (id);
-
-CREATE UNIQUE INDEX CONCURRENTLY cntry_id_idx ON cypher_index."Country" (id);
-ALTER TABLE cypher_index."Country"  CLUSTER ON cntry_id_idx;
-
-ALTER TABLE cypher_index."City" ADD PRIMARY KEY (id);
-
-CREATE UNIQUE INDEX city_id_idx ON cypher_index."City" (id);
-
-ALTER TABLE cypher_index."City" CLUSTER ON city_id_idx;
-
-ALTER TABLE cypher_index.has_city
-ADD CONSTRAINT has_city_end_fk FOREIGN KEY (end_id)
-REFERENCES cypher_index."Country"(id) MATCH FULL;
-
-CREATE INDEX load_has_city_eid_idx ON cypher_index.has_city (end_id);
-
-CREATE INDEX load_has_city_sid_idx ON cypher_index.has_city (start_id);
-
-ALTER TABLE cypher_index."has_city" CLUSTER ON load_has_city_eid_idx;
+-- Verify that the incices are created on id columns
+SELECT indexname, indexdef FROM pg_indexes WHERE schemaname= 'cypher_index' ORDER BY 1;
 
 SET enable_mergejoin = ON;
 SET enable_hashjoin = OFF;
@@ -193,6 +173,11 @@ SET enable_nestloop = OFF;
 
 SELECT COUNT(*) FROM cypher('cypher_index', $$
     MATCH (a:Country)<-[e:has_city]-()
+    RETURN e
+$$) as (n agtype);
+
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
     RETURN e
 $$) as (n agtype);
 
@@ -205,12 +190,17 @@ SELECT COUNT(*) FROM cypher('cypher_index', $$
     RETURN e
 $$) as (n agtype);
 
+SELECT COUNT(*) FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
+    RETURN e
+$$) as (n agtype);
+
 SET enable_mergejoin = OFF;
 SET enable_hashjoin = OFF;
 SET enable_nestloop = ON;
 
 SELECT COUNT(*) FROM cypher('cypher_index', $$
-    MATCH (a:Country)<-[e:has_city]-()
+    EXPLAIN (costs off) MATCH (a:Country)<-[e:has_city]-()
     RETURN e
 $$) as (n agtype);
 
@@ -227,6 +217,11 @@ ON cypher_index."City" USING gin (properties);
 CREATE INDEX load_country_gin_idx
 ON cypher_index."Country" USING gin (properties);
 
+-- Verify GIN index is used for City property match
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (c:City {city_id: 1})
+    RETURN c
+$$) as (plan agtype);
 
 SELECT * FROM cypher('cypher_index', $$
     MATCH (c:City {city_id: 1})
@@ -243,6 +238,12 @@ SELECT * FROM cypher('cypher_index', $$
     RETURN c
 $$) as (n agtype);
 
+-- Verify GIN index is used for Country property match
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (c:Country {life_expectancy: 82.05})
+    RETURN c
+$$) as (plan agtype);
+
 SELECT * FROM cypher('cypher_index', $$
     MATCH (c:Country {life_expectancy: 82.05})
     RETURN c
@@ -258,23 +259,180 @@ DROP INDEX cypher_index.load_country_gin_idx;
 --
 -- Section 4: Index use with WHERE clause
 --
-SELECT COUNT(*) FROM cypher('cypher_index', $$
-    MATCH (a:City)
-    WHERE a.country_code = 'RS'
-    RETURN a
-$$) as (n agtype);
-
-CREATE INDEX CONCURRENTLY cntry_ode_idx ON cypher_index."City"
+-- Create expression index on country_code property
+CREATE INDEX city_country_code_idx ON cypher_index."City"
 (ag_catalog.agtype_access_operator(properties, '"country_code"'::agtype));
 
-SELECT COUNT(*) FROM cypher('agload_test_graph', $$
-    MATCH (a:City)
-    WHERE a.country_code = 'RS'
+-- Verify index is used with EXPLAIN (should show Index Scan on city_country_code_idx)
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.country_code = 'US'
     RETURN a
-$$) as (n agtype);
+$$) as (plan agtype);
+
+-- Test WHERE with indexed string property
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.country_code = 'US'
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.country_code = 'CA'
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+-- Test WHERE with no matching results
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.country_code = 'XX'
+    RETURN a.name
+$$) as (name agtype);
+
+-- Create expression index on city_id property
+CREATE INDEX city_id_idx ON cypher_index."City"
+(ag_catalog.agtype_access_operator(properties, '"city_id"'::agtype));
+
+-- Verify index is used with EXPLAIN for integer property
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.city_id = 1
+    RETURN a
+$$) as (plan agtype);
+
+-- Test WHERE with indexed integer property
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.city_id = 1
+    RETURN a.name
+$$) as (name agtype);
+
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.city_id = 5
+    RETURN a.name
+$$) as (name agtype);
+
+-- Test WHERE with comparison operators on indexed property
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.city_id < 3
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.city_id >= 8
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+-- Create expression index on west_coast boolean property
+CREATE INDEX city_west_coast_idx ON cypher_index."City"
+(ag_catalog.agtype_access_operator(properties, '"west_coast"'::agtype));
+
+-- Verify index is used with EXPLAIN for boolean property
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.west_coast = true
+    RETURN a
+$$) as (plan agtype);
+
+-- Test WHERE with indexed boolean property
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.west_coast = true
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.west_coast = false
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+-- EXPLAIN for pattern with WHERE clause
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (a:City)
+    WHERE a.country_code = 'US' AND a.west_coast = true
+    RETURN a
+$$) as (plan agtype);
+
+-- Test WHERE with multiple conditions (AND)
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.country_code = 'US' AND a.west_coast = true
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+-- Test WHERE with OR conditions
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE a.city_id = 1 OR a.city_id = 5
+    RETURN a.name
+    ORDER BY a.city_id
+$$) as (name agtype);
+
+-- Test WHERE with NOT
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (a:City)
+    WHERE NOT a.west_coast = true AND a.country_code = 'US'
+    RETURN a.name
+$$) as (name agtype);
+
+-- Create expression index on life_expectancy for Country
+CREATE INDEX country_life_exp_idx ON cypher_index."Country"
+(ag_catalog.agtype_access_operator(properties, '"life_expectancy"'::agtype));
+
+-- Verify index is used with EXPLAIN for float property
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (c:Country)
+    WHERE c.life_expectancy > 80.0
+    RETURN c
+$$) as (plan agtype);
+
+-- Test WHERE with float property
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (c:Country)
+    WHERE c.life_expectancy > 80.0
+    RETURN c.name
+$$) as (name agtype);
+
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (c:Country)
+    WHERE c.life_expectancy < 76.0
+    RETURN c.name
+$$) as (name agtype);
+
+-- EXPLAIN for pattern with filters on both country and city
+SELECT * FROM cypher('cypher_index', $$
+    EXPLAIN (costs off) MATCH (country:Country)<-[:has_city]-(city:City)
+    WHERE country.country_code = 'CA' AND city.west_coast = true
+    RETURN city.name
+$$) as (plan agtype);
+
+-- Test WHERE in combination with pattern matching
+SELECT * FROM cypher('cypher_index', $$
+    MATCH (country:Country)<-[:has_city]-(city:City)
+    WHERE country.country_code = 'CA'
+    RETURN city.name
+    ORDER BY city.city_id
+$$) as (name agtype);
+
+-- Clean up indices
+DROP INDEX cypher_index.city_country_code_idx;
+DROP INDEX cypher_index.city_id_idx;
+DROP INDEX cypher_index.city_west_coast_idx;
+DROP INDEX cypher_index.country_life_exp_idx;
 
 --
 -- General Cleanup
 --
 SELECT drop_graph('cypher_index', true);
-SELECT drop_graph('agload_test_graph', true);

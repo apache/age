@@ -75,8 +75,15 @@ typedef enum ag_node_tag
     /* delete data structures */
     cypher_delete_information_t,
     cypher_delete_item_t,
-    cypher_merge_information_t
+    cypher_merge_information_t,
+    /* predicate functions */
+    cypher_predicate_function_t,
+    /* reduce */
+    cypher_reduce_t
 } ag_node_tag;
+
+extern const char *node_names[];
+extern const ExtensibleNodeMethods node_methods[];
 
 void register_ag_nodes(void);
 

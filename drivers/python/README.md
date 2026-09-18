@@ -28,11 +28,11 @@ AGType parser and driver support for [Apache AGE](https://age.apache.org/), grap
 
 ### Features
 * Unmarshal AGE result data(AGType) to Vertex, Edge, Path
-* Cypher query support for Psycopg2 PostgreSQL driver (enables to use cypher queries directly)
+* Cypher query support for Psycopg3 PostgreSQL driver (enables to use cypher queries directly)
 
 ### Prerequisites
 * over Python 3.9
-* This module runs on [psycopg2](https://www.psycopg.org/) and [antlr4-python3](https://pypi.org/project/antlr4-python3-runtime/)
+* This module runs on [psycopg3](https://www.psycopg.org/) and [antlr4-python3](https://pypi.org/project/antlr4-python3-runtime/)
 ```
 sudo apt-get update
 sudo apt-get install python3-dev libpq-dev
@@ -62,7 +62,7 @@ python -m unittest -v test_agtypes.py
 
 ### Build from source
 ```
-python setup.py install
+pip install .
 ```
 
 ### For more information about [Apache AGE](https://age.apache.org/)
@@ -80,7 +80,7 @@ SET search_path = ag_catalog, "$user", public;
 ```
 
 ### Usage
-* If you are familiar with Psycopg2 driver : Go to [Jupyter Notebook : Basic Sample](samples/apache-age-basic.ipynb) 
+* If you are not familiar with Psycopg driver : Go to [Jupyter Notebook : Basic Sample](samples/apache-age-basic.ipynb) 
 * Simpler way to access Apache AGE [AGE Sample](samples/apache-age-note.ipynb) in Samples.
 * Agtype converting samples: [Agtype Sample](samples/apache-age-agtypes.ipynb) in Samples.
 
@@ -89,9 +89,25 @@ SET search_path = ag_catalog, "$user", public;
 * Make sure to give your non-superuser db account proper permissions to the graph schemas and corresponding objects
 * Make sure to initiate the Apache Age python driver with the ```load_from_plugins``` parameter. This parameter tries to
   load the Apache Age extension from the PostgreSQL plugins directory located at ```$libdir/plugins/age```. Example:
-  ```python.
+  ```python
   ag = age.connect(host='localhost', port=5432, user='dbuser', password='strong_password', 
-                   dbname=postgres, load_from_plugins=True, graph='graph_name)
+                   dbname='postgres', load_from_plugins=True, graph='graph_name')
+  ```
+
+### Managed PostgreSQL Usage (Azure, AWS RDS, etc.)
+* On managed PostgreSQL services where the AGE extension is loaded server-side via ```shared_preload_libraries```,
+  the ```LOAD 'age'``` command may fail because the binary is not at the expected file path. Use the ```skip_load```
+  parameter to skip the ```LOAD``` statement while still performing all other setup:
+  ```python
+  ag = age.connect(host='myserver.postgres.database.azure.com', port=5432,
+                   user='dbuser', password='strong_password',
+                   dbname='postgres', skip_load=True, graph='graph_name')
+  ```
+* **Connection pools:** If you manage connections externally (e.g. via ```psycopg_pool.ConnectionPool```),
+  you can call ```setUpAge()``` with ```skip_load=True``` on each pooled connection:
+  ```python
+  from age.age import setUpAge
+  setUpAge(conn, 'graph_name', skip_load=True)
   ```
 
 ### License
@@ -119,7 +135,7 @@ Here the following value required
 Insert From networkx directed graph into an Age database.
 #### Parameters
 
-- `connection` (psycopg2.connect): Connection object to the Age database.
+- `connection` (psycopg.connect): Connection object to the AGE database.
 
 - `G` (networkx.DiGraph): Networkx directed graph to be converted and inserted.
 
@@ -152,7 +168,7 @@ Converts data from a Apache AGE graph database into a Networkx directed graph.
 
 #### Parameters
 
-- `connection` (psycopg2.connect): Connection object to the PostgreSQL database.
+- `connection` (psycopg.connect): Connection object to the PostgreSQL database.
 - `graphName` (str): Name of the graph.
 - `G` (None | nx.DiGraph): Optional Networkx directed graph. If provided, the data will be added to this graph.
 - `query` (str | None): Optional Cypher query to retrieve data from the database.
@@ -167,3 +183,4 @@ Converts data from a Apache AGE graph database into a Networkx directed graph.
 # Call the function to convert data into a Networkx graph
 graph = age_to_networkx(connection, graphName="MyGraph" )
 ```
+

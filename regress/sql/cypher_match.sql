@@ -1068,9 +1068,9 @@ SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name}) RETURN a $$) as 
 SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name, age:a.age}) RETURN a $$) as (a agtype);
 SELECT * FROM cypher('cypher_match', $$ MATCH (a {name:a.name}) MATCH (a {age:a.age}) RETURN a $$) as (a agtype);
 
-SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship}]->(b) RETURN p $$) as (a agtype);
-SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship, years: u.years}]->(b) RETURN p $$) as (a agtype);
-SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationship: u.relationship}]->(b {age:b.age}) RETURN p $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship}]->(b) RETURN p ORDER BY id(u) $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a)-[u {relationship: u.relationship, years: u.years}]->(b) RETURN p ORDER BY id(u) $$) as (a agtype);
+SELECT * FROM cypher('cypher_match', $$ MATCH p=(a {name:a.name})-[u {relationship: u.relationship}]->(b {age:b.age}) RETURN p ORDER BY id(u) $$) as (a agtype);
 
 SELECT * FROM cypher('cypher_match', $$ CREATE () WITH * MATCH (x{n0:x.n1}) RETURN 0 $$) as (a agtype);
 
@@ -1438,6 +1438,258 @@ SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:
 SELECT * FROM cypher('test_enable_containment', $$ EXPLAIN (costs off) MATCH (x:Customer ={school: { name: 'XYZ College',program: { major: 'Psyc', degree: 'BSc'} },phone: [ 123456789, 987654321, 456987123 ]}) RETURN 0 $$) as (a agtype);
 
 --
+-- issue 2308: MATCH after CREATE returns 0 rows
+--
+-- When all MATCH variables are already bound from a preceding CREATE + WITH,
+-- the MATCH filter quals must evaluate after CREATE, not before.
+--
+SELECT create_graph('issue_2308');
+
+-- Reporter's exact case: CREATE + WITH + MATCH + SET + RETURN
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:TestB3)-[e:B3REL]->(b:TestB3)
+    WITH a, e, b
+    MATCH p = (a)-[e]->(b)
+    SET a.something = 'something'
+    RETURN a
+$$) AS (a agtype);
+
+-- Bound variables, no SET
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T2)-[e:R2]->(b:T2)
+    WITH a, e, b
+    MATCH (a)-[e]->(b)
+    RETURN a, e, b
+$$) AS (a agtype, e agtype, b agtype);
+
+-- Reversed direction: filter should reject (0 rows expected)
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T3)-[e:R3]->(b:T3)
+    WITH a, e, b
+    MATCH (b)-[e]->(a)
+    RETURN a
+$$) AS (a agtype);
+
+-- Node-only MATCH with bound variable
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T4 {name: 'test'})
+    WITH a
+    MATCH (a)
+    RETURN a
+$$) AS (a agtype);
+
+-- MATCH after SET (SET is also DML, chain must be protected)
+SELECT * FROM cypher('issue_2308', $$
+    CREATE (a:T5 {val: 1})-[e:R5]->(b:T5 {val: 2})
+$$) AS (r agtype);
+SELECT * FROM cypher('issue_2308', $$
+    MATCH (a:T5)-[e:R5]->(b:T5)
+    SET a.val = 10
+    WITH a, e, b
+    MATCH (a)-[e]->(b)
+    RETURN a.val
+$$) AS (val agtype);
+
+SELECT drop_graph('issue_2308', true);
+-- Issue 1964
+--
+-- PREPARE with property parameter ($props) crashed the server when
+-- age.enable_containment was set to off. The crash was in
+-- transform_map_to_ind_recursive which blindly cast cypher_param
+-- nodes to cypher_map, accessing invalid memory.
+--
+
+SELECT create_graph('issue_1964');
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice', age: 30}),
+           (:Person {name: 'Bob', age: 25})
+$$) AS (result agtype);
+SELECT * FROM cypher('issue_1964', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS {since: 2020}]->(:Person {name: 'Bob'})
+$$) AS (result agtype);
+
+-- Test PREPARE with enable_containment off (was crashing)
+SET age.enable_containment = off;
+
+PREPARE issue_1964_vertex(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex('{"props": {"name": "Alice"}}');
+EXECUTE issue_1964_vertex('{"props": {"age": 25}}');
+DEALLOCATE issue_1964_vertex;
+
+-- Test edge property parameter with enable_containment off
+PREPARE issue_1964_edge(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge('{"props": {"since": 2020}}');
+DEALLOCATE issue_1964_edge;
+
+-- Verify enable_containment on still works with PREPARE
+SET age.enable_containment = on;
+
+PREPARE issue_1964_vertex_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_on('{"props": {"name": "Alice"}}');
+DEALLOCATE issue_1964_vertex_on;
+
+-- Test =properties form with PREPARE (uses @>> top-level containment)
+SET age.enable_containment = off;
+
+PREPARE issue_1964_vertex_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq('{"props": {"name": "Alice", "age": 25}}');
+DEALLOCATE issue_1964_vertex_eq;
+
+PREPARE issue_1964_edge_eq(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH ()-[r = $props]->() RETURN r $$, $1) AS (p agtype);
+EXECUTE issue_1964_edge_eq('{"props": {"since": 2020}}');
+DEALLOCATE issue_1964_edge_eq;
+
+-- Same with enable_containment on
+SET age.enable_containment = on;
+
+PREPARE issue_1964_vertex_eq_on(agtype) AS
+    SELECT * FROM cypher('issue_1964',
+        $$MATCH (n = $props) RETURN n $$, $1) AS (p agtype);
+EXECUTE issue_1964_vertex_eq_on('{"props": {"name": "Alice", "age": 25}}');
+DEALLOCATE issue_1964_vertex_eq_on;
+
+--
+-- Issue 2193: CREATE ... WITH ... MATCH on brand-new label returns 0 rows
+-- on first execution because match_check_valid_label() runs before
+-- transform_prev_cypher_clause() creates the label table.
+--
+SELECT create_graph('issue_2193');
+
+-- Reporter's exact case: CREATE two Person nodes, then MATCH on Person
+-- Should return 2 rows on the very first execution
+SELECT * FROM cypher('issue_2193', $$
+    CREATE (a:Person {name: 'Jane', livesIn: 'London'}),
+           (b:Person {name: 'Tom', livesIn: 'Copenhagen'})
+    WITH a, b
+    MATCH (p:Person)
+    RETURN p.name ORDER BY p.name
+$$) AS (result agtype);
+
+-- Single CREATE + MATCH on brand-new label
+SELECT * FROM cypher('issue_2193', $$
+    CREATE (a:City {name: 'Berlin'})
+    WITH a
+    MATCH (c:City)
+    RETURN c.name ORDER BY c.name
+$$) AS (result agtype);
+
+-- MATCH on a label that now exists (second execution) still works
+SELECT * FROM cypher('issue_2193', $$
+    CREATE (a:City {name: 'Paris'})
+    WITH a
+    MATCH (c:City)
+    RETURN c.name ORDER BY c.name
+$$) AS (result agtype);
+
+-- MATCH on non-existent label without DML predecessor still returns 0 rows
+SELECT * FROM cypher('issue_2193', $$
+    MATCH (x:NonExistentLabel)
+    RETURN x
+$$) AS (result agtype);
+
+-- MATCH on non-existent label after DML predecessor still returns 0 rows
+-- and MATCH-introduced variable (p) is properly registered
+SELECT * FROM cypher('issue_2193', $$
+    CREATE (a:Person {name: 'Alice'})
+    WITH a
+    MATCH (p:NonExistentLabel)
+    RETURN p
+$$) AS (result agtype);
+
+-- Verify that the CREATE side effect was preserved even though MATCH
+-- returned 0 rows (guards against plan-elimination regressions where
+-- a constant-false predicate causes PG to skip the DML predecessor)
+SELECT * FROM cypher('issue_2193', $$
+    MATCH (a:Person {name: 'Alice'})
+    RETURN a.name
+$$) AS (result agtype);
+
+SELECT drop_graph('issue_2193', true);
+
+--
+-- Issue 2378: OPTIONAL MATCH may incorrectly drop null-preserving outer
+-- rows when its WHERE clause contains a correlated sub-pattern predicate.
+--
+-- Cypher OPTIONAL MATCH semantics: the WHERE applies to the optional
+-- binding; when no right-hand row survives the predicate, the outer row
+-- is still emitted with NULLs in the optional columns.  Before the fix,
+-- a WHERE containing EXISTS { ... } or COUNT { ... } was attached as an
+-- outer filter on the transformed subquery, so it ran after the LATERAL
+-- LEFT JOIN produced null-preserving rows and then incorrectly dropped
+-- them when the predicate evaluated NULL/false on the nulled side.
+--
+SELECT create_graph('issue_2378');
+SELECT * FROM cypher('issue_2378', $$
+    CREATE (a:Person {name: 'Alice'}),
+           (b:Person {name: 'Bob'}),
+           (c:Person {name: 'Charlie'}),
+           (a)-[:KNOWS]->(b),
+           (a)-[:KNOWS]->(c)
+$$) AS (v agtype);
+
+-- Correlated EXISTS referencing the optional variable (friend).
+-- Neither Bob nor Charlie knows anyone, so for every outer p the
+-- predicate fails on all optional matches; expect one row per person
+-- with friend = NULL.
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { (friend)-[:KNOWS]->(:Person) }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+-- Correlated EXISTS referencing the outer variable (p).
+-- Alice knows someone so her optional matches pass; Bob and Charlie
+-- don't, so they are emitted with NULL friend.
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { (p)-[:KNOWS]->(:Person) }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name, friend
+$$) AS (name agtype, friend agtype);
+
+-- Non-correlated EXISTS (was already working; kept as a regression guard).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE EXISTS { MATCH (x:Person) RETURN x }
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name, friend
+$$) AS (name agtype, friend agtype);
+
+-- Plain scalar predicate on the optional variable (was already working).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE friend.name = 'Bob'
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+-- Constant-false WHERE on the optional side (was already working).
+SELECT * FROM cypher('issue_2378', $$
+    MATCH (p:Person)
+    OPTIONAL MATCH (p)-[:KNOWS]->(friend:Person)
+    WHERE false
+    RETURN p.name AS name, friend.name AS friend
+    ORDER BY name
+$$) AS (name agtype, friend agtype);
+
+SELECT drop_graph('issue_2378', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
@@ -1446,6 +1698,7 @@ SELECT drop_graph('test_enable_containment', true);
 SELECT drop_graph('issue_945', true);
 SELECT drop_graph('issue_1399', true);
 SELECT drop_graph('issue_1393', true);
+SELECT drop_graph('issue_1964', true);
 
 --
 -- End

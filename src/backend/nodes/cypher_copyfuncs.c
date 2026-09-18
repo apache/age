@@ -136,6 +136,8 @@ void copy_cypher_update_item(ExtensibleNode *newnode, const ExtensibleNode *from
     COPY_NODE_FIELD(qualified_name);
     COPY_SCALAR_FIELD(remove_item);
     COPY_SCALAR_FIELD(is_add);
+    COPY_NODE_FIELD(prop_expr);
+    COPY_NODE_FIELD(prop_expr_state);
 }
 
 /* copy function for cypher_delete_information */
@@ -168,4 +170,30 @@ void copy_cypher_merge_information(ExtensibleNode *newnode, const ExtensibleNode
     COPY_SCALAR_FIELD(graph_oid);
     COPY_SCALAR_FIELD(merge_function_attr);
     COPY_NODE_FIELD(path);
+    COPY_NODE_FIELD(on_match_set_info);
+    COPY_NODE_FIELD(on_create_set_info);
+}
+
+/* copy function for cypher_predicate_function */
+void copy_cypher_predicate_function(ExtensibleNode *newnode,
+                                    const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_predicate_function);
+
+    COPY_SCALAR_FIELD(kind);
+    COPY_STRING_FIELD(varname);
+    COPY_NODE_FIELD(expr);
+    COPY_NODE_FIELD(where);
+}
+
+/* copy function for cypher_reduce */
+void copy_cypher_reduce(ExtensibleNode *newnode, const ExtensibleNode *from)
+{
+    COPY_LOCALS(cypher_reduce);
+
+    COPY_STRING_FIELD(acc_varname);
+    COPY_NODE_FIELD(init_expr);
+    COPY_STRING_FIELD(elem_varname);
+    COPY_NODE_FIELD(list_expr);
+    COPY_NODE_FIELD(body_expr);
 }

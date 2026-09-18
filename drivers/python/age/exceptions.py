@@ -16,39 +16,74 @@
 from psycopg.errors import *
 
 class AgeNotSet(Exception):
-    def __init__(self, name):
+    def __init__(self, name=None):
         self.name = name
+        super().__init__(name or 'AGE extension is not set.')
 
-    def __repr__(self) :
+    def __repr__(self):
         return 'AGE extension is not set.'
 
 class GraphNotFound(Exception):
-    def __init__(self, name):
+    def __init__(self, name=None):
         self.name = name
+        super().__init__(f'Graph[{name}] does not exist.' if name else 'Graph does not exist.')
 
-    def __repr__(self) :
-        return 'Graph[' + self.name + '] does not exist.'
+    def __repr__(self):
+        if self.name:
+            return 'Graph[' + self.name + '] does not exist.'
+        return 'Graph does not exist.'
 
 
 class GraphAlreadyExists(Exception):
-    def __init__(self, name):
+    def __init__(self, name=None):
         self.name = name
+        super().__init__(f'Graph[{name}] already exists.' if name else 'Graph already exists.')
 
-    def __repr__(self) :
-        return 'Graph[' + self.name + '] already exists.'
+    def __repr__(self):
+        if self.name:
+            return 'Graph[' + self.name + '] already exists.'
+        return 'Graph already exists.'
+
+
+class InvalidGraphName(Exception):
+    """Raised when a graph name contains invalid characters."""
+    def __init__(self, name, reason=None):
+        self.name = name
+        self.reason = reason
+        msg = f"Invalid graph name: '{name}'."
+        if reason:
+            msg += f" {reason}"
+        super().__init__(msg)
+
+    def __repr__(self):
+        return f"InvalidGraphName('{self.name}')"
+
+
+class InvalidIdentifier(Exception):
+    """Raised when an identifier (column, label, etc.) is invalid."""
+    def __init__(self, name, context=None):
+        self.name = name
+        self.context = context
+        msg = f"Invalid identifier: '{name}'."
+        if context:
+            msg += f" {context}"
+        super().__init__(msg)
+
+    def __repr__(self):
+        return f"InvalidIdentifier('{self.name}')"
 
 
 class GraphNotSet(Exception):
-    def __repr__(self) :
+    def __repr__(self):
         return 'Graph name is not set.'
 
 
 class NoConnection(Exception):
-    def __repr__(self) :
+    def __repr__(self):
         return 'No Connection'
 
 class NoCursor(Exception):
-    def __repr__(self) :
+    def __repr__(self):
         return 'No Cursor'
 
 class SqlExecutionError(Exception):
@@ -57,7 +92,7 @@ class SqlExecutionError(Exception):
         self.cause = cause
         super().__init__(msg, cause)
 
-    def __repr__(self) :
+    def __repr__(self):
         return 'SqlExecution [' + self.msg + ']'
 
 class AGTypeError(Exception):

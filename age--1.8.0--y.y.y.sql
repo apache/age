@@ -17,6 +17,9 @@
  * under the License.
  */
 
+-- This will only work within a major version of PostgreSQL, not across
+-- major versions.
+
 --* This is a TEMPLATE for upgrading from the previous version of Apache AGE
 --* Please adjust the below ALTER EXTENSION to reflect the -- correct version it
 --* is upgrading to.
@@ -30,4 +33,3 @@
 --* Please add all additions, deletions, and modifications to the end of this
 --* file. We need to keep the order of these changes.
 --* REMOVE ALL LINES ABOVE, and this one, that start with --*
-

@@ -105,20 +105,20 @@ SELECT * FROM cypher('cypher_vle', $$MATCH ()-[*]->() RETURN count(*) $$) AS (e 
 SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[*]->() RETURN count(*) $$) AS (e agtype);
 SELECT * FROM cypher('cypher_vle', $$MATCH ()-[*]->(v) RETURN count(*) $$) AS (e agtype);
 -- Should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)<-[e*]-(v:end) RETURN e $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)<-[e*]-(v:end) RETURN e ORDER BY e ASC $$) AS (e agtype);
 -- Should find 5
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*1..1]-()-[]-() RETURN p ORDER BY p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*1..1]-()-[]-() RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Should find 2922
 SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*]->(v) RETURN count(*) $$) AS (e agtype);
 -- Should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]->(v:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]->(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Should find 12
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]-(v:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[*3..3]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Each should find 2
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[*]-(v:end) RETURN p $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN p $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN e $$) AS (e agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*]-()<-[]-(:end) RETURN p $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[*]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)<-[e*]-(v:end) RETURN e ORDER BY e ASC $$) AS (e agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(:begin)<-[*]-()<-[]-(:end) RETURN p ORDER BY p ASC $$) AS (e agtype);
 -- Each should return 31
 SELECT count(*) FROM cypher('cypher_vle', $$ MATCH ()-[e1]->(v)-[e2]->() RETURN e1,e2 $$) AS (e1 agtype, e2 agtype);
 SELECT count(*) FROM cypher('cypher_vle', $$
@@ -163,16 +163,16 @@ FROM cypher('cypher_vle', $$
     RETURN a, e
 $$) AS (e1 agtype, e2 agtype);
 -- Should return 1 path
-SELECT * FROM cypher('cypher_vle', $$ MATCH p=()<-[e1*]-(:end)-[e2*]->(:begin) RETURN p $$) AS (result agtype);
+SELECT * FROM cypher('cypher_vle', $$ MATCH p=()<-[e1*]-(:end)-[e2*]->(:begin) RETURN p ORDER BY p ASC $$) AS (result agtype);
 -- Each should return 3
-SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)-[e*0..1]->(v) RETURN id(u), e, id(v) $$) AS (u agtype, e agtype, v agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[e*0..1]->(v) RETURN p $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u:begin)-[e*0..1]->(v) RETURN id(u), e, id(v) ORDER BY id(u) ASC, e ASC, id(v) ASC $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u:begin)-[e*0..1]->(v) RETURN p ORDER BY p ASC $$) AS (p agtype);
 -- Each should return 5
-SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[e*0..0]->(v) RETURN id(u), e, id(v) $$) AS (u agtype, e agtype, v agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=(u)-[e*0..0]->(v) RETURN id(u), p, id(v) $$) AS (u agtype, p agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH (u)-[e*0..0]->(v) RETURN id(u), e, id(v) ORDER BY id(u) ASC, e ASC, id(v) ASC $$) AS (u agtype, e agtype, v agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=(u)-[e*0..0]->(v) RETURN id(u), p, id(v) ORDER BY id(u) ASC, p ASC, id(v) ASC $$) AS (u agtype, p agtype, v agtype);
 -- Each should return 13 and will be the same
-SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*0..0]->()-[]->() RETURN p $$) AS (p agtype);
-SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[]->()-[*0..0]->() RETURN p $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[*0..0]->()-[]->() RETURN p ORDER BY p ASC $$) AS (p agtype);
+SELECT * FROM cypher('cypher_vle', $$MATCH p=()-[]->()-[*0..0]->() RETURN p ORDER BY p ASC $$) AS (p agtype);
 
 --
 -- Test VLE inside of a BEGIN/COMMIT block
@@ -189,7 +189,7 @@ $$) AS (g1 agtype);
 /* should return 1 path with 1 edge */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge*]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g2 agtype);
 
 /* should delete the original path and replace it with a path with 2 edges */
@@ -202,13 +202,13 @@ $$) AS (g3 agtype);
 /* should find 2 paths with 1 edge */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g4 agtype);
 
 /* should return 3 paths, 2 with 1 edge, 1 with 2 edges */
 SELECT * FROM cypher('mygraph', $$
     MATCH p = ()-[:Edge*]->()
-    RETURN p
+    RETURN p ORDER BY p ASC
 $$) AS (g5 agtype);
 
 SELECT drop_graph('mygraph', true);
@@ -264,7 +264,7 @@ BEGIN
     RETURN QUERY
     SELECT * FROM cypher('mygraph', $CYPHER$
         MATCH (h:head {name: $list_name})-[e:next*]->(v:node)
-        RETURN v
+        RETURN v ORDER BY id(v)
     $CYPHER$, ag_param) AS (node agtype);
 END $$;
 
@@ -312,50 +312,103 @@ SELECT * FROM cypher('access',$$ CREATE ()-[:knows]->() $$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows]->()-[:knows]->()$$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows {id:0}]->()-[:knows {id: 1}]->() $$) as (results agtype);
 SELECT * FROM cypher('access',$$ CREATE ()-[:knows {id:2, arry:[0,1,2,3,{name: "joe"}]}]->()-[:knows {id: 3, arry:[1,3,{name:"john", stats: {age: 1000}}]}]->() $$) as (results agtype);
-SELECT * FROM cypher('access', $$ MATCH (u)-[e*]->(v) RETURN e $$)as (edges agtype);
-SELECT * FROM cypher('access', $$ MATCH (u)-[e*2..2]->(v) RETURN e $$)as (edges agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[0]) $$) as (prop_first_edge agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].id $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].arry[2] $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[1]) $$) as (prop_second_edge agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].id $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2] $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2].stats $$) as (results agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[2]) $$) as (prop_third_edge agtype);
+SELECT * FROM cypher('access', $$ MATCH (u)-[e*]->(v) RETURN e ORDER BY e ASC $$)as (edges agtype);
+SELECT * FROM cypher('access', $$ MATCH (u)-[e*2..2]->(v) RETURN e ORDER BY e ASC $$)as (edges agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[0]) ORDER BY id(e[0]) ASC $$) as (prop_first_edge agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].id ORDER BY id(e[0]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[0].arry[2] ORDER BY id(e[0]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[1]) ORDER BY id(e[1]) ASC $$) as (prop_second_edge agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].id ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2] ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN e[1].arry[2].stats ORDER BY id(e[1]) ASC $$) as (results agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*2..2]->() RETURN properties(e[2]) ORDER BY id(e[2]) ASC $$) as (prop_third_edge agtype);
 
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN properties(e[0]), properties(e[1]) $$) as (prop_1st agtype, prop_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].id, e[1].id $$) as (results_1st agtype, results_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry, e[1].arry $$) as (results_1st agtype, results_2nd agtype);
-SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry[2], e[1].arry[2] $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN properties(e[0]), properties(e[1]) ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (prop_1st agtype, prop_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].id, e[1].id ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry, e[1].arry ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
+SELECT * FROM cypher('access',$$ MATCH ()-[e*]->() RETURN e[0].arry[2], e[1].arry[2] ORDER BY id(e[0]) ASC, id(e[1]) ASC $$) as (results_1st agtype, results_2nd agtype);
 
 SELECT drop_graph('access', true);
 
 -- issue 1043
 SELECT create_graph('issue_1043');
 SELECT * FROM cypher('issue_1043', $$ CREATE (n)-[:KNOWS {n:'hello'}]->({n:'hello'}) $$) as (a agtype);
-SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x ORDER BY id(x) ASC $$) as (a agtype);
 SELECT * FROM cypher('issue_1043', $$ CREATE (n)-[:KNOWS {n:'hello'}]->({n:'hello'}) $$) as (a agtype);
-SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x $$) as (a agtype);
+SELECT * FROM cypher('issue_1043', $$ MATCH (x)<-[y *]-(),({n:y[0].n}) RETURN x ORDER BY id(x) ASC $$) as (a agtype);
 
 SELECT drop_graph('issue_1043', true);
 
 -- issue 1910
 SELECT create_graph('issue_1910');
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*1]-({name: 'Willem Defoe'}))
-                                      RETURN n.full_name $$) AS (full_name agtype);
+                                      RETURN n.full_name ORDER BY id(n) ASC $$) AS (full_name agtype);
 SELECT * FROM cypher('issue_1910', $$ CREATE ({name: 'Jane Doe'})-[:KNOWS]->({name: 'John Doe'}) $$) AS (result agtype);
 SELECT * FROM cypher('issue_1910', $$ CREATE ({name: 'Donald Defoe'})-[:KNOWS]->({name: 'Willem Defoe'}) $$) AS (result agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (u {name: 'John Doe'})
                                       MERGE (u)-[:KNOWS]->({name: 'Willem Defoe'}) $$) AS (result agtype);
 
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*1]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 SELECT * FROM cypher('issue_1910', $$ MATCH (n) WHERE EXISTS((n)-[*2..2]-({name: 'Willem Defoe'}))
-                                      RETURN n.name $$) AS (name agtype);
+                                      RETURN n.name ORDER BY id(n) ASC $$) AS (name agtype);
 
 SELECT drop_graph('issue_1910', true);
+
+-- issue 2092: VLE with chained OPTIONAL MATCH and NULL handling
+-- Previously, chained OPTIONAL MATCH with VLE would either segfault
+-- (with WHERE IS NOT NULL) or error with "arguments cannot be NULL"
+-- (without WHERE) instead of producing correct NULL-extended rows.
+SELECT create_graph('issue_2092');
+
+-- Set up a small graph where some OPTIONAL MATCH paths exist and some don't
+SELECT * FROM cypher('issue_2092', $$
+    CREATE (a:Person {name: 'Alice'})
+    CREATE (b:Person {name: 'Bob'})
+    CREATE (c:City {name: 'NYC'})
+    CREATE (d:City {name: 'LA'})
+    CREATE (e:Place {name: 'Central Park'})
+    CREATE (a)-[:LIVES_IN]->(c)
+    CREATE (c)-[:HAS_PLACE]->(e)
+    CREATE (b)-[:LIVES_IN]->(d)
+$$) AS (result agtype);
+
+-- Alice lives in NYC which has Central Park.
+-- Bob lives in LA which has no places.
+-- VLE + chained OPTIONAL MATCH + WHERE IS NOT NULL: should return rows
+-- without crashing (was: segfault)
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    WHERE place IS NOT NULL
+    RETURN p.name, place.name, other
+    ORDER BY p.name
+$$) AS (person agtype, place agtype, other agtype);
+
+-- VLE + chained OPTIONAL MATCH without WHERE: should return NULL-extended
+-- rows without error (was: "match_vle_terminal_edge() arguments cannot be
+-- NULL")
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    OPTIONAL MATCH (place)-[:NEARBY*]->(other)
+    RETURN p.name, place.name, other
+    ORDER BY p.name
+$$) AS (person agtype, place agtype, other agtype);
+
+-- Verify the happy path still works: Alice's full chain resolves
+SELECT * FROM cypher('issue_2092', $$
+    MATCH (p:Person)-[:LIVES_IN*]->(c:City)
+    OPTIONAL MATCH (c)-[:HAS_PLACE*]->(place)
+    WHERE place IS NOT NULL
+    RETURN p.name, c.name, place.name
+    ORDER BY p.name
+$$) AS (person agtype, city agtype, place agtype);
+
+SELECT drop_graph('issue_2092', true);
 
 --
 -- Clean up
@@ -364,6 +417,75 @@ SELECT drop_graph('issue_1910', true);
 DROP TABLE start_and_end_points;
 
 SELECT drop_graph('cypher_vle', true);
+--
+-- Issue #2382: variable-length relationships with a zero lower bound must
+-- still produce the zero-hop self-binding even when the edge label does not
+-- exist in the graph (Neo4j/openCypher semantics).
+--
+SELECT create_graph('issue_2382');
+
+SELECT * FROM cypher('issue_2382', $$
+    CREATE (:Person {name: 'Alice'})-[:KNOWS]->(:Person {name: 'Bob'})
+$$) AS (v agtype);
+
+-- Plain MATCH on a non-existent edge label with [*0..N] must return the
+-- zero-hop self-binding row (Alice -> Alice). It must NOT match arbitrary
+-- edges of other labels (e.g. KNOWS).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- OPTIONAL MATCH form (the exact shape from the issue report).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    OPTIONAL MATCH (p)-[:NOEXIST*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- [*0..0] still emits exactly the zero-hop self-binding.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*0..0]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- Fixed-length (lower bound > 0) on a missing label must still return zero
+-- rows: there is no edge of that label, so the pattern is unsatisfiable.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:NOEXIST*1..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- OPTIONAL MATCH on the unsatisfiable fixed-length pattern still preserves
+-- the outer row with NULL bindings.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    OPTIONAL MATCH (p)-[:NOEXIST*1..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+$$) AS (person agtype, friend agtype);
+
+-- Mixed pattern: a zero-bound VLE on a missing label combined with another
+-- fixed-length missing label segment must still yield zero rows. The other
+-- segment is impossible regardless of the zero-hop case.
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (a:Person {name: 'Alice'})
+    MATCH (a)-[:NOEXIST*0..1]-(b:Person)-[:STILL_MISSING]-(c:Person)
+    RETURN a.name, b.name, c.name
+$$) AS (a agtype, b agtype, c agtype);
+
+-- Sanity: zero-bound VLE on an EXISTING label still works the way it did
+-- before (Alice via zero-hop, Bob via 1-hop KNOWS).
+SELECT * FROM cypher('issue_2382', $$
+    MATCH (p:Person {name: 'Alice'})
+    MATCH (p)-[:KNOWS*0..1]-(f:Person)
+    RETURN p.name AS person, f.name AS friend
+    ORDER BY f.name
+$$) AS (person agtype, friend agtype);
+
+SELECT drop_graph('issue_2382', true);
 
 --
 -- End

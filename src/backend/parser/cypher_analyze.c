@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "catalog/ag_catalog.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
@@ -84,6 +85,11 @@ static void post_parse_analyze(ParseState *pstate, Query *query, JumbleState *js
     if (prev_post_parse_analyze_hook)
     {
         prev_post_parse_analyze_hook(pstate, query, jstate);
+    }
+
+    if (!is_age_extension_exists())
+    {
+        return;
     }
 
     /*
@@ -169,13 +175,19 @@ static bool convert_cypher_walker(Node *node, ParseState *pstate)
          * Const - constant value or expression node
          * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
          *
-         * These are a special case that needs to be ignored.
+         * Added the following, although only the first 2 caused crashes in tests -
+         * CoalesceExpr, MinMaxExpr, CaseExpr, XmlExpr, ArrayExpr, RowExpr
+         *
+         * These are all special case that needs to be ignored.
          *
          */
         if (IsA(funcexpr, SQLValueFunction)
-                || IsA(funcexpr, CoerceViaIO)
-                || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-                || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+            || IsA(funcexpr, CoerceViaIO)
+            || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+            || IsA(funcexpr, CoalesceExpr) || IsA(funcexpr, MinMaxExpr)
+            || IsA(funcexpr, CaseExpr) || IsA(funcexpr, XmlExpr)
+            || IsA(funcexpr, ArrayExpr) || IsA(funcexpr, RowExpr))
         {
             return false;
         }
@@ -341,13 +353,19 @@ static bool is_func_cypher(FuncExpr *funcexpr)
      * Const - constant value or expression node
      * BoolExpr - expression node for the basic Boolean operators AND, OR, NOT
      *
-     * These are a special case that needs to be ignored.
+     * Added the following, although only the first 2 caused crashes in tests -
+     * CoalesceExpr, MinMaxExpr, CaseExpr, XmlExpr, ArrayExpr, RowExpr
+     *
+     * These are all special case that needs to be ignored.
      *
      */
     if (IsA(funcexpr, SQLValueFunction)
             || IsA(funcexpr, CoerceViaIO)
             || IsA(funcexpr, Var)   || IsA(funcexpr, OpExpr)
-            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr))
+            || IsA(funcexpr, Const) || IsA(funcexpr, BoolExpr)
+            || IsA(funcexpr, CoalesceExpr) || IsA(funcexpr, MinMaxExpr)
+            || IsA(funcexpr, CaseExpr) || IsA(funcexpr, XmlExpr)
+            || IsA(funcexpr, ArrayExpr) || IsA(funcexpr, RowExpr))
     {
         return false;
     }
@@ -825,6 +843,41 @@ bool cypher_raw_expr_tree_walker(Node *node,
                 return true;
             }
         }
+        else if (is_ag_node(node, cypher_predicate_function))
+        {
+            cypher_predicate_function *pf;
+
+            pf = (cypher_predicate_function *)node;
+
+            if (WALK(pf->expr))
+            {
+                return true;
+            }
+
+            if (WALK(pf->where))
+            {
+                return true;
+            }
+        }
+        else if (is_ag_node(node, cypher_reduce))
+        {
+            cypher_reduce *rd = (cypher_reduce *)node;
+
+            if (WALK(rd->init_expr))
+            {
+                return true;
+            }
+
+            if (WALK(rd->list_expr))
+            {
+                return true;
+            }
+
+            if (WALK(rd->body_expr))
+            {
+                return true;
+            }
+        }
         /* Add more node types here as needed */
         else
         {
@@ -927,9 +980,8 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
      * convert ParseState into cypher_parsestate temporarily to pass it to
      * make_cypher_parsestate()
      */
+    MemSet(&parent_cpstate, 0, sizeof(parent_cpstate));
     parent_cpstate.pstate = *parent_pstate;
-    parent_cpstate.graph_name = NULL;
-    parent_cpstate.params = NULL;
 
     cpstate = make_cypher_parsestate(&parent_cpstate);
 
