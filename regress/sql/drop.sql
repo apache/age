@@ -37,6 +37,84 @@ RESET client_min_messages;
 CREATE SCHEMA _regress_drop;
 DROP SCHEMA _regress_drop; -- should'n produce the ERROR
 
+-- A loaded library must not inspect AGE catalogs before installation.
+CREATE TABLE public._regress_utility (id int);
+CREATE INDEX _regress_utility_idx ON public._regress_utility (id);
+INSERT INTO public._regress_utility VALUES (2), (1), (2), (NULL);
+VACUUM FULL public._regress_utility;
+DO $$
+BEGIN
+    IF (SELECT array_agg(id ORDER BY id) FROM public._regress_utility)
+        IS DISTINCT FROM ARRAY[1, 2, 2, NULL] THEN
+        RAISE EXCEPTION 'VACUUM FULL did not preserve the ordinary table data';
+    END IF;
+END
+$$;
+CLUSTER public._regress_utility USING _regress_utility_idx;
+DO $$
+BEGIN
+    IF (SELECT array_agg(id ORDER BY id) FROM public._regress_utility)
+        IS DISTINCT FROM ARRAY[1, 2, 2, NULL] THEN
+        RAISE EXCEPTION 'CLUSTER did not preserve the ordinary table data';
+    END IF;
+    IF NOT EXISTS (
+        SELECT FROM pg_catalog.pg_index
+        WHERE indexrelid = 'public._regress_utility_idx'::regclass
+          AND indisclustered
+    ) THEN
+        RAISE EXCEPTION 'CLUSTER did not mark the specified index';
+    END IF;
+END
+$$;
+TRUNCATE public._regress_utility;
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM public._regress_utility) THEN
+        RAISE EXCEPTION 'TRUNCATE did not empty the ordinary table';
+    END IF;
+END
+$$;
+-- An empty schema is not an installed extension.
+CREATE SCHEMA ag_catalog;
+-- Clear the previous CLUSTER marker so this case tests it independently.
+ALTER TABLE public._regress_utility SET WITHOUT CLUSTER;
+INSERT INTO public._regress_utility VALUES (2), (1), (2), (NULL);
+VACUUM FULL public._regress_utility;
+DO $$
+BEGIN
+    IF (SELECT array_agg(id ORDER BY id) FROM public._regress_utility)
+        IS DISTINCT FROM ARRAY[1, 2, 2, NULL] THEN
+        RAISE EXCEPTION 'VACUUM FULL did not preserve the ordinary table data';
+    END IF;
+END
+$$;
+CLUSTER public._regress_utility USING _regress_utility_idx;
+DO $$
+BEGIN
+    IF (SELECT array_agg(id ORDER BY id) FROM public._regress_utility)
+        IS DISTINCT FROM ARRAY[1, 2, 2, NULL] THEN
+        RAISE EXCEPTION 'CLUSTER did not preserve the ordinary table data';
+    END IF;
+    IF NOT EXISTS (
+        SELECT FROM pg_catalog.pg_index
+        WHERE indexrelid = 'public._regress_utility_idx'::regclass
+          AND indisclustered
+    ) THEN
+        RAISE EXCEPTION 'CLUSTER did not mark the specified index';
+    END IF;
+END
+$$;
+TRUNCATE public._regress_utility;
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM public._regress_utility) THEN
+        RAISE EXCEPTION 'TRUNCATE did not empty the ordinary table';
+    END IF;
+END
+$$;
+DROP TABLE public._regress_utility;
+DROP SCHEMA ag_catalog;
+
 -- Recreate the extension and validate we can recreate a graph
 CREATE EXTENSION age;
 
