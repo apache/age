@@ -20,8 +20,6 @@
 #ifndef AG_CYPHER_PATHNODE_H
 #define AG_CYPHER_PATHNODE_H
 
-#include "nodes/extensible.h"
-
 #define CREATE_PATH_NAME "Cypher Create"
 #define SET_PATH_NAME "Cypher Set"
 #define DELETE_PATH_NAME "Cypher Delete"
@@ -35,10 +33,5 @@ CustomPath *create_cypher_delete_path(PlannerInfo *root, RelOptInfo *rel,
                                       List *custom_private);
 CustomPath *create_cypher_merge_path(PlannerInfo *root, RelOptInfo *rel,
                                      List *custom_private);
-
-extern const CustomPathMethods cypher_create_path_methods;
-extern const CustomPathMethods cypher_set_path_methods;
-extern const CustomPathMethods cypher_delete_path_methods;
-extern const CustomPathMethods cypher_merge_path_methods;
 
 #endif

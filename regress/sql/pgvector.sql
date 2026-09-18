@@ -219,7 +219,7 @@ BEGIN
         USING hnsw (((
           agtype_access_operator(
             VARIADIC ARRAY[
-              properties,
+              _agtype_build_vertex(id, _label_name(%L::oid, id), properties),
               '"embedding"'::agtype
             ]
           )::text
@@ -274,7 +274,7 @@ BEGIN
         USING hnsw ((
           agtype_access_operator(
             VARIADIC ARRAY[
-              properties,
+              _agtype_build_vertex(id, _label_name(%L::oid, id), properties),
               '"embedding"'::agtype
             ]
         )::vector(4)) vector_cosine_ops);

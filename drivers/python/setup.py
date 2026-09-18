@@ -13,10 +13,28 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# This setup.py is maintained for backward compatibility.
-# All package configuration is in pyproject.toml. For installation,
-# use: pip install .
+from setuptools import setup, find_packages
+from age import VERSION 
 
-from setuptools import setup
+with open("README.md", "r", encoding='utf8') as fh:
+    long_description = fh.read()
 
-setup()
+setup(
+    name             = 'apache-age-python',
+    version          = '0.0.7',
+    description      = 'Python driver support for Apache AGE',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    author           = 'Ikchan Kwon, Apache AGE',
+    author_email     = 'dev-subscribe@age.apache.org',
+    url              = 'https://github.com/apache/age/tree/master/drivers/python',
+    download_url     = 'https://github.com/apache/age/releases' ,
+    license          = 'Apache2.0',
+    install_requires = [ 'psycopg', 'antlr4-python3-runtime==4.11.1'],
+    packages         = ['age', 'age.gen','age.networkx'],
+    keywords         = ['Graph Database', 'Apache AGE', 'PostgreSQL'],
+    python_requires  = '>=3.9',
+    classifiers      = [
+        'Programming Language :: Python :: 3.9'
+    ]
+)

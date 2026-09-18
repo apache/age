@@ -92,29 +92,15 @@ class ResultVisitor(AgtypeVisitor):
 
         if annoCtx is not None:
             annoCtx.accept(self)
-            identNode = annoCtx.IDENT()
-            if identNode is None:
-                raise AGTypeError(ctx.getText(), "Missing type annotation identifier")
-            anno = identNode.getText()
-            if valueCtx is None:
-                raise AGTypeError(ctx.getText(), "Missing value for annotated type")
+            anno = annoCtx.IDENT().getText()
             return self.handleAnnotatedValue(anno, valueCtx)
         else:
-            if valueCtx is None:
-                return None
             return valueCtx.accept(self)
 
 
-    @staticmethod
-    def _stripStringDelimiters(stringToken):
-        # The STRING token always has surrounding '"' delimiters per the
-        # Agtype grammar; slice rather than strip('"') so escaped quotes
-        # at the boundaries are preserved.
-        return stringToken.getText()[1:-1]
-
     # Visit a parse tree produced by AgtypeParser#StringValue.
     def visitStringValue(self, ctx:AgtypeParser.StringValueContext):
-        return self._stripStringDelimiters(ctx.STRING())
+        return ctx.STRING().getText().strip('"')
 
 
     # Visit a parse tree produced by AgtypeParser#IntegerValue.
@@ -123,14 +109,9 @@ class ResultVisitor(AgtypeVisitor):
 
     # Visit a parse tree produced by AgtypeParser#floatLiteral.
     def visitFloatLiteral(self, ctx:AgtypeParser.FloatLiteralContext):
-        text = ctx.getText()
         c = ctx.getChild(0)
-        if c is None or not hasattr(c, 'symbol') or c.symbol is None:
-            raise AGTypeError(
-                str(text),
-                "Malformed float literal: missing or invalid child node"
-            )
         tp = c.symbol.type
+        text = ctx.getText()
         if tp == AgtypeParser.RegularFloat:
             return float(text)
         elif tp == AgtypeParser.ExponentFloat:
@@ -143,7 +124,7 @@ class ResultVisitor(AgtypeVisitor):
             elif text == 'Infinity':
                 return float('inf')
             else:
-                raise ValueError("Unknown float expression: " + text)
+                return Exception("Unknown float expression:"+text)
         
 
     # Visit a parse tree produced by AgtypeParser#TrueBoolean.
@@ -169,27 +150,15 @@ class ResultVisitor(AgtypeVisitor):
                 namVal = self.visitPair(c)
                 name = namVal[0]
                 valCtx = namVal[1]
-                # visitPair() raises AGTypeError when the value node is
-                # missing, so valCtx should never be None here.  The
-                # guard is kept as a defensive fallback only.
-                if valCtx is not None:
-                    val = valCtx.accept(self) 
-                    obj[name] = val
-                else:
-                    obj[name] = None
+                val = valCtx.accept(self) 
+                obj[name] = val
         return obj
 
 
     # Visit a parse tree produced by AgtypeParser#pair.
     def visitPair(self, ctx:AgtypeParser.PairContext):
         self.visitChildren(ctx)
-        strNode = ctx.STRING()
-        agValNode = ctx.agValue()
-        if strNode is None:
-            raise AGTypeError(ctx.getText(), "Missing key in object pair")
-        if agValNode is None:
-            raise AGTypeError(ctx.getText(), "Missing value in object pair")
-        return (self._stripStringDelimiters(strNode), agValNode)
+        return (ctx.STRING().getText().strip('"') , ctx.agValue())
 
 
     # Visit a parse tree produced by AgtypeParser#array.
@@ -202,49 +171,38 @@ class ResultVisitor(AgtypeVisitor):
         return li
 
     def handleAnnotatedValue(self, anno:str, ctx:ParserRuleContext):
-        # Each branch below constructs a model object (Vertex, Edge, Path)
-        # and populates it from the parsed dict/list.  If a type check
-        # fails (e.g. the parsed value is not a dict), AGTypeError is
-        # raised and the partially-constructed object is discarded — no
-        # cleanup is needed because the caller propagates the exception.
         if anno == "numeric":
             return Decimal(ctx.getText())
         elif anno == "vertex":
-            d = ctx.accept(self)
-            if not isinstance(d, dict):
-                raise AGTypeError(str(ctx.getText()), "Expected dict for vertex, got " + type(d).__name__)
-            vid = d.get("id")
+            dict = ctx.accept(self)
+            vid = dict["id"]
             vertex = None
-            if self.vertexCache is not None and vid in self.vertexCache:
+            if self.vertexCache != None and vid in self.vertexCache :
                 vertex = self.vertexCache[vid]
             else:
                 vertex = Vertex()
-                vertex.id = d.get("id")
-                vertex.label = d.get("label")
-                vertex.properties = d.get("properties") or {}
+                vertex.id = dict["id"]
+                vertex.label = dict["label"]
+                vertex.properties = dict["properties"]
             
-            if self.vertexCache is not None:
+            if self.vertexCache != None:
                 self.vertexCache[vid] = vertex
 
             return vertex
         
         elif anno == "edge":
             edge = Edge()
-            d = ctx.accept(self)
-            if not isinstance(d, dict):
-                raise AGTypeError(str(ctx.getText()), "Expected dict for edge, got " + type(d).__name__)
-            edge.id = d.get("id")
-            edge.label = d.get("label")
-            edge.end_id = d.get("end_id")
-            edge.start_id = d.get("start_id")
-            edge.properties = d.get("properties") or {}
+            dict = ctx.accept(self)
+            edge.id = dict["id"]
+            edge.label = dict["label"]
+            edge.end_id = dict["end_id"]
+            edge.start_id = dict["start_id"]
+            edge.properties = dict["properties"]
             
             return edge
 
         elif anno == "path":
             arr = ctx.accept(self)
-            if not isinstance(arr, list):
-                raise AGTypeError(str(ctx.getText()), "Expected list for path, got " + type(arr).__name__)
             path = Path(arr)
             
             return path

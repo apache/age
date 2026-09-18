@@ -286,34 +286,52 @@ static void invalidate_graph_caches(Datum arg, int cache_id, uint32 hash_value)
 
 static void flush_graph_name_cache(void)
 {
-    /*
-     * If the graph_name_cache exists, destroy it. This will avoid any
-     * potential corruption issues.
-     */
-    if (graph_name_cache_hash)
-    {
-        hash_destroy(graph_name_cache_hash);
-        graph_name_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the graph_name_cache */
-    create_graph_name_cache();
+    hash_seq_init(&hash_seq, graph_name_cache_hash);
+    for (;;)
+    {
+        graph_name_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(graph_name_cache_hash, &entry->name, HASH_REMOVE,
+                              NULL);
+        if (!removed)
+        {
+            ereport(ERROR, (errmsg_internal("graph (name) cache corrupted")));
+        }
+    }
 }
 
 static void flush_graph_namespace_cache(void)
 {
-    /*
-     * If the graph_namespace_cache exists, destroy it. This will avoid any
-     * potential corruption issues.
-     */
-    if (graph_namespace_cache_hash)
-    {
-        hash_destroy(graph_namespace_cache_hash);
-        graph_namespace_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the graph_namespace_cache */
-    create_graph_namespace_cache();
+    hash_seq_init(&hash_seq, graph_namespace_cache_hash);
+    for (;;)
+    {
+        graph_namespace_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+
+        removed = hash_search(graph_namespace_cache_hash, &entry->namespace,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("graph (namespace) cache corrupted")));
+        }
+    }
 }
 
 graph_cache_data *search_graph_name_cache(const char *name)
@@ -646,18 +664,27 @@ static void invalidate_label_name_graph_cache(Oid relid)
 
 static void flush_label_name_graph_cache(void)
 {
-    /*
-     * If the label_name_graph_cache exists, destroy it. This will avoid any
-     * potential corruption issues.
-     */
-    if (label_name_graph_cache_hash)
-    {
-        hash_destroy(label_name_graph_cache_hash);
-        label_name_graph_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the label_name_graph_cache */
-    create_label_name_graph_cache();
+    hash_seq_init(&hash_seq, label_name_graph_cache_hash);
+    for (;;)
+    {
+        label_name_graph_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(label_name_graph_cache_hash, &entry->key,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("label (name, graph) cache corrupted")));
+        }
+    }
 }
 
 static void invalidate_label_graph_oid_cache(Oid relid)
@@ -695,18 +722,27 @@ static void invalidate_label_graph_oid_cache(Oid relid)
 
 static void flush_label_graph_oid_cache(void)
 {
-    /*
-     * If the label_graph_oid_cache exists, destroy it. This will avoid any
-     * potential corruption issues.
-     */
-    if (label_graph_oid_cache_hash)
-    {
-        hash_destroy(label_graph_oid_cache_hash);
-        label_graph_oid_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the label_graph_oid_cache */
-    create_label_graph_oid_cache();
+    hash_seq_init(&hash_seq, label_graph_oid_cache_hash);
+    for (;;)
+    {
+        label_graph_oid_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(label_graph_oid_cache_hash, &entry->key,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("label (graph, id) cache corrupted")));
+        }
+    }
 }
 
 static void invalidate_label_relation_cache(Oid relid)
@@ -729,18 +765,27 @@ static void invalidate_label_relation_cache(Oid relid)
 
 static void flush_label_relation_cache(void)
 {
-    /*
-     * If the label_relation_cache exists, destroy it. This will avoid any
-     * potential corruption issues.
-     */
-    if (label_relation_cache_hash)
-    {
-        hash_destroy(label_relation_cache_hash);
-        label_relation_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the label_relation_cache */
-    create_label_relation_cache();
+    hash_seq_init(&hash_seq, label_relation_cache_hash);
+    for (;;)
+    {
+        label_relation_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(label_relation_cache_hash, &entry->relation,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("label (relation) cache corrupted")));
+        }
+    }
 }
 
 static void invalidate_label_seq_name_graph_cache(Oid relid)
@@ -778,18 +823,27 @@ static void invalidate_label_seq_name_graph_cache(Oid relid)
 
 static void flush_label_seq_name_graph_cache(void)
 {
-    /*
-     * If the label_seq_name_graph_cache exists, destroy it. This will
-     * avoid any potential corruption issues by deleting entries.
-     */
-    if (label_seq_name_graph_cache_hash)
-    {
-        hash_destroy(label_seq_name_graph_cache_hash);
-        label_seq_name_graph_cache_hash = NULL;
-    }
+    HASH_SEQ_STATUS hash_seq;
 
-    /* recreate the label_seq_name_graph_cache */
-    create_label_seq_name_graph_cache();
+    hash_seq_init(&hash_seq, label_seq_name_graph_cache_hash);
+    for (;;)
+    {
+        label_seq_name_graph_cache_entry *entry;
+        void *removed;
+
+        entry = hash_seq_search(&hash_seq);
+        if (!entry)
+        {
+            break;
+        }
+        removed = hash_search(label_seq_name_graph_cache_hash, &entry->key,
+                              HASH_REMOVE, NULL);
+        if (!removed)
+        {
+            ereport(ERROR,
+                    (errmsg_internal("label (seq_name, graph) cache corrupted")));
+        }
+    }
 }
 
 label_cache_data *search_label_name_graph_cache(const char *name, Oid graph)

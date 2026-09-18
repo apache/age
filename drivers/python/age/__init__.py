@@ -16,7 +16,6 @@
 import psycopg.conninfo as conninfo
 from . import age
 from .age import *
-from .age import AgeLoader, ClientCursor, configure_connection
 from .models import *
 from .builder import ResultHandler, DummyResultHandler, parseAgeValue, newResultHandler
 from . import VERSION 
@@ -26,13 +25,13 @@ def version():
 
 
 def connect(dsn=None, graph=None, connection_factory=None, cursor_factory=ClientCursor, load_from_plugins=False,
-            skip_load=False, **kwargs):
+            **kwargs):
 
     dsn = conninfo.make_conninfo('' if dsn is None else dsn, **kwargs)
 
     ag = Age()
     ag.connect(dsn=dsn, graph=graph, connection_factory=connection_factory, cursor_factory=cursor_factory,
-               load_from_plugins=load_from_plugins, skip_load=skip_load, **kwargs)
+               load_from_plugins=load_from_plugins, **kwargs)
     return ag
 
 # Dummy ResultHandler

@@ -52,7 +52,6 @@ transform_entity *make_transform_entity(cypher_parsestate *cpstate,
     entity->declared_in_current_clause = true;
     entity->expr = expr;
     entity->in_join_tree = expr != NULL;
-    entity->vle_alias = NULL;
 
     return entity;
 }

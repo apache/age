@@ -45,7 +45,7 @@ typedef struct
 {
     ParseState *pstate;
     Query *qry;
-    bool hasJoinRTEs;
+    PlannerInfo *root;
     List *groupClauses;
     List *groupClauseCommonVars;
     bool have_non_var_grouping;
@@ -61,7 +61,7 @@ static void check_ungrouped_columns(Node *node, ParseState *pstate, Query *qry,
 static bool check_ungrouped_columns_walker(Node *node,
                                            check_ungrouped_columns_context *context);
 static void finalize_grouping_exprs(Node *node, ParseState *pstate, Query *qry,
-                                    List *groupClauses, bool hasJoinRTEs,
+                                    List *groupClauses, PlannerInfo *root,
                                     bool have_non_var_grouping);
 static bool finalize_grouping_exprs_walker(Node *node,
                                            check_ungrouped_columns_context *context);
@@ -91,6 +91,7 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
     ListCell *l;
     bool hasJoinRTEs;
     bool hasSelfRefRTEs;
+    PlannerInfo *root = NULL;
     Node *clause;
 
     /* This should only be called if we found aggregates or grouping */
@@ -182,11 +183,17 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
      * underlying vars, so that aliased and unaliased vars will be correctly
      * taken as equal.  We can skip the expense of doing this if no rangetable
      * entries are RTE_JOIN kind. We use the planner's flatten_join_alias_vars
-     * routine to do the flattening.
+     * routine to do the flattening; it wants a PlannerInfo root node, which
+     * fortunately can be mostly dummy.
      */
     if (hasJoinRTEs)
     {
-        groupClauses = (List *) flatten_join_alias_vars(qry,
+        root = makeNode(PlannerInfo);
+        root->parse = qry;
+        root->planner_cxt = CurrentMemoryContext;
+        root->hasJoinRTEs = true;
+
+        groupClauses = (List *) flatten_join_alias_vars((Query*)root,
                                                         (Node *) groupClauses);
     }
 
@@ -227,19 +234,19 @@ void parse_check_aggregates(ParseState *pstate, Query *qry)
      * the original (unflattened) clause in order to modify nodes.
      */
     clause = (Node *) qry->targetList;
-    finalize_grouping_exprs(clause, pstate, qry, groupClauses, hasJoinRTEs,
+    finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
-        clause = flatten_join_alias_vars(qry, clause);
+        clause = flatten_join_alias_vars((Query*)root, clause);
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
 
     clause = (Node *) qry->havingQual;
-    finalize_grouping_exprs(clause, pstate, qry, groupClauses, hasJoinRTEs,
+    finalize_grouping_exprs(clause, pstate, qry, groupClauses, root,
                             have_non_var_grouping);
     if (hasJoinRTEs)
-        clause = flatten_join_alias_vars(qry, clause);
+        clause = flatten_join_alias_vars((Query*)root, clause);
     check_ungrouped_columns(clause, pstate, qry, groupClauses,
                             groupClauseCommonVars, have_non_var_grouping,
                             &func_grouped_rels);
@@ -285,7 +292,7 @@ static void check_ungrouped_columns(Node *node, ParseState *pstate, Query *qry,
 
     context.pstate = pstate;
     context.qry = qry;
-    context.hasJoinRTEs = false;
+    context.root = NULL;
     context.groupClauses = groupClauses;
     context.groupClauseCommonVars = groupClauseCommonVars;
     context.have_non_var_grouping = have_non_var_grouping;
@@ -477,14 +484,14 @@ static bool check_ungrouped_columns_walker(Node *node, check_ungrouped_columns_c
  * GROUPING argument as we see it before comparing it.
  */
 static void finalize_grouping_exprs(Node *node, ParseState *pstate, Query *qry,
-                                    List *groupClauses, bool hasJoinRTEs,
+                                    List *groupClauses, PlannerInfo *root,
                                     bool have_non_var_grouping)
 {
     check_ungrouped_columns_context context;
 
     context.pstate = pstate;
     context.qry = qry;
-    context.hasJoinRTEs = hasJoinRTEs;
+    context.root = root;
     context.groupClauses = groupClauses;
     context.groupClauseCommonVars = NIL;
     context.have_non_var_grouping = have_non_var_grouping;
@@ -555,8 +562,8 @@ static bool finalize_grouping_exprs_walker(Node *node,
                 Node *expr = lfirst(lc);
                 Index ref = 0;
 
-                if (context->hasJoinRTEs)
-                    expr = flatten_join_alias_vars(context->qry, expr);
+                if (context->root)
+                    expr = flatten_join_alias_vars((Query*)context->root, expr);
 
                 /*
                  * Each expression must match a grouping entry at the current

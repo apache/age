@@ -14,5 +14,3 @@ age_string
 age_trig
 age_aggregate
 agtype_typecast
-age_pg_upgrade
-age_subgraph

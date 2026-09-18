@@ -21,7 +21,6 @@
 #define AG_CYPHER_CLAUSE_H
 
 #include "parser/cypher_parse_node.h"
-#include "parser/cypher_transform_entity.h"
 
 typedef struct cypher_clause cypher_clause;
 
@@ -40,12 +39,4 @@ Query *cypher_parse_sub_analyze(Node *parseTree,
                                 CommonTableExpr *parentCTE,
                                 bool locked_from_parent,
                                 bool resolve_unknowns);
-
-/*
- * Helper to get field info for vertex/edge entity field access
- */
-void get_record_field_info(char *field_name, Oid entity_type,
-                          AttrNumber *fieldnum, Oid *fieldtype);
-FieldSelect *make_field_select(Var *var, AttrNumber fieldnum, Oid resulttype);
-
 #endif

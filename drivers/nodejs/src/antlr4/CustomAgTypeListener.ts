@@ -92,11 +92,7 @@ class CustomAgTypeListener implements AgtypeListener, ParseTreeListener {
   }
 
   exitIntegerValue (ctx: IntegerValueContext): void {
-    // Use BigInt for values that exceed Number.MAX_SAFE_INTEGER to
-    // prevent silent precision loss with large AGE graph IDs (64-bit).
-    const text = ctx.text
-    const num = Number(text)
-    const value = Number.isSafeInteger(num) ? num : BigInt(text)
+    const value = parseInt(ctx.text)
     if (!this.pushIfArray(value)) {
       this.lastValue = value
     }
