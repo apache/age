@@ -62,10 +62,6 @@ github:
       required_pull_request_reviews:
         required_approving_review_count: 1
 
-    PG15:
-      required_pull_request_reviews:
-        required_approving_review_count: 1
-
     PG14:
       required_pull_request_reviews:
         required_approving_review_count: 1
@@ -81,3 +77,42 @@ github:
     PG11:
       required_pull_request_reviews:
         required_approving_review_count: 1
+
+  rulesets:
+    - name: "PG15 protection"
+      target: branch
+      enforcement: active
+      conditions:
+        ref_name:
+          include:
+            - "refs/heads/PG15"
+          exclude: []
+      bypass_actors:
+        - actor_type: User
+          actor_id: 85064039  # MuhammadTahaNaveed
+          bypass_mode: always
+        - actor_type: User
+          actor_id: 1505136  # jrgemignani
+          bypass_mode: always
+      rules:
+        - type: non_fast_forward
+        - type: pull_request
+          parameters:
+            dismiss_stale_reviews_on_push: false
+            require_code_owner_review: false
+            require_last_push_approval: false
+            required_approving_review_count: 1
+            required_review_thread_resolution: false
+
+    # Keep deletion protection outside the direct/force-push bypass.
+    - name: "PG15 deletion protection"
+      target: branch
+      enforcement: active
+      conditions:
+        ref_name:
+          include:
+            - "refs/heads/PG15"
+          exclude: []
+      bypass_actors: []
+      rules:
+        - type: deletion
