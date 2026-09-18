@@ -1,0 +1,369 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+LOAD 'age';
+SET search_path TO ag_catalog;
+--
+-- Row-level security enforcement during VLE / global-graph traversal
+-- (controlled by age.enforce_rls_in_traversal, default on).
+--
+-- Chain: n1 -[LINK visible:true]-> n2 -[LINK visible:false]-> n3 -[LINK visible:true]-> n4
+--
+SELECT create_graph('rls_vle');
+NOTICE:  graph "rls_vle" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('rls_vle', $$ CREATE (:Node {name: 'n1'}) $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$ CREATE (:Node {name: 'n2'}) $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$ CREATE (:Node {name: 'n3'}) $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$ CREATE (:Node {name: 'n4'}) $$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'}), (b:Node {name: 'n2'})
+    CREATE (a)-[:LINK {visible: true}]->(b)
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n2'}), (b:Node {name: 'n3'})
+    CREATE (a)-[:LINK {visible: false}]->(b)
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n3'}), (b:Node {name: 'n4'})
+    CREATE (a)-[:LINK {visible: true}]->(b)
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+-- restricted role: SELECT on the graph + ag_catalog, nothing more
+CREATE ROLE rls_vle_user LOGIN;
+GRANT USAGE ON SCHEMA rls_vle TO rls_vle_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_vle TO rls_vle_user;
+GRANT USAGE ON SCHEMA ag_catalog TO rls_vle_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA ag_catalog TO rls_vle_user;
+-- ============================================================================
+-- PART 1: Baseline (superuser, RLS bypassed) -- VLE from n1 reaches n2, n3, n4.
+-- ============================================================================
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+ "n4"
+(3 rows)
+
+-- ============================================================================
+-- PART 2: Edge-label RLS -- hide edges whose "visible" property is false.
+-- ============================================================================
+ALTER TABLE rls_vle."LINK" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" FORCE ROW LEVEL SECURITY;
+CREATE POLICY link_visible ON rls_vle."LINK"
+    FOR SELECT USING ((properties->>'"visible"')::boolean = true);
+-- Enforced (default): the restricted role reaches ONLY n2 (n2->n3 hidden).
+SET ROLE rls_vle_user;
+SHOW age.enforce_rls_in_traversal;
+ age.enforce_rls_in_traversal 
+------------------------------
+ on
+(1 row)
+
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+(1 row)
+
+RESET ROLE;
+-- Opt-out: with enforcement off, the legacy direct scan bypasses RLS, so the
+-- restricted role again reaches n2, n3, n4.
+SET age.enforce_rls_in_traversal = off;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+ "n4"
+(3 rows)
+
+RESET ROLE;
+RESET age.enforce_rls_in_traversal;
+-- clear the edge policy for the next part
+DROP POLICY link_visible ON rls_vle."LINK";
+ALTER TABLE rls_vle."LINK" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" DISABLE ROW LEVEL SECURITY;
+-- ============================================================================
+-- PART 3: Vertex-label RLS -- exercises the vertex loader and the dropping of
+-- edges whose endpoint vertex is hidden (matches MATCH's inner-join behavior).
+-- All edges are visible here; only vertices are filtered.
+-- ============================================================================
+ALTER TABLE rls_vle."Node" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."Node" FORCE ROW LEVEL SECURITY;
+-- 3.1: hide the INTERMEDIATE vertex n2. Its edges are dropped, so the traversal
+-- cannot pass through it -- expect no rows (and no "no vertex found" error).
+CREATE POLICY node_visible ON rls_vle."Node"
+    FOR SELECT USING ((properties->>'"name"') <> 'n2');
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+(0 rows)
+
+RESET ROLE;
+-- 3.2: hide only the LEAF vertex n4. The edge into n4 is dropped; the traversal
+-- still reaches n2 and n3.
+DROP POLICY node_visible ON rls_vle."Node";
+CREATE POLICY node_visible ON rls_vle."Node"
+    FOR SELECT USING ((properties->>'"name"') <> 'n4');
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+(2 rows)
+
+RESET ROLE;
+DROP POLICY node_visible ON rls_vle."Node";
+ALTER TABLE rls_vle."Node" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
+-- ============================================================================
+-- PART 4: Per-role cache key -- two roles with different edge policies in one
+-- session must see different results (the cache is rebuilt when the role
+-- changes). user1 sees all edges; user2 sees none.
+-- ============================================================================
+CREATE ROLE rls_vle_user2 LOGIN;
+GRANT USAGE ON SCHEMA rls_vle TO rls_vle_user2;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_vle TO rls_vle_user2;
+GRANT USAGE ON SCHEMA ag_catalog TO rls_vle_user2;
+GRANT SELECT ON ALL TABLES IN SCHEMA ag_catalog TO rls_vle_user2;
+ALTER TABLE rls_vle."LINK" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" FORCE ROW LEVEL SECURITY;
+CREATE POLICY link_user1 ON rls_vle."LINK" FOR SELECT TO rls_vle_user  USING (true);
+CREATE POLICY link_user2 ON rls_vle."LINK" FOR SELECT TO rls_vle_user2 USING (false);
+-- user1: all edges visible -> n2, n3, n4
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+ "n4"
+(3 rows)
+
+RESET ROLE;
+-- user2: no edges visible -> empty (cache must not be reused from user1)
+SET ROLE rls_vle_user2;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+(0 rows)
+
+RESET ROLE;
+-- tidy up Part 4's edge policies before the next parts
+DROP POLICY link_user1 ON rls_vle."LINK";
+DROP POLICY link_user2 ON rls_vle."LINK";
+ALTER TABLE rls_vle."LINK" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" DISABLE ROW LEVEL SECURITY;
+-- ============================================================================
+-- PART 5: SELECT-ACL enforcement -- the low-level loader must not bypass table
+-- privileges, not only RLS policies. rls_vle_user3 can read every label table
+-- EXCEPT the edge table "LINK".
+-- ============================================================================
+CREATE ROLE rls_vle_user3 LOGIN;
+GRANT USAGE ON SCHEMA rls_vle TO rls_vle_user3;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_vle TO rls_vle_user3;
+GRANT USAGE ON SCHEMA ag_catalog TO rls_vle_user3;
+GRANT SELECT ON ALL TABLES IN SCHEMA ag_catalog TO rls_vle_user3;
+REVOKE SELECT ON rls_vle."LINK" FROM rls_vle_user3;
+-- Enforced (default): traversal fails closed with permission denied on "LINK".
+-- The start-node MATCH on "Node" is allowed; only the edge load is denied.
+SET ROLE rls_vle_user3;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ERROR:  permission denied for table LINK
+RESET ROLE;
+-- Opt-out: with enforcement off, the legacy direct scan bypasses the ACL, so
+-- the same role again reaches n2, n3, n4 (the legacy behavior).
+SET age.enforce_rls_in_traversal = off;
+SET ROLE rls_vle_user3;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+ "n4"
+(3 rows)
+
+RESET ROLE;
+RESET age.enforce_rls_in_traversal;
+-- ============================================================================
+-- PART 6: Session-dependent RLS policy -- a policy whose result depends on a
+-- session GUC (current_setting) must be re-evaluated every statement, so an
+-- RLS-enforced cache is never reused across statements even when the role, the
+-- enforcement GUC, and the snapshot are unchanged.
+-- ============================================================================
+ALTER TABLE rls_vle."LINK" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" FORCE ROW LEVEL SECURITY;
+CREATE POLICY link_by_setting ON rls_vle."LINK"
+    FOR SELECT USING (current_setting('rls_vle.mode', true) = 'all');
+SET ROLE rls_vle_user;
+-- mode=all: every edge visible -> n2, n3, n4
+SET rls_vle.mode = 'all';
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "n2"
+ "n3"
+ "n4"
+(3 rows)
+
+-- mode changed in the same session (same role / GUC / snapshot): the cache must
+-- be rebuilt, so now no edge is visible -> empty.
+SET rls_vle.mode = 'none';
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+(0 rows)
+
+RESET rls_vle.mode;
+RESET ROLE;
+DROP POLICY link_by_setting ON rls_vle."LINK";
+ALTER TABLE rls_vle."LINK" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE rls_vle."LINK" DISABLE ROW LEVEL SECURITY;
+-- ============================================================================
+-- PART 7: ACL-metadata cache invalidation -- an enforced (non-RLS) direct-scan
+-- cache must not survive a REVOKE on a label table. In DSM/SHMEM mode the graph
+-- version fast path only tracks data changes, so the cache is invalidated via
+-- catalog-invalidation callbacks; without them the REVOKE'd rows stay readable.
+-- Uses a fresh graph with no RLS so the direct-scan (ACL-only) path is taken.
+-- ============================================================================
+SET age.enforce_rls_in_traversal = on;
+SELECT create_graph('rls_acl');
+NOTICE:  graph "rls_acl" has been created
+ create_graph 
+--------------
+ 
+(1 row)
+
+SELECT * FROM cypher('rls_acl', $$
+    CREATE (:Node {name: 'a'})-[:LINK]->(:Node {name: 'b'})-[:LINK]->(:Node {name: 'c'})
+$$) AS (x agtype);
+ x 
+---
+(0 rows)
+
+GRANT USAGE ON SCHEMA rls_acl TO rls_vle_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_acl TO rls_vle_user;
+-- build the enforced cache: rls_vle_user has SELECT -> reaches b, c
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_acl', $$
+    MATCH (a:Node {name: 'a'})-[:LINK*1..2]->(x) RETURN x.name
+$$) AS (name agtype) ORDER BY name;
+ name 
+------
+ "b"
+ "c"
+(2 rows)
+
+RESET ROLE;
+-- REVOKE SELECT on the edge label -- no graph data change, version counter same
+REVOKE SELECT ON rls_acl."LINK" FROM rls_vle_user;
+-- the cached traversal must now be rebuilt and denied
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_acl', $$
+    MATCH (a:Node {name: 'a'})-[:LINK*1..2]->(x) RETURN x.name
+$$) AS (name agtype) ORDER BY name;
+ERROR:  permission denied for table LINK
+RESET ROLE;
+SELECT drop_graph('rls_acl', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table rls_acl._ag_label_vertex
+drop cascades to table rls_acl._ag_label_edge
+drop cascades to table rls_acl."Node"
+drop cascades to table rls_acl."LINK"
+NOTICE:  graph "rls_acl" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+RESET age.enforce_rls_in_traversal;
+-- ============================================================================
+-- cleanup
+-- ============================================================================
+SELECT drop_graph('rls_vle', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table rls_vle._ag_label_vertex
+drop cascades to table rls_vle._ag_label_edge
+drop cascades to table rls_vle."Node"
+drop cascades to table rls_vle."LINK"
+NOTICE:  graph "rls_vle" has been dropped
+ drop_graph 
+------------
+ 
+(1 row)
+
+DROP OWNED BY rls_vle_user, rls_vle_user2, rls_vle_user3;
+DROP ROLE rls_vle_user, rls_vle_user2, rls_vle_user3;

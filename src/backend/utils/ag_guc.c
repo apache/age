@@ -23,6 +23,7 @@
 #include "utils/ag_guc.h"
 
 bool age_enable_containment = true;
+bool age_enforce_rls_in_traversal = true;
 
 /*
  * Defines AGE's custom configuration parameters.
@@ -36,6 +37,16 @@ void define_config_params(void)
                              "Use @> operator to transform MATCH's filter. Otherwise, use -> operator.",
                              NULL,
                              &age_enable_containment,
+                             true,
+                             PGC_SUSET,
+                             0,
+                             NULL,
+                             NULL,
+                             NULL);
+    DefineCustomBoolVariable("age.enforce_rls_in_traversal",
+                             "Enforce row-level security during VLE / global-graph traversal. When off, the traversal cache is loaded with a direct scan that bypasses RLS.",
+                             NULL,
+                             &age_enforce_rls_in_traversal,
                              true,
                              PGC_SUSET,
                              0,
