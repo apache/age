@@ -46,4 +46,9 @@ agtype_value *agtv_materialize_vle_path(agtype *agt_arg_vpc);
  */
 agtype_value *agtv_materialize_vle_edges(agtype *agt_arg_vpc);
 
+/*
+ * Register the VLE GUC variables.
+ */
+void vle_define_guc_variables(void);
+
 #endif
