@@ -299,6 +299,22 @@ SELECT * FROM cypher('setdelete', $$ MATCH (n)-[e]->(m) SET e.i = 1 DETACH DELET
 SELECT id as "expected: 2 rows (m vertices)" FROM setdelete._ag_label_vertex;
 SELECT id as "expected: 0 rows"              FROM setdelete._ag_label_edge;
 
+-- stale ctid fallback - SET one alias, then DELETE the same entity via another alias.
+SELECT * FROM cypher('setdelete', $$ CREATE (:B) $$) as ("CREATE" agtype);
+SELECT * FROM cypher('setdelete', $$ MATCH (n:B), (m:B) WHERE id(n) = id(m) SET n.flag = true DELETE m $$) as ("SET + DELETE alias" agtype);
+SELECT count(*) as "expected: 0 rows" FROM setdelete."B";
+
+-- hidden ctid propagation through WITH.
+SELECT * FROM cypher('setdelete', $$ CREATE (:C) $$) as ("CREATE" agtype);
+SELECT * FROM cypher('setdelete', $$ MATCH (n:C) WITH n DELETE n $$) as ("WITH DELETE" agtype);
+SELECT count(*) as "expected: 0 rows" FROM setdelete."C";
+
+-- stale edge ctid fallback with DETACH DELETE through another alias.
+SELECT * FROM cypher('setdelete', $$ CREATE (:D)-[:de]->(:D) $$) AS ("CREATE" agtype);
+SELECT * FROM cypher('setdelete', $$ MATCH (n)-[e:de]->(m), (x)-[f:de]->(y) WHERE id(e) = id(f) SET e.i = 1 DETACH DELETE x $$) AS ("SET + DETACH alias" agtype);
+SELECT count(*) as "expected: 1 row" FROM setdelete."D";
+SELECT count(*) as "expected: 0 rows" FROM setdelete.de;
+
 -- clean up
 SELECT drop_graph('setdelete', true);
 

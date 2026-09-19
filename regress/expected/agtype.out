@@ -3779,6 +3779,31 @@ SELECT ag_catalog.agtype_volatile_wrapper(-32767::int2);
  -32767
 (1 row)
 
+-- TID is packed as BlockNumber << 16 | OffsetNumber for hidden ctid transport.
+SELECT ag_catalog.agtype_volatile_wrapper('(0,1)'::tid);
+ agtype_volatile_wrapper 
+-------------------------
+ 1
+(1 row)
+
+SELECT ag_catalog.agtype_volatile_wrapper('(42,7)'::tid);
+ agtype_volatile_wrapper 
+-------------------------
+ 2752519
+(1 row)
+
+SELECT ag_catalog.agtype_volatile_wrapper('(65535,65535)'::tid);
+ agtype_volatile_wrapper 
+-------------------------
+ 4294967295
+(1 row)
+
+SELECT ag_catalog.agtype_volatile_wrapper('(4294967294,65535)'::tid);
+ agtype_volatile_wrapper 
+-------------------------
+ 281474976645119
+(1 row)
+
 -- These should fail
 SELECT ag_catalog.agtype_volatile_wrapper(32768::int2);
 ERROR:  smallint out of range
