@@ -65,3 +65,14 @@ CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
     RETURNS void
     LANGUAGE c
     AS 'MODULE_PATHNAME';
+
+-- Drop and recreate agtype_access_operator with new signature
+DROP FUNCTION IF EXISTS ag_catalog.agtype_access_operator(VARIADIC agtype[]);
+
+CREATE FUNCTION ag_catalog.agtype_access_operator(VARIADIC "any")
+    RETURNS agtype
+    LANGUAGE c
+    IMMUTABLE
+RETURNS NULL ON NULL INPUT
+PARALLEL SAFE
+AS 'MODULE_PATHNAME';

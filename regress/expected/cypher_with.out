@@ -426,10 +426,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WITH n.name AS name, n.age AS age
     RETURN name, age
 $$) AS (name agtype, age agtype);
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
  Seq Scan on with_accessor_opt."Person" n
-   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype])
+   Output: agtype_access_operator(n.properties, '"name"'::agtype), agtype_access_operator(n.properties, '"age"'::agtype)
 (2 rows)
 
 SELECT * FROM cypher('with_accessor_opt', $$
@@ -471,10 +471,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WITH n.name AS name, nid
     RETURN name, nid
 $$) AS (name agtype, nid agtype);
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Seq Scan on with_accessor_opt."Person" n
-   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), (n.id)::agtype
+   Output: agtype_access_operator(n.properties, '"name"'::agtype), (n.id)::agtype
 (2 rows)
 
 SELECT * FROM cypher('with_accessor_opt', $$
@@ -495,10 +495,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WITH n
     RETURN id(n), n.name
 $$) AS (id agtype, name agtype);
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Seq Scan on with_accessor_opt."Person" n
-   Output: (n.id)::agtype, agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
+   Output: (n.id)::agtype, agtype_access_operator(n.properties, '"name"'::agtype)
 (2 rows)
 
 SELECT * FROM cypher('with_accessor_opt', $$
@@ -521,10 +521,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WITH a.name AS aname, b.name AS bname, aid
     RETURN aname, bname, aid
 $$) AS (aname agtype, bname agtype, aid agtype);
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
  Hash Join
-   Output: agtype_access_operator(VARIADIC ARRAY[a.properties, '"name"'::agtype]), agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype]), (a.id)::agtype
+   Output: agtype_access_operator(a.properties, '"name"'::agtype), agtype_access_operator(b.properties, '"name"'::agtype), (a.id)::agtype
    Inner Unique: true
    Hash Cond: (r.end_id = b.id)
    ->  Hash Join
@@ -550,11 +550,11 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WHERE age > 20
     RETURN n.name
 $$) AS (name agtype);
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Seq Scan on with_accessor_opt."Person" n
-   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype])
-   Filter: (agtype_access_operator(VARIADIC ARRAY[n.properties, '"age"'::agtype]) > '20'::agtype)
+   Output: agtype_access_operator(n.properties, '"name"'::agtype)
+   Filter: (agtype_access_operator(n.properties, '"age"'::agtype) > '20'::agtype)
 (3 rows)
 
 SELECT * FROM cypher('with_accessor_opt', $$
@@ -564,12 +564,12 @@ SELECT * FROM cypher('with_accessor_opt', $$
     ORDER BY nid
     RETURN name
 $$) AS (name agtype);
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Subquery Scan on _age_default_alias_previous_cypher_clause
    Output: _age_default_alias_previous_cypher_clause.name
    ->  Index Scan using "Person_pkey" on with_accessor_opt."Person" n
-         Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), n.id
+         Output: agtype_access_operator(n.properties, '"name"'::agtype), n.id
 (4 rows)
 
 SELECT * FROM cypher('with_accessor_opt', $$
@@ -607,10 +607,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     WITH n.name AS name, nid
     RETURN name, nid
 $$) AS (name agtype, nid agtype);
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Seq Scan on with_accessor_opt."Person" n
-   Output: agtype_access_operator(VARIADIC ARRAY[n.properties, '"name"'::agtype]), (n.id)::agtype
+   Output: agtype_access_operator(n.properties, '"name"'::agtype), (n.id)::agtype
 (2 rows)
 
 -- MATCH -> WITH accessors -> MATCH -> RETURN
@@ -621,10 +621,10 @@ SELECT * FROM cypher('with_accessor_opt', $$
     MATCH (a)-[r:KNOWS]->(b)
     RETURN aid, b.name
 $$) AS (aid agtype, bname agtype);
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
  Merge Join
-   Output: (a.id)::agtype, agtype_access_operator(VARIADIC ARRAY[b.properties, '"name"'::agtype])
+   Output: (a.id)::agtype, agtype_access_operator(b.properties, '"name"'::agtype)
    Merge Cond: (b.id = r.end_id)
    ->  Merge Append
          Sort Key: b.id

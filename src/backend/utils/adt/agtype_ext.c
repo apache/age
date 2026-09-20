@@ -18,6 +18,7 @@
  */
 
 #include "utils/agtype_ext.h"
+#include "utils/agtype_traversal.h"
 
 /* define the type and size of the agt_header */
 #define AGT_HEADER_TYPE uint32
@@ -198,21 +199,20 @@ void ag_deserialize_extended_type(char *base_addr, uint32 offset,
 static void ag_deserialize_composite(char *base, enum agtype_value_type type,
                                      agtype_value *result)
 {
-    agtype_iterator *it = NULL;
+    agtype_traversal traversal;
     agtype_iterator_token tok;
     agtype_parse_state *parse_state = NULL;
-    agtype_value *r = NULL;
+    agtype_value r;
     agtype_value *parsed_agtype_value = NULL;
     /* offset container by the extended type header */
     char *container_base = base + AGT_HEADER_SIZE;
 
-    r = palloc(sizeof(agtype_value));
-
-    it = agtype_iterator_init((agtype_container *)container_base);
-    while ((tok = agtype_iterator_next(&it, r, true)) != WAGT_DONE)
+    agtype_traversal_init((agtype_container *)container_base, &traversal);
+    memset(&r, 0, sizeof(r));
+    while ((tok = agtype_iterator_next(&traversal, &r, true)) != WAGT_DONE)
     {
         parsed_agtype_value = push_agtype_value(
-            &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? r : NULL);
+            &parse_state, tok, tok < WAGT_BEGIN_ARRAY ? &r : NULL);
     }
 
     result->type = type;

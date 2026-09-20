@@ -160,7 +160,8 @@ OBJS = src/backend/age.o \
        src/backend/utils/load/ag_load_edges.o \
        src/backend/utils/load/age_load.o \
        src/backend/utils/name_validation.o \
-       src/backend/utils/ag_guc.o
+       src/backend/utils/ag_guc.o \
+       src/backend/utils/adt/agtype_traversal.o
 
 # Per-object header-dependency files (see "Automatic header-dependency
 # tracking" below the PGXS include). One .d is generated beside each .o.
