@@ -157,6 +157,19 @@ SELECT * FROM cypher('expr',
 $$RETURN 1 in [[1]]$$) AS r(c boolean);
 SELECT * FROM cypher('expr',
 $$RETURN 1 IN [[null]]$$) AS r(c boolean);
+-- edge/vertex IN relationships()/nodes() (issue #2542 regression)
+SELECT * FROM create_graph('expr_in_op');
+SELECT * FROM cypher('expr_in_op',
+$$CREATE (a:L)-[:R]->(b)$$) AS r(c agtype);
+SELECT * FROM cypher('expr_in_op',
+$$MATCH ()-[r0]->()
+MATCH p0 = (:L)-[:R]->()
+RETURN r0 IN relationships(p0)$$) AS r(c boolean);
+SELECT * FROM cypher('expr_in_op',
+$$MATCH (a:L)
+MATCH p0 = (:L)-[:R]->()
+RETURN a IN nodes(p0)$$) AS r(c boolean);
+SELECT * FROM drop_graph('expr_in_op', true);
 -- empty list: x IN [] should always return false
 SELECT * FROM cypher('expr',
 $$RETURN 1 IN []$$) AS r(c boolean);
