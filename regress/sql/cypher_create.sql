@@ -194,6 +194,31 @@ PREPARE p_2 AS SELECT * FROM cypher('cypher_create', $$CREATE (v:new_vertex {key
 EXECUTE p_2('{"var_name": "Hello Prepared Statements"}');
 EXECUTE p_2('{"var_name": "Hello Prepared Statements 2"}');
 
+-- prepared statement with scalar parameters used in MATCH and CREATE EDGE.
+-- Regression test: transform_cypher_param() previously called the VARIADIC
+-- agtype_access_operator without building the agtype[] ArrayExpr argument
+-- and without setting funcvariadic = true. Under the extended query
+-- protocol this caused agtype_access_operator to read past its argument
+-- at execution time, corrupting error messages with random bytes and
+-- producing client-side UnicodeDecodeError / invalid-start-byte errors.
+PREPARE p_create_edge(agtype) AS
+SELECT * FROM cypher('cypher_create', $$
+    MATCH (source:v {id: $src_id}), (target:v {id: $tgt_id})
+    CREATE (source)-[r:e {id: $edge_id}]->(target)
+    RETURN r
+$$, $1) AS (r agtype);
+
+-- seed vertices to match against
+SELECT * FROM cypher('cypher_create', $$
+    CREATE (:v {id: 'a'}), (:v {id: 'b'})
+$$) AS (a agtype);
+
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge1"}');
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge2"}');
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge3"}');
+
+DEALLOCATE p_create_edge;
+
 -- pl/pgsql
 CREATE FUNCTION create_test()
 RETURNS TABLE(vertex agtype)
