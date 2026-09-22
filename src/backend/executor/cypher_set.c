@@ -432,6 +432,10 @@ void apply_update_list(CustomScanState *node,
     /* Allocate transient update state in the per-tuple context. */
     old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
+    /* if scanTupleSlot is NULL, there is no data to update */
+    if (scanTupleSlot == NULL)
+        return;
+
     /* allocate an array to hold the last update index of each 'entity' */
     luindex = palloc0(sizeof(int) * scanTupleSlot->tts_nvalid);
 
