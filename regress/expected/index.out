@@ -574,11 +574,12 @@ SELECT * FROM cypher('cypher_index', $$
     RETURN a.name
     ORDER BY a.city_id
 $$) as (name agtype);
-    name     
--------------
+     name      
+---------------
+ "Mexico City"
  "Monterrey"
  "Tijuana"
-(2 rows)
+(3 rows)
 
 -- Create expression index on west_coast boolean property
 CREATE INDEX city_west_coast_idx ON cypher_index."City"
@@ -753,6 +754,100 @@ DROP INDEX cypher_index.city_country_code_idx;
 DROP INDEX cypher_index.city_id_idx;
 DROP INDEX cypher_index.city_west_coast_idx;
 DROP INDEX cypher_index.country_life_exp_idx;
+--
+-- Section 5: Agtype B-tree range boundaries
+--
+BEGIN;
+SET LOCAL enable_seqscan = off;
+SET LOCAL enable_bitmapscan = off;
+SET LOCAL enable_indexonlyscan = off;
+CREATE TEMP TABLE agtype_btree_test (value agtype);
+INSERT INTO agtype_btree_test VALUES ('1'), ('2'), ('2'), ('3');
+CREATE INDEX agtype_btree_test_idx ON agtype_btree_test USING btree (value);
+ANALYZE agtype_btree_test;
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value;
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Index Scan using agtype_btree_test_idx on agtype_btree_test
+   Index Cond: (value > '2'::agtype)
+(2 rows)
+
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value;
+ value 
+-------
+ 3
+(1 row)
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value;
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Index Scan using agtype_btree_test_idx on agtype_btree_test
+   Index Cond: (value >= '2'::agtype)
+(2 rows)
+
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value;
+ value 
+-------
+ 2
+ 2
+ 3
+(3 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value DESC;
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Index Scan Backward using agtype_btree_test_idx on agtype_btree_test
+   Index Cond: (value > '2'::agtype)
+(2 rows)
+
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value DESC;
+ value 
+-------
+ 3
+(1 row)
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value DESC;
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Index Scan Backward using agtype_btree_test_idx on agtype_btree_test
+   Index Cond: (value >= '2'::agtype)
+(2 rows)
+
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value DESC;
+ value 
+-------
+ 3
+ 2
+ 2
+(3 rows)
+
+SELECT value FROM agtype_btree_test WHERE value < '2'::agtype ORDER BY value;
+ value 
+-------
+ 1
+(1 row)
+
+SELECT value FROM agtype_btree_test WHERE value <= '2'::agtype ORDER BY value;
+ value 
+-------
+ 1
+ 2
+ 2
+(3 rows)
+
+SELECT value FROM agtype_btree_test WHERE value = '2'::agtype ORDER BY value;
+ value 
+-------
+ 2
+ 2
+(2 rows)
+
+DROP TABLE agtype_btree_test;
+COMMIT;
 --
 -- General Cleanup
 --

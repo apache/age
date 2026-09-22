@@ -225,6 +225,19 @@ BEGIN
 END;
 $$;
 RESET check_function_bodies;
+BEGIN;
+CREATE TEMP TABLE agtype_upgrade_test (value agtype);
+INSERT INTO agtype_upgrade_test VALUES ('1'), ('2'), ('2'), ('3');
+CREATE INDEX agtype_upgrade_test_idx ON agtype_upgrade_test USING btree (value);
+SELECT value FROM agtype_upgrade_test ORDER BY value DESC;
+ value 
+-------
+ 3
+ 2
+ 2
+ 1
+(4 rows)
+
 -- Step 11: Upgrade to the current (default) version via the stamped template.
 DO $$
 DECLARE curr_ver text;
@@ -246,6 +259,31 @@ FROM pg_available_extensions WHERE name = 'age';
  t
 (1 row)
 
+SET LOCAL enable_seqscan = off;
+SET LOCAL enable_bitmapscan = off;
+SELECT count(*) AS greater FROM agtype_upgrade_test WHERE value > '2'::agtype;
+ greater 
+---------
+       1
+(1 row)
+
+SELECT count(*) AS greater_equal FROM agtype_upgrade_test WHERE value >= '2'::agtype;
+ greater_equal 
+---------------
+             3
+(1 row)
+
+SELECT value FROM agtype_upgrade_test ORDER BY value DESC;
+ value 
+-------
+ 3
+ 2
+ 2
+ 1
+(4 rows)
+
+DROP TABLE agtype_upgrade_test;
+COMMIT;
 -- =====================================================================
 -- UPGRADED INSTALL SNAPSHOTS (Steps 13-18b)
 -- Capture the catalog state after upgrade from initial to current.
