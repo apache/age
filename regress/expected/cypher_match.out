@@ -2270,9 +2270,11 @@ ERROR:  variable "p" already exists
 LINE 1: ...cypher('cypher_match', $$ CREATE (p) WITH p MATCH p=() RETUR...
                                                              ^
 SELECT * FROM cypher('cypher_match', $$ CREATE p=() WITH p MATCH (p) RETURN p $$)as (p agtype);
-ERROR:  variable 'p' already exists
-LINE 1: ...pher('cypher_match', $$ CREATE p=() WITH p MATCH (p) RETURN ...
-                                                             ^
+                                   p                                    
+------------------------------------------------------------------------
+ [{"id": 281474976710669, "label": "", "properties": {}}::vertex]::path
+(1 row)
+
 SELECT * FROM cypher('cypher_match', $$ CREATE ()-[p:knows]->() WITH p MATCH p=() RETURN p $$)as (p agtype);
 ERROR:  variable "p" already exists
 LINE 1: ...r_match', $$ CREATE ()-[p:knows]->() WITH p MATCH p=() RETUR...
@@ -2297,7 +2299,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH (_) RETURN _ $$) as (a agtype);
  {"id": 281474976710659, "label": "", "properties": {"age": 3, "name": "orphan"}}::vertex
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
  {"id": 281474976710668, "label": "", "properties": {"name": "John"}}::vertex
-(10 rows)
+ {"id": 281474976710669, "label": "", "properties": {}}::vertex
+(11 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN 0 $$) as (a agtype);
  a 
@@ -2312,7 +2315,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN 
  0
  0
  0
-(10 rows)
+ 0
+(11 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN _ $$) as (a agtype);
                                       a                                       
@@ -2327,7 +2331,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (_{name: "Dave"}) RETURN 
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
-(10 rows)
+ {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
+(11 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH (my_age_default_{name: "Dave"}) RETURN my_age_default_$$) as (a agtype);
                                       a                                       
@@ -2348,7 +2353,8 @@ SELECT * FROM cypher('cypher_match', $$ MATCH () MATCH (my_age_default_{name: "D
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
  {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
-(10 rows)
+ {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
+(11 rows)
 
 -- these should fail as they are prefixed with _age_default_ which is only for internal use
 SELECT * FROM cypher('cypher_match', $$ MATCH (_age_default_) RETURN _age_default_ $$) as (a agtype);
