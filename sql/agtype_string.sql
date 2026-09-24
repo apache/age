@@ -24,7 +24,7 @@
 CREATE FUNCTION ag_catalog.agtype_string_match_starts_with(agtype, agtype)
     RETURNS agtype
     LANGUAGE c
-    STABLE
+    IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
@@ -32,7 +32,7 @@ AS 'MODULE_PATHNAME';
 CREATE FUNCTION ag_catalog.agtype_string_match_ends_with(agtype, agtype)
     RETURNS agtype
     LANGUAGE c
-    STABLE
+    IMMUTABLE
 RETURNS NULL ON NULL INPUT
 PARALLEL SAFE
 AS 'MODULE_PATHNAME';
