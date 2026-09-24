@@ -77,6 +77,15 @@ is_age_extension_exists(void)
 {
     static bool callback_registered = false;
 
+    /*
+     * Outside a live transaction (the ROLLBACK of a failed one) the catalog
+     * must not be read: the resource owner is already released, and the locks
+     * a catalog scan takes here would leak into the PGPROC. Nothing is cached,
+     * so the next live transaction asks the catalog again.
+     */
+    if (!IsTransactionState())
+        return false;
+
     if (extension_cache_is_valid)
         return age_extension_exists;
 
