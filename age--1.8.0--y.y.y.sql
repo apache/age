@@ -58,10 +58,10 @@ CREATE FUNCTION ag_catalog.load_labels_from_file(graph_name name,
 DROP FUNCTION IF EXISTS ag_catalog.load_edges_from_file(name, name, text, bool);
 
 CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
-                                                label_name name,
-                                                file_path text,
-                                                load_as_agtype bool default false,
-                                                delimiter text default ',')
+                                                 label_name name,
+                                                 file_path text,
+                                                 load_as_agtype bool default false,
+                                                 delimiter text default ',')
     RETURNS void
     LANGUAGE c
     AS 'MODULE_PATHNAME';
@@ -100,3 +100,14 @@ BEGIN
       AND opcfamily = btree_family;
 END
 $$;
+
+--
+-- Mark agtype_string_match_starts_with/_ends_with IMMUTABLE
+--
+-- Issue #2576: same inputs always produce the same output with no catalog
+-- lookups or session state, matching agtype_string_match_contains which is
+-- already IMMUTABLE.
+
+ALTER FUNCTION ag_catalog.agtype_string_match_starts_with(agtype, agtype) IMMUTABLE;
+
+ALTER FUNCTION ag_catalog.agtype_string_match_ends_with(agtype, agtype) IMMUTABLE;
