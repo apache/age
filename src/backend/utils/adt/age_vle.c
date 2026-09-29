@@ -2846,10 +2846,12 @@ typedef struct sp_visit_entry
     List *preds;           /* sp_pred * list for all-shortest-paths mode */
 } sp_visit_entry;
 
-/* Cross-call SRF state: the precomputed result paths streamed one per call. */
+/* Cross-call SRF state: path IDs are materialized one result row at a time. */
 typedef struct sp_srf_state
 {
-    Datum *paths;
+    graphid **paths;
+    Oid graph_oid;
+    int64 path_len;
     int64 npaths;
     int64 next;
 } sp_srf_state;
@@ -3212,24 +3214,23 @@ static HTAB *sp_run_bfs(GRAPH_global_context *ggctx, graphid source,
 }
 
 /*
- * Maximum number of result paths age_all_shortest_paths will materialize
- * before raising an error. The shortest-path DAG can contain exponentially
- * many equal-length paths (grid-like or multi-edge graphs), and they are all
- * built up front in the SRF's memory context, so this is a backstop against
- * unbounded memory growth. CHECK_FOR_INTERRUPTS() in sp_enumerate still allows
- * cancellation, but a fast explosion can outrun a statement_timeout.
+ * The shortest-path DAG can contain exponentially many equal-length paths.
+ * Bound the saved path IDs as well as their count. Result agtype values must
+ * not be retained here: they are built on demand by the SRF.
  */
 #define SP_MAX_RESULT_PATHS 1000000
+#define SP_MAX_PATH_ID_BYTES ((Size) 64 * 1024 * 1024)
 
 /*
  * Recursively enumerate every shortest path by walking the predecessor DAG
- * from target back to source. Each completed path is appended to *out as a
- * freshly allocated interleaved graphid array of length alt_len. The running
- * total is capped at SP_MAX_RESULT_PATHS to bound peak memory.
+ * from target back to source. Each completed path is appended to *out as an
+ * interleaved graphid array allocated in result_ctx. The list cells and BFS
+ * state remain in the caller's scratch context and can be discarded later.
  */
 static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
                          graphid *alt, int64 alt_len, int64 pos,
-                         char *fname, List **out)
+                         char *fname, List **out, MemoryContext result_ctx,
+                         Size *out_bytes)
 {
     sp_visit_entry *e = NULL;
     ListCell *lc = NULL;
@@ -3247,24 +3248,26 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
         /* a complete path only when we have consumed the whole array */
         if (pos == 0)
         {
-            graphid *copy = palloc(sizeof(graphid) * alt_len);
+            Size path_bytes;
+            graphid *copy;
 
-            memcpy(copy, alt, sizeof(graphid) * alt_len);
-            *out = lappend(*out, copy);
-
-            /*
-             * Bound the number of materialized paths. Without a ceiling, a
-             * combinatorial shortest-path DAG could exhaust memory before the
-             * first row is returned.
-             */
-            if (list_length(*out) > SP_MAX_RESULT_PATHS)
+            if (list_length(*out) >= SP_MAX_RESULT_PATHS ||
+                alt_len > SP_MAX_PATH_ID_BYTES / sizeof(graphid) ||
+                *out_bytes > SP_MAX_PATH_ID_BYTES -
+                             (Size) alt_len * sizeof(graphid))
             {
                 ereport(ERROR,
                         (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-                         errmsg("%s: shortest path count exceeded %d",
-                                fname, SP_MAX_RESULT_PATHS),
-                         errhint("Narrow the search with a relationship type or a maximum hop count, or use age_shortest_path for a single path.")));
+                         errmsg("%s: shortest path result exceeds the path limit",
+                                fname),
+                         errhint("Narrow the relationship type or hop range, or use age_shortest_path for one path.")));
             }
+
+            path_bytes = (Size) alt_len * sizeof(graphid);
+            copy = MemoryContextAlloc(result_ctx, path_bytes);
+            memcpy(copy, alt, path_bytes);
+            *out = lappend(*out, copy);
+            *out_bytes += path_bytes;
         }
         return;
     }
@@ -3281,7 +3284,7 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
 
         alt[pos - 1] = p->edge;
         sp_enumerate(visited, source, p->parent_vertex, alt, alt_len, pos - 2,
-                     fname, out);
+                     fname, out, result_ctx, out_bytes);
     }
 }
 
@@ -3307,12 +3310,14 @@ static void sp_enumerate(HTAB *visited, graphid source, graphid cur,
  * is rejected by the caller before reaching here. A single label_oid of
  * InvalidOid means "any edge label".
  */
-static Datum *sp_minhops_fallback(GRAPH_global_context *ggctx, Oid graph_oid,
-                                  const char *graph_name, char *fname,
-                                  graphid source, graphid target, Oid label_oid,
-                                  cypher_rel_dir dir, int64 min_hops,
-                                  int64 max_hops, bool collect_all,
-                                  int64 *out_count)
+static graphid **sp_minhops_fallback(GRAPH_global_context *ggctx,
+                                     Oid graph_oid, const char *graph_name,
+                                     char *fname,
+                                     graphid source, graphid target,
+                                     Oid label_oid, cypher_rel_dir dir,
+                                     int64 min_hops, int64 max_hops,
+                                     bool collect_all, int64 *out_count,
+                                     int64 *out_len)
 {
     MemoryContext oldctx = CurrentMemoryContext;
     MemoryContext tmpctx = NULL;
@@ -3326,9 +3331,11 @@ static Datum *sp_minhops_fallback(GRAPH_global_context *ggctx, Oid graph_oid,
     int64 result_len = 0;
     int64 n = 0;
     int64 idx = 0;
-    Datum *paths = NULL;
+    Size best_bytes = 0;
+    graphid **paths = NULL;
 
     *out_count = 0;
+    *out_len = 0;
 
     /* do the VLE enumeration in a private context we can throw away at the end */
     tmpctx = AllocSetContextCreate(oldctx, "age shortest path minhops",
@@ -3428,12 +3435,29 @@ static Datum *sp_minhops_fallback(GRAPH_global_context *ggctx, Oid graph_oid,
                 list_free_deep(best);
                 best = NIL;
                 best_len = hops;
+                best_bytes = 0;
             }
             {
-                graphid *copy = palloc(sizeof(graphid) * arrlen);
+                Size path_bytes;
+                graphid *copy;
 
-                memcpy(copy, garr, sizeof(graphid) * arrlen);
+                if (list_length(best) >= SP_MAX_RESULT_PATHS ||
+                    arrlen > SP_MAX_PATH_ID_BYTES / sizeof(graphid) ||
+                    best_bytes > SP_MAX_PATH_ID_BYTES -
+                                 (Size) arrlen * sizeof(graphid))
+                {
+                    ereport(ERROR,
+                            (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                             errmsg("%s: shortest path result exceeds the path limit",
+                                    fname),
+                             errhint("Narrow the relationship type or hop range, or use age_shortest_path for one path.")));
+                }
+
+                path_bytes = (Size) arrlen * sizeof(graphid);
+                copy = palloc(path_bytes);
+                memcpy(copy, garr, path_bytes);
                 best = lappend(best, copy);
+                best_bytes += path_bytes;
             }
             MemoryContextSwitchTo(tmpctx);
 
@@ -3454,30 +3478,31 @@ static Datum *sp_minhops_fallback(GRAPH_global_context *ggctx, Oid graph_oid,
 
     /* every kept path has the same (minimum qualifying) length */
     result_len = (2 * best_len) + 1;
-    paths = palloc(sizeof(Datum) * n);
+    paths = palloc(sizeof(graphid *) * n);
     foreach(lc, best)
     {
-        graphid *a = (graphid *) lfirst(lc);
-
-        paths[idx] = sp_build_path_datum(graph_oid, a, result_len);
+        paths[idx] = (graphid *) lfirst(lc);
         idx = idx + 1;
     }
 
-    list_free_deep(best);
+    list_free(best);
     *out_count = n;
+    *out_len = result_len;
     return paths;
 }
 
 /*
- * Resolve arguments, run the BFS, and materialize the result path(s) as an
- * array of AGTV_PATH agtype Datums. Returns NULL with *out_count == 0 when no
- * path exists. Caller must run in a context that survives the SRF.
+ * Resolve arguments, run the BFS, and retain path IDs for the SRF. The agtype
+ * result is built only when the caller asks for each row. Returns NULL with
+ * *out_count == 0 when no path exists. Caller must run in a context that
+ * survives the SRF.
  */
-static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
-                               agtype *end_agt, agtype *label_agt,
-                               agtype *dir_agt, agtype *minhops_agt,
-                               agtype *maxhops_agt, char *fname,
-                               bool collect_all, int64 *out_count)
+static graphid **sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
+                                  agtype *end_agt, agtype *label_agt,
+                                  agtype *dir_agt, agtype *minhops_agt,
+                                  agtype *maxhops_agt, char *fname,
+                                  bool collect_all, int64 *out_count,
+                                  Oid *out_graph_oid, int64 *out_len)
 {
     agtype_value *agtv_temp = NULL;
     char *graph_name = NULL;
@@ -3493,11 +3518,13 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     HTAB *visited = NULL;
     int64 target_depth = -1;
     bool found = false;
-    Datum *paths = NULL;
+    graphid **paths = NULL;
     MemoryContext oldctx = CurrentMemoryContext;
     MemoryContext scratch = NULL;
 
     *out_count = 0;
+    *out_graph_oid = InvalidOid;
+    *out_len = 0;
 
     /* the graph name is required */
     if (graph_name_agt == NULL)
@@ -3512,6 +3539,7 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     graph_name = pnstrdup(agtv_temp->val.string.val,
                           agtv_temp->val.string.len);
     graph_oid = get_graph_oid(graph_name);
+    *out_graph_oid = graph_oid;
 
     /*
      * A NULL start or end vertex yields no rows, matching Cypher semantics
@@ -3638,13 +3666,9 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
     }
 
     /*
-     * Run the search and reconstruct the result path(s) in a private scratch
-     * context. The BFS bookkeeping (visited table, frontier queue, predecessor
-     * multiset) and the intermediate path arrays are only needed while we
-     * compute; the surviving result Datums are built in the caller's
-     * (SRF-lifetime) context and copied out before the scratch context is
-     * deleted. This bounds peak memory to the result set plus one search,
-     * rather than retaining the whole search state for the life of the SRF.
+     * Run the search in a private scratch context. Keep only bounded path ID
+     * arrays in the SRF-lifetime context; discard the BFS bookkeeping and
+     * temporary list cells before producing agtype result rows.
      */
     scratch = AllocSetContextCreate(oldctx, "age shortest path scratch",
                                     ALLOCSET_DEFAULT_SIZES);
@@ -3701,12 +3725,12 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
          * result is captured rather than retained for the SRF's lifetime.
          */
         {
-            Datum *fb_paths;
+            graphid **fb_paths;
 
             fb_paths = sp_minhops_fallback(ggctx, graph_oid, graph_name, fname,
                                            source, target, fallback_label_oid,
                                            dir, min_hops, max_hops, collect_all,
-                                           out_count);
+                                           out_count, out_len);
             pfree_if_not_null(graph_name);
             pfree_if_not_null(label_oids);
             return fb_paths;
@@ -3735,11 +3759,13 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
             cur = e->parent_vertex;
         }
 
-        /* build the surviving result Datum in the caller's context */
+        /* copy the path IDs out of the short-lived BFS context */
         MemoryContextSwitchTo(oldctx);
-        paths = palloc(sizeof(Datum));
-        paths[0] = sp_build_path_datum(graph_oid, alt, alt_len);
+        paths = palloc(sizeof(graphid *));
+        paths[0] = palloc(sizeof(graphid) * alt_len);
+        memcpy(paths[0], alt, sizeof(graphid) * alt_len);
         *out_count = 1;
+        *out_len = alt_len;
     }
     else
     {
@@ -3750,26 +3776,26 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
         ListCell *lc = NULL;
         int64 n = 0;
         int64 idx = 0;
+        Size path_bytes = 0;
 
         sp_enumerate(visited, source, target, alt, alt_len, alt_len - 1,
-                     fname, &arrays);
+                     fname, &arrays, oldctx, &path_bytes);
 
         n = list_length(arrays);
 
-        /* build the surviving result Datums in the caller's context */
+        /* the saved ID arrays already live in the caller's context */
         MemoryContextSwitchTo(oldctx);
-        paths = palloc(sizeof(Datum) * (n > 0 ? n : 1));
+        paths = palloc(sizeof(graphid *) * (n > 0 ? n : 1));
         foreach(lc, arrays)
         {
-            graphid *a = (graphid *) lfirst(lc);
-
-            paths[idx] = sp_build_path_datum(graph_oid, a, alt_len);
+            paths[idx] = (graphid *) lfirst(lc);
             idx = idx + 1;
         }
         *out_count = n;
+        *out_len = alt_len;
     }
 
-    /* results are copied out; drop the BFS/enumeration scratch */
+    /* saved IDs survive; drop the BFS/enumeration scratch */
     MemoryContextSwitchTo(oldctx);
     MemoryContextDelete(scratch);
     pfree_if_not_null(graph_name);
@@ -3779,8 +3805,9 @@ static Datum *sp_compute_paths(agtype *graph_name_agt, agtype *start_agt,
 
 /*
  * Shared SRF driver for age_shortest_path / age_all_shortest_paths. The first
- * call computes every result path up front and stores them; subsequent calls
- * stream them one per row.
+ * call saves bounded path IDs; each subsequent call materializes one agtype
+ * path in the per-call context. An outer LIMIT can therefore stop before
+ * unrequested agtype values are built.
  */
 static Datum sp_srf_impl(FunctionCallInfo fcinfo, bool collect_all)
 {
@@ -3847,7 +3874,8 @@ static Datum sp_srf_impl(FunctionCallInfo fcinfo, bool collect_all)
                                         a_dir, a_min, a_max,
                                         collect_all ? "age_all_shortest_paths"
                                                     : "age_shortest_path",
-                                        collect_all, &state->npaths);
+                                        collect_all, &state->npaths,
+                                        &state->graph_oid, &state->path_len);
         funcctx->user_fctx = state;
 
         MemoryContextSwitchTo(oldctx);
@@ -3858,7 +3886,13 @@ static Datum sp_srf_impl(FunctionCallInfo fcinfo, bool collect_all)
 
     if (state->next < state->npaths)
     {
-        Datum d = state->paths[state->next];
+        Datum d;
+
+        CHECK_FOR_INTERRUPTS();
+        d = sp_build_path_datum(state->graph_oid,
+                                state->paths[state->next], state->path_len);
+        pfree(state->paths[state->next]);
+        state->paths[state->next] = NULL;
 
         state->next = state->next + 1;
         SRF_RETURN_NEXT(funcctx, d);
