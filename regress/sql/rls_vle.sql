@@ -257,6 +257,534 @@ SELECT drop_graph('rls_acl', true);
 RESET age.enforce_rls_in_traversal;
 
 -- ============================================================================
+-- PART 8: Traversal lifetime -- a traversal's graph context stays alive until
+-- its query ends, even when another traversal in the same query must load its
+-- own RLS-filtered context. Within one query an RLS-filtered context is reused
+-- under the rules PostgreSQL gives a statement's scans (see 8.3 to 8.7).
+-- ============================================================================
+SELECT create_graph('rls_vle_chain');
+SELECT * FROM cypher('rls_vle_chain', $$
+    CREATE (:Node {n: 1})-[:LINK]->(:Node {n: 2})-[:LINK]->(:Node {n: 3})-[:LINK]->(:Node {n: 4})
+$$) AS (x agtype);
+SELECT create_graph('rls_vle_chain2');
+SELECT * FROM cypher('rls_vle_chain2', $$
+    CREATE (:Node {n: 1})-[:LINK]->(:Node {n: 2})-[:LINK]->(:Node {n: 3})
+$$) AS (x agtype);
+SELECT create_graph('rls_vle_many');
+SELECT * FROM cypher('rls_vle_many', $$
+    UNWIND range(1, 20) AS i
+    CREATE (:Source {i: i})-[:LINK]->(:Target {i: i})
+$$) AS (x agtype);
+GRANT USAGE ON SCHEMA rls_vle_chain, rls_vle_chain2, rls_vle_many TO rls_vle_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_vle_chain, rls_vle_chain2, rls_vle_many
+    TO rls_vle_user;
+ALTER TABLE rls_vle_chain."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_all ON rls_vle_chain."LINK" FOR SELECT USING (true);
+ALTER TABLE rls_vle_chain2."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_all ON rls_vle_chain2."LINK" FOR SELECT USING (true);
+ALTER TABLE rls_vle_many."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_all ON rls_vle_many."LINK" FOR SELECT USING (true);
+
+SET ROLE rls_vle_user;
+-- 8.1: two traversals advanced row by row in one target list: 6 and 20 paths
+SELECT count(a) AS chain_paths, count(b) AS independent_paths
+FROM (
+    SELECT
+        (age_vle('"rls_vle_chain"', NULL, NULL,
+                 age_build_vle_match_edge('"LINK"', NULL),
+                 '1', '3', '1')).start_id AS a,
+        (age_vle('"rls_vle_many"', NULL, NULL,
+                 age_build_vle_match_edge('"LINK"', NULL),
+                 '1', '2', '1')).end_id AS b
+) AS interleaved;
+
+-- 8.2: paths of the first graph are materialized after the second graph's
+-- traversal loaded its own context: 6 x 3 pairs of distinct paths
+SELECT count(*) AS pairs, count(DISTINCT p) AS chain_paths,
+       count(DISTINCT q) AS chain2_paths
+FROM cypher('rls_vle_chain', $$
+         MATCH p = (a)-[:LINK*1..3]->(b) RETURN p
+     $$) AS one(p agtype),
+     cypher('rls_vle_chain2', $$
+         MATCH q = (a)-[:LINK*1..2]->(b) RETURN q
+     $$) AS two(q agtype);
+RESET ROLE;
+
+-- 8.3: policy evaluations per query. Each traversal loads the 20 visible
+-- edges once and reuses its load when it is evaluated again for another row,
+-- as PostgreSQL rescans a materialized scan. Another traversal in the query
+-- shares that load only when the policy gives the same result throughout the
+-- statement: when it calls only IMMUTABLE functions, besides values such as
+-- current_user that cannot change unnoticed. Otherwise, as with the STABLE
+-- and volatile counters below, it loads the graph again, as a separate scan
+-- would evaluate the policy again.
+SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
+CREATE SEQUENCE public.rls_vle_policy_calls;
+GRANT USAGE, SELECT ON SEQUENCE public.rls_vle_policy_calls TO rls_vle_user;
+CREATE FUNCTION public.rls_vle_count_stable() RETURNS boolean
+    LANGUAGE plpgsql STABLE
+AS $f$
+BEGIN
+    PERFORM nextval('public.rls_vle_policy_calls');
+    RETURN true;
+END
+$f$;
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (public.rls_vle_count_stable());
+
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+$$) AS (n agtype);
+RESET ROLE;
+SELECT last_value AS stable_one_hop_evaluations FROM public.rls_vle_policy_calls;
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..2]->(b:Target) RETURN count(*)
+$$) AS (n agtype);
+RESET ROLE;
+SELECT last_value AS stable_one_to_two_hop_evaluations
+FROM public.rls_vle_policy_calls;
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH p = (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(p)
+$$) AS (n agtype);
+RESET ROLE;
+SELECT last_value AS stable_named_path_evaluations
+FROM public.rls_vle_policy_calls;
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS stable_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+
+-- each traversal loaded its own context: the first one's was freed when the
+-- query ended, and the second one's stays in the backend until the next
+-- graph load frees it
+SELECT count(*) AS contexts_after_stable_query
+FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
+SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
+
+-- policies that give the same result throughout the statement: the two
+-- traversals share one load. The counter is declared IMMUTABLE so that the
+-- policy counts as fixed, and its argument keeps it from being evaluated
+-- once at planning.
+CREATE FUNCTION public.rls_vle_count_fixed(id graphid) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+AS $f$
+BEGIN
+    PERFORM nextval('public.rls_vle_policy_calls');
+    RETURN true;
+END
+$f$;
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (public.rls_vle_count_fixed(id));
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS immutable_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (public.rls_vle_count_fixed(id) AND current_user = 'rls_vle_user');
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS current_user_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+
+-- the search path can change during the statement, and a STABLE function
+-- in a subquery of the policy counts as in the policy itself: each
+-- traversal loads the graph
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (public.rls_vle_count_fixed(id) AND current_schema IS NOT NULL);
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS current_schema_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (EXISTS (SELECT 1 WHERE id IS NOT NULL
+                              AND public.rls_vle_count_stable()));
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS stable_subquery_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
+
+ALTER POLICY link_all ON rls_vle_many."LINK"
+    USING (nextval('public.rls_vle_policy_calls') > 0);
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+$$) AS (n agtype);
+RESET ROLE;
+SELECT last_value AS volatile_one_hop_evaluations
+FROM public.rls_vle_policy_calls;
+ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
+
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+    WITH count(*) AS first
+    MATCH (c:Source)-[:LINK*1..1]->(d:Target)
+    RETURN first, count(*)
+$$) AS (first agtype, second agtype);
+RESET ROLE;
+SELECT last_value AS volatile_two_call_site_evaluations
+FROM public.rls_vle_policy_calls;
+
+-- the first call site's context was freed when the query ended; the second
+-- one is kept, as for the stable policy
+SELECT count(*) AS contexts_after_volatile_query
+FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
+ALTER POLICY link_all ON rls_vle_many."LINK" USING (true);
+
+-- a policy that reads a setting with current_setting(), which the statement
+-- itself changes: each traversal sets the limit through its graph argument
+-- and sees its own Targets, the first those up to 5 and the second those up
+-- to 10, as two scans of the label in PostgreSQL would
+ALTER TABLE rls_vle_many."Target" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY target_limit ON rls_vle_many."Target" FOR SELECT
+    USING ((properties->>'"i"')::int <=
+           coalesce(nullif(current_setting('rls_vle.max_target', true), ''),
+                    '0')::int);
+CREATE FUNCTION public.rls_vle_limit_targets(n int) RETURNS agtype
+    LANGUAGE plpgsql VOLATILE
+AS $f$
+BEGIN
+    PERFORM set_config('rls_vle.max_target', n::text, false);
+    RETURN '"rls_vle_many"'::agtype;
+END
+$f$;
+SET ROLE rls_vle_user;
+SELECT count(DISTINCT first.end_id) AS first_targets,
+       count(DISTINCT second.end_id) AS second_targets
+FROM age_vle(public.rls_vle_limit_targets(5), NULL, NULL,
+             age_build_vle_match_edge('"LINK"', NULL),
+             '1', '1', '1') AS first,
+     LATERAL age_vle(public.rls_vle_limit_targets(
+                         CASE WHEN first.start_id IS NOT NULL THEN 10 END),
+                     NULL, NULL,
+                     age_build_vle_match_edge('"LINK"', NULL),
+                     '1', '1', '1') AS second;
+RESET ROLE;
+RESET rls_vle.max_target;
+DROP POLICY target_limit ON rls_vle_many."Target";
+ALTER TABLE rls_vle_many."Target" DISABLE ROW LEVEL SECURITY;
+DROP FUNCTION public.rls_vle_limit_targets(int);
+
+-- 8.4: a statement's own write is visible to its later traversal. The write
+-- advances the command id, so the later traversal does not reuse the graph
+-- loaded before it.
+BEGIN;
+GRANT INSERT ON rls_vle_many."LINK" TO rls_vle_user;
+GRANT USAGE ON SEQUENCE rls_vle_many."LINK_id_seq" TO rls_vle_user;
+CREATE POLICY link_insert ON rls_vle_many."LINK" FOR INSERT WITH CHECK (true);
+SET LOCAL ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source {i: 1})-[:LINK*1..1]->(b:Target)
+    WITH a, count(b) AS before
+    MATCH (t:Target {i: 2})
+    CREATE (a)-[:LINK]->(t)
+    WITH a, before, count(*) AS created
+    MATCH (a)-[:LINK*1..1]->(c:Target)
+    RETURN before, created, count(c)
+$$) AS (before agtype, created agtype, after agtype);
+ROLLBACK;
+
+-- 8.5: a policy change made while a statement runs does not change what that
+-- statement's traversal sees, as for a PostgreSQL scan; the next statement
+-- sees it. The start vertex argument hides every edge when the traversal is
+-- evaluated for the second row, after the first row loaded the graph.
+CREATE FUNCTION public.rls_vle_start_hiding_links(id graphid, rn bigint)
+    RETURNS ag_catalog.agtype
+    LANGUAGE plpgsql SECURITY DEFINER
+AS $f$
+BEGIN
+    IF rn = 2 THEN
+        ALTER POLICY link_all ON rls_vle_many."LINK" USING (false);
+    END IF;
+    RETURN (id::text)::ag_catalog.agtype;
+END
+$f$;
+
+SET ROLE rls_vle_user;
+SELECT count(*) AS paths_with_policy_changed_midway
+FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn
+      FROM rls_vle_many."Source") AS s,
+     LATERAL age_vle('"rls_vle_many"',
+                     public.rls_vle_start_hiding_links(s.id, s.rn), NULL,
+                     age_build_vle_match_edge('"LINK"', NULL),
+                     '1', '1', '1') AS v;
+SELECT count(*) AS paths_in_next_statement
+FROM rls_vle_many."Source" AS s,
+     LATERAL age_vle('"rls_vle_many"', (s.id::text)::agtype, NULL,
+                     age_build_vle_match_edge('"LINK"', NULL),
+                     '1', '1', '1') AS v;
+RESET ROLE;
+
+-- 8.6: a graph loaded for one role is not reused for another, even within a
+-- statement. The start vertex argument switches to rls_vle_user2, from whom
+-- every edge is hidden, when the traversal is evaluated for the second row.
+ALTER POLICY link_all ON rls_vle_many."LINK" USING (true);
+GRANT USAGE ON SCHEMA rls_vle_many TO rls_vle_user2;
+GRANT SELECT ON ALL TABLES IN SCHEMA rls_vle_many TO rls_vle_user2;
+CREATE POLICY link_hidden_from_user2 ON rls_vle_many."LINK" AS RESTRICTIVE
+    FOR SELECT TO rls_vle_user2 USING (false);
+CREATE FUNCTION public.rls_vle_start_as_user2(id graphid, rn bigint)
+    RETURNS ag_catalog.agtype
+    LANGUAGE plpgsql
+AS $f$
+BEGIN
+    IF rn = 2 THEN
+        PERFORM set_config('role', 'rls_vle_user2', true);
+    END IF;
+    RETURN (id::text)::ag_catalog.agtype;
+END
+$f$;
+
+SET ROLE rls_vle_user;
+SELECT count(*) AS paths_with_role_changed_midway
+FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn
+      FROM rls_vle_many."Source") AS s,
+     LATERAL age_vle('"rls_vle_many"',
+                     public.rls_vle_start_as_user2(s.id, s.rn), NULL,
+                     age_build_vle_match_edge('"LINK"', NULL),
+                     '1', '1', '1') AS v;
+RESET ROLE;
+
+-- 8.7: a statement's own deletes do not make a traversal load its graph
+-- again. The traversal keeps the graph it loaded, as it does without RLS, so
+-- a policy that allows every row returns what no policy returns, and the
+-- query holds one copy of the graph instead of one for every row.
+SELECT create_graph('rls_vle_before_plain');
+SELECT create_graph('rls_vle_before_rls');
+SELECT create_graph('rls_vle_after_plain');
+SELECT create_graph('rls_vle_after_rls');
+SELECT * FROM cypher('rls_vle_before_plain', $$
+    CREATE (:Source {i: 1})-[:LINK]->(m:Mid {i: 0})-[:LINK]->(:Target {i: 9}),
+           (:Source {i: 2})-[:LINK]->(m)
+$$) AS (x agtype);
+SELECT * FROM cypher('rls_vle_before_rls', $$
+    CREATE (:Source {i: 1})-[:LINK]->(m:Mid {i: 0})-[:LINK]->(:Target {i: 9}),
+           (:Source {i: 2})-[:LINK]->(m)
+$$) AS (x agtype);
+SELECT * FROM cypher('rls_vle_after_plain', $$
+    CREATE (:Node {i: 1, ord: 0})-[:LINK]->(:Node {i: 2, ord: 2})
+           -[:LINK]->(:Node {i: 3, ord: 3}),
+           (:Node {i: 9, ord: 1})
+$$) AS (x agtype);
+SELECT * FROM cypher('rls_vle_after_rls', $$
+    CREATE (:Node {i: 1, ord: 0})-[:LINK]->(:Node {i: 2, ord: 2})
+           -[:LINK]->(:Node {i: 3, ord: 3}),
+           (:Node {i: 9, ord: 1})
+$$) AS (x agtype);
+GRANT USAGE ON SCHEMA rls_vle_before_plain, rls_vle_before_rls,
+    rls_vle_after_plain, rls_vle_after_rls TO rls_vle_user;
+GRANT SELECT, DELETE ON ALL TABLES IN SCHEMA rls_vle_before_plain,
+    rls_vle_before_rls, rls_vle_after_plain, rls_vle_after_rls
+    TO rls_vle_user;
+ALTER TABLE rls_vle_before_rls."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_read ON rls_vle_before_rls."LINK" FOR SELECT USING (true);
+CREATE POLICY link_delete ON rls_vle_before_rls."LINK" FOR DELETE USING (true);
+ALTER TABLE rls_vle_after_rls."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_read ON rls_vle_after_rls."LINK" FOR SELECT USING (true);
+CREATE POLICY link_delete ON rls_vle_after_rls."LINK" FOR DELETE USING (true);
+
+SET ROLE rls_vle_user;
+-- a traversal before the delete, for each Source: s1 -> m <- s2, m -> t
+SELECT * FROM cypher('rls_vle_before_plain', $$
+    MATCH (a:Source)-[:LINK*1..2]->(b)
+    DETACH DELETE b
+    RETURN a.i, b.i
+$$) AS (source agtype, deleted agtype) ORDER BY source, deleted;
+SELECT * FROM cypher('rls_vle_before_rls', $$
+    MATCH (a:Source)-[:LINK*1..2]->(b)
+    DETACH DELETE b
+    RETURN a.i, b.i
+$$) AS (source agtype, deleted agtype) ORDER BY source, deleted;
+
+-- a traversal after the delete of each node but n1, in the order of ord:
+-- n1 -> n2 -> n3 and an unconnected n9, which is deleted first
+SELECT * FROM cypher('rls_vle_after_plain', $$
+    MATCH (d:Node) WHERE d.i > 1
+    WITH d ORDER BY d.ord
+    DETACH DELETE d
+    WITH d
+    MATCH p = (n:Node {i: 1})-[:LINK*1..3]->()
+    RETURN d.i, length(p)
+$$) AS (deleted agtype, path_length agtype) ORDER BY deleted, path_length;
+SELECT * FROM cypher('rls_vle_after_rls', $$
+    MATCH (d:Node) WHERE d.i > 1
+    WITH d ORDER BY d.ord
+    DETACH DELETE d
+    WITH d
+    MATCH p = (n:Node {i: 1})-[:LINK*1..3]->()
+    RETURN d.i, length(p)
+$$) AS (deleted agtype, path_length agtype) ORDER BY deleted, path_length;
+RESET ROLE;
+
+-- the copies of the graph held while a traversal for each Source is
+-- followed by a delete, counted after every row
+CREATE FUNCTION public.rls_vle_graph_copies(anyelement) RETURNS bigint
+    LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+AS $f$
+BEGIN
+    RETURN (SELECT count(*) FROM pg_backend_memory_contexts
+            WHERE name = 'AGE edge_table');
+END
+$f$;
+SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
+BEGIN;
+GRANT DELETE ON ALL TABLES IN SCHEMA rls_vle_many TO rls_vle_user;
+CREATE POLICY link_delete ON rls_vle_many."LINK" FOR DELETE USING (true);
+SET LOCAL ROLE rls_vle_user;
+SELECT count(*) AS deleted, max(copies) AS most_graph_copies_held
+FROM (SELECT public.rls_vle_graph_copies(i) AS copies
+      FROM cypher('rls_vle_many', $$
+          MATCH (a:Source)-[:LINK*1..1]->(b:Target)
+          DETACH DELETE b
+          RETURN a.i
+      $$) AS (i agtype)) AS per_row;
+ROLLBACK;
+
+-- 8.8: a path value kept after its query is built from a graph context that
+-- holds all of its vertices and edges. When no context does, building it
+-- raises an error: after the caches are deleted, and for a role whose
+-- context lacks the path's edges.
+CREATE TABLE public.rls_vle_stored_paths AS
+SELECT edges FROM age_vle('"rls_vle_many"', NULL, NULL,
+                          age_build_vle_match_edge('"LINK"', NULL),
+                          '1', '1', '1');
+SELECT count(age_materialize_vle_path(edges)) AS stored_paths_built
+FROM public.rls_vle_stored_paths;
+SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
+SELECT count(age_materialize_vle_path(edges)) AS stored_paths_built
+FROM public.rls_vle_stored_paths;
+SELECT count(age_materialize_vle_edges(edges)) AS stored_edge_lists_built
+FROM public.rls_vle_stored_paths;
+GRANT SELECT ON public.rls_vle_stored_paths TO rls_vle_user2;
+SET ROLE rls_vle_user2;
+SELECT count(*) AS paths_visible_to_user2
+FROM age_vle('"rls_vle_many"', NULL, NULL,
+             age_build_vle_match_edge('"LINK"', NULL), '1', '1', '1');
+SELECT count(age_materialize_vle_path(edges)) AS stored_paths_built
+FROM public.rls_vle_stored_paths;
+SELECT count(age_materialize_vle_edges(edges)) AS stored_edge_lists_built
+FROM public.rls_vle_stored_paths;
+RESET ROLE;
+DROP TABLE public.rls_vle_stored_paths;
+
+-- 8.9: a query that fails after its traversal releases its graph context
+-- during the error cleanup, at the top level and in PL/pgSQL, so failed
+-- queries leave no contexts behind
+SET ROLE rls_vle_user;
+SELECT 1 / ((n::text)::int - 20) AS fails_after_traversal
+FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+$$) AS (n agtype);
+SELECT 1 / ((n::text)::int - 20) AS fails_after_traversal
+FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+$$) AS (n agtype);
+DO $d$
+BEGIN
+    PERFORM 1 / ((n::text)::int - 20)
+    FROM cypher('rls_vle_many', $$
+        MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+    $$) AS (n agtype);
+EXCEPTION WHEN division_by_zero THEN
+    NULL;
+END
+$d$;
+SELECT * FROM cypher('rls_vle_many', $$
+    MATCH (a:Source)-[:LINK*1..1]->(b:Target) RETURN count(*)
+$$) AS (paths agtype);
+RESET ROLE;
+SELECT count(*) AS contexts_after_failed_queries
+FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
+
+-- 8.10: deleting the graph caches while a query holds its graph retires the
+-- context instead of freeing it. The query still builds its paths from it,
+-- and it is freed when the query ends, also when the query then fails.
+SET ROLE rls_vle_user;
+SELECT count(age_materialize_vle_path(v.edges)) AS paths_built_after_delete
+FROM (SELECT edges, row_number() OVER () AS rn
+      FROM age_vle('"rls_vle_many"', NULL, NULL,
+                   age_build_vle_match_edge('"LINK"', NULL),
+                   '1', '1', '1')) AS v
+WHERE CASE WHEN v.rn = 1 THEN age_delete_global_graphs(NULL) IS NOT NULL
+           ELSE true END;
+RESET ROLE;
+SELECT count(*) AS contexts_after_query
+FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
+SET ROLE rls_vle_user;
+SELECT 1 / (count(age_materialize_vle_path(v.edges)) - 20) AS fails_after_paths
+FROM (SELECT edges, row_number() OVER () AS rn
+      FROM age_vle('"rls_vle_many"', NULL, NULL,
+                   age_build_vle_match_edge('"LINK"', NULL),
+                   '1', '1', '1')) AS v
+WHERE CASE WHEN v.rn = 1
+           THEN age_delete_global_graphs('"rls_vle_many"') IS NOT NULL
+           ELSE true END;
+RESET ROLE;
+SELECT count(*) AS contexts_after_failed_query
+FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
+
+DROP FUNCTION public.rls_vle_graph_copies(anyelement);
+DROP FUNCTION public.rls_vle_start_as_user2(graphid, bigint);
+DROP FUNCTION public.rls_vle_start_hiding_links(graphid, bigint);
+DROP FUNCTION public.rls_vle_count_fixed(graphid);
+DROP FUNCTION public.rls_vle_count_stable();
+DROP SEQUENCE public.rls_vle_policy_calls;
+SELECT drop_graph('rls_vle_chain', true);
+SELECT drop_graph('rls_vle_chain2', true);
+SELECT drop_graph('rls_vle_many', true);
+SELECT drop_graph('rls_vle_before_plain', true);
+SELECT drop_graph('rls_vle_before_rls', true);
+SELECT drop_graph('rls_vle_after_plain', true);
+SELECT drop_graph('rls_vle_after_rls', true);
+
+-- ============================================================================
 -- cleanup
 -- ============================================================================
 SELECT drop_graph('rls_vle', true);
