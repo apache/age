@@ -776,6 +776,18 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     ggctx = acquire_GRAPH_global_context(graph_name, graph_oid, query_owner,
                                          fcinfo->flinfo);
 
+    /*
+     * The graph can have no vertices the caller may see, for example when
+     * row-level security hides all of them. There is nothing to traverse,
+     * so there are no paths.
+     */
+    if (peek_stack_head(get_graph_vertices(ggctx)) == NULL)
+    {
+        pfree_if_not_null(graph_name);
+        MemoryContextSwitchTo(oldctx);
+        return NULL;
+    }
+
     /* allocate and initialize local VLE context */
     vlelctx = palloc0(sizeof(VLE_local_context));
 
@@ -798,11 +810,6 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     /* initialize the next vertex, in this case the first */
     vlelctx->next_vertex = peek_stack_head(get_graph_vertices(ggctx));
 
-    /* if there isn't one, the graph is empty */
-    if (vlelctx->next_vertex == NULL)
-    {
-        elog(ERROR, "age_vle: empty graph");
-    }
     /*
      * Get the start vertex id - this is an optional parameter and determines
      * which path function is used. If a start vertex isn't provided, we

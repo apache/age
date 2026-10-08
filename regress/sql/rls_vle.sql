@@ -849,6 +849,31 @@ DROP POLICY node_all ON rls_vle."Node";
 ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
+-- PART 11: No visible vertices. When a policy hides every vertex, a traversal
+-- has nothing to traverse and returns no paths instead of an error. The
+-- untyped MATCH still returns the hidden vertices from the parent table, so
+-- each traversal starts from a vertex outside the visible graph.
+-- ============================================================================
+ALTER TABLE rls_vle."Node" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY node_none ON rls_vle."Node" FOR SELECT USING (false);
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n:Node) RETURN count(n)
+$$) AS (count agtype);
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a)-[:LINK*1..3]->(b) RETURN b.name
+$$) AS (name agtype);
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a)-[:LINK*0..1]->(b) RETURN count(*)
+$$) AS (count agtype);
+SELECT count(*) AS paths
+FROM age_vle('"rls_vle"', NULL, NULL,
+             age_build_vle_match_edge('"LINK"', NULL), '1', '3', '1');
+RESET ROLE;
+DROP POLICY node_none ON rls_vle."Node";
+ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
 -- cleanup
 -- ============================================================================
 SELECT drop_graph('rls_vle', true);
