@@ -2787,6 +2787,17 @@ Datum age_vertex_stats(PG_FUNCTION_ARGS)
     /* get the vertex entry */
     ve = get_vertex_entry(ggctx, vid);
 
+    /*
+     * The vertex is absent from the graph the caller can traverse, for
+     * example when row-level security hides it while an untyped MATCH, which
+     * scans the parent label table, still returns it. There are no
+     * statistics for it.
+     */
+    if (ve == NULL)
+    {
+        PG_RETURN_NULL();
+    }
+
     /* zero the state */
     memset(&result, 0, sizeof(agtype_in_state));
 
