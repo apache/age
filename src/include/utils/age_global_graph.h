@@ -58,7 +58,16 @@ typedef struct GRAPH_global_context GRAPH_global_context;
 /* GRAPH global context functions */
 GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
                                                    Oid graph_oid);
+GRAPH_global_context *acquire_GRAPH_global_context(char *graph_name,
+                                                   Oid graph_oid,
+                                                   MemoryContext query_owner,
+                                                   const void *call_site);
+void pin_GRAPH_global_context(GRAPH_global_context *ggctx,
+                              MemoryContext owner, const void *call_site);
 GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid);
+GRAPH_global_context *find_GRAPH_global_context_for_path(Oid graph_oid,
+                                                         const graphid *ids,
+                                                         int64 count);
 bool is_ggctx_invalid(GRAPH_global_context *ggctx);
 /* GRAPH retrieval functions */
 ListGraphId *get_graph_vertices(GRAPH_global_context *ggctx);

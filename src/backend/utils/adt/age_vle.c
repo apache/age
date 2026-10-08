@@ -639,6 +639,14 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     Oid graph_oid = InvalidOid;
     int64 vle_grammar_node_id = 0;
     bool use_cache = false;
+    ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+    MemoryContext query_owner = NULL;
+
+    /* the graph context stays pinned for the rest of this query */
+    if (rsinfo != NULL && IsA(rsinfo, ReturnSetInfo) && rsinfo->econtext != NULL)
+    {
+        query_owner = rsinfo->econtext->ecxt_per_query_memory;
+    }
 
     /*
      * Get the VLE grammar node id, if it exists. Remember, we overload the
@@ -667,6 +675,8 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
          * to objects already in the proper context or primitive types that will
          * be stored in that context since the memory is allocated there.
          */
+
+        pin_GRAPH_global_context(vlelctx->ggctx, query_owner, fcinfo->flinfo);
 
         /* get and update the start vertex id */
         if (PG_ARGISNULL(1) || is_agtype_null(AG_GET_ARG_AGTYPE_P(1)))
@@ -758,10 +768,13 @@ static VLE_local_context *build_local_vle_context(FunctionCallInfo fcinfo,
     graph_oid = get_graph_oid(graph_name);
 
     /*
-     * Create or retrieve the GRAPH global context for this graph. This function
-     * will also purge off invalidated contexts.
+     * Create or retrieve the GRAPH global context for this graph and pin it
+     * for this query. This function will also purge off invalidated contexts.
+     * The function's FmgrInfo identifies this traversal within the query; it
+     * stays the same when the traversal is evaluated again for another row.
     */
-    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
+    ggctx = acquire_GRAPH_global_context(graph_name, graph_oid, query_owner,
+                                         fcinfo->flinfo);
 
     /* allocate and initialize local VLE context */
     vlelctx = palloc0(sizeof(VLE_local_context));
@@ -1754,14 +1767,19 @@ static agtype_value *build_edge_list(VLE_path_container *vpc)
     /* get the graph_oid */
     graph_oid = vpc->graph_oid;
 
-    /* get the GRAPH global context for this graph */
-    ggctx = find_GRAPH_global_context(graph_oid);
-    /* verify we got a global context */
-    Assert(ggctx != NULL);
-
     /* get the graphid_array and size */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
     graphid_array_size = vpc->graphid_array_size;
+
+    /* get a GRAPH global context that holds every entity of this path */
+    ggctx = find_GRAPH_global_context_for_path(graph_oid, graphid_array,
+                                               graphid_array_size);
+    if (ggctx == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("graph data for the referenced VLE path is not available")));
+    }
 
     /* initialize our agtype array */
     MemSet(&edges_result, 0, sizeof(agtype_in_state));
@@ -1818,14 +1836,19 @@ static agtype_value *build_path(VLE_path_container *vpc)
     /* get the graph_oid */
     graph_oid = vpc->graph_oid;
 
-    /* get the GRAPH global context for this graph */
-    ggctx = find_GRAPH_global_context(graph_oid);
-    /* verify we got a global context */
-    Assert(ggctx != NULL);
-
     /* get the graphid_array and size */
     graphid_array = GET_GRAPHID_ARRAY_FROM_CONTAINER(vpc);
     graphid_array_size = vpc->graphid_array_size;
+
+    /* get a GRAPH global context that holds every entity of this path */
+    ggctx = find_GRAPH_global_context_for_path(graph_oid, graphid_array,
+                                               graphid_array_size);
+    if (ggctx == NULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("graph data for the referenced VLE path is not available")));
+    }
 
     /* initialize our agtype array */
     MemSet(&path_result, 0, sizeof(agtype_in_state));

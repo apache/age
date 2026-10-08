@@ -38,6 +38,13 @@
 #include "executor/spi.h"
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
+#include "optimizer/optimizer.h"
+#include "catalog/pg_proc.h"
+#include "nodes/nodeFuncs.h"
+#include "utils/json.h"
+#include "utils/jsonb.h"
+#include "utils/jsonpath.h"
+#include "utils/plancache.h"
 #include "utils/rls.h"
 #include "utils/acl.h"
 #include "utils/inval.h"
@@ -170,7 +177,10 @@ typedef struct GRAPH_global_context
     bool loaded_rls_enforced;      /* age.enforce_rls_in_traversal value at load */
     bool vertices_rls_filtered;    /* true if any vertex label was RLS-filtered at load */
     bool loaded_with_rls;          /* true if any label was loaded through RLS (SPI) */
+    bool rls_quals_vary;           /* RLS quals can vary in a statement */
     bool security_invalidated;     /* set by ACL/RLS catalog inval callbacks */
+    bool retired;                  /* not offered to new acquisitions */
+    int pin_count;                 /* queries still using this context */
     List *label_table_oids;        /* label table OIDs, for targeted security inval */
     int64 num_loaded_vertices;     /* number of loaded vertices in this graph */
     int64 num_loaded_edges;        /* number of loaded edges in this graph */
@@ -180,6 +190,24 @@ typedef struct GRAPH_global_context
 
 /* global variable to hold the per process GRAPH global contexts */
 static GRAPH_global_context *global_graph_contexts = NULL;
+
+/*
+ * A query that traverses a graph pins its context until the query's memory
+ * context is reset or deleted. Results of the traversal can be materialized
+ * after the traversal itself has finished, so a pinned context is retired
+ * instead of freed when it becomes invalid.
+ */
+typedef struct GRAPH_context_pin
+{
+    GRAPH_global_context *ggctx;   /* pinned graph context */
+    MemoryContext owner;           /* per-query memory context holding it */
+    const void *call_site;         /* traversal call site that pinned it */
+    MemoryContextCallback release; /* unpins when owner goes away */
+    struct GRAPH_context_pin *next;
+} GRAPH_context_pin;
+
+/* backend-local list of live pins */
+static GRAPH_context_pin *graph_context_pins = NULL;
 
 /*
  * VertexEdgeArray helpers — flat-array adjacency container used by
@@ -257,6 +285,13 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
 static void load_edge_label_rls(GRAPH_global_context *ggctx,
                                 Oid edge_label_table_oid,
                                 char *edge_label_name);
+static bool rls_function_not_immutable(Oid func_id, void *context);
+static bool rls_quals_vary_walker(Node *node, void *context);
+static bool rls_plan_quals_vary(SPIPlanPtr plan);
+static void unlink_GRAPH_global_context(GRAPH_global_context *ggctx);
+static void release_GRAPH_context_pin(void *arg);
+static bool graph_context_reusable(GRAPH_context_pin *pin,
+                                   const void *call_site);
 /* definitions */
 
 /*
@@ -272,6 +307,12 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
  */
 bool is_ggctx_invalid(GRAPH_global_context *ggctx)
 {
+    /* a retired context is only kept for the queries still pinning it */
+    if (ggctx->retired)
+    {
+        return true;
+    }
+
     /*
      * Security-relevant cache keys, checked before the version-counter
      * fast-path below. A cache that applied row-level security is never safe
@@ -786,6 +827,157 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
     return false;
 }
 
+/* checker for check_functions_in_node: a function that is not IMMUTABLE */
+static bool rls_function_not_immutable(Oid func_id, void *context)
+{
+    return (func_volatile(func_id) != PROVOLATILE_IMMUTABLE);
+}
+
+/*
+ * PostgreSQL's contain_mutable_functions_walker, except for the SQL value
+ * functions whose result cannot change during a statement without the reuse
+ * check noticing: the date and time ones are fixed for the transaction,
+ * CURRENT_ROLE, CURRENT_USER and USER are the current role, which the reuse
+ * check compares, and CURRENT_CATALOG is fixed for the session. SESSION_USER
+ * and CURRENT_SCHEMA can change within a statement.
+ */
+static bool rls_quals_vary_walker(Node *node, void *context)
+{
+    if (node == NULL)
+    {
+        return false;
+    }
+
+    if (check_functions_in_node(node, rls_function_not_immutable, context))
+    {
+        return true;
+    }
+
+    if (IsA(node, JsonConstructorExpr))
+    {
+        JsonConstructorExpr *ctor = (JsonConstructorExpr *) node;
+        bool is_jsonb = (ctor->returning->format->format_type ==
+                         JS_FORMAT_JSONB);
+        ListCell *lc;
+
+        foreach (lc, ctor->args)
+        {
+            Oid typid = exprType(lfirst(lc));
+
+            if (is_jsonb ? !to_jsonb_is_immutable(typid) :
+                           !to_json_is_immutable(typid))
+            {
+                return true;
+            }
+        }
+    }
+
+    if (IsA(node, JsonExpr))
+    {
+        JsonExpr *jexpr = (JsonExpr *) node;
+        Const *cnst;
+
+        if (!IsA(jexpr->path_spec, Const))
+        {
+            return true;
+        }
+
+        cnst = (Const *) jexpr->path_spec;
+        if (cnst->constisnull)
+        {
+            return false;
+        }
+
+        if (jspIsMutable(DatumGetJsonPathP(cnst->constvalue),
+                         jexpr->passing_names, jexpr->passing_values))
+        {
+            return true;
+        }
+    }
+
+    if (IsA(node, SQLValueFunction))
+    {
+        switch (((SQLValueFunction *) node)->op)
+        {
+        case SVFOP_CURRENT_DATE:
+        case SVFOP_CURRENT_TIME:
+        case SVFOP_CURRENT_TIME_N:
+        case SVFOP_CURRENT_TIMESTAMP:
+        case SVFOP_CURRENT_TIMESTAMP_N:
+        case SVFOP_LOCALTIME:
+        case SVFOP_LOCALTIME_N:
+        case SVFOP_LOCALTIMESTAMP:
+        case SVFOP_LOCALTIMESTAMP_N:
+        case SVFOP_CURRENT_ROLE:
+        case SVFOP_CURRENT_USER:
+        case SVFOP_USER:
+        case SVFOP_CURRENT_CATALOG:
+            return false;
+        default:
+            return true;
+        }
+    }
+
+    if (IsA(node, NextValueExpr))
+    {
+        return true;
+    }
+
+    if (IsA(node, Query))
+    {
+        return query_tree_walker((Query *) node, rls_quals_vary_walker,
+                                 context, 0);
+    }
+
+    return expression_tree_walker(node, rls_quals_vary_walker, context);
+}
+
+/*
+ * Whether the row-security quals the planner applied to an RLS load can give
+ * another result later in the same statement, so that another scan of the
+ * label could return other rows. They can when they call a function that is
+ * not IMMUTABLE: a volatile one, or a STABLE one such as current_setting(),
+ * whose input the statement itself can change with set_config(). Policies
+ * from row_security_policy_hook_permissive and _restrictive are turned into
+ * the same securityQuals as catalog policies, so they are inspected too. A
+ * plan whose queries cannot be inspected is reported as varying; reuse is
+ * then limited to the call site that loaded the graph, which is valid for any
+ * policy.
+ */
+static bool rls_plan_quals_vary(SPIPlanPtr plan)
+{
+    List *sources;
+    ListCell *source_cell;
+
+    sources = SPI_plan_get_plan_sources(plan);
+    if (sources == NIL)
+    {
+        return true;
+    }
+
+    foreach (source_cell, sources)
+    {
+        CachedPlanSource *source = lfirst(source_cell);
+        ListCell *query_cell;
+
+        if (source->query_list == NIL)
+        {
+            return true;
+        }
+
+        foreach (query_cell, source->query_list)
+        {
+            /* walks the range table's securityQuals and any sublinks */
+            if (rls_quals_vary_walker(lfirst(query_cell), NULL))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 /*
  * RLS-aware loader for a single vertex label table.
  *
@@ -835,6 +1027,11 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("load_vertex_label_rls: SPI_prepare failed: %s",
                         SPI_result_code_string(SPI_result))));
+    }
+
+    if (rls_plan_quals_vary(plan))
+    {
+        ggctx->rls_quals_vary = true;
     }
 
     /* read-only cursor: reuses the active snapshot; RLS applied by planner */
@@ -924,6 +1121,11 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("load_edge_label_rls: SPI_prepare failed: %s",
                         SPI_result_code_string(SPI_result))));
+    }
+
+    if (rls_plan_quals_vary(plan))
+    {
+        ggctx->rls_quals_vary = true;
     }
 
     /* read-only cursor: reuses the active snapshot; RLS applied by planner */
@@ -1608,6 +1810,15 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
         {
             bool success = false;
 
+            /* a query still using it keeps it; it is freed when unpinned */
+            if (curr_ggctx->pin_count > 0)
+            {
+                curr_ggctx->retired = true;
+                prev_ggctx = curr_ggctx;
+                curr_ggctx = next_ggctx;
+                continue;
+            }
+
             /*
              * If prev_ggctx is NULL then we are freeing the top of the
              * contexts. So, we need to point the contexts variable to the
@@ -1646,7 +1857,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
     curr_ggctx = global_graph_contexts;
     while (curr_ggctx != NULL)
     {
-        if (curr_ggctx->graph_oid == graph_oid)
+        if (curr_ggctx->graph_oid == graph_oid && !curr_ggctx->retired)
         {
             /* switch our context back */
             MemoryContextSwitchTo(oldctx);
@@ -1736,47 +1947,60 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
      * through a SECURITY DEFINER RLS policy can attach a context loaded as a
      * different role; returning it here would expose rows the current role may
      * not be allowed to see. If the existing context is not reusable, detach
-     * and discard it so the list keeps a single, correct context per graph.
+     * and discard it so the list keeps a single, correct context per graph;
+     * a context that a query still pins is retired instead.
      */
     prev_ggctx = NULL;
     curr_ggctx = global_graph_contexts;
     while (curr_ggctx != NULL)
     {
-        if (curr_ggctx->graph_oid == graph_oid)
-        {
-            if (!is_ggctx_invalid(curr_ggctx))
-            {
-                (void) free_specific_GRAPH_global_context(new_ggctx);
-                MemoryContextSwitchTo(oldctx);
-                return curr_ggctx;
-            }
+        GRAPH_global_context *next_ggctx = curr_ggctx->next;
 
-            /* detach the incompatible context and discard it */
-            if (prev_ggctx == NULL)
-            {
-                global_graph_contexts = curr_ggctx->next;
-            }
-            else
-            {
-                prev_ggctx->next = curr_ggctx->next;
-            }
-            if (!free_specific_GRAPH_global_context(curr_ggctx))
-            {
-                /*
-                 * The detached context was internally inconsistent (a
-                 * vertex or edge entry went missing). Free our freshly-
-                 * built context first so it does not leak, then surface
-                 * the corruption as the other cleanup paths in this file
-                 * do.
-                 */
-                (void) free_specific_GRAPH_global_context(new_ggctx);
-                ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
-                                errmsg("missing vertex or edge entry during free")));
-            }
-            break;
+        if (curr_ggctx->graph_oid != graph_oid || curr_ggctx->retired)
+        {
+            prev_ggctx = curr_ggctx;
+            curr_ggctx = next_ggctx;
+            continue;
         }
-        prev_ggctx = curr_ggctx;
-        curr_ggctx = curr_ggctx->next;
+
+        if (!is_ggctx_invalid(curr_ggctx))
+        {
+            (void) free_specific_GRAPH_global_context(new_ggctx);
+            MemoryContextSwitchTo(oldctx);
+            return curr_ggctx;
+        }
+
+        if (curr_ggctx->pin_count > 0)
+        {
+            curr_ggctx->retired = true;
+            prev_ggctx = curr_ggctx;
+            curr_ggctx = next_ggctx;
+            continue;
+        }
+
+        /* detach the incompatible context and discard it */
+        if (prev_ggctx == NULL)
+        {
+            global_graph_contexts = next_ggctx;
+        }
+        else
+        {
+            prev_ggctx->next = next_ggctx;
+        }
+        if (!free_specific_GRAPH_global_context(curr_ggctx))
+        {
+            /*
+             * The detached context was internally inconsistent (a
+             * vertex or edge entry went missing). Free our freshly-
+             * built context first so it does not leak, then surface
+             * the corruption as the other cleanup paths in this file
+             * do.
+             */
+            (void) free_specific_GRAPH_global_context(new_ggctx);
+            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
+                            errmsg("missing vertex or edge entry during free")));
+        }
+        curr_ggctx = next_ggctx;
     }
 
     /* prepend our freshly-built context to the shared list */
@@ -1791,12 +2015,12 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
 
 /*
  * Helper function to delete all of the global graph contexts used by the
- * process. When done the global global_graph_contexts will be NULL.
- *
- *
+ * process. Contexts that a query still pins are retired instead and freed
+ * when the last pin is released.
  */
 static bool delete_GRAPH_global_contexts(void)
 {
+    GRAPH_global_context *prev_ggctx = NULL;
     GRAPH_global_context *curr_ggctx = NULL;
     bool retval = false;
 
@@ -1809,6 +2033,25 @@ static bool delete_GRAPH_global_contexts(void)
     {
         GRAPH_global_context *next_ggctx = curr_ggctx->next;
         bool success = false;
+
+        retval = true;
+
+        if (curr_ggctx->pin_count > 0)
+        {
+            curr_ggctx->retired = true;
+            prev_ggctx = curr_ggctx;
+            curr_ggctx = next_ggctx;
+            continue;
+        }
+
+        if (prev_ggctx == NULL)
+        {
+            global_graph_contexts = next_ggctx;
+        }
+        else
+        {
+            prev_ggctx->next = next_ggctx;
+        }
 
         /* free the current graph context */
         success = free_specific_GRAPH_global_context(curr_ggctx);
@@ -1823,26 +2066,21 @@ static bool delete_GRAPH_global_contexts(void)
 
         /* advance to the next context */
         curr_ggctx = next_ggctx;
-
-        retval = true;
     }
-
-    /* reset the head of the contexts to NULL */
-    global_graph_contexts = NULL;
-
 
     return retval;
 }
 
 /*
- * Helper function to delete a specific global graph context used by the
- * process.
+ * Helper function to delete the global graph contexts of a specific graph.
+ * Contexts that a query still pins are retired instead.
  */
 static bool delete_specific_GRAPH_global_contexts(char *graph_name)
 {
     GRAPH_global_context *prev_ggctx = NULL;
     GRAPH_global_context *curr_ggctx = NULL;
     Oid graph_oid = InvalidOid;
+    bool found = false;
 
     if (graph_name == NULL)
     {
@@ -1856,7 +2094,7 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
     /* get the first context, if any */
     curr_ggctx = global_graph_contexts;
 
-    /* find the specified GRAPH global context */
+    /* find the specified GRAPH global contexts */
     while (curr_ggctx != NULL)
     {
         GRAPH_global_context *next_ggctx = curr_ggctx->next;
@@ -1864,6 +2102,17 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
         if (curr_ggctx->graph_oid == graph_oid)
         {
             bool success = false;
+
+            found = true;
+
+            if (curr_ggctx->pin_count > 0)
+            {
+                curr_ggctx->retired = true;
+                prev_ggctx = curr_ggctx;
+                curr_ggctx = next_ggctx;
+                continue;
+            }
+
             /*
              * If prev_ggctx is NULL then we are freeing the top of the
              * contexts. So, we need to point the global variable to the
@@ -1875,7 +2124,7 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
             }
             else
             {
-                prev_ggctx->next = curr_ggctx->next;
+                prev_ggctx->next = next_ggctx;
             }
 
             /* free the current graph context */
@@ -1889,8 +2138,8 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
                                 errmsg("missing vertex_entry during free")));
             }
 
-            /* we found and freed it, return true */
-            return true;
+            curr_ggctx = next_ggctx;
+            continue;
         }
 
         /* save the current as previous and advance to the next one */
@@ -1898,9 +2147,7 @@ static bool delete_specific_GRAPH_global_contexts(char *graph_name)
         curr_ggctx = next_ggctx;
     }
 
-
-    /* we didn't find it, return false */
-    return false;
+    return found;
 }
 
 /*
@@ -1965,7 +2212,7 @@ GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid)
     while(ggctx != NULL)
     {
         /* if we found it return it */
-        if (ggctx->graph_oid == graph_oid)
+        if (ggctx->graph_oid == graph_oid && !ggctx->retired)
         {
 
             return ggctx;
@@ -1978,6 +2225,233 @@ GRAPH_global_context *find_GRAPH_global_context(Oid graph_oid)
 
     /* we did not find it so return NULL */
     return NULL;
+}
+
+/*
+ * Find a graph context for materializing a VLE path. The path may come from a
+ * traversal whose context has since been retired, so retired contexts that a
+ * query still pins are considered too. The first context that holds every
+ * vertex and edge of the path is returned, or NULL if there is none.
+ */
+GRAPH_global_context *find_GRAPH_global_context_for_path(Oid graph_oid,
+                                                         const graphid *ids,
+                                                         int64 count)
+{
+    GRAPH_global_context *ggctx = NULL;
+
+    for (ggctx = global_graph_contexts; ggctx != NULL; ggctx = ggctx->next)
+    {
+        bool complete = true;
+        int64 i;
+
+        if (ggctx->graph_oid != graph_oid)
+        {
+            continue;
+        }
+
+        for (i = 0; i < count; i++)
+        {
+            /*
+             * get_edge_entry() asserts that the edge exists; a context may
+             * lack it here, so look the edge up directly.
+             */
+            if ((i % 2 == 0 && get_vertex_entry(ggctx, ids[i]) == NULL) ||
+                (i % 2 == 1 &&
+                 agehash_lookup(ggctx->edge_table, &ids[i]) == NULL))
+            {
+                complete = false;
+                break;
+            }
+        }
+
+        if (complete)
+        {
+            return ggctx;
+        }
+    }
+
+    return NULL;
+}
+
+/* remove a context from the backend-local list without freeing it */
+static void unlink_GRAPH_global_context(GRAPH_global_context *ggctx)
+{
+    GRAPH_global_context **link = &global_graph_contexts;
+
+    while (*link != NULL && *link != ggctx)
+    {
+        link = &(*link)->next;
+    }
+
+    if (*link == ggctx)
+    {
+        *link = ggctx->next;
+    }
+
+    ggctx->next = NULL;
+}
+
+/*
+ * Memory-context callback for a pin. Runs when the query's memory context is
+ * reset or deleted, including during error cleanup. A retired context is
+ * freed once no query pins it. It only uses pfree, hash_destroy and
+ * MemoryContextDelete, so it is safe in an aborted transaction.
+ */
+static void release_GRAPH_context_pin(void *arg)
+{
+    GRAPH_context_pin *pin = (GRAPH_context_pin *) arg;
+    GRAPH_context_pin **link = &graph_context_pins;
+    GRAPH_global_context *ggctx = NULL;
+
+    while (*link != NULL && *link != pin)
+    {
+        link = &(*link)->next;
+    }
+
+    if (*link == NULL)
+    {
+        return;
+    }
+
+    *link = pin->next;
+    ggctx = pin->ggctx;
+
+    if (ggctx->pin_count > 0)
+    {
+        ggctx->pin_count--;
+    }
+
+    if (ggctx->pin_count == 0 && ggctx->retired)
+    {
+        unlink_GRAPH_global_context(ggctx);
+        (void) free_specific_GRAPH_global_context(ggctx);
+    }
+}
+
+/*
+ * Keep a graph context alive until the given per-query memory context goes
+ * away, recording the traversal call site that pinned it. Pinning the same
+ * context twice for one query is a no-op.
+ */
+void pin_GRAPH_global_context(GRAPH_global_context *ggctx, MemoryContext owner,
+                              const void *call_site)
+{
+    GRAPH_context_pin *pin = NULL;
+
+    if (ggctx == NULL || owner == NULL)
+    {
+        return;
+    }
+
+    for (pin = graph_context_pins; pin != NULL; pin = pin->next)
+    {
+        if (pin->ggctx == ggctx && pin->owner == owner)
+        {
+            return;
+        }
+    }
+
+    pin = MemoryContextAllocZero(owner, sizeof(GRAPH_context_pin));
+    pin->ggctx = ggctx;
+    pin->owner = owner;
+    pin->call_site = call_site;
+    pin->release.func = release_GRAPH_context_pin;
+    pin->release.arg = pin;
+    MemoryContextRegisterResetCallback(owner, &pin->release);
+
+    pin->next = graph_context_pins;
+    graph_context_pins = pin;
+    ggctx->pin_count++;
+}
+
+/*
+ * Whether a graph context this query already pins can serve another
+ * acquisition in the same query, under the semantics PostgreSQL gives a
+ * statement's scans:
+ *
+ * - A context loaded with another role, enforcement setting or snapshot is a
+ *   different scan.
+ * - A later command id means that a traversal which has not loaded the graph
+ *   yet must see the statement's own writes. The traversal that loaded it
+ *   keeps it while the statement writes, as a traversal of a graph without
+ *   RLS does, instead of loading the graph again for every row.
+ * - Policies and privileges hold for the whole statement: PostgreSQL applies
+ *   the policies when it plans the statement and checks the privileges when
+ *   it starts it, so an authorization change made while the statement runs
+ *   does not end the reuse.
+ * - When the RLS quals give the same result throughout the statement, every
+ *   scan of the labels in this statement returns the same rows, so any
+ *   traversal may share the graph (see rls_plan_quals_vary).
+ * - Otherwise only the traversal call site that loaded the graph shares it,
+ *   as when PostgreSQL scans a relation once and rescans the result. Another
+ *   call site is a separate scan and evaluates the policies itself.
+ */
+static bool graph_context_reusable(GRAPH_context_pin *pin,
+                                   const void *call_site)
+{
+    GRAPH_global_context *ggctx = pin->ggctx;
+    Snapshot snapshot = GetActiveSnapshot();
+
+    if (ggctx->load_as_role != GetUserId() ||
+        ggctx->loaded_rls_enforced != age_enforce_rls_in_traversal ||
+        ggctx->xmin != snapshot->xmin ||
+        ggctx->xmax != snapshot->xmax)
+    {
+        return false;
+    }
+
+    if (ggctx->curcid != snapshot->curcid &&
+        (call_site == NULL || pin->call_site != call_site))
+    {
+        return false;
+    }
+
+    if (ggctx->rls_quals_vary &&
+        (call_site == NULL || pin->call_site != call_site))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Acquire a graph context for a traversal and pin it for the rest of the
+ * query that owns query_owner, so a later acquisition cannot free it while
+ * the traversal or the materialization of its results still needs it.
+ * call_site identifies the traversal within the query; it stays the same
+ * when the traversal is evaluated again for another row. A context the query
+ * already pins is reused when graph_context_reusable() allows it, so the
+ * policies run once for each row a load scans rather than again for every
+ * traversal.
+ */
+GRAPH_global_context *acquire_GRAPH_global_context(char *graph_name,
+                                                   Oid graph_oid,
+                                                   MemoryContext query_owner,
+                                                   const void *call_site)
+{
+    GRAPH_global_context *ggctx = NULL;
+    GRAPH_context_pin *pin = NULL;
+
+    if (query_owner == NULL)
+    {
+        return manage_GRAPH_global_contexts(graph_name, graph_oid);
+    }
+
+    for (pin = graph_context_pins; pin != NULL; pin = pin->next)
+    {
+        if (pin->owner == query_owner &&
+            pin->ggctx->graph_oid == graph_oid &&
+            graph_context_reusable(pin, call_site))
+        {
+            return pin->ggctx;
+        }
+    }
+
+    ggctx = manage_GRAPH_global_contexts(graph_name, graph_oid);
+    pin_GRAPH_global_context(ggctx, query_owner, call_site);
+
+    return ggctx;
 }
 
 /* graph vertices accessor */
