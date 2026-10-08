@@ -809,6 +809,46 @@ DROP POLICY node_visible ON rls_vle."Node";
 ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
+-- PART 10: Column privileges. A role granted SELECT on every user column of
+-- an RLS-protected label, but not on the table, traverses it just as MATCH
+-- reads it. It cannot read ctid, so its graph keeps the rows' properties.
+-- ============================================================================
+ALTER TABLE rls_vle."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_all ON rls_vle."LINK" FOR SELECT USING (true);
+REVOKE SELECT ON rls_vle."LINK" FROM rls_vle_user;
+GRANT SELECT (id, start_id, end_id, properties) ON rls_vle."LINK"
+    TO rls_vle_user;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[:LINK]->(b) RETURN b.name
+$$) AS (name agtype);
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (a:Node {name: 'n1'})-[e:LINK*1..3]->(b)
+    RETURN b.name, [r IN e | r.visible]
+$$) AS (name agtype, visible agtype) ORDER BY name;
+RESET ROLE;
+REVOKE SELECT (id, start_id, end_id, properties) ON rls_vle."LINK"
+    FROM rls_vle_user;
+GRANT SELECT ON rls_vle."LINK" TO rls_vle_user;
+DROP POLICY link_all ON rls_vle."LINK";
+ALTER TABLE rls_vle."LINK" DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rls_vle."Node" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY node_all ON rls_vle."Node" FOR SELECT USING (true);
+REVOKE SELECT ON rls_vle."Node" FROM rls_vle_user;
+GRANT SELECT (id, properties) ON rls_vle."Node" TO rls_vle_user;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH p = (a:Node {name: 'n1'})-[:LINK*1..3]->(b)
+    RETURN b.name, [v IN nodes(p) | v.name]
+$$) AS (name agtype, names agtype) ORDER BY name;
+RESET ROLE;
+REVOKE SELECT (id, properties) ON rls_vle."Node" FROM rls_vle_user;
+GRANT SELECT ON rls_vle."Node" TO rls_vle_user;
+DROP POLICY node_all ON rls_vle."Node";
+ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
 -- cleanup
 -- ============================================================================
 SELECT drop_graph('rls_vle', true);
