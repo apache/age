@@ -127,6 +127,18 @@ static GraphVersionState *shmem_version_state = NULL;
 
 /* internal data structures implementation */
 
+/*
+ * Where an entry's properties come from. An entry normally keeps its tuple's
+ * location and reads the properties when a path is materialized. An RLS load
+ * for a role that holds only column privileges cannot read ctid, so it keeps
+ * an owned copy of the properties instead.
+ */
+typedef union entry_storage
+{
+    ItemPointerData tid;           /* physical tuple location for lazy fetch */
+    Datum properties;              /* owned, detoasted properties */
+} entry_storage;
+
 /* vertex entry for the vertex_hashtable */
 typedef struct vertex_entry
 {
@@ -135,7 +147,8 @@ typedef struct vertex_entry
     VertexEdgeArray edges_out;     /* outgoing edge graphids (flat array) */
     VertexEdgeArray edges_self;    /* self-loop edge graphids (flat array) */
     Oid vertex_label_table_oid;    /* the label table oid */
-    ItemPointerData tid;           /* physical tuple location for lazy fetch */
+    bool has_properties;           /* storage holds properties, not a tid */
+    entry_storage storage;         /* tuple location or properties */
 } vertex_entry;
 
 /*
@@ -152,7 +165,8 @@ typedef struct vertex_entry
 typedef struct edge_entry
 {
     Oid edge_label_table_oid;      /* the label table oid */
-    ItemPointerData tid;           /* physical tuple location for lazy fetch */
+    bool has_properties;           /* storage holds properties, not a tid */
+    entry_storage storage;         /* tuple location or properties */
     graphid start_vertex_id;       /* start vertex */
     graphid end_vertex_id;         /* end vertex */
 } edge_entry;
@@ -169,6 +183,7 @@ typedef struct GRAPH_global_context
     HTAB *vertex_hashtable;        /* hashtable to hold vertex edge lists */
     AgeHashTable *edge_table;      /* edge to vertex map (Robin Hood) */
     MemoryContext edge_table_mcxt; /* private context owning edge_table */
+    MemoryContext properties_mcxt; /* owns entry property copies, if any */
     uint64 graph_version;          /* version counter for cache invalidation */
     TransactionId xmin;            /* snapshot fallback: transaction xmin */
     TransactionId xmax;            /* snapshot fallback: transaction xmax */
@@ -271,14 +286,15 @@ static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
                                  char label_type);
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
-                              ItemPointerData tid, graphid start_vertex_id,
+                              ItemPointerData tid, Datum properties,
+                              graphid start_vertex_id,
                               graphid end_vertex_id, Oid edge_label_table_oid);
 static bool insert_vertex_edge(GRAPH_global_context *ggctx,
                                graphid start_vertex_id, graphid end_vertex_id,
                                graphid edge_id, char *edge_label_name);
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
-                                ItemPointerData tid);
+                                ItemPointerData tid, Datum properties);
 static void load_vertex_label_rls(GRAPH_global_context *ggctx,
                                   Oid vertex_label_table_oid,
                                   char *vertex_label_name);
@@ -621,10 +637,12 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
 
 /*
  * Helper function to insert one edge/edge->vertex, key/value pair, in the
- * current GRAPH global edge hashtable.
+ * current GRAPH global edge hashtable. A non-zero properties datum is an owned
+ * copy that the entry keeps instead of the tuple location.
  */
 static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
-                              ItemPointerData tid, graphid start_vertex_id,
+                              ItemPointerData tid, Datum properties,
+                              graphid start_vertex_id,
                               graphid end_vertex_id, Oid edge_label_table_oid)
 {
     edge_entry *ee = NULL;
@@ -667,7 +685,15 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
      * in only the fields we care about. The hash key (edge_id) lives in the
      * slot header; recoverable via get_edge_entry_id() if needed.
      */
-    ee->tid = tid;
+    if (properties != (Datum) 0)
+    {
+        ee->has_properties = true;
+        ee->storage.properties = properties;
+    }
+    else
+    {
+        ee->storage.tid = tid;
+    }
     ee->start_vertex_id = start_vertex_id;
     ee->end_vertex_id = end_vertex_id;
     ee->edge_label_table_oid = edge_label_table_oid;
@@ -680,11 +706,12 @@ static bool insert_edge_entry(GRAPH_global_context *ggctx, graphid edge_id,
 
 /*
  * Helper function to insert an entire vertex into the current GRAPH global
- * vertex hashtable. It will return false if there is a duplicate.
+ * vertex hashtable. It will return false if there is a duplicate. A non-zero
+ * properties datum is an owned copy kept instead of the tuple location.
  */
 static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
                                 Oid vertex_label_table_oid,
-                                ItemPointerData tid)
+                                ItemPointerData tid, Datum properties)
 {
     vertex_entry *ve = NULL;
     bool found = false;
@@ -726,8 +753,16 @@ static bool insert_vertex_entry(GRAPH_global_context *ggctx, graphid vertex_id,
     ve->vertex_id = vertex_id;
     /* set the label table oid for this vertex */
     ve->vertex_label_table_oid = vertex_label_table_oid;
-    /* set the TID for lazy property fetch */
-    ve->tid = tid;
+    /* keep the properties, or the TID for a lazy property fetch */
+    if (properties != (Datum) 0)
+    {
+        ve->has_properties = true;
+        ve->storage.properties = properties;
+    }
+    else
+    {
+        ve->storage.tid = tid;
+    }
     /*
      * MemSet above already zeroed the embedded VertexEdgeArray fields
      * (array=NULL, size=0, capacity=0); no explicit NIL assignment needed.
@@ -979,17 +1014,44 @@ static bool rls_plan_quals_vary(SPIPlanPtr plan)
 }
 
 /*
+ * Keep an owned, detoasted copy of an entry's properties in the context's
+ * property memory, which is freed with the context.
+ */
+static Datum copy_entry_properties(GRAPH_global_context *ggctx,
+                                   MemoryContext parent, Datum properties)
+{
+    MemoryContext oldctx;
+    Datum copy;
+
+    if (ggctx->properties_mcxt == NULL)
+    {
+        ggctx->properties_mcxt = AllocSetContextCreate(parent,
+                                                       "AGE entry properties",
+                                                       ALLOCSET_DEFAULT_SIZES);
+    }
+
+    oldctx = MemoryContextSwitchTo(ggctx->properties_mcxt);
+    copy = PointerGetDatum(PG_DETOAST_DATUM_COPY(properties));
+    MemoryContextSwitchTo(oldctx);
+
+    return copy;
+}
+
+/*
  * RLS-aware loader for a single vertex label table.
  *
- * Loads (id, ctid) through SPI so the planner applies row-level security
+ * Loads the visible rows through SPI so the planner applies row-level security
  * policies (and table/column ACL) for the current role, then inserts each
- * visible row into the graph's global vertex hashtable. The physical tuple
- * location (ctid) is stored for the same lazy property fetch the direct-scan
- * path uses (get_vertex_entry_properties); because only RLS-visible rows are
- * loaded, that later heap_fetch only ever reads authorized tuples. Used in
- * place of the direct heap scan when age.enforce_rls_in_traversal is on and RLS
- * is active on the label table. Rows are fetched in batches so the entire label
- * table is never materialized at once.
+ * visible row into the graph's global vertex hashtable. A role with SELECT on
+ * the table loads (id, ctid) and the physical tuple location is stored for the
+ * same lazy property fetch the direct-scan path uses
+ * (get_vertex_entry_properties); because only RLS-visible rows are loaded, that
+ * later heap_fetch only ever reads authorized tuples. A role holding only
+ * column privileges cannot read ctid, so it loads (id, properties) and the
+ * entry keeps a copy of the properties. Used in place of the direct heap scan
+ * when age.enforce_rls_in_traversal is on and RLS is active on the label table.
+ * Rows are fetched in batches so the entire label table is never materialized
+ * at once.
  */
 static void load_vertex_label_rls(GRAPH_global_context *ggctx,
                                   Oid vertex_label_table_oid,
@@ -999,6 +1061,11 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
     StringInfoData query;
     SPIPlanPtr plan;
     Portal portal;
+    bool keep_properties;
+
+    /* column privileges cover the user columns but not ctid */
+    keep_properties = (pg_class_aclcheck(vertex_label_table_oid, GetUserId(),
+                                         ACL_SELECT) != ACLCHECK_OK);
 
     if (SPI_connect() != SPI_OK_CONNECT)
     {
@@ -1016,7 +1083,8 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
      * cache rebuild.
      */
     initStringInfo(&query);
-    appendStringInfo(&query, "SELECT id, ctid FROM ONLY %s",
+    appendStringInfo(&query, "SELECT id, %s FROM ONLY %s",
+                     keep_properties ? "properties" : "ctid",
                      quote_qualified_identifier(ggctx->graph_name,
                                                 vertex_label_name));
 
@@ -1054,24 +1122,39 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
             TupleDesc tupdesc = SPI_tuptable->tupdesc;
             bool isnull = false;
             graphid vertex_id;
-            ItemPointer tidptr;
+            Datum value;
             ItemPointerData tid;
+            Datum properties = (Datum) 0;
             MemoryContext oldctx;
 
             vertex_id = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 1,
                                                     &isnull));
-            tidptr = (ItemPointer) DatumGetPointer(SPI_getbinval(tuple, tupdesc,
-                                                                 2, &isnull));
-            /* ctid is never null for a scanned heap tuple; guard defensively */
-            if (isnull || tidptr == NULL)
+            value = SPI_getbinval(tuple, tupdesc, 2, &isnull);
+            ItemPointerSetInvalid(&tid);
+
+            if (keep_properties)
             {
-                continue;
+                if (isnull)
+                {
+                    elog(ERROR, "load_vertex_label_rls: vertex " INT64_FORMAT
+                         " has null properties", vertex_id);
+                }
+                properties = copy_entry_properties(ggctx, ggctx_cxt, value);
             }
-            tid = *tidptr;
+            else
+            {
+                /* ctid is never null for a scanned heap tuple; guard defensively */
+                if (isnull || DatumGetPointer(value) == NULL)
+                {
+                    continue;
+                }
+                tid = *((ItemPointer) DatumGetPointer(value));
+            }
 
             /* build the entry in the cache's (persistent) memory context */
             oldctx = MemoryContextSwitchTo(ggctx_cxt);
-            insert_vertex_entry(ggctx, vertex_id, vertex_label_table_oid, tid);
+            insert_vertex_entry(ggctx, vertex_id, vertex_label_table_oid, tid,
+                                properties);
             MemoryContextSwitchTo(oldctx);
         }
 
@@ -1086,7 +1169,8 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
  * RLS-aware loader for a single edge label table. See load_vertex_label_rls;
  * this variant additionally loads start_id/end_id and populates the per-vertex
  * edge lists, exactly like the direct-scan path, storing the ctid for the same
- * lazy property fetch.
+ * lazy property fetch, or a copy of the properties for a role that holds only
+ * column privileges.
  */
 static void load_edge_label_rls(GRAPH_global_context *ggctx,
                                 Oid edge_label_table_oid,
@@ -1096,6 +1180,11 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
     StringInfoData query;
     SPIPlanPtr plan;
     Portal portal;
+    bool keep_properties;
+
+    /* column privileges cover the user columns but not ctid */
+    keep_properties = (pg_class_aclcheck(edge_label_table_oid, GetUserId(),
+                                         ACL_SELECT) != ACLCHECK_OK);
 
     if (SPI_connect() != SPI_OK_CONNECT)
     {
@@ -1110,7 +1199,8 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
      */
     initStringInfo(&query);
     appendStringInfo(&query,
-                     "SELECT id, start_id, end_id, ctid FROM ONLY %s",
+                     "SELECT id, start_id, end_id, %s FROM ONLY %s",
+                     keep_properties ? "properties" : "ctid",
                      quote_qualified_identifier(ggctx->graph_name,
                                                 edge_label_name));
 
@@ -1150,8 +1240,9 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
             graphid edge_id;
             graphid edge_vertex_start_id;
             graphid edge_vertex_end_id;
-            ItemPointer tidptr;
+            Datum value;
             ItemPointerData tid;
+            Datum properties = (Datum) 0;
             MemoryContext oldctx;
 
             edge_id = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 1, &isnull));
@@ -1159,14 +1250,26 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
                                                                2, &isnull));
             edge_vertex_end_id = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 3,
                                                              &isnull));
-            tidptr = (ItemPointer) DatumGetPointer(SPI_getbinval(tuple, tupdesc,
-                                                                 4, &isnull));
-            /* ctid is never null for a scanned heap tuple; guard defensively */
-            if (isnull || tidptr == NULL)
+            value = SPI_getbinval(tuple, tupdesc, 4, &isnull);
+            ItemPointerSetInvalid(&tid);
+
+            if (keep_properties)
             {
-                continue;
+                if (isnull)
+                {
+                    elog(ERROR, "load_edge_label_rls: edge " INT64_FORMAT
+                         " has null properties", edge_id);
+                }
             }
-            tid = *tidptr;
+            else
+            {
+                /* ctid is never null for a scanned heap tuple; guard defensively */
+                if (isnull || DatumGetPointer(value) == NULL)
+                {
+                    continue;
+                }
+                tid = *((ItemPointer) DatumGetPointer(value));
+            }
 
             /*
              * If a vertex label was RLS-filtered, drop any edge whose start or
@@ -1180,10 +1283,16 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
                 continue;
             }
 
+            if (keep_properties)
+            {
+                properties = copy_entry_properties(ggctx, ggctx_cxt, value);
+            }
+
             /* build the entries in the cache's (persistent) memory context */
             oldctx = MemoryContextSwitchTo(ggctx_cxt);
-            insert_edge_entry(ggctx, edge_id, tid, edge_vertex_start_id,
-                              edge_vertex_end_id, edge_label_table_oid);
+            insert_edge_entry(ggctx, edge_id, tid, properties,
+                              edge_vertex_start_id, edge_vertex_end_id,
+                              edge_label_table_oid);
             insert_vertex_edge(ggctx, edge_vertex_start_id,
                                edge_vertex_end_id, edge_id, edge_label_name);
             MemoryContextSwitchTo(oldctx);
@@ -1369,7 +1478,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
                 /* insert vertex into vertex hashtable with TID (no property copy) */
                 inserted = insert_vertex_entry(ggctx, vertex_id,
                                                vertex_label_table_oid,
-                                               tuple->t_self);
+                                               tuple->t_self, (Datum) 0);
 
                 /* warn if there is a duplicate */
                 if (!inserted)
@@ -1546,6 +1655,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
 
                 /* insert edge into edge hashtable with TID (no property copy) */
                 inserted = insert_edge_entry(ggctx, edge_id, tuple->t_self,
+                                             (Datum) 0,
                                              edge_vertex_start_id,
                                              edge_vertex_end_id,
                                              edge_label_table_oid);
@@ -1674,6 +1784,13 @@ static bool free_specific_GRAPH_global_context(GRAPH_global_context *ggctx)
     if (ggctx->edge_table_mcxt != NULL)
     {
         MemoryContextDelete(ggctx->edge_table_mcxt);
+    }
+
+    /* property copies kept for column-privilege RLS loads */
+    if (ggctx->properties_mcxt != NULL)
+    {
+        MemoryContextDelete(ggctx->properties_mcxt);
+        ggctx->properties_mcxt = NULL;
     }
 
     ggctx->vertex_hashtable = NULL;
@@ -2602,7 +2719,14 @@ Datum get_vertex_entry_properties(vertex_entry *ve)
     Datum result;
     entry_fetch_status status;
 
-    result = fetch_entry_properties(ve->vertex_label_table_oid, &ve->tid,
+    /* properties kept at load time; return the caller its own copy */
+    if (ve->has_properties)
+    {
+        return datumCopy(ve->storage.properties, false, -1);
+    }
+
+    result = fetch_entry_properties(ve->vertex_label_table_oid,
+                                    &ve->storage.tid,
                                     ve->vertex_id,
                                     Anum_ag_label_vertex_table_id,
                                     Anum_ag_label_vertex_table_properties,
@@ -2651,7 +2775,14 @@ Datum get_edge_entry_properties(edge_entry *ee)
     Datum result;
     entry_fetch_status status;
 
-    result = fetch_entry_properties(ee->edge_label_table_oid, &ee->tid,
+    /* properties kept at load time; return the caller its own copy */
+    if (ee->has_properties)
+    {
+        return datumCopy(ee->storage.properties, false, -1);
+    }
+
+    result = fetch_entry_properties(ee->edge_label_table_oid,
+                                    &ee->storage.tid,
                                     get_edge_entry_id(ee),
                                     Anum_ag_label_edge_table_id,
                                     Anum_ag_label_edge_table_properties,
