@@ -1384,6 +1384,47 @@ RESET ROLE;
 DROP POLICY node_none ON rls_vle."Node";
 ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
 -- ============================================================================
+-- PART 12: Parallel operations. The policies are evaluated by the process
+-- that loads the graph, and a parallel worker lacks part of the caller's
+-- session state, so loading an RLS-protected label during a parallel
+-- operation is refused. Roles that bypass the policy, and serial plans, are
+-- unaffected.
+-- ============================================================================
+ALTER TABLE rls_vle."LINK" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY link_all ON rls_vle."LINK" FOR SELECT USING (true);
+SET debug_parallel_query = on;
+\set VERBOSITY terse
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n:Node) RETURN vertex_stats(n)
+$$) AS (stats agtype);
+ERROR:  cannot load row-level security protected graph data during a parallel operation
+SELECT age_graph_stats('"rls_vle"');
+ERROR:  cannot load row-level security protected graph data during a parallel operation
+RESET ROLE;
+\set VERBOSITY default
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n:Node {name: 'n1'}) WITH vertex_stats(n) AS s RETURN s.out_degree
+$$) AS (out_degree agtype);
+ out_degree 
+------------
+ 1
+(1 row)
+
+RESET debug_parallel_query;
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n:Node {name: 'n1'}) WITH vertex_stats(n) AS s RETURN s.out_degree
+$$) AS (out_degree agtype);
+ out_degree 
+------------
+ 1
+(1 row)
+
+RESET ROLE;
+DROP POLICY link_all ON rls_vle."LINK";
+ALTER TABLE rls_vle."LINK" DISABLE ROW LEVEL SECURITY;
+-- ============================================================================
 -- cleanup
 -- ============================================================================
 SELECT drop_graph('rls_vle', true);
