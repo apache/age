@@ -785,6 +785,30 @@ SELECT drop_graph('rls_vle_after_plain', true);
 SELECT drop_graph('rls_vle_after_rls', true);
 
 -- ============================================================================
+-- PART 9: vertex_stats on a vertex hidden from traversals. An untyped MATCH
+-- scans the parent label table, which the child table's policy does not
+-- filter, so it can return a vertex that the traversal graph does not hold.
+-- vertex_stats returns null for it; visible vertices get statistics computed
+-- over the graph the caller can traverse.
+-- ============================================================================
+ALTER TABLE rls_vle."Node" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY node_visible ON rls_vle."Node"
+    FOR SELECT USING ((properties->>'"name"') <> 'n2');
+SET ROLE rls_vle_user;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n:Node) RETURN n.name
+$$) AS (name agtype) ORDER BY name;
+SELECT * FROM cypher('rls_vle', $$
+    MATCH (n)
+    WITH n, vertex_stats(n) AS s
+    RETURN n.name, s IS NULL, s.in_degree, s.out_degree
+$$) AS (name agtype, no_stats agtype, in_degree agtype, out_degree agtype)
+ORDER BY name;
+RESET ROLE;
+DROP POLICY node_visible ON rls_vle."Node";
+ALTER TABLE rls_vle."Node" DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
 -- cleanup
 -- ============================================================================
 SELECT drop_graph('rls_vle', true);
