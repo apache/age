@@ -278,6 +278,7 @@ static void load_GRAPH_global_hashtables(GRAPH_global_context *ggctx);
 static void load_vertex_hashtable(GRAPH_global_context *ggctx);
 static void load_edge_hashtable(GRAPH_global_context *ggctx);
 static void enforce_label_table_select_acl(Oid label_table_oid);
+static void prevent_rls_load_in_parallel_mode(void);
 static void register_ggctx_security_callbacks(void);
 static void ggctx_security_relcache_callback(Datum arg, Oid relid);
 static void ggctx_security_syscache_callback(Datum arg, int cacheid,
@@ -1370,6 +1371,24 @@ static void enforce_label_table_select_acl(Oid label_table_oid)
     }
 }
 
+/*
+ * The RLS loaders evaluate the policies in whichever process loads the graph.
+ * A parallel worker does not have all of the caller's session state (for
+ * example, inet_client_addr() is NULL there), so a policy could admit rows in
+ * a worker that it hides from the caller. Refuse to load an RLS-protected label
+ * during a parallel operation.
+ */
+static void prevent_rls_load_in_parallel_mode(void)
+{
+    if (IsInParallelMode())
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_TRANSACTION_STATE),
+                 errmsg("cannot load row-level security protected graph data during a parallel operation"),
+                 errhint("Run the query without parallelism, for example with SET max_parallel_workers_per_gather = 0.")));
+    }
+}
+
 /* helper routine to load all vertices into the GRAPH global vertex hashtable */
 static void load_vertex_hashtable(GRAPH_global_context *ggctx)
 {
@@ -1434,6 +1453,7 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
                 check_enable_rls(vertex_label_table_oid, InvalidOid, true) ==
                     RLS_ENABLED)
             {
+                prevent_rls_load_in_parallel_mode();
                 load_vertex_label_rls(ggctx, vertex_label_table_oid,
                                       vertex_label_name);
                 /*
@@ -1594,6 +1614,7 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
                 check_enable_rls(edge_label_table_oid, InvalidOid, true) ==
                     RLS_ENABLED)
             {
+                prevent_rls_load_in_parallel_mode();
                 load_edge_label_rls(ggctx, edge_label_table_oid, edge_label_name);
                 ggctx->loaded_with_rls = true;
                 continue;
