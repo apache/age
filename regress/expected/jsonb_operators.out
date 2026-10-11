@@ -189,6 +189,18 @@ SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? '["e1"
  f
 (1 row)
 
+SELECT 'null'::agtype ? '"a"'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'null'::agtype ? 'null'::agtype;
+ ?column? 
+----------
+ f
+(1 row)
+
 -- errors out
 SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::agtype ? 'e1';
 ERROR:  invalid input syntax for type agtype

@@ -1322,7 +1322,15 @@ Datum agtype_exists_agtype(PG_FUNCTION_ARGS)
 
     if (AGT_ROOT_IS_SCALAR(agt))
     {
-        agt = agtype_value_to_agtype(extract_entity_properties(agt, false));
+        agtype_value *properties = extract_entity_properties(agt, false);
+
+        /* an agtype null (or null properties) has no keys to look up */
+        if (properties == NULL)
+        {
+            PG_RETURN_BOOL(false);
+        }
+
+        agt = agtype_value_to_agtype(properties);
     }
 
     if (AGT_ROOT_IS_SCALAR(key))
