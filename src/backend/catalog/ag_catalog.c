@@ -237,6 +237,11 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
                     TruncateStmt *tstmt = (TruncateStmt *) parsetree;
                     ListCell *lc;
 
+                    if (!is_age_extension_exists())
+                    {
+                        break;
+                    }
+
                     foreach(lc, tstmt->relations)
                     {
                         RangeVar *rv = (RangeVar *) lfirst(lc);
@@ -268,6 +273,11 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
                      */
                     VacuumStmt *vstmt = (VacuumStmt *) parsetree;
 
+                    if (!is_age_extension_exists())
+                    {
+                        break;
+                    }
+
                     if (vacuum_rewrites_heap(vstmt))
                     {
                         if (vstmt->rels == NIL)
@@ -293,6 +303,11 @@ void ag_ProcessUtility_hook(PlannedStmt *pstmt, const char *queryString,
                 {
                     /* CLUSTER rewrites the heap for the same reason. */
                     ClusterStmt *cstmt = (ClusterStmt *) parsetree;
+
+                    if (!is_age_extension_exists())
+                    {
+                        break;
+                    }
 
                     if (cstmt->relation == NULL)
                     {
