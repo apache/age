@@ -601,6 +601,41 @@ SELECT agtype_any_div('-1::numeric', 0);
 ERROR:  division by zero
 SELECT agtype_any_div('-1.0::numeric', 0);
 ERROR:  division by zero
+SELECT agtype_mod('1', '0');
+ERROR:  division by zero
+SELECT agtype_mod('1', '0.0');
+ERROR:  division by zero
+SELECT agtype_mod('1.0', '0');
+ERROR:  division by zero
+SELECT agtype_mod('1.0', '0.0');
+ERROR:  division by zero
+SELECT agtype_mod('1', '0::numeric');
+ERROR:  division by zero
+SELECT agtype_mod('1.0', '0::numeric');
+ERROR:  division by zero
+SELECT agtype_mod('1::numeric', '0');
+ERROR:  division by zero
+SELECT agtype_mod('1::numeric', '0.0');
+ERROR:  division by zero
+SELECT agtype_mod('1::numeric', '0::numeric');
+ERROR:  division by zero
+SELECT agtype_any_mod('1', 0);
+ERROR:  division by zero
+SELECT agtype_any_mod('1.0', 0);
+ERROR:  division by zero
+SELECT agtype_any_mod('-1::numeric', 0);
+ERROR:  division by zero
+SELECT agtype_any_mod('-1.0::numeric', 0);
+ERROR:  division by zero
+--
+-- Should get 0 - INT64_MIN % -1 is well defined
+--
+SELECT agtype_mod('-9223372036854775808', '-1');
+ agtype_mod 
+------------
+ 0
+(1 row)
+
 --
 -- Should get Infinity
 --
