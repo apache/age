@@ -65,3 +65,38 @@ CREATE FUNCTION ag_catalog.load_edges_from_file(graph_name name,
     RETURNS void
     LANGUAGE c
     AS 'MODULE_PATHNAME';
+
+DO $$
+DECLARE
+    btree_family oid;
+BEGIN
+    SELECT opcfamily INTO STRICT btree_family
+    FROM pg_catalog.pg_opclass
+    WHERE opcnamespace = 'ag_catalog'::regnamespace
+      AND opcname = 'agtype_ops_btree'
+      AND opcmethod = (SELECT oid FROM pg_catalog.pg_am WHERE amname = 'btree');
+
+    UPDATE pg_catalog.pg_amop
+    SET amopstrategy = amopstrategy + 10
+    WHERE amopfamily = btree_family
+      AND amoplefttype = 'ag_catalog.agtype'::regtype
+      AND amoprighttype = 'ag_catalog.agtype'::regtype
+      AND amopstrategy IN (4, 5);
+
+    UPDATE pg_catalog.pg_amop
+    SET amopstrategy = CASE amopopr
+        WHEN 'ag_catalog.>=(ag_catalog.agtype,ag_catalog.agtype)'::regoperator THEN 4
+        WHEN 'ag_catalog.>(ag_catalog.agtype,ag_catalog.agtype)'::regoperator THEN 5
+    END
+    WHERE amopfamily = btree_family
+      AND amoplefttype = 'ag_catalog.agtype'::regtype
+      AND amoprighttype = 'ag_catalog.agtype'::regtype
+      AND amopstrategy IN (14, 15);
+
+    UPDATE pg_catalog.pg_opclass
+    SET opcfamily = btree_family
+    WHERE opcnamespace = 'ag_catalog'::regnamespace
+      AND opcname = 'agtype_ops_btree'
+      AND opcfamily = btree_family;
+END
+$$;

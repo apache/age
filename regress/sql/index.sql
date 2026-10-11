@@ -433,6 +433,42 @@ DROP INDEX cypher_index.city_west_coast_idx;
 DROP INDEX cypher_index.country_life_exp_idx;
 
 --
+-- Section 5: Agtype B-tree range boundaries
+--
+BEGIN;
+SET LOCAL enable_seqscan = off;
+SET LOCAL enable_bitmapscan = off;
+SET LOCAL enable_indexonlyscan = off;
+
+CREATE TEMP TABLE agtype_btree_test (value agtype);
+INSERT INTO agtype_btree_test VALUES ('1'), ('2'), ('2'), ('3');
+CREATE INDEX agtype_btree_test_idx ON agtype_btree_test USING btree (value);
+ANALYZE agtype_btree_test;
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value;
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value;
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value;
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value;
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value DESC;
+SELECT value FROM agtype_btree_test WHERE value > '2'::agtype ORDER BY value DESC;
+
+EXPLAIN (COSTS OFF)
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value DESC;
+SELECT value FROM agtype_btree_test WHERE value >= '2'::agtype ORDER BY value DESC;
+
+SELECT value FROM agtype_btree_test WHERE value < '2'::agtype ORDER BY value;
+SELECT value FROM agtype_btree_test WHERE value <= '2'::agtype ORDER BY value;
+SELECT value FROM agtype_btree_test WHERE value = '2'::agtype ORDER BY value;
+
+DROP TABLE agtype_btree_test;
+COMMIT;
+
+--
 -- General Cleanup
 --
 SELECT drop_graph('cypher_index', true);

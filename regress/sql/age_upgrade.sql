@@ -236,6 +236,13 @@ END;
 $$;
 RESET check_function_bodies;
 
+BEGIN;
+CREATE TEMP TABLE agtype_upgrade_test (value agtype);
+INSERT INTO agtype_upgrade_test VALUES ('1'), ('2'), ('2'), ('3');
+CREATE INDEX agtype_upgrade_test_idx ON agtype_upgrade_test USING btree (value);
+
+SELECT value FROM agtype_upgrade_test ORDER BY value DESC;
+
 -- Step 11: Upgrade to the current (default) version via the stamped template.
 DO $$
 DECLARE curr_ver text;
@@ -253,6 +260,14 @@ $$;
 -- Step 12: Confirm the upgrade succeeded.
 SELECT installed_version = default_version AS upgraded_to_current
 FROM pg_available_extensions WHERE name = 'age';
+
+SET LOCAL enable_seqscan = off;
+SET LOCAL enable_bitmapscan = off;
+SELECT count(*) AS greater FROM agtype_upgrade_test WHERE value > '2'::agtype;
+SELECT count(*) AS greater_equal FROM agtype_upgrade_test WHERE value >= '2'::agtype;
+SELECT value FROM agtype_upgrade_test ORDER BY value DESC;
+DROP TABLE agtype_upgrade_test;
+COMMIT;
 
 -- =====================================================================
 -- UPGRADED INSTALL SNAPSHOTS (Steps 13-18b)
