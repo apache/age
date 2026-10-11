@@ -26,6 +26,12 @@ NOTICE:  graph "expr" has been created
  
 (1 row)
 
+-- Integer division must report bigint overflow instead of raising SIGFPE.
+SELECT * FROM cypher('expr', $$
+RETURN (-9223372036854775807 - 1) / -1
+$$) AS (r agtype);
+ERROR:  bigint out of range
+
 --
 -- map literal
 --
