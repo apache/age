@@ -848,6 +848,7 @@ static Node *transform_cypher_param(cypher_parsestate *cpstate,
                                     cypher_param *cp)
 {
     ParseState *pstate = (ParseState *)cpstate;
+    ArrayExpr  *newa;
     Const *const_str;
     FuncExpr *func_expr;
     Oid func_access_oid;
@@ -867,6 +868,30 @@ static Node *transform_cypher_param(cypher_parsestate *cpstate,
     func_access_oid = get_ag_func_oid("agtype_access_operator", 1,
                                       AGTYPEARRAYOID);
 
+    /*
+     * agtype_access_operator is declared VARIADIC agtype[] and expects a
+     * single agtype[] ArrayExpr with funcvariadic = true. Every other call
+     * site in this file (see transform_cypher_map_projection,
+     * transform_cypher_indirection) assembles its arguments via
+     * make_agtype_array_expr() and sets funcvariadic; only this function was
+     * passing the Param and the key Const as separate list elements directly.
+     *
+     * With the Simple Query protocol PostgreSQL implicitly forms the variadic
+     * array from separate arguments at execution time, masking the bug. But
+     * under the Extended Query protocol (prepared statements /
+     * Parse-Bind-Execute) the executor does not perform that implicit
+     * assembly, so agtype_access_operator read past its single agtype
+     * argument treating adjacent memory as additional array elements. The
+     * resulting out-of-bounds read surfaced as corrupted relation names in
+     * error responses (random bytes mixed with fragments of property values
+     * such as "November", "customer", "communication"; control bytes such as
+     * 0x01), which client drivers then failed to UTF-8 decode:
+     *
+     *     UnicodeDecodeError: 'utf-8' ... invalid start byte
+     *
+     * The fix matches every other call site: pack the arguments into an
+     * agtype[] ArrayExpr and set funcvariadic = true.
+     */
     args = lappend(args, copyObject(cpstate->params));
 
     const_str = makeConst(AGTYPEOID, -1, InvalidOid, -1,
@@ -874,8 +899,11 @@ static Node *transform_cypher_param(cypher_parsestate *cpstate,
 
     args = lappend(args, const_str);
 
-    func_expr = makeFuncExpr(func_access_oid, AGTYPEOID, args, InvalidOid,
-                             InvalidOid, COERCE_EXPLICIT_CALL);
+    newa = make_agtype_array_expr(args);
+
+    func_expr = makeFuncExpr(func_access_oid, AGTYPEOID, list_make1(newa),
+                             InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+    func_expr->funcvariadic = true;
     func_expr->location = cp->location;
 
     return (Node *)func_expr;
