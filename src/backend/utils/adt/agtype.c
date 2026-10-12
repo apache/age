@@ -9481,12 +9481,12 @@ Datum age_split(PG_FUNCTION_ARGS)
      * We need the strings as a text strings so that we can let PG deal with
      * multibyte characters in the string. The result is an ArrayType
      *
-     * Use string_to_array (literal split) instead of regexp_split_to_array
+     * Use text_to_array (SQL string_to_array, literal split) instead of regexp_split_to_array
      * so that the delimiter is treated as a plain string, not a regular
      * expression.  This matches openCypher semantics and is consistent with
      * age_replace(), which already treats the delimiter literally.
      */
-    text_array = DirectFunctionCall2Coll(string_to_array,
+    text_array = DirectFunctionCall2Coll(text_to_array,
                                          DEFAULT_COLLATION_OID,
                                          PointerGetDatum(text_string),
                                          PointerGetDatum(text_delimiter));
