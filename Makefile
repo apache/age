@@ -199,6 +199,7 @@ REGRESS = scan \
           expr \
           cypher_create \
           cypher_match \
+          cypher_match_rel_label_alternation \
           cypher_unwind \
           cypher_set \
           cypher_remove \
