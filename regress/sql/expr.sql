@@ -4203,3 +4203,18 @@ SELECT * FROM drop_graph('issue_2391', true);
 --
 -- End of tests
 --
+
+-- Issue #2536: Full-path MERGE with WITH followed by WHERE
+-- on a non-existing pattern (empty graph). The child plan is a
+-- Result node, not a SubqueryScan, and the code must not assume
+-- SubqueryScanState internals when remaking the scan tuple slot.
+SELECT * FROM create_graph('issue_2536');
+SELECT * FROM cypher('issue_2536', $$
+  MERGE p = (:a)-[:r]->(n)
+  WITH 1 AS y
+  WHERE ('a' STARTS WITH 'a')
+  RETURN y
+$$) AS (y agtype);
+SELECT * FROM drop_graph('issue_2536', true);
+
+-- End of tests
