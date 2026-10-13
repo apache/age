@@ -795,6 +795,14 @@ Datum agtype_div(PG_FUNCTION_ARGS)
             PG_RETURN_NULL();
         }
 
+        if (agtv_lhs->val.int_value == PG_INT64_MIN &&
+            agtv_rhs->val.int_value == -1)
+        {
+            ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                            errmsg("bigint out of range")));
+            PG_RETURN_NULL();
+        }
+
         agtv_result.type = AGTV_INTEGER;
         agtv_result.val.int_value = agtv_lhs->val.int_value /
                                     agtv_rhs->val.int_value;
