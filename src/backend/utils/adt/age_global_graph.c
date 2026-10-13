@@ -38,13 +38,6 @@
 #include "executor/spi.h"
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
-#include "optimizer/optimizer.h"
-#include "catalog/pg_proc.h"
-#include "nodes/nodeFuncs.h"
-#include "utils/json.h"
-#include "utils/jsonb.h"
-#include "utils/jsonpath.h"
-#include "utils/plancache.h"
 #include "utils/rls.h"
 #include "utils/acl.h"
 #include "utils/inval.h"
@@ -192,7 +185,6 @@ typedef struct GRAPH_global_context
     bool loaded_rls_enforced;      /* age.enforce_rls_in_traversal value at load */
     bool vertices_rls_filtered;    /* true if any vertex label was RLS-filtered at load */
     bool loaded_with_rls;          /* true if any label was loaded through RLS (SPI) */
-    bool rls_quals_vary;           /* RLS quals can vary in a statement */
     bool security_invalidated;     /* set by ACL/RLS catalog inval callbacks */
     bool retired;                  /* not offered to new acquisitions */
     int pin_count;                 /* queries still using this context */
@@ -302,9 +294,6 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
 static void load_edge_label_rls(GRAPH_global_context *ggctx,
                                 Oid edge_label_table_oid,
                                 char *edge_label_name);
-static bool rls_function_not_immutable(Oid func_id, void *context);
-static bool rls_quals_vary_walker(Node *node, void *context);
-static bool rls_plan_quals_vary(SPIPlanPtr plan);
 static void unlink_GRAPH_global_context(GRAPH_global_context *ggctx);
 static void release_GRAPH_context_pin(void *arg);
 static bool graph_context_reusable(GRAPH_context_pin *pin,
@@ -863,157 +852,6 @@ static bool insert_vertex_edge(GRAPH_global_context *ggctx,
     return false;
 }
 
-/* checker for check_functions_in_node: a function that is not IMMUTABLE */
-static bool rls_function_not_immutable(Oid func_id, void *context)
-{
-    return (func_volatile(func_id) != PROVOLATILE_IMMUTABLE);
-}
-
-/*
- * PostgreSQL's contain_mutable_functions_walker, except for the SQL value
- * functions whose result cannot change during a statement without the reuse
- * check noticing: the date and time ones are fixed for the transaction,
- * CURRENT_ROLE, CURRENT_USER and USER are the current role, which the reuse
- * check compares, and CURRENT_CATALOG is fixed for the session. SESSION_USER
- * and CURRENT_SCHEMA can change within a statement.
- */
-static bool rls_quals_vary_walker(Node *node, void *context)
-{
-    if (node == NULL)
-    {
-        return false;
-    }
-
-    if (check_functions_in_node(node, rls_function_not_immutable, context))
-    {
-        return true;
-    }
-
-    if (IsA(node, JsonConstructorExpr))
-    {
-        JsonConstructorExpr *ctor = (JsonConstructorExpr *) node;
-        bool is_jsonb = (ctor->returning->format->format_type ==
-                         JS_FORMAT_JSONB);
-        ListCell *lc;
-
-        foreach (lc, ctor->args)
-        {
-            Oid typid = exprType(lfirst(lc));
-
-            if (is_jsonb ? !to_jsonb_is_immutable(typid) :
-                           !to_json_is_immutable(typid))
-            {
-                return true;
-            }
-        }
-    }
-
-    if (IsA(node, JsonExpr))
-    {
-        JsonExpr *jexpr = (JsonExpr *) node;
-        Const *cnst;
-
-        if (!IsA(jexpr->path_spec, Const))
-        {
-            return true;
-        }
-
-        cnst = (Const *) jexpr->path_spec;
-        if (cnst->constisnull)
-        {
-            return false;
-        }
-
-        if (jspIsMutable(DatumGetJsonPathP(cnst->constvalue),
-                         jexpr->passing_names, jexpr->passing_values))
-        {
-            return true;
-        }
-    }
-
-    if (IsA(node, SQLValueFunction))
-    {
-        switch (((SQLValueFunction *) node)->op)
-        {
-        case SVFOP_CURRENT_DATE:
-        case SVFOP_CURRENT_TIME:
-        case SVFOP_CURRENT_TIME_N:
-        case SVFOP_CURRENT_TIMESTAMP:
-        case SVFOP_CURRENT_TIMESTAMP_N:
-        case SVFOP_LOCALTIME:
-        case SVFOP_LOCALTIME_N:
-        case SVFOP_LOCALTIMESTAMP:
-        case SVFOP_LOCALTIMESTAMP_N:
-        case SVFOP_CURRENT_ROLE:
-        case SVFOP_CURRENT_USER:
-        case SVFOP_USER:
-        case SVFOP_CURRENT_CATALOG:
-            return false;
-        default:
-            return true;
-        }
-    }
-
-    if (IsA(node, NextValueExpr))
-    {
-        return true;
-    }
-
-    if (IsA(node, Query))
-    {
-        return query_tree_walker((Query *) node, rls_quals_vary_walker,
-                                 context, 0);
-    }
-
-    return expression_tree_walker(node, rls_quals_vary_walker, context);
-}
-
-/*
- * Whether the row-security quals the planner applied to an RLS load can give
- * another result later in the same statement, so that another scan of the
- * label could return other rows. They can when they call a function that is
- * not IMMUTABLE: a volatile one, or a STABLE one such as current_setting(),
- * whose input the statement itself can change with set_config(). Policies
- * from row_security_policy_hook_permissive and _restrictive are turned into
- * the same securityQuals as catalog policies, so they are inspected too. A
- * plan whose queries cannot be inspected is reported as varying; reuse is
- * then limited to the call site that loaded the graph, which is valid for any
- * policy.
- */
-static bool rls_plan_quals_vary(SPIPlanPtr plan)
-{
-    List *sources;
-    ListCell *source_cell;
-
-    sources = SPI_plan_get_plan_sources(plan);
-    if (sources == NIL)
-    {
-        return true;
-    }
-
-    foreach (source_cell, sources)
-    {
-        CachedPlanSource *source = lfirst(source_cell);
-        ListCell *query_cell;
-
-        if (source->query_list == NIL)
-        {
-            return true;
-        }
-
-        foreach (query_cell, source->query_list)
-        {
-            /* walks the range table's securityQuals and any sublinks */
-            if (rls_quals_vary_walker(lfirst(query_cell), NULL))
-            {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 /*
  * Keep an owned, detoasted copy of an entry's properties in the context's
  * property memory, which is freed with the context.
@@ -1096,11 +934,6 @@ static void load_vertex_label_rls(GRAPH_global_context *ggctx,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("load_vertex_label_rls: SPI_prepare failed: %s",
                         SPI_result_code_string(SPI_result))));
-    }
-
-    if (rls_plan_quals_vary(plan))
-    {
-        ggctx->rls_quals_vary = true;
     }
 
     /* read-only cursor: reuses the active snapshot; RLS applied by planner */
@@ -1212,11 +1045,6 @@ static void load_edge_label_rls(GRAPH_global_context *ggctx,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("load_edge_label_rls: SPI_prepare failed: %s",
                         SPI_result_code_string(SPI_result))));
-    }
-
-    if (rls_plan_quals_vary(plan))
-    {
-        ggctx->rls_quals_vary = true;
     }
 
     /* read-only cursor: reuses the active snapshot; RLS applied by planner */
@@ -2517,12 +2345,12 @@ void pin_GRAPH_global_context(GRAPH_global_context *ggctx, MemoryContext owner,
  *   the policies when it plans the statement and checks the privileges when
  *   it starts it, so an authorization change made while the statement runs
  *   does not end the reuse.
- * - When the RLS quals give the same result throughout the statement, every
- *   scan of the labels in this statement returns the same rows, so any
- *   traversal may share the graph (see rls_plan_quals_vary).
- * - Otherwise only the traversal call site that loaded the graph shares it,
- *   as when PostgreSQL scans a relation once and rescans the result. Another
- *   call site is a separate scan and evaluates the policies itself.
+ * - A graph loaded through RLS serves only the traversal call site that
+ *   loaded it, as when PostgreSQL scans a relation once and rescans the
+ *   result. Another call site is a separate scan and evaluates the policies
+ *   itself, because a policy can depend on session state, such as a setting
+ *   or the time zone, that the statement can change. A graph loaded without
+ *   RLS may serve any traversal in the query.
  */
 static bool graph_context_reusable(GRAPH_context_pin *pin,
                                    const void *call_site)
@@ -2544,7 +2372,7 @@ static bool graph_context_reusable(GRAPH_context_pin *pin,
         return false;
     }
 
-    if (ggctx->rls_quals_vary &&
+    if (ggctx->loaded_with_rls &&
         (call_site == NULL || pin->call_site != call_site))
     {
         return false;
@@ -2559,9 +2387,9 @@ static bool graph_context_reusable(GRAPH_context_pin *pin,
  * the traversal or the materialization of its results still needs it.
  * call_site identifies the traversal within the query; it stays the same
  * when the traversal is evaluated again for another row. A context the query
- * already pins is reused when graph_context_reusable() allows it, so the
- * policies run once for each row a load scans rather than again for every
- * traversal.
+ * already pins is reused when graph_context_reusable() allows it, so a
+ * traversal does not load the graph, and evaluate its policies, again each
+ * time it is evaluated for another row.
  */
 GRAPH_global_context *acquire_GRAPH_global_context(char *graph_name,
                                                    Oid graph_oid,

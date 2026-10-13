@@ -313,11 +313,8 @@ RESET ROLE;
 -- 8.3: policy evaluations per query. Each traversal loads the 20 visible
 -- edges once and reuses its load when it is evaluated again for another row,
 -- as PostgreSQL rescans a materialized scan. Another traversal in the query
--- shares that load only when the policy gives the same result throughout the
--- statement: when it calls only IMMUTABLE functions, besides values such as
--- current_user that cannot change unnoticed. Otherwise, as with the STABLE
--- and volatile counters below, it loads the graph again, as a separate scan
--- would evaluate the policy again.
+-- loads the graph again, as a separate scan would evaluate the policy again,
+-- whichever functions the policy calls.
 SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
 CREATE SEQUENCE public.rls_vle_policy_calls;
 GRANT USAGE, SELECT ON SEQUENCE public.rls_vle_policy_calls TO rls_vle_user;
@@ -376,10 +373,9 @@ SELECT count(*) AS contexts_after_stable_query
 FROM pg_backend_memory_contexts WHERE name = 'AGE edge_table';
 SELECT age_delete_global_graphs(NULL) IS NOT NULL AS graph_caches_cleared;
 
--- policies that give the same result throughout the statement: the two
--- traversals share one load. The counter is declared IMMUTABLE so that the
--- policy counts as fixed, and its argument keeps it from being evaluated
--- once at planning.
+-- a policy that calls only IMMUTABLE functions, alone and with current_user:
+-- each traversal still loads the graph. The counter's argument keeps it from
+-- being evaluated once at planning.
 CREATE FUNCTION public.rls_vle_count_fixed(id graphid) RETURNS boolean
     LANGUAGE plpgsql IMMUTABLE
 AS $f$
@@ -416,9 +412,8 @@ RESET ROLE;
 SELECT last_value AS current_user_two_call_site_evaluations
 FROM public.rls_vle_policy_calls;
 
--- the search path can change during the statement, and a STABLE function
--- in a subquery of the policy counts as in the policy itself: each
--- traversal loads the graph
+-- a policy that reads the search path, and one that calls a STABLE function
+-- in a subquery: each traversal loads the graph
 ALTER POLICY link_all ON rls_vle_many."LINK"
     USING (public.rls_vle_count_fixed(id) AND current_schema IS NOT NULL);
 ALTER SEQUENCE public.rls_vle_policy_calls RESTART;
