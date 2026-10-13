@@ -4714,8 +4714,15 @@ static bool is_redundant_edge_type_qual(List *pattern, Node *qual)
     variable_name = linitial(column->fields);
     static_label = find_static_edge_label(pattern, strVal(variable_name));
 
-    return static_label != NULL &&
-           strcmp(static_label, strVal(&constant->val)) == 0;
+    /*
+     * The default label edge (_ag_label_edge) scans child labels, so a
+     * `type(r) = '_ag_label_edge'` predicate is not redundant with the
+     * pattern edge and must not be elided.
+     */
+    if (static_label == NULL || IS_DEFAULT_LABEL_EDGE(static_label))
+        return false;
+
+    return strcmp(static_label, strVal(&constant->val)) == 0;
 }
 
 static Node *simplify_redundant_edge_type_qual(List *pattern, Node *where)
