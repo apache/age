@@ -3948,6 +3948,16 @@ SELECT * FROM cypher('accessor_opt', $$
     RETURN count(r)
 $$) AS (count agtype);
 
+-- The default edge label (_ag_label_edge) scans every child edge label, so a
+-- `type(r) = '_ag_label_edge'` predicate is not redundant with the pattern
+-- edge and must not be elided. No edge is ever stored with this synthetic
+-- label, so the result must stay empty.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:_ag_label_edge]->()
+    WHERE type(r) = '_ag_label_edge'
+    RETURN type(r)
+$$) AS (edge_type agtype);
+
 SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
