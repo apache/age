@@ -136,6 +136,29 @@ SELECT * FROM cypher('cypher_remove', $$CREATE ()-[:edge_multi_property { i: 5, 
 SELECT * FROM cypher('cypher_remove', $$MATCH ()-[e:edge_multi_property]-() RETURN e$$) AS (a agtype);
 SELECT * FROM cypher('cypher_remove', $$MATCH ()-[e:edge_multi_property]-() REMOVE e.i, e.j RETURN e$$) AS (a agtype);
 
+-- Hidden ctid columns must propagate through WITH for REMOVE.
+SELECT * FROM cypher('cypher_remove', $$
+    CREATE (:ctid_remove {drop_me: 1})
+$$) AS (a agtype);
+SELECT * FROM cypher('cypher_remove', $$
+    MATCH (n:ctid_remove)
+    WITH n
+    REMOVE n.drop_me
+    RETURN n
+$$) AS (a agtype);
+
+-- REMOVE must fall back from a stale ctid after an earlier SET moves the row.
+SELECT * FROM cypher('cypher_remove', $$
+    CREATE (:ctid_remove_stale {drop_me: 1})
+$$) AS (a agtype);
+SELECT * FROM cypher('cypher_remove', $$
+    MATCH (n:ctid_remove_stale), (m:ctid_remove_stale)
+    WHERE id(n) = id(m)
+    SET n.changed = true
+    REMOVE m.drop_me
+    RETURN m
+$$) AS (a agtype);
+
 --Errors
 SELECT * FROM cypher('cypher_remove', $$REMOVE n.i$$) AS (a agtype);
 

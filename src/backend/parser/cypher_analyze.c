@@ -1009,6 +1009,25 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
     cpstate->default_alias_num = 0;
     cpstate->entities = NIL;
     cpstate->subquery_where_flag = false;
+
+    /*
+     * Inject hidden ctid columns during MATCH only when the statement contains
+     * a clause that needs to relocate entity tuples. Read-only statements skip
+     * the extra columns entirely.
+     */
+    cpstate->has_writable_clause = false;
+    foreach (lc, stmt)
+    {
+        Node *clause_node = lfirst(lc);
+
+        if (is_ag_node(clause_node, cypher_set) ||
+            is_ag_node(clause_node, cypher_delete))
+        {
+            cpstate->has_writable_clause = true;
+            break;
+        }
+    }
+
     /*
      * install error context callback to adjust an error position since
      * locations in stmt are 0 based

@@ -131,6 +131,9 @@ void copy_cypher_update_item(ExtensibleNode *newnode, const ExtensibleNode *from
 
     COPY_SCALAR_FIELD(prop_position);
     COPY_SCALAR_FIELD(entity_position);
+
+    /* copy ctid position for direct tuple fetch */
+    COPY_SCALAR_FIELD(ctid_position);
     COPY_STRING_FIELD(var_name);
     COPY_STRING_FIELD(prop_name);
     COPY_NODE_FIELD(qualified_name);
@@ -159,6 +162,9 @@ void copy_cypher_delete_item(ExtensibleNode *newnode, const ExtensibleNode *from
 
     COPY_NODE_FIELD(entity_position);
     COPY_STRING_FIELD(var_name);
+
+    /* copy ctid position for direct tuple fetch */
+    COPY_SCALAR_FIELD(ctid_position);
 }
 
 /* copy function for cypher_merge_information */
