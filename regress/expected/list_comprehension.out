@@ -842,6 +842,18 @@ SELECT * FROM cypher('list_comprehension', $$ UNWIND [null, 1] AS x RETURN x, x 
  1 | false | true
 (2 rows)
 
+SELECT * FROM cypher('list_comprehension', $$ RETURN 1 LIMIT [x IN [1] | x][0] $$) AS (result agtype);
+ result 
+--------
+ 1
+(1 row)
+
+SELECT * FROM cypher('list_comprehension', $$ RETURN 1 SKIP [x IN [0] | x][0] $$) AS (result agtype);
+ result 
+--------
+ 1
+(1 row)
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);
 NOTICE:  drop cascades to 4 other objects
