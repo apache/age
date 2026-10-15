@@ -4903,9 +4903,9 @@ $$) AS (results agtype);
 SELECT * FROM cypher('expr', $$
     RETURN split("a,b,c,d,e,f", "")
 $$) AS (results agtype);
-                         results                         
----------------------------------------------------------
- ["a", ",", "b", ",", "c", ",", "d", ",", "e", ",", "f"]
+     results     
+-----------------
+ ["a,b,c,d,e,f"]
 (1 row)
 
 SELECT * FROM cypher('expr', $$
@@ -5018,52 +5018,53 @@ HINT:  No function matches the given name and argument types. You might need to 
 SELECT * FROM cypher('expr', $$
     RETURN split("a.b.c", ".")
 $$) AS (results agtype);
-    results     
----------------
+     results     
+-----------------
  ["a", "b", "c"]
 (1 row)
 
 SELECT * FROM cypher('expr', $$
     RETURN split("a|b|c", "|")
 $$) AS (results agtype);
-    results     
----------------
+     results     
+-----------------
  ["a", "b", "c"]
 (1 row)
 
 SELECT * FROM cypher('expr', $$
     RETURN split("a+b+c", "+")
 $$) AS (results agtype);
-    results     
----------------
+     results     
+-----------------
  ["a", "b", "c"]
 (1 row)
 
 SELECT * FROM cypher('expr', $$
     RETURN split("a.b.c.d", ".")
 $$) AS (results agtype);
-      results       
---------------------
+       results        
+----------------------
  ["a", "b", "c", "d"]
 (1 row)
 
 SELECT * FROM age_split('a.b.c', '.');
-      results       
---------------------
+    age_split    
+-----------------
  ["a", "b", "c"]
 (1 row)
 
 SELECT * FROM age_split('a|b|c', '|');
-      results       
---------------------
+    age_split    
+-----------------
  ["a", "b", "c"]
 (1 row)
 
 SELECT * FROM age_split('a+b+c', '+');
-      results       
---------------------
+    age_split    
+-----------------
  ["a", "b", "c"]
 (1 row)
+
 --
 -- replace()
 --
