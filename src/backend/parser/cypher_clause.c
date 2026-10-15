@@ -4730,6 +4730,7 @@ static Node *simplify_redundant_edge_type_qual(List *pattern, Node *where)
     BoolExpr *expression;
     List *args = NIL;
     ListCell *cell;
+    bool changed = false;
 
     if (where == NULL)
         return NULL;
@@ -4748,15 +4749,37 @@ static Node *simplify_redundant_edge_type_qual(List *pattern, Node *where)
     {
         Node *arg = lfirst(cell);
 
+        /*
+         * Recurse into nested AND-conjunctions: a `type(r) = '<label>'` that is
+         * redundant with the edge's static label stays redundant no matter how it
+         * is parenthesized. Stop at OR/NOT boundaries -- crossing into an OR
+         * branch would be over-elision.
+         */
+        if (IsA(arg, BoolExpr) && ((BoolExpr *) arg)->boolop == AND_EXPR)
+        {
+            Node *simplified = simplify_redundant_edge_type_qual(pattern, arg);
+
+            if (simplified != arg)
+                changed = true;
+
+            if (simplified != NULL)
+                args = lappend(args, simplified);
+            else
+                changed = true;   /* an all-redundant nested group was dropped */
+            continue;
+        }
+
         if (!is_redundant_edge_type_qual(pattern, arg))
             args = lappend(args, arg);
+        else
+            changed = true;
     }
 
     if (args == NIL)
         return NULL;
     if (list_length(args) == 1)
         return linitial(args);
-    if (list_length(args) == list_length(expression->args))
+    if (!changed)
         return where;
 
     return (Node *)makeBoolExpr(AND_EXPR, args, expression->location);

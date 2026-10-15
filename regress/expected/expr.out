@@ -9864,6 +9864,67 @@ $$) AS (rid agtype);
  1125899906842625
 (1 row)
 
+-- A redundant predication nested inside a parenthesized AND-conjunct is still
+-- redundant, regardless of parenthesization: it must be elided while the
+-- sibling predicate in the same nested group is preserved.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 1
+(1 row)
+
+-- The flat and nested forms above must produce identical plans (the redundant
+-- conjunct is gone from both).
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (plan agtype);
+                                                                                                          QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: (count(ROW(r.id, _label_name('18222'::oid, r.id), r.end_id, r.start_id, r.properties)))::agtype
+   ->  Hash Join
+         Output: r.id, r.end_id, r.start_id, r.properties
+         Hash Cond: (_age_default_alias_1.id = r.end_id)
+         ->  Append
+               ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_1_1
+                     Output: _age_default_alias_1_1.id
+               ->  Seq Scan on accessor_opt."Person" _age_default_alias_1_2
+                     Output: _age_default_alias_1_2.id
+         ->  Hash
+               Output: r.id, r.end_id, r.start_id, r.properties
+               ->  Nested Loop
+                     Output: r.id, r.end_id, r.start_id, r.properties
+                     ->  Seq Scan on accessor_opt."KNOWS" r
+                           Output: r.id, r.start_id, r.end_id, r.properties
+                           Filter: ((agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype]) = '2020'::agtype) AND (agtype_access_operator(VARIADIC ARRAY[r.properties, '"since"'::agtype]) <> '-1'::agtype))
+                     ->  Append
+                           ->  Seq Scan on accessor_opt._ag_label_vertex _age_default_alias_0_1
+                                 Output: _age_default_alias_0_1.id
+                                 Filter: (_age_default_alias_0_1.id = r.start_id)
+                           ->  Index Only Scan using "Person_pkey" on accessor_opt."Person" _age_default_alias_0_2
+                                 Output: _age_default_alias_0_2.id
+                                 Index Cond: (_age_default_alias_0_2.id = r.start_id)
+(24 rows)
+
+-- A redundant predication inside a parenthesized OR-group must NOT be elided:
+-- it still filters which rows reach the count.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE (type(r) = 'KNOWS' OR r.since = -1)
+    RETURN count(r)
+$$) AS (count agtype);
+ count 
+-------
+ 1
+(1 row)
+
 --
 -- Accessors in ORDER BY
 --

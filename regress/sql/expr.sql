@@ -3964,6 +3964,32 @@ SELECT * FROM cypher('accessor_opt', $$
     RETURN id(r)
 $$) AS (rid agtype);
 
+-- A redundant predication nested inside a parenthesized AND-conjunct is still
+-- redundant, regardless of parenthesization: it must be elided while the
+-- sibling predicate in the same nested group is preserved.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- The flat and nested forms above must produce identical plans (the redundant
+-- conjunct is gone from both).
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (plan agtype);
+
+-- A redundant predication inside a parenthesized OR-group must NOT be elided:
+-- it still filters which rows reach the count.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE (type(r) = 'KNOWS' OR r.since = -1)
+    RETURN count(r)
+$$) AS (count agtype);
+
 --
 -- Accessors in ORDER BY
 --
