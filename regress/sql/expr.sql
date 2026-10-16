@@ -3896,10 +3896,99 @@ $$) AS (name agtype);
 
 -- type() comparison on edge
 SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN id(r)
+$$) AS (plan agtype);
+
+-- A different relationship type is not redundant.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'LIKES'
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- Removing the redundant conjunct must preserve the remaining predicate.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' AND r.since = 2020
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- A redundant predicate nested under OR must not be removed.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE type(r) = 'KNOWS' OR r.since = -1
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- OPTIONAL MATCH must continue to emit unmatched left-hand rows.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (n:Person)
+    OPTIONAL MATCH (n)-[r:KNOWS]->(m)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(n), count(r)
+$$) AS (nodes agtype, relationships agtype);
+
+-- A variable-length relationship is a list, so its type predicate is not
+-- equivalent to the static relationship label and must remain untouched.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS*1..1]->()
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- A relationship variable reused through WITH keeps its original binding.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH (a:Person)-[r:KNOWS]->(b)
+    WITH a, b, r
+    OPTIONAL MATCH (a)-[r]->(b)
+    WHERE type(r) = 'KNOWS'
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- The default edge label (_ag_label_edge) scans every child edge label, so a
+-- `type(r) = '_ag_label_edge'` predicate is not redundant with the pattern
+-- edge and must not be elided. No edge is ever stored with this synthetic
+-- label, so the result must stay empty.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:_ag_label_edge]->()
+    WHERE type(r) = '_ag_label_edge'
+    RETURN type(r)
+$$) AS (edge_type agtype);
+
+SELECT * FROM cypher('accessor_opt', $$
     MATCH ()-[r]->()
     WHERE type(r) = 'KNOWS'
     RETURN id(r)
 $$) AS (rid agtype);
+
+-- A redundant predication nested inside a parenthesized AND-conjunct is still
+-- redundant, regardless of parenthesization: it must be elided while the
+-- sibling predicate in the same nested group is preserved.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (count agtype);
+
+-- The flat and nested forms above must produce identical plans (the redundant
+-- conjunct is gone from both).
+SELECT * FROM cypher('accessor_opt', $$
+    EXPLAIN (VERBOSE, COSTS OFF)
+    MATCH ()-[r:KNOWS]->()
+    WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
+    RETURN count(r)
+$$) AS (plan agtype);
+
+-- A redundant predication inside a parenthesized OR-group must NOT be elided:
+-- it still filters which rows reach the count.
+SELECT * FROM cypher('accessor_opt', $$
+    MATCH ()-[r:KNOWS]->()
+    WHERE (type(r) = 'KNOWS' OR r.since = -1)
+    RETURN count(r)
+$$) AS (count agtype);
 
 --
 -- Accessors in ORDER BY
