@@ -966,6 +966,26 @@ static Query *analyze_cypher(List *stmt, ParseState *parent_pstate,
      * the clauses is inverted.
      */
     clause = NULL;
+
+    /*
+     * A query that begins with OPTIONAL MATCH still has to emit a row.
+     * openCypher gives every OPTIONAL MATCH left join semantics; with no
+     * clause to its left it joins against the implicit single row that
+     * begins a query, so a pattern matching nothing yields one row of nulls
+     * rather than no rows at all. transform_cypher_match_pattern builds that
+     * join out of the previous clause, so give the leading OPTIONAL MATCH a
+     * previous clause that produces exactly one row.
+     *
+     * This has to happen here rather than in the transform: the transform
+     * temporarily clears prev to recurse into the join's right side, and
+     * relies on prev being NULL there to take the plain MATCH path.
+     */
+    if (stmt != NIL && is_ag_node(linitial(stmt), cypher_match) &&
+        ((cypher_match *)linitial(stmt))->optional)
+    {
+        clause = make_optional_match_unit_clause();
+    }
+
     foreach (lc, stmt)
     {
         cypher_clause *next;

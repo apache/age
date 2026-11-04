@@ -32,6 +32,7 @@ struct cypher_clause
     cypher_clause *prev; /* previous clause */
 };
 
+cypher_clause *make_optional_match_unit_clause(void);
 Query *transform_cypher_clause(cypher_parsestate *cpstate,
                                cypher_clause *clause);
 
