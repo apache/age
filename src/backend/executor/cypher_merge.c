@@ -34,6 +34,13 @@
  *
  * Note: This structure is only useful for paths when stored in a dynamic
  *       array.
+ *
+ * Note: id, start_id and end_id hold graphid values, never Datums. They are
+ *       converted with GRAPHID_GET_DATUM/DATUM_GET_GRAPHID where they meet a
+ *       Datum. On a 64-bit build the two are the same bits, but with
+ *       SIZEOF_DATUM=4 a graphid Datum is a pointer, and storing it here (or
+ *       reading a graphid stored here as a Datum) writes edges with
+ *       start_id/end_id from whatever that address holds.
  */
 typedef struct path_entry
 {
@@ -1270,8 +1277,9 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
             path_array != NULL &&
             path_array[path_index] != NULL)
         {
-            id = path_array[path_index]->id;
             isNull = path_array[path_index]->id_isNull;
+            id = isNull ? (Datum) 0 :
+                          GRAPHID_GET_DATUM(path_array[path_index]->id);
         }
         /*
          * Otherwise, we need to retrieve the vertex normally and store its
@@ -1285,7 +1293,8 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
             if (path_array != NULL && path_array[path_index] != NULL)
             {
                 /* store it */
-                path_array[path_index]->id = id;
+                path_array[path_index]->id = isNull ? 0 :
+                                                      DATUM_GET_GRAPHID(id);
                 path_array[path_index]->id_isNull = isNull;
             }
         }
@@ -1422,7 +1431,7 @@ static Datum merge_vertex(cypher_merge_custom_scan_state *css,
     else if (path_array != NULL && path_array[path_index] != NULL)
     {
         /* retrieve the id of the vertex */
-        id = path_array[path_index]->id;
+        id = GRAPHID_GET_DATUM(path_array[path_index]->id);
 
         /*
          * Add the Datum to the list of entities for creating the path variable
@@ -1606,10 +1615,11 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
         path_array != NULL &&
         path_array[path_index] != NULL)
     {
-        id = path_array[path_index]->id;
         isNull = path_array[path_index]->id_isNull;
-        start_id = path_array[path_index]->start_id;
-        end_id = path_array[path_index]->end_id;
+        id = isNull ? (Datum) 0 :
+                      GRAPHID_GET_DATUM(path_array[path_index]->id);
+        start_id = GRAPHID_GET_DATUM(path_array[path_index]->start_id);
+        end_id = GRAPHID_GET_DATUM(path_array[path_index]->end_id);
     }
     /*
      * Otherwise, we need to get the edge's ID and store its unique values if
@@ -1623,10 +1633,10 @@ static void merge_edge(cypher_merge_custom_scan_state *css,
         if (path_array != NULL && path_array[path_index] != NULL)
         {
             /* store it */
-            path_array[path_index]->id = id;
+            path_array[path_index]->id = isNull ? 0 : DATUM_GET_GRAPHID(id);
             path_array[path_index]->id_isNull = isNull;
-            path_array[path_index]->start_id = start_id;
-            path_array[path_index]->end_id = end_id;
+            path_array[path_index]->start_id = DATUM_GET_GRAPHID(start_id);
+            path_array[path_index]->end_id = DATUM_GET_GRAPHID(end_id);
         }
     }
     else
