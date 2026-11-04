@@ -195,6 +195,7 @@
              path_node path_relationship path_relationship_body
              properties_opt
 %type <string> label_opt
+%type <list> rel_label_opt rel_labels
 
 /* expression */
 %type <node> expr expr_opt expr_atom expr_literal map list
@@ -1479,30 +1480,52 @@ path_relationship:
     ;
 
 path_relationship_body:
-    '[' var_name_opt label_opt cypher_varlen_opt properties_opt ']'
+    '[' var_name_opt rel_label_opt cypher_varlen_opt properties_opt ']'
         {
             cypher_relationship *n;
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            if (list_length($3) <= 1)
+            {
+                n->label = (list_length($3) == 1)
+                           ? strVal(linitial($3)) : NULL;
+                n->parsed_label = n->label;
+                n->labels = NIL;
+            }
+            else
+            {
+                n->label = NULL;
+                n->parsed_label = NULL;
+                n->labels = $3;
+            }
             n->varlen = $4;
             n->use_equals = false;
             n->props = $5;
 
             $$ = (Node *)n;
         }
-    | '[' var_name_opt label_opt cypher_varlen_opt '='properties_opt ']'
+    | '[' var_name_opt rel_label_opt cypher_varlen_opt '='properties_opt ']'
         {
             cypher_relationship *n;
 
             n = make_ag_node(cypher_relationship);
             n->name = $2;
             n->parsed_name = $2;
-            n->label = $3;
-            n->parsed_label = $3;
+            if (list_length($3) <= 1)
+            {
+                n->label = (list_length($3) == 1)
+                           ? strVal(linitial($3)) : NULL;
+                n->parsed_label = n->label;
+                n->labels = NIL;
+            }
+            else
+            {
+                n->label = NULL;
+                n->parsed_label = NULL;
+                n->labels = $3;
+            }
             n->varlen = $4;
             n->use_equals = true;
             n->props = $6;
@@ -1519,6 +1542,7 @@ path_relationship_body:
             n->parsed_name = NULL;
             n->label = NULL;
             n->parsed_label = NULL;
+            n->labels = NIL;
             n->varlen = NULL;
             n->use_equals = false;
             n->props = NULL;
@@ -1535,6 +1559,37 @@ label_opt:
     | ':' label_name
         {
             $$ = $2;
+        }
+    ;
+
+/*
+ * Relationship-type alternation: openCypher allows multiple edge labels
+ * to be listed inside a single edge pattern, e.g. `[:A|B|C]` or
+ * `[:A|:B|:C]`. Returns a List of String, NIL for no labels.
+ */
+rel_label_opt:
+    /* empty */
+        {
+            $$ = NIL;
+        }
+    | rel_labels
+        {
+            $$ = $1;
+        }
+    ;
+
+rel_labels:
+    ':' label_name
+        {
+            $$ = list_make1(makeString($2));
+        }
+    | rel_labels '|' label_name
+        {
+            $$ = lappend($1, makeString($3));
+        }
+    | rel_labels '|' ':' label_name
+        {
+            $$ = lappend($1, makeString($4));
         }
     ;
 

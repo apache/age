@@ -259,6 +259,7 @@ void out_cypher_relationship(StringInfo str, const ExtensibleNode *node)
     WRITE_NODE_FIELD(varlen);
     WRITE_ENUM_FIELD(dir, cypher_rel_dir);
     WRITE_LOCATION_FIELD(location);
+    WRITE_NODE_FIELD(labels);
 }
 
 /* serialization function for the cypher_bool_const ExtensibleNode. */
