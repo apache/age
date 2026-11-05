@@ -2098,6 +2098,22 @@ SELECT * FROM age_split(123456789, ',');
 SELECT * FROM age_split('a,b,c,d,e,f', -1);
 SELECT * FROM age_split('a,b,c,d,e,f');
 SELECT * FROM age_split();
+-- regex metacharacters should be treated as literal delimiters (#2568)
+SELECT * FROM cypher('expr', $$
+    RETURN split("a.b.c", ".")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN split("a|b|c", "|")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN split("a+b+c", "+")
+$$) AS (results agtype);
+SELECT * FROM cypher('expr', $$
+    RETURN split("a.b.c.d", ".")
+$$) AS (results agtype);
+SELECT * FROM age_split('a.b.c', '.');
+SELECT * FROM age_split('a|b|c', '|');
+SELECT * FROM age_split('a+b+c', '+');
 
 --
 -- replace()
