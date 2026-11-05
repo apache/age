@@ -202,5 +202,8 @@ SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [null, 1] WHERE x IS 
 SELECT * FROM cypher('list_comprehension', $$ RETURN [x IN [1, 2, 3] WHERE x IS NULL] $$) AS (result agtype);
 SELECT * FROM cypher('list_comprehension', $$ UNWIND [null, 1] AS x RETURN x, x IS NULL, x IS NOT NULL $$) AS (x agtype, a agtype, b agtype);
 
+SELECT * FROM cypher('list_comprehension', $$ RETURN 1 LIMIT [x IN [1] | x][0] $$) AS (result agtype);
+SELECT * FROM cypher('list_comprehension', $$ RETURN 1 SKIP [x IN [0] | x][0] $$) AS (result agtype);
+
 -- Clean up
 SELECT * FROM drop_graph('list_comprehension', true);
