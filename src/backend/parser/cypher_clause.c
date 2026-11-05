@@ -80,6 +80,7 @@
 #define AGE_VARNAME_ID AGE_DEFAULT_VARNAME_PREFIX"id"
 #define AGE_VARNAME_SET_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"set_clause"
 #define AGE_VARNAME_SET_VALUE AGE_DEFAULT_VARNAME_PREFIX"set_value"
+#define AGE_VARNAME_CTID_FORMAT AGE_DEFAULT_VARNAME_PREFIX"ctid_%s"
 
 /*
  * In the transformation stage, we need to track
@@ -266,6 +267,18 @@ static Expr *add_volatile_wrapper(Expr *node);
 static bool variable_exists(cypher_parsestate *cpstate, char *name);
 static void add_volatile_wrapper_to_target_entry(List *target_list, int resno);
 static int get_target_entry_resno(List *target_list, char *name);
+
+/* Helpers for injecting and resolving ctid columns for direct tuple fetch. */
+static AttrNumber resolve_ctid_position(List *target_list,
+                                        const char *var_name);
+static bool is_internal_name(const char *name);
+static char *get_ctid_source_name(ParseState *pstate, TargetEntry *te);
+static void inject_ctid_target_entry(ParseState *pstate,
+                                     ParseNamespaceItem *pnsi,
+                                     const char *entity_name,
+                                     List **target_list);
+static void inject_ctid_columns_for_with(ParseState *pstate, Query *query);
+
 static void handle_prev_clause(cypher_parsestate *cpstate, Query *query,
                                cypher_clause *clause, bool first_rte);
 static TargetEntry *placeholder_target_entry(cypher_parsestate *cpstate,
@@ -2853,6 +2866,9 @@ static List *transform_cypher_delete_item_list(cypher_parsestate *cpstate,
         item->var_name = val->sval;
         item->entity_position = pos;
 
+        /* Resolve the ctid attribute position for direct tuple fetch. */
+        item->ctid_position = resolve_ctid_position(query->targetList,
+                                                    val->sval);
         items = lappend(items, item);
     }
 
@@ -3038,6 +3054,9 @@ cypher_update_information *transform_cypher_remove_item_list(
         property_name = property_node->sval;
         item->prop_name = property_name;
 
+        /* Resolve the ctid attribute position for direct tuple fetch. */
+        item->ctid_position = resolve_ctid_position(query->targetList,
+                                                    variable_name);
         info->set_items = lappend(info->set_items, item);
     }
 
@@ -3235,6 +3254,10 @@ cypher_update_information *transform_cypher_set_item_list(
         target_item->expr = add_volatile_wrapper(target_item->expr);
 
         query->targetList = lappend(query->targetList, target_item);
+
+        /* Resolve the ctid attribute position for direct tuple fetch. */
+        item->ctid_position = resolve_ctid_position(query->targetList,
+                                                    variable_name);
         info->set_items = lappend(info->set_items, item);
     }
 
@@ -3520,6 +3543,15 @@ static Query *transform_cypher_return(cypher_parsestate *cpstate,
                                                    &groupClause,
                                                    EXPR_KIND_SELECT_TARGET);
 
+    /*
+     * Propagate ctid columns through WITH only when the statement contains SET
+     * or DELETE. Skip aggregation and DISTINCT because hidden ctid must not
+     * affect grouping or deduplication semantics.
+     */
+    if (self->is_with && cpstate->has_writable_clause &&
+        !pstate->p_hasAggs && groupClause == NIL && !self->distinct)
+        inject_ctid_columns_for_with(pstate, query);
+
     markTargetListOrigins(pstate, query->targetList);
 
     /* ORDER BY */
@@ -3700,6 +3732,8 @@ static Query *transform_cypher_with(cypher_parsestate *cpstate,
     return_clause->skip = self->skip;
     return_clause->limit = self->limit;
 
+    /* Mark as WITH so ctid columns propagate to downstream clauses. */
+    return_clause->is_with = true;
     wrapper = palloc(sizeof(*wrapper));
     wrapper->self = (Node *)return_clause;
     wrapper->prev = clause->prev;
@@ -6875,6 +6909,14 @@ static Expr *transform_cypher_edge(cypher_parsestate *cpstate,
     {
         te = makeTargetEntry((Expr *)expr, resno, rel->name, false);
         *target_list = lappend(*target_list, te);
+
+        /*
+         * Add a hidden ctid column for direct tuple fetch. This is only useful
+         * when the statement contains SET, REMOVE, or DELETE.
+         */
+        if (valid_label && cpstate->has_writable_clause &&
+            !is_internal_name(rel->name))
+            inject_ctid_target_entry(pstate, pnsi, rel->name, target_list);
     }
 
     return (Expr *)expr;
@@ -7163,6 +7205,13 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
     te = makeTargetEntry(expr, resno, node->name, false);
     *target_list = lappend(*target_list, te);
 
+    /*
+     * Add a hidden ctid column for direct tuple fetch. This is only useful
+     * when the statement contains SET, REMOVE, or DELETE.
+     */
+    if (valid_label && cpstate->has_writable_clause &&
+        !is_internal_name(node->name))
+        inject_ctid_target_entry(pstate, pnsi, node->name, target_list);
     return expr;
 }
 
@@ -7737,6 +7786,136 @@ static void add_volatile_wrapper_to_target_entry(List *target_list, int resno)
     ereport(ERROR,
             (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
              errmsg("add_volatile_wrapper_to_target_entry: resno not found")));
+}
+
+/* Find the ctid target entry for a variable and return its resno. */
+static AttrNumber resolve_ctid_position(List *target_list,
+                                        const char *var_name)
+{
+    char *ctid_name;
+    AttrNumber pos;
+
+    ctid_name = psprintf(AGE_VARNAME_CTID_FORMAT, var_name);
+
+    pos = get_target_entry_resno(target_list, ctid_name);
+    pfree(ctid_name);
+
+    if (pos == -1)
+        return 0;
+
+    add_volatile_wrapper_to_target_entry(target_list, pos);
+    return pos;
+}
+
+/* Return true when name was generated for an internal pattern entity. */
+static bool is_internal_name(const char *name)
+{
+    return strncmp(name, AGE_DEFAULT_PREFIX,
+                   strlen(AGE_DEFAULT_PREFIX)) == 0;
+}
+
+/* Resolve the source column name for hidden ctid propagation. */
+static char *get_ctid_source_name(ParseState *pstate, TargetEntry *te)
+{
+    /*
+     * Resolve the source ctid from the underlying variable rather than the
+     * WITH alias.
+     */
+    if (te->expr != NULL && IsA(te->expr, Var))
+    {
+        Var *var = (Var *)te->expr;
+
+        if (var->varattno > 0 && var->varlevelsup == 0)
+        {
+            RangeTblEntry *rte = rt_fetch(var->varno, pstate->p_rtable);
+
+            return get_rte_attribute_name(rte, var->varattno);
+        }
+    }
+
+    return NULL;
+}
+
+/*
+ * Add a hidden CTID target entry for a vertex or edge.
+ *
+ * It must remain a non-junk output of this clause query. AGE represents
+ * successive clauses as subqueries, and a resjunk entry is not addressable by
+ * the downstream clause, leaving ctid_position unresolved.
+ */
+static void inject_ctid_target_entry(ParseState *pstate,
+                                     ParseNamespaceItem *pnsi,
+                                     const char *entity_name,
+                                     List **target_list)
+{
+    Node *ctid_var;
+
+    ctid_var = scanNSItemForColumn(pstate, pnsi, 0, "ctid", -1);
+    if (ctid_var != NULL)
+    {
+        char *ctid_name = psprintf(AGE_VARNAME_CTID_FORMAT, entity_name);
+        TargetEntry *ctid_te = makeTargetEntry((Expr *)ctid_var,
+                                               pstate->p_next_resno++,
+                                               ctid_name, false);
+        *target_list = lappend(*target_list, ctid_te);
+    }
+}
+
+/* Preserve hidden ctid columns across WITH for writable clauses. */
+static void inject_ctid_columns_for_with(ParseState *pstate, Query *query)
+{
+    List *new_entries = NIL;
+    ListCell *lc;
+    int var_prefix_len = strlen(AGE_DEFAULT_VARNAME_PREFIX);
+
+    foreach (lc, query->targetList)
+    {
+        TargetEntry *te = (TargetEntry *)lfirst(lc);
+        char *source_ctid_name;
+        char *source_name;
+        char *ctid_name;
+        Node *ctid_var;
+
+        if (te->resjunk || te->resname == NULL)
+            continue;
+
+        if (strncmp(te->resname, AGE_DEFAULT_VARNAME_PREFIX,
+                    var_prefix_len) == 0)
+            continue;
+
+        /*
+         * Keep the output hidden ctid column named after te->resname,
+         * but resolve its value from the source variable.
+         */
+        source_name = get_ctid_source_name(pstate, te);
+        if (source_name == NULL)
+            continue;
+
+        ctid_name = psprintf(AGE_VARNAME_CTID_FORMAT, te->resname);
+
+        if (get_target_entry_resno(query->targetList, ctid_name) != -1)
+        {
+            pfree(ctid_name);
+            continue;
+        }
+
+        source_ctid_name = psprintf(AGE_VARNAME_CTID_FORMAT, source_name);
+        ctid_var = colNameToVar(pstate, source_ctid_name, false, -1);
+        pfree(source_ctid_name);
+        if (ctid_var != NULL)
+        {
+            TargetEntry *ctid_te = makeTargetEntry(
+                (Expr *)ctid_var, (AttrNumber)pstate->p_next_resno++,
+                ctid_name, false);
+            new_entries = lappend(new_entries, ctid_te);
+        }
+        else
+        {
+            pfree(ctid_name);
+        }
+    }
+
+    query->targetList = list_concat(query->targetList, new_entries);
 }
 
 /*

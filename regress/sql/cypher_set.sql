@@ -542,6 +542,180 @@ SELECT * FROM cypher('issue_1884', $$
     RETURN a
 $$) AS (a agtype);
 
+-- ============================================================================
+-- ctid lookup fallback tests
+-- ============================================================================
+
+SELECT create_graph('ctid_set');
+
+-- Same entity referenced through two aliases: the second SET must fall back
+-- from the stale ctid to graphid lookup after the first SET moves the tuple.
+SELECT * FROM cypher('ctid_set', $$CREATE (:v {k: 1})$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:v), (m:v)
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.a = 2
+    RETURN n.a, m.a
+$$) AS (n agtype, m agtype);
+SELECT * FROM cypher('ctid_set', $$MATCH (n:v) RETURN n.a$$) AS (a agtype);
+
+-- Updating the same entity through different aliases must preserve earlier
+-- changes, including when a later RHS depends on an earlier SET.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:alias_vertex {k: 1})
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:alias_vertex), (m:alias_vertex)
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.b = n.a + 1
+    RETURN n.a, m.a, m.b
+$$) AS (na agtype, ma agtype, mb agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:alias_vertex)
+    RETURN n.a, n.b
+$$) AS (a agtype, b agtype);
+
+-- The same alias synchronization is required for edges.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE ()-[:alias_edge {k: 1}]->()
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[n:alias_edge]->(), ()-[m:alias_edge]->()
+    WHERE id(n) = id(m)
+    SET n.a = 1
+    SET m.b = n.a + 1
+    RETURN n.a, m.a, m.b
+$$) AS (na agtype, ma agtype, mb agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[n:alias_edge]->()
+    RETURN n.a, n.b
+$$) AS (a agtype, b agtype);
+
+-- Hidden ctid columns must propagate through WITH.
+SELECT * FROM cypher('ctid_set', $$CREATE (:w {k: 1})$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:w)
+    WITH n
+    SET n.k = 2
+    RETURN n.k
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$MATCH (n:w) RETURN n.k$$) AS (a agtype);
+
+-- Hidden ctid columns must follow simple WITH aliases too.
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:w)
+    WITH n AS m
+    SET m.k = 3
+    RETURN m.k
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$MATCH (n:w) RETURN n.k$$) AS (a agtype);
+
+-- Computed WITH expressions must not inherit a ctid from one of their inputs.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:expr {k: 1}), (:expr {k: 2})
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (a:expr {k: 1}), (b:expr {k: 2})
+    WITH CASE WHEN a.k = 1 THEN a ELSE b END AS n
+    SET n.mark = 1
+    RETURN n.k, n.mark
+$$) AS (k agtype, mark agtype);
+
+-- Aggregating WITH clauses must not leak pre-aggregation ctid values.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:aggregate {k: 1}), (:aggregate {k: 2})
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:aggregate)
+    WITH collect(n) AS nodes, count(*) AS total
+    UNWIND nodes AS n
+    SET n.total = total
+    RETURN n.k, n.total
+$$) AS (k agtype, total agtype);
+
+-- DISTINCT is a row-shaping boundary and must preserve its semantics.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:distinct_source), (:distinct_source),
+           (:distinct_target {hits: 0})
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (:distinct_source), (n:distinct_target)
+    WITH DISTINCT n
+    SET n.hits = n.hits + 1
+    RETURN n.hits
+$$) AS (hits agtype);
+
+-- Edge labels have no inherited primary key. A user-created B-tree index on
+-- id must support fallback when DISTINCT intentionally suppresses the ctid.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE ()-[:indexed_edge {k: 1}]->(),
+           ()-[:indexed_edge {k: 2}]->()
+$$) AS (a agtype);
+CREATE INDEX ctid_set_indexed_edge_id_idx
+    ON ctid_set.indexed_edge (id);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH ()-[e:indexed_edge]->()
+    WITH DISTINCT e
+    SET e.indexed = true
+    RETURN e.k, e.indexed
+    ORDER BY e.k
+$$) AS (k agtype, indexed agtype);
+
+-- WITH * and RETURN * must not expose hidden ctid target entries.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:wildcard {k: 1})
+$$) AS (a agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:wildcard)
+    WITH *
+    SET n.updated = true
+    RETURN *
+$$) AS (n agtype);
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:wildcard)
+    RETURN n.updated
+$$) AS (updated agtype);
+
+-- DISTINCT suppresses the ctid. Without the default vertex id index, lookup
+-- must fall back to a sequential scan and still update the intended rows.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:seqscan_vertex {k: 1}), (:seqscan_vertex {k: 2})
+$$) AS (a agtype);
+ALTER TABLE ctid_set.seqscan_vertex
+    DROP CONSTRAINT seqscan_vertex_pkey;
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:seqscan_vertex)
+    WITH DISTINCT n
+    SET n.fallback = true
+    RETURN n.k, n.fallback
+    ORDER BY n.k
+$$) AS (k agtype, fallback agtype);
+
+-- ExtensibleNode metadata, including ctid_position, must survive generic-plan
+-- reuse. DDL invalidation between executions must rebuild a valid plan.
+SELECT * FROM cypher('ctid_set', $$
+    CREATE (:generic_plan {k: 1})
+$$) AS (a agtype);
+SET plan_cache_mode = force_generic_plan;
+PREPARE ctid_generic_plan(agtype) AS
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:generic_plan)
+    WHERE n.k = $target
+    SET n.mark = $mark
+    RETURN n.mark
+$$, $1) AS (mark agtype);
+EXECUTE ctid_generic_plan('{"target": 1, "mark": 10}'::agtype);
+ALTER TABLE ctid_set.generic_plan ADD COLUMN review_dummy integer;
+EXECUTE ctid_generic_plan('{"target": 1, "mark": 20}'::agtype);
+DEALLOCATE ctid_generic_plan;
+RESET plan_cache_mode;
+SELECT * FROM cypher('ctid_set', $$
+    MATCH (n:generic_plan)
+    RETURN n.mark
+$$) AS (mark agtype);
+
 --
 -- Issue 2493: a clause that reads must see every update a preceding SET
 -- made, not only the updates from that clause's first input row.
@@ -600,6 +774,7 @@ SELECT drop_graph('cypher_set', true);
 SELECT drop_graph('cypher_set_1', true);
 SELECT drop_graph('issue_1634', true);
 SELECT drop_graph('issue_1884', true);
+SELECT drop_graph('ctid_set', true);
 
 --
 -- End

@@ -60,6 +60,12 @@ cypher_parsestate *make_cypher_parsestate(cypher_parsestate *parent_cpstate)
         cpstate->graph_oid = parent_cpstate->graph_oid;
         cpstate->params = parent_cpstate->params;
         cpstate->subquery_where_flag = parent_cpstate->subquery_where_flag;
+
+        /*
+         * Keep the ctid injection decision consistent across the whole
+         * statement, including subquery parse states.
+         */
+        cpstate->has_writable_clause = parent_cpstate->has_writable_clause;
     }
 
     return cpstate;

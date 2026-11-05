@@ -264,6 +264,9 @@ void read_cypher_update_item(struct ExtensibleNode *node)
 
     READ_INT_FIELD(prop_position);
     READ_INT_FIELD(entity_position);
+
+    /* deserialize ctid position for direct tuple fetch */
+    READ_INT_FIELD(ctid_position);
     READ_STRING_FIELD(var_name);
     READ_STRING_FIELD(prop_name);
     READ_NODE_FIELD(qualified_name);
@@ -298,6 +301,9 @@ void read_cypher_delete_item(struct ExtensibleNode *node)
 
     READ_NODE_FIELD(entity_position);
     READ_STRING_FIELD(var_name);
+
+    /* deserialize ctid position for direct tuple fetch */
+    READ_INT_FIELD(ctid_position);
 }
 
 /*

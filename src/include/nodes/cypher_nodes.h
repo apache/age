@@ -62,6 +62,10 @@ typedef struct cypher_return
     SetOperation op;
     List *larg; /* lefthand argument of the unions */
     List *rarg; /*righthand argument of the unions */
+
+    /* Distinguish WITH from RETURN for hidden ctid propagation. */
+    bool is_with;
+
 } cypher_return;
 
 typedef struct cypher_with
@@ -487,6 +491,10 @@ typedef struct cypher_update_item
     ExtensibleNode extensible;
     AttrNumber prop_position;
     AttrNumber entity_position;
+
+    /* Attribute number of the packed ctid column in the scan tuple. */
+    AttrNumber ctid_position;
+
     char *var_name;
     char *prop_name;
     List *qualified_name;
@@ -512,6 +520,9 @@ typedef struct cypher_delete_item
     ExtensibleNode extensible;
     Integer *entity_position;
     char *var_name;
+
+    /* Attribute number of the packed ctid column in the scan tuple. */
+    AttrNumber ctid_position;
 } cypher_delete_item;
 
 typedef struct cypher_merge_information

@@ -812,15 +812,76 @@ SELECT id as "expected: 0 rows"              FROM setdelete._ag_label_edge;
 ------------------
 (0 rows)
 
+-- stale ctid fallback - SET one alias, then DELETE the same entity via another alias.
+SELECT * FROM cypher('setdelete', $$ CREATE (:B) $$) as ("CREATE" agtype);
+ CREATE 
+--------
+(0 rows)
+
+SELECT * FROM cypher('setdelete', $$ MATCH (n:B), (m:B) WHERE id(n) = id(m) SET n.flag = true DELETE m $$) as ("SET + DELETE alias" agtype);
+ SET + DELETE alias 
+--------------------
+(0 rows)
+
+SELECT count(*) as "expected: 0 rows" FROM setdelete."B";
+ expected: 0 rows 
+------------------
+                0
+(1 row)
+
+-- hidden ctid propagation through WITH.
+SELECT * FROM cypher('setdelete', $$ CREATE (:C) $$) as ("CREATE" agtype);
+ CREATE 
+--------
+(0 rows)
+
+SELECT * FROM cypher('setdelete', $$ MATCH (n:C) WITH n DELETE n $$) as ("WITH DELETE" agtype);
+ WITH DELETE 
+-------------
+(0 rows)
+
+SELECT count(*) as "expected: 0 rows" FROM setdelete."C";
+ expected: 0 rows 
+------------------
+                0
+(1 row)
+
+-- stale edge ctid fallback with DETACH DELETE through another alias.
+SELECT * FROM cypher('setdelete', $$ CREATE (:D)-[:de]->(:D) $$) AS ("CREATE" agtype);
+ CREATE 
+--------
+(0 rows)
+
+SELECT * FROM cypher('setdelete', $$ MATCH (n)-[e:de]->(m), (x)-[f:de]->(y) WHERE id(e) = id(f) SET e.i = 1 DETACH DELETE x $$) AS ("SET + DETACH alias" agtype);
+ SET + DETACH alias 
+--------------------
+(0 rows)
+
+SELECT count(*) as "expected: 1 row" FROM setdelete."D";
+ expected: 1 row 
+-----------------
+               1
+(1 row)
+
+SELECT count(*) as "expected: 0 rows" FROM setdelete.de;
+ expected: 0 rows 
+------------------
+                0
+(1 row)
+
 -- clean up
 SELECT drop_graph('setdelete', true);
-NOTICE:  drop cascades to 6 other objects
+NOTICE:  drop cascades to 10 other objects
 DETAIL:  drop cascades to table setdelete._ag_label_vertex
 drop cascades to table setdelete._ag_label_edge
 drop cascades to table setdelete."A"
 drop cascades to table setdelete.n
 drop cascades to table setdelete.e
 drop cascades to table setdelete.m
+drop cascades to table setdelete."B"
+drop cascades to table setdelete."C"
+drop cascades to table setdelete."D"
+drop cascades to table setdelete.de
 NOTICE:  graph "setdelete" has been dropped
  drop_graph 
 ------------
