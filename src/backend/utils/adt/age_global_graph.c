@@ -1802,7 +1802,7 @@ GRAPH_global_context *manage_GRAPH_global_contexts(char *graph_name,
             /* free the current graph context */
             success = free_specific_GRAPH_global_context(curr_ggctx);
 
-            /* if it wasn't successfull, there was a missing vertex entry */
+            /* if it wasn't successful, there was a missing vertex entry */
             if (!success)
             {
 
