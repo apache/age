@@ -20,8 +20,42 @@
 #include "postgres.h"
 
 #include "access/genam.h"
+#include "catalog/pg_namespace.h"
+#include "miscadmin.h"
 #include "commands/graph_commands.h"
+#include "utils/acl.h"
 #include "utils/load/age_load.h"
+#include "utils/rls.h"
+
+/* The generators insert tuples directly, without the executor's ACL/RLS checks. */
+static void check_generation_insert(Oid relid, int columns)
+{
+    if (pg_class_aclcheck(relid, GetUserId(), ACL_INSERT) != ACLCHECK_OK)
+    {
+        int attnum;
+
+        /* INSERT on every written column is also sufficient in PostgreSQL. */
+        for (attnum = 1; attnum <= columns; attnum++)
+        {
+            AclResult aclresult = pg_attribute_aclcheck(relid, attnum,
+                                                         GetUserId(), ACL_INSERT);
+
+            if (aclresult != ACLCHECK_OK)
+            {
+                aclcheck_error(aclresult, OBJECT_TABLE, get_rel_name(relid));
+            }
+        }
+    }
+
+    /* These direct writes cannot evaluate INSERT WITH CHECK policies. */
+    if (check_enable_rls(relid, InvalidOid, true) == RLS_ENABLED)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("graph generation is not supported with row-level security"),
+                 errhint("Use Cypher CREATE instead.")));
+    }
+}
 
 
 int64 get_nextval_internal(graph_cache_data* graph_cache,
@@ -168,6 +202,19 @@ Datum create_complete_graph(PG_FUNCTION_ARGS)
 
     vtx_seq_id = get_relname_relid(vtx_seq_name_str, nsp_id);
     edge_seq_id = get_relname_relid(edge_seq_name_str, nsp_id);
+
+    /* Check both labels before consuming sequence values or inserting rows. */
+    {
+        AclResult aclresult = object_aclcheck(NamespaceRelationId, nsp_id,
+                                              GetUserId(), ACL_USAGE);
+
+        if (aclresult != ACLCHECK_OK)
+        {
+            aclcheck_error(aclresult, OBJECT_SCHEMA, graph_name_str);
+        }
+    }
+    check_generation_insert(get_label_relation(vtx_name_str, graph_oid), 2);
+    check_generation_insert(get_label_relation(edge_name_str, graph_oid), 4);
 
     props = create_empty_agtype();
 

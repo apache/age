@@ -215,6 +215,7 @@ REGRESS = scan \
           index \
           analyze \
           graph_generation \
+          graph_generation_security \
           name_validation \
           jsonb_operators \
           list_comprehension \
