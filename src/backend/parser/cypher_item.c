@@ -183,6 +183,7 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
     List *te_list = NIL;
     int var_prefix_len = strlen(AGE_DEFAULT_VARNAME_PREFIX);
     int alias_prefix_len = strlen(AGE_DEFAULT_ALIAS_PREFIX);
+    int vle_prefix_len = strlen(AGE_DEFAULT_PREFIX "vle_function_");
 
     vars = expandNSItemVars(pstate, pnsi, sublevels_up, location, &names);
 
@@ -210,6 +211,16 @@ static List *expand_pnsi_attrs(ParseState *pstate, ParseNamespaceItem *pnsi,
 
         /* we want to skip out "hidden" aliases */
         if (strncmp(AGE_DEFAULT_ALIAS_PREFIX, label, alias_prefix_len) == 0)
+            continue;
+
+        /*
+         * Skip the internal VLE helper columns (created in cypher_gram.y via
+         * create_unique_name(AGE_DEFAULT_PREFIX"vle_function_{start,end}_var")).
+         * These feed the vle() SRF's start/end bound vars and are visible in
+         * the namespace, but they are implementation details and must not show
+         * up in RETURN * projections alongside the user's variables.
+         */
+        if (strncmp(AGE_DEFAULT_PREFIX "vle_function_", label, vle_prefix_len) == 0)
             continue;
 
         /* add this variable to the list */
