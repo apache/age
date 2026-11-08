@@ -164,7 +164,7 @@ $$) AS (i agtype);
 SELECT * FROM cypher('cypher_match', $$
 	MATCH ()<-[]-(n:v2)-[]->()
 	MATCH p=(n)-[]->()
-	RETURN p
+	RETURN p ORDER BY p
 $$) AS (i agtype);
 
 SELECT * FROM cypher('cypher_match', $$

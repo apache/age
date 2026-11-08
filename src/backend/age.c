@@ -69,6 +69,7 @@ void _PG_init(void)
     process_utility_hook_init();
     post_parse_analyze_init();
     define_config_params();
+    age_visible_adj_init();
 
 #if PG_VERSION_NUM < 170000
     /* Register shared memory hooks for graph version tracking.

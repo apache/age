@@ -187,3 +187,7 @@ SELECT drop_graph('sg_nr', true);
 SELECT drop_graph('sg_v', true);
 SELECT drop_graph('sg_all', true);
 SELECT drop_graph('sg_src', true);
+
+--
+-- End of tests
+--

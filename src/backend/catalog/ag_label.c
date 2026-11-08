@@ -341,7 +341,11 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
         ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                     F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
+#if PG_VERSION_NUM >= 190000
+        index_scan_desc = index_beginscan(ag_label, index_rel, estate->es_snapshot, NULL, 1, 0, 0);
+#else
         index_scan_desc = index_beginscan(ag_label, index_rel, estate->es_snapshot, NULL, 1, 0);
+#endif
         index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
         while (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
@@ -391,7 +395,11 @@ List *get_all_edge_labels_per_graph(EState *estate, Oid graph_oid)
         ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                   F_CHAREQ, CharGetDatum(LABEL_TYPE_EDGE));
 
+#if PG_VERSION_NUM >= 190000
+        scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys, 0);
+#else
         scan_desc = table_beginscan(ag_label, estate->es_snapshot, 2, scan_keys);
+#endif
 
         /* scan through the results and get all the label names. */
         while(true)

@@ -24,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "catalog/pg_type_d.h"
 #include "common/keywords.h"
 #include "funcapi.h"
 

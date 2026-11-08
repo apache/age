@@ -1703,8 +1703,8 @@ Datum agtype_exists_any(PG_FUNCTION_ARGS)
         }
 
         strVal.type = AGTV_STRING;
-        strVal.val.string.val = VARDATA(key_datums[i]);
-        strVal.val.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+        strVal.val.string.val = VARDATA_ANY(DatumGetTextPP(key_datums[i]));
+        strVal.val.string.len = VARSIZE_ANY_EXHDR(DatumGetTextPP(key_datums[i]));
 
         if (find_agtype_value_from_container(&agt->root,
                                         AGT_FOBJECT | AGT_FARRAY,
@@ -1744,8 +1744,8 @@ Datum agtype_exists_all(PG_FUNCTION_ARGS)
         }
 
         strVal.type = AGTV_STRING;
-        strVal.val.string.val = VARDATA(key_datums[i]);
-        strVal.val.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+        strVal.val.string.val = VARDATA_ANY(DatumGetTextPP(key_datums[i]));
+        strVal.val.string.len = VARSIZE_ANY_EXHDR(DatumGetTextPP(key_datums[i]));
 
         if (find_agtype_value_from_container(&agt->root,
                                         AGT_FOBJECT | AGT_FARRAY,

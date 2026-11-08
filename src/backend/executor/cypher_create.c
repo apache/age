@@ -75,7 +75,11 @@ static void begin_cypher_create(CustomScanState *node, EState *estate,
 
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
-                          &TTSOpsHeapTuple);
+                          &TTSOpsHeapTuple
+#if PG_VERSION_NUM >= 190000
+                          , 0
+#endif
+                          );
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -638,4 +642,3 @@ static Datum create_vertex(cypher_create_custom_scan_state *css,
 
     return id;
 }
-

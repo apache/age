@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "access/heapam.h"
 #include "catalog/namespace.h"
 #include "commands/trigger.h"
@@ -44,6 +45,17 @@
 #include "catalog/ag_graph.h"
 #include "catalog/ag_label.h"
 #include "utils/ag_cache.h"
+#include "access/xact.h"
+#include "catalog/pg_am_d.h"
+#include "miscadmin.h"
+
+/* Optional graph-core ABI: ordinary PG/AGE builds remain independent. */
+#ifdef __has_include
+#if __has_include("executor/graph_visible_adj.h")
+#include "executor/graph_visible_adj.h"
+#define AGE_HAVE_VISIBLE_ADJ 1
+#endif
+#endif
 
 
 /* defines */
@@ -345,9 +357,10 @@ static void create_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     vertex_ctl.keysize = sizeof(int64);
     vertex_ctl.entrysize = sizeof(vertex_entry);
     vertex_ctl.hash = graphid_hash;
+    vertex_ctl.hcxt = CurrentMemoryContext;
     ggctx->vertex_hashtable = hash_create(vhn, VERTEX_HTAB_INITIAL_SIZE,
                                           &vertex_ctl,
-                                          HASH_ELEM | HASH_FUNCTION);
+                                          HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
     pfree_if_not_null(vhn);
 
     /*
@@ -417,7 +430,11 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         ScanKeyInit(&key, 1, BTEqualStrategyNumber,
                     F_OIDEQ, ObjectIdGetDatum(graph_oid));
 
+#if PG_VERSION_NUM >= 190000
+        idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0, 0);
+#else
         idx_scan_desc = index_beginscan(ag_label, index_rel, snapshot, NULL, 1, 0);
+#endif
         index_rescan(idx_scan_desc, &key, 1, NULL, 0);
 
         while (index_getnext_slot(idx_scan_desc, ForwardScanDirection, slot))
@@ -472,7 +489,11 @@ static List *get_ag_labels_names(Snapshot snapshot, Oid graph_oid,
         ScanKeyInit(&scan_keys[0], Anum_ag_label_kind, BTEqualStrategyNumber,
                     F_CHAREQ, CharGetDatum(label_type));
 
+#if PG_VERSION_NUM >= 190000
+        scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys, 0);
+#else
         scan_desc = table_beginscan(ag_label, snapshot, 2, scan_keys);
+#endif
 
         /* get all of the label names */
         while((tuple = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
@@ -745,7 +766,11 @@ static void load_vertex_hashtable(GRAPH_global_context *ggctx)
                                                    graph_namespace_oid);
         /* open the relation (table) and begin the scan */
         graph_vertex_label = table_open(vertex_label_table_oid, AccessShareLock);
+#if PG_VERSION_NUM >= 190000
+        scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL, 0);
+#else
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 0, NULL);
+#endif
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_vertex_label);
         /* bail if the number of columns differs */
@@ -847,7 +872,11 @@ static void load_edge_hashtable(GRAPH_global_context *ggctx)
                                                  graph_namespace_oid);
         /* open the relation (table) and begin the scan */
         graph_edge_label = table_open(edge_label_table_oid, AccessShareLock);
+#if PG_VERSION_NUM >= 190000
+        scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL, 0);
+#else
         scan_desc = table_beginscan(graph_edge_label, snapshot, 0, NULL);
+#endif
         /* get the tupdesc - we don't need to release this one */
         tupdesc = RelationGetDescr(graph_edge_label);
         /* bail if the number of columns differs */
@@ -930,6 +959,17 @@ static void freeze_GRAPH_global_hashtables(GRAPH_global_context *ggctx)
     hash_freeze(ggctx->vertex_hashtable);
     agehash_freeze(ggctx->edge_table);
 }
+
+#ifdef AGE_HAVE_VISIBLE_ADJ
+/* Separate from VLE's backend-global graph/version cache. */
+#include "age_visible_adj.inc"
+#else
+void
+age_visible_adj_init(void)
+{
+    /* No graph-core ABI in this PostgreSQL installation. */
+}
+#endif
 
 /*
  * Helper function to free the entire specified GRAPH global context. After
@@ -1754,13 +1794,22 @@ Datum age_graph_stats(PG_FUNCTION_ARGS)
  * DSM path: GetNamedDSMSegment init callback.
  * Called once when the DSM segment is first created.
  */
-static void age_dsm_init_callback(void *ptr)
+static void age_dsm_init_callback(void *ptr
+#if PG_VERSION_NUM >= 190000
+                                  , void *arg
+#endif
+                                  )
 {
     GraphVersionState *state = (GraphVersionState *) ptr;
 
+#if PG_VERSION_NUM >= 190000
+    LWLockInitialize(&state->lock,
+                     LWLockNewTrancheId("age_graph_version"));
+#else
     LWLockInitialize(&state->lock,
                      LWLockNewTrancheId());
     LWLockRegisterTranche(state->lock.tranche, "age_graph_version");
+#endif
     state->num_entries = 0;
     memset(state->entries, 0, sizeof(state->entries));
 }
@@ -1777,7 +1826,11 @@ static GraphVersionState *get_version_state_dsm(void)
         GetNamedDSMSegment("age_graph_versions",
                            sizeof(GraphVersionState),
                            age_dsm_init_callback,
-                           &found);
+                           &found
+#if PG_VERSION_NUM >= 190000
+                           , NULL
+#endif
+                           );
 }
 #endif /* PG_VERSION_NUM >= 170000 */
 

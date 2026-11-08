@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "common/hashfn.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
@@ -72,7 +73,11 @@ static void begin_cypher_set(CustomScanState *node, EState *estate,
 
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
-                          &TTSOpsHeapTuple);
+                          &TTSOpsHeapTuple
+#if PG_VERSION_NUM >= 190000
+                          , 0
+#endif
+                          );
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -172,8 +177,11 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         }
 
         result = table_tuple_update(resultRelInfo->ri_RelationDesc,
-                                    &tuple->t_self, elemTupleSlot,
-                                    cid, estate->es_snapshot,
+                                    &tuple->t_self, elemTupleSlot, cid,
+#if PG_VERSION_NUM >= 190000
+                                    0,
+#endif
+                                    estate->es_snapshot,
                                     estate->es_crosscheck_snapshot,
                                     true /* wait for commit */ ,
                                     &hufd, &lockmode, &update_indexes);
@@ -205,8 +213,16 @@ static HeapTuple update_entity_tuple(ResultRelInfo *resultRelInfo,
         /* Insert index entries for the tuple */
         if (resultRelInfo->ri_NumIndices > 0 && update_indexes != TU_None)
         {
+#if PG_VERSION_NUM >= 190000
+          ExecInsertIndexTuples(resultRelInfo, estate,
+                                EIIT_IS_UPDATE |
+                                ((update_indexes == TU_Summarizing) ?
+                                 EIIT_ONLY_SUMMARIZING : 0),
+                                elemTupleSlot, NIL, NULL);
+#else
           ExecInsertIndexTuples(resultRelInfo, elemTupleSlot, estate, false, false, NULL, NIL,
                                 (update_indexes == TU_Summarizing));
+#endif
         }
 
         if (close_indices)
@@ -730,7 +746,11 @@ void apply_update_list(CustomScanState *node,
                             GRAPHID_GET_DATUM(id->val.int_value));
 
                 index_slot = table_slot_create(rel, NULL);
+#if PG_VERSION_NUM >= 190000
+                idx_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0, 0);
+#else
                 idx_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+#endif
                 index_rescan(idx_scan_desc, scan_keys, 1, NULL, 0);
 
                 if (index_getnext_slot(idx_scan_desc, ForwardScanDirection, index_slot))
@@ -796,8 +816,14 @@ void apply_update_list(CustomScanState *node,
                  * Setup the scan description, with the correct snapshot and scan
                  * keys.
                  */
+#if PG_VERSION_NUM >= 190000
+                scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
+                                            estate->es_snapshot, 1, scan_keys,
+                                            0);
+#else
                 scan_desc = table_beginscan(resultRelInfo->ri_RelationDesc,
                                             estate->es_snapshot, 1, scan_keys);
+#endif
                 /* Retrieve the tuple. */
                 heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
 

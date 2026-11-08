@@ -19,6 +19,7 @@
 
 #include "postgres.h"
 
+#include "access/genam.h"
 #include "executor/executor.h"
 #include "storage/bufmgr.h"
 #include "common/hashfn.h"
@@ -87,7 +88,11 @@ static void begin_cypher_delete(CustomScanState *node, EState *estate,
     /* setup scan tuple slot and projection info */
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
-                          &TTSOpsHeapTuple);
+                          &TTSOpsHeapTuple
+#if PG_VERSION_NUM >= 190000
+                          , 0
+#endif
+                          );
 
     if (!CYPHER_CLAUSE_IS_TERMINAL(css->flags))
     {
@@ -319,8 +324,14 @@ static void delete_entity(EState *estate, ResultRelInfo *resultRelInfo,
     {
         delete_result = heap_delete(resultRelInfo->ri_RelationDesc,
                                     &tuple->t_self, GetCurrentCommandId(true),
-                                    estate->es_crosscheck_snapshot, true, &hufd,
-                                    false);
+#if PG_VERSION_NUM >= 190000
+                                    0,
+#endif
+                                    estate->es_crosscheck_snapshot, true, &hufd
+#if PG_VERSION_NUM < 190000
+                                    , false
+#endif
+                                    );
 
         /*
          * Unlike locking, the heap_delete either succeeded
@@ -488,7 +499,11 @@ static void process_delete_list(CustomScanState *node)
             slot = table_slot_create(rel, NULL);
 
             index_rel = index_open(index_oid, RowExclusiveLock);
+#if PG_VERSION_NUM >= 190000
+            index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0, 0);
+#else
             index_scan_desc = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+#endif
             index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
             if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
@@ -498,7 +513,11 @@ static void process_delete_list(CustomScanState *node)
         }
         else
         {
+#if PG_VERSION_NUM >= 190000
+            scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys, 0);
+#else
             scan_desc = table_beginscan(rel, estate->es_snapshot, 1, scan_keys);
+#endif
             /* Retrieve the tuple. */
             heap_tuple = heap_getnext(scan_desc, ForwardScanDirection);
         }
@@ -597,7 +616,11 @@ static void process_edges_by_index(Oid index_oid,
     slot = table_slot_create(rel, NULL);
 
     index_rel = index_open(index_oid, RowExclusiveLock);
+#if PG_VERSION_NUM >= 190000
+    scan = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0, 0);
+#else
     scan = index_beginscan(rel, index_rel, estate->es_snapshot, NULL, 1, 0);
+#endif
 
     /* Initialize ScanKey with a dummy argument (0), updated in the loop */
     ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_GRAPHIDEQ, 0);
@@ -769,7 +792,11 @@ static void check_for_connected_edges(CustomScanState *node)
         }
         else
         {
+#if PG_VERSION_NUM >= 190000
+            scan_desc = table_beginscan(rel, estate->es_snapshot, 0, NULL, 0);
+#else
             scan_desc = table_beginscan(rel, estate->es_snapshot, 0, NULL);
+#endif
             slot = ExecInitExtraTupleSlot(
                 estate, RelationGetDescr(rel),
                 &TTSOpsHeapTuple);

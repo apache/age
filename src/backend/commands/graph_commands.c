@@ -25,6 +25,7 @@
 #include "commands/tablecmds.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "parser/parse_node.h"
 #include "parser/parser.h"
 
 #include "catalog/ag_graph.h"
@@ -180,8 +181,18 @@ static Oid create_schema_for_graph(const Name graph_name)
     seq_stmt->if_not_exists = false;
     schema_stmt->schemaElts = list_make1(seq_stmt);
     schema_stmt->if_not_exists = false;
+#if PG_VERSION_NUM >= 190000
+    {
+        ParseState *pstate = make_parsestate(NULL);
+
+        pstate->p_sourcetext = "(generated CREATE SCHEMA command)";
+        nsp_id = CreateSchemaCommand(pstate, schema_stmt, -1, -1);
+        free_parsestate(pstate);
+    }
+#else
     nsp_id = CreateSchemaCommand(schema_stmt,
                                  "(generated CREATE SCHEMA command)", -1, -1);
+#endif
     /* CommandCounterIncrement() is called in CreateSchemaCommand() */
 
     return nsp_id;
@@ -394,7 +405,11 @@ List *get_graphnames(void)
     scan_desc = systable_beginscan(ag_graph, ag_graph_name_index_id(), true,
                                    NULL, 0, NULL);
 
+#if PG_VERSION_NUM >= 190000
+    slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple, 0);
+#else
     slot = MakeTupleTableSlot(RelationGetDescr(ag_graph), &TTSOpsHeapTuple);
+#endif
 
     for (;;)
     {

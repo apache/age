@@ -20,6 +20,8 @@
 #ifndef AG_AGE_GLOBAL_GRAPH_H
 #define AG_AGE_GLOBAL_GRAPH_H
 
+extern void age_visible_adj_init(void);
+
 #include "utils/age_graphid_ds.h"
 
 /*

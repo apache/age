@@ -131,3 +131,7 @@ DROP FUNCTION myfunc;
 
 DROP SCHEMA call_stmt_test CASCADE;
 SELECT drop_graph('cypher_call', true);
+
+--
+-- End of tests
+--

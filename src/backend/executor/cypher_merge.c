@@ -122,7 +122,11 @@ static void begin_cypher_merge(CustomScanState *node, EState *estate,
 
     ExecInitScanTupleSlot(estate, &node->ss,
                           ExecGetResultType(node->ss.ps.lefttree),
-                          &TTSOpsVirtual);
+                          &TTSOpsVirtual
+#if PG_VERSION_NUM >= 190000
+                          , 0
+#endif
+                          );
 
     /*
      * When MERGE is not the last clause in a cypher query. Setup projection
@@ -990,7 +994,11 @@ static TupleTableSlot *exec_cypher_merge(CustomScanState *node)
              */
             ExecInitScanTupleSlot(estate, &sss->ss,
                                   ExecGetResultType(sss->subplan),
-                                  &TTSOpsVirtual);
+                                  &TTSOpsVirtual
+#if PG_VERSION_NUM >= 190000
+                                  , 0
+#endif
+                                  );
 
             /* setup the scantuple that the process_path needs */
             econtext->ecxt_scantuple = sss->ss.ss_ScanTupleSlot;

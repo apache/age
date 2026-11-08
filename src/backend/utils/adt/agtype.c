@@ -32,6 +32,7 @@
 #include "varatt.h"
 #include "utils/jsonfuncs.h"
 #include <math.h>
+#include <time.h>
 
 #include <float.h>
 
@@ -56,6 +57,8 @@
 #include "utils/float.h"
 #include "utils/lsyscache.h"
 #include "utils/snapmgr.h"
+#include "utils/tuplestore.h"
+#include "utils/tuplesort.h"
 #include "utils/typcache.h"
 #include "utils/age_vle.h"
 #include "utils/agtype_parser.h"
@@ -6168,8 +6171,13 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber,
                     F_GRAPHIDEQ, Int64GetDatum(graphid));
 
-        index_scan_desc = index_beginscan(graph_vertex_label, index_rel, 
+#if PG_VERSION_NUM >= 190000
+        index_scan_desc = index_beginscan(graph_vertex_label, index_rel,
+                                          snapshot, NULL, 1, 0, 0);
+#else
+        index_scan_desc = index_beginscan(graph_vertex_label, index_rel,
                                           snapshot, NULL, 1, 0);
+#endif
         index_rescan(index_scan_desc, scan_keys, 1, NULL, 0);
 
         if (index_getnext_slot(index_scan_desc, ForwardScanDirection, slot))
@@ -6188,7 +6196,12 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         ScanKeyInit(&scan_keys[0], 1, BTEqualStrategyNumber, F_GRAPHIDEQ,
                     GRAPHID_GET_DATUM(graphid));
 
+#if PG_VERSION_NUM >= 190000
+        scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys,
+                                    0);
+#else
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
+#endif
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
     }
 
@@ -9487,7 +9500,7 @@ Datum age_split(PG_FUNCTION_ARGS)
                                          PointerGetDatum(text_delimiter));
 
     /* now build an agtype array of strings */
-    if (PointerIsValid(DatumGetPointer(text_array)))
+    if (DatumGetPointer(text_array) != NULL)
     {
         ArrayType *array = DatumGetArrayTypeP(text_array);
         agtype_in_state result;
@@ -9512,8 +9525,10 @@ Datum age_split(PG_FUNCTION_ARGS)
             Datum d;
 
             /* get the string element from the array */
-            string = VARDATA(elements[i]);
-            string_len = VARSIZE(elements[i]) - VARHDRSZ;
+            text *element = DatumGetTextPP(elements[i]);
+
+            string = VARDATA_ANY(element);
+            string_len = VARSIZE_ANY_EXHDR(element);
 
             /* make a copy */
             string_copy = palloc0(string_len);

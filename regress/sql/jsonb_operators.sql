@@ -1112,3 +1112,7 @@ $$) as (a agtype);
 
 -- clean up
 SELECT drop_graph('jsonb_operators', true);
+
+--
+-- End of tests
+--
