@@ -26,6 +26,7 @@
 #include "parser/cypher_analyze.h"
 #include "utils/ag_guc.h"
 #include "utils/age_global_graph.h"
+#include "utils/age_vle.h"
 
 #if PG_VERSION_NUM < 170000
 
@@ -63,6 +64,7 @@ void _PG_init(void)
         return;
     }
 
+    vle_define_guc_variables();
     register_ag_nodes();
     set_rel_pathlist_init();
     object_access_hook_init();
