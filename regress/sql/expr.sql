@@ -23,6 +23,11 @@ SET search_path TO ag_catalog;
 
 SELECT * FROM create_graph('expr');
 
+-- Integer division must report bigint overflow instead of raising SIGFPE.
+SELECT * FROM cypher('expr', $$
+RETURN (-9223372036854775807 - 1) / -1
+$$) AS (r agtype);
+
 --
 -- map literal
 --
