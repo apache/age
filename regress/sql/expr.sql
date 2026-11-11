@@ -4201,5 +4201,16 @@ $$) AS (n agtype);
 SELECT * FROM drop_graph('issue_2391', true);
 
 --
+-- Issue 2563: age_to*list called from SQL with a non-agtype literal
+-- must raise an error instead of crashing
+--
+SELECT ag_catalog.age_tobooleanlist('[true]');
+SELECT ag_catalog.age_tofloatlist('[1.5]');
+SELECT ag_catalog.age_tointegerlist('[1]');
+SELECT ag_catalog.age_tostringlist('[1]');
+SELECT ag_catalog.age_tobooleanlist('[true]'::agtype);
+SELECT ag_catalog.age_tostringlist('[1]'::agtype);
+
+--
 -- End of tests
 --

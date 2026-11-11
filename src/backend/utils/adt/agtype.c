@@ -6864,6 +6864,11 @@ Datum age_tobooleanlist(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0))
         PG_RETURN_NULL();
 
+    /* the argument must be agtype, otherwise it cannot be read as one */
+    if (get_fn_expr_argtype(fcinfo->flinfo, 0) != AGTYPEOID)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toBooleanList() argument must be of type agtype")));
+
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
@@ -7105,6 +7110,11 @@ Datum age_tofloatlist(PG_FUNCTION_ARGS)
     {
         PG_RETURN_NULL();
     }
+    /* the argument must be agtype, otherwise it cannot be read as one */
+    if (get_fn_expr_argtype(fcinfo->flinfo, 0) != AGTYPEOID)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toFloatList() argument must be of type agtype")));
+
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
 
     /* check for an array */
@@ -7462,6 +7472,11 @@ Datum age_tointegerlist(PG_FUNCTION_ARGS)
     {
         PG_RETURN_NULL();
     }
+    /* the argument must be agtype, otherwise it cannot be read as one */
+    if (get_fn_expr_argtype(fcinfo->flinfo, 0) != AGTYPEOID)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toIntegerList() argument must be of type agtype")));
+
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
@@ -8102,6 +8117,11 @@ Datum age_tostringlist(PG_FUNCTION_ARGS)
     {
         PG_RETURN_NULL();
     }
+    /* the argument must be agtype, otherwise it cannot be read as one */
+    if (get_fn_expr_argtype(fcinfo->flinfo, 0) != AGTYPEOID)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                        errmsg("toStringList() argument must be of type agtype")));
+
     agt_arg = AG_GET_ARG_AGTYPE_P(0);
     /* check for an array */
     if (!AGT_ROOT_IS_ARRAY(agt_arg) || AGT_ROOT_IS_SCALAR(agt_arg))
