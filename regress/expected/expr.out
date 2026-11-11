@@ -10709,5 +10709,29 @@ NOTICE:  graph "issue_2391" has been dropped
 (1 row)
 
 --
+-- Issue 2563: age_to*list called from SQL with a non-agtype literal
+-- must raise an error instead of crashing
+--
+SELECT ag_catalog.age_tobooleanlist('[true]');
+ERROR:  toBooleanList() argument must be of type agtype
+SELECT ag_catalog.age_tofloatlist('[1.5]');
+ERROR:  toFloatList() argument must be of type agtype
+SELECT ag_catalog.age_tointegerlist('[1]');
+ERROR:  toIntegerList() argument must be of type agtype
+SELECT ag_catalog.age_tostringlist('[1]');
+ERROR:  toStringList() argument must be of type agtype
+SELECT ag_catalog.age_tobooleanlist('[true]'::agtype);
+ age_tobooleanlist 
+-------------------
+ [true]
+(1 row)
+
+SELECT ag_catalog.age_tostringlist('[1]'::agtype);
+ age_tostringlist 
+------------------
+ ["1"]
+(1 row)
+
+--
 -- End of tests
 --
