@@ -467,6 +467,46 @@ EXECUTE p_2('{"var_name": "Hello Prepared Statements 2"}');
  {"id": 2533274790395908, "label": "new_vertex", "properties": {"key": "Hello Prepared Statements 2"}}::vertex
 (1 row)
 
+-- prepared statement with scalar parameters used in MATCH and CREATE EDGE.
+-- Regression test: transform_cypher_param() previously called the VARIADIC
+-- agtype_access_operator without building the agtype[] ArrayExpr argument
+-- and without setting funcvariadic = true. Under the extended query
+-- protocol this caused agtype_access_operator to read past its argument
+-- at execution time, corrupting error messages with random bytes and
+-- producing client-side UnicodeDecodeError / invalid-start-byte errors.
+PREPARE p_create_edge(agtype) AS
+SELECT * FROM cypher('cypher_create', $$
+    MATCH (source:v {id: $src_id}), (target:v {id: $tgt_id})
+    CREATE (source)-[r:e {id: $edge_id}]->(target)
+    RETURN r
+$$, $1) AS (r agtype);
+-- seed vertices to match against
+SELECT * FROM cypher('cypher_create', $$
+    CREATE (:v {id: 'a'}), (:v {id: 'b'})
+$$) AS (a agtype);
+ a 
+---
+(0 rows)
+
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge1"}');
+                                                                  r                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842635, "label": "e", "end_id": 844424930131990, "start_id": 844424930131989, "properties": {"id": "edge1"}}::edge
+(1 row)
+
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge2"}');
+                                                                  r                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842636, "label": "e", "end_id": 844424930131990, "start_id": 844424930131989, "properties": {"id": "edge2"}}::edge
+(1 row)
+
+EXECUTE p_create_edge('{"src_id": "a", "tgt_id": "b", "edge_id": "edge3"}');
+                                                                  r                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------
+ {"id": 1125899906842637, "label": "e", "end_id": 844424930131990, "start_id": 844424930131989, "properties": {"id": "edge3"}}::edge
+(1 row)
+
+DEALLOCATE p_create_edge;
 -- pl/pgsql
 CREATE FUNCTION create_test()
 RETURNS TABLE(vertex agtype)
