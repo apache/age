@@ -1690,6 +1690,31 @@ $$) AS (name agtype, friend agtype);
 SELECT drop_graph('issue_2378', true);
 
 --
+-- Test OPTIONAL MATCH with WHERE false as the first clause (issue #2603)
+-- When OPTIONAL MATCH is the first clause and its WHERE predicate is false,
+-- it should return one row with null bindings, not zero rows.
+--
+SELECT * FROM create_graph('issue_2603');
+-- Create a matching edge
+SELECT * FROM cypher('issue_2603', $$
+  CREATE (:A)-[:R]->(:B)
+$$) AS (v agtype);
+-- OPTIONAL MATCH as first clause with WHERE false should return one null row
+SELECT * FROM cypher('issue_2603', $$
+  OPTIONAL MATCH (n)-[r:R]->()
+  WHERE false
+  RETURN startNode(r) AS s, endNode(r) AS e
+$$) AS (s agtype, e agtype);
+-- Control: WITH before OPTIONAL MATCH preserves the input row (already working)
+SELECT * FROM cypher('issue_2603', $$
+  WITH 1 AS seed
+  OPTIONAL MATCH (n)-[r:R]->()
+  WHERE false
+  RETURN seed, n, r
+$$) AS (seed agtype, n agtype, r agtype);
+SELECT drop_graph('issue_2603', true);
+
+--
 -- Clean up
 --
 SELECT drop_graph('cypher_match', true);
