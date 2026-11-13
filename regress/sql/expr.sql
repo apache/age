@@ -4201,5 +4201,40 @@ $$) AS (n agtype);
 SELECT * FROM drop_graph('issue_2391', true);
 
 --
+-- Test string comparison with mixed-case values (issue #2604)
+-- Unicode code point of uppercase D (U+0044) is less than lowercase a (U+0061),
+-- so 'D' < 'a' should return true.
+--
+SELECT * FROM create_graph('issue_2604');
+-- single character: D (U+0044) < a (U+0061) => true
+SELECT * FROM cypher('issue_2604', $$
+  RETURN 'D' < 'a' AS upper_before_lower
+$$) AS (upper_before_lower agtype);
+-- doubled uppercase vs lowercase: 'DD' < 'a' => true
+SELECT * FROM cypher('issue_2604', $$
+  RETURN 'DD' < 'a' AS doubled_before_lower
+$$) AS (doubled_before_lower agtype);
+-- doubled uppercase >= lowercase: 'DD' >= 'a' => false
+SELECT * FROM cypher('issue_2604', $$
+  RETURN 'DD' >= 'a' AS doubled_gte_lower
+$$) AS (doubled_gte_lower agtype);
+-- all three in one query
+SELECT * FROM cypher('issue_2604', $$
+  RETURN 'D' < 'a' AS upper_before_lower,
+         'DD' < 'a' AS doubled_before_lower,
+         'DD' >= 'a' AS doubled_gte_lower
+$$) AS (upper_before_lower agtype, doubled_before_lower agtype, doubled_gte_lower agtype);
+-- concatenated string comparison: (value + value) >= 'a'
+-- for 'D': 'DD' >= 'a' should be false (D < a by code point)
+-- for 'eUu': 'eUueUu' >= 'a' should be true (e > a by code point)
+SELECT * FROM cypher('issue_2604', $$
+  UNWIND ['D', 'eUu'] AS value
+  RETURN value,
+         value + value AS doubled,
+         NOT ((value + value) >= 'a') AS keep
+$$) AS (value agtype, doubled agtype, keep agtype);
+SELECT * FROM drop_graph('issue_2604', true);
+
+--
 -- End of tests
 --
