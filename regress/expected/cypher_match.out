@@ -3951,9 +3951,63 @@ drop cascades to table issue_2378._ag_label_edge
 drop cascades to table issue_2378."Person"
 drop cascades to table issue_2378."KNOWS"
 NOTICE:  graph "issue_2378" has been dropped
- drop_graph 
+ drop_graph
 ------------
- 
+
+(1 row)
+
+--
+-- Test OPTIONAL MATCH with WHERE false as the first clause (issue #2603)
+-- When OPTIONAL MATCH is the first clause and its WHERE predicate is false,
+-- it should return one row with null bindings, not zero rows.
+--
+SELECT * FROM create_graph('issue_2603');
+ create_graph
+--------------
+
+(1 row)
+
+-- Create a matching edge
+SELECT * FROM cypher('issue_2603', $$
+  CREATE (:A)-[:R]->(:B)
+$$) AS (v agtype);
+ v
+---
+(0 rows)
+
+-- OPTIONAL MATCH as first clause with WHERE false should return one null row
+SELECT * FROM cypher('issue_2603', $$
+  OPTIONAL MATCH (n)-[r:R]->()
+  WHERE false
+  RETURN startNode(r) AS s, endNode(r) AS e
+$$) AS (s agtype, e agtype);
+ s    | e
+------+------
+ null | null
+(1 row)
+
+-- Control: WITH before OPTIONAL MATCH preserves the input row (already working)
+SELECT * FROM cypher('issue_2603', $$
+  WITH 1 AS seed
+  OPTIONAL MATCH (n)-[r:R]->()
+  WHERE false
+  RETURN seed, n, r
+$$) AS (seed agtype, n agtype, r agtype);
+ seed | n    | r
+------+------+------
+ 1    | null | null
+(1 row)
+
+SELECT drop_graph('issue_2603', true);
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table issue_2603._ag_label_vertex
+drop cascades to table issue_2603._ag_label_edge
+drop cascades to table issue_2603."A"
+drop cascades to table issue_2603."R"
+NOTICE:  graph "issue_2603" has been dropped
+ drop_graph
+------------
+
 (1 row)
 
 --
