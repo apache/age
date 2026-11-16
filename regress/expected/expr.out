@@ -6698,6 +6698,19 @@ ERROR:  function ag_catalog.age_stdevp() does not exist
 LINE 1: SELECT * FROM cypher('UCSC', $$ RETURN stDevP() $$) AS (stDe...
                                                ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-- direct calls of the final functions with a NULL state - should return NULL
+SELECT age_float8_stddev_samp_aggfinalfn(NULL);
+ age_float8_stddev_samp_aggfinalfn 
+-----------------------------------
+ 
+(1 row)
+
+SELECT age_float8_stddev_pop_aggfinalfn(NULL);
+ age_float8_stddev_pop_aggfinalfn 
+----------------------------------
+ 
+(1 row)
+
 --
 -- aggregate functions percentileCont() & percentileDisc()
 --

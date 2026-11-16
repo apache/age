@@ -2764,6 +2764,9 @@ SELECT * FROM cypher('UCSC', $$ RETURN stDevP(NULL) $$) AS (stDevP agtype);
 -- should fail
 SELECT * FROM cypher('UCSC', $$ RETURN stDev() $$) AS (stDev agtype);
 SELECT * FROM cypher('UCSC', $$ RETURN stDevP() $$) AS (stDevP agtype);
+-- direct calls of the final functions with a NULL state - should return NULL
+SELECT age_float8_stddev_samp_aggfinalfn(NULL);
+SELECT age_float8_stddev_pop_aggfinalfn(NULL);
 
 --
 -- aggregate functions percentileCont() & percentileDisc()
