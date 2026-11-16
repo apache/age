@@ -179,6 +179,19 @@ char *get_label_name(int32 label_id, Oid graph_oid)
         return NULL;
 }
 
+/*
+ * Vertices and edges that belong to a default label are presented to
+ * users as having no label. Map a label name to the name that should
+ * appear in a constructed vertex or edge. The result may be a string
+ * literal; it must not be modified or freed.
+ */
+char *get_display_label_name(char *label_name)
+{
+    if (IS_AG_DEFAULT_LABEL(label_name))
+        return "";
+    return label_name;
+}
+
 PG_FUNCTION_INFO_V1(_label_name);
 
 /*
@@ -219,14 +232,8 @@ Datum _label_name(PG_FUNCTION_ARGS)
     }
 
     /* Convert cstring to agtype string */
-    if (IS_AG_DEFAULT_LABEL(label_name))
-    {
-        result = DATUM_GET_AGTYPE_P(string_to_agtype(""));
-    }
-    else
-    {
-        result = DATUM_GET_AGTYPE_P(string_to_agtype(label_name));
-    }
+    result = DATUM_GET_AGTYPE_P(
+        string_to_agtype(get_display_label_name(label_name)));
 
     PG_RETURN_POINTER(result);
 }

@@ -2802,11 +2802,11 @@ SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[*]->() WHERE length(p) > 1 R
 (3 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH p=()-[*]->() WHERE size(nodes(p)) = 3 RETURN nodes(p)[0] $$) as (nodes agtype);
-                                                nodes                                                
------------------------------------------------------------------------------------------------------
- {"id": 281474976710660, "label": "_ag_label_vertex", "properties": {"age": 4, "name": "F"}}::vertex
- {"id": 281474976710667, "label": "_ag_label_vertex", "properties": {"name": "Dave"}}::vertex
- {"id": 281474976710668, "label": "_ag_label_vertex", "properties": {"name": "John"}}::vertex
+                                        nodes                                        
+-------------------------------------------------------------------------------------
+ {"id": 281474976710660, "label": "", "properties": {"age": 4, "name": "F"}}::vertex
+ {"id": 281474976710667, "label": "", "properties": {"name": "Dave"}}::vertex
+ {"id": 281474976710668, "label": "", "properties": {"name": "John"}}::vertex
 (3 rows)
 
 SELECT * FROM cypher('cypher_match', $$ MATCH (n {name:'Dave'}) MATCH p=()-[*]->() WHERE nodes(p)[0] = n RETURN length(p) $$) as (length agtype);
