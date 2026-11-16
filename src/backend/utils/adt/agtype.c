@@ -6239,7 +6239,8 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     properties = column_get_datum(tupdesc, tuple, 1, "properties",
                                   AGTYPEOID, true);
     /* reconstruct the vertex */
-    label_agtype = DATUM_GET_AGTYPE_P(string_to_agtype((char *)vertex_label));
+    label_agtype = DATUM_GET_AGTYPE_P(
+        string_to_agtype(get_display_label_name((char *)vertex_label)));
     result = DirectFunctionCall3(_agtype_build_vertex, id,
                                  PointerGetDatum(label_agtype), properties);
 

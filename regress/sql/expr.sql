@@ -1212,6 +1212,35 @@ $$) AS (endNode agtype);
 SELECT * FROM cypher('expr', $$
     RETURN endNode()
 $$) AS (endNode agtype);
+--
+-- Labels of a vertex in the default vertex label must be presented the
+-- same way whether the vertex comes from pattern matching or from
+-- startNode()/endNode(), and must not change when the vertex is rebound
+-- by id across an OPTIONAL MATCH barrier (issue #2612)
+--
+SELECT * FROM create_graph('default_label');
+SELECT * FROM cypher('default_label', $$
+    CREATE (s:L {role: 'source'})-[:R]->(t {role: 'target'})
+$$) AS (v agtype);
+SELECT * FROM cypher('default_label', $$
+    MATCH (s:L)-[r:R]->(t)
+    RETURN labels(t) AS from_match, labels(endNode(r)) AS from_endnode,
+           labels(startNode(r)) AS from_startnode
+$$) AS (from_match agtype, from_endnode agtype, from_startnode agtype);
+SELECT * FROM cypher('default_label', $$
+    MATCH (s:L)-[r:R]->(t)
+    WITH endNode(r) AS e
+    OPTIONAL MATCH (v) WHERE id(v) = id(e)
+    RETURN labels(e) AS before_barrier, labels(v) AS after_barrier
+$$) AS (before_barrier agtype, after_barrier agtype);
+-- a vertex reached through a variable-length path must be identical to
+-- the same vertex returned by endNode()
+SELECT * FROM cypher('default_label', $$
+    MATCH p=(s:L)-[*1]->(t)
+    RETURN nodes(p)[1] = endNode(relationships(p)[0]) AS vle_matches_endnode,
+           labels(nodes(p)[1]) AS vle_labels
+$$) AS (vle_matches_endnode agtype, vle_labels agtype);
+SELECT * FROM drop_graph('default_label', true);
 -- type()
 SELECT * FROM cypher('expr', $$
     MATCH ()-[e]-() RETURN type(e)
