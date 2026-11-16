@@ -6134,6 +6134,7 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     Oid graph_namespace_oid;
     Oid vertex_label_table_oid;
     Snapshot snapshot;
+    CommandId saved_curcid;
 
     /* get the specific graph namespace (schema) */
     graph_namespace_oid = get_namespace_oid(graph, false);
@@ -6150,6 +6151,26 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
     {
         aclcheck_error(aclresult, OBJECT_TABLE, vertex_label);
     }
+
+    /*
+     * Temporarily advance the snapshot's curcid so that vertices written
+     * by preceding clauses (e.g., SET) in the same query are visible.
+     * When this runs inside a cypher query, the active snapshot is the
+     * executor's es_snapshot, whose curcid the clause machinery manages
+     * manually. CommandCounterIncrement() calls made outside that
+     * machinery, e.g., by statements executed inside a function called
+     * with CALL, advance the global command id without advancing this
+     * snapshot's curcid, which would leave it behind the command id
+     * that stamped those writes and make this scan return the
+     * pre-update tuple.
+     *
+     * Use Max to ensure we never decrease curcid. Visibility is decided
+     * when the tuple is fetched below, so restore the original curcid
+     * right after the fetch, before any error path can leave it raised.
+     * Same pattern as entity_exists() in cypher_utils.c.
+     */
+    saved_curcid = snapshot->curcid;
+    snapshot->curcid = Max(saved_curcid, GetCurrentCommandId(false));
 
     /* open the relation (table) */
     graph_vertex_label = table_open(vertex_label_table_oid, ShareLock);
@@ -6191,6 +6212,9 @@ static Datum get_vertex(const char *graph, const char *vertex_label,
         scan_desc = table_beginscan(graph_vertex_label, snapshot, 1, scan_keys);
         tuple = heap_getnext(scan_desc, ForwardScanDirection);
     }
+
+    /* the fetch decided visibility; restore the snapshot's curcid */
+    snapshot->curcid = saved_curcid;
 
     /* bail if the tuple isn't valid */
     if (!HeapTupleIsValid(tuple))
