@@ -11525,6 +11525,16 @@ Datum age_float8_stddev_samp_aggfinalfn(PG_FUNCTION_ARGS)
     PGFunction func;
     agtype_value agtv_float;
 
+    /*
+     * The function is not STRICT, so it can be called directly with a NULL
+     * state. float8_stddev_samp does not check for that and would dereference
+     * it, so return NULL here, as a STRICT function would.
+     */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
+
     /* we can't use DirectFunctionCall1 as it errors for NULL values */
     func = float8_stddev_samp;
     result = (*func) (fcinfo);
@@ -11556,6 +11566,12 @@ Datum age_float8_stddev_pop_aggfinalfn(PG_FUNCTION_ARGS)
     Datum result;
     PGFunction func;
     agtype_value agtv_float;
+
+    /* same as above, float8_stddev_pop does not check for a NULL state */
+    if (PG_ARGISNULL(0))
+    {
+        PG_RETURN_NULL();
+    }
 
     /* we can't use DirectFunctionCall1 as it errors for NULL values */
     func = float8_stddev_pop;
