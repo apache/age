@@ -6962,6 +6962,17 @@ static Expr *transform_cypher_node(cypher_parsestate *cpstate,
          */
         else if (te && !entity)
         {
+            /*
+             * If the variable is visible as a column from a previous clause
+             * (e.g. WITH n AS alias0 → MATCH (alias0)), it is an alias
+             * projection of an existing entity.  Return the column reference
+             * directly instead of erroring — the caller will create the
+             * transform_entity for it.
+             */
+            if (previous_clause_var != NULL)
+            {
+                return (Expr *)previous_clause_var;
+            }
             ereport(ERROR,
                     (errcode(ERRCODE_DUPLICATE_ALIAS),
                      errmsg("variable '%s' already exists", node->name),
