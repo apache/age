@@ -4976,13 +4976,14 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
         agtv_arg = agtv_materialize_vle_edges(agt_arg);
         array_size = agtv_arg->val.array.num_elems;
 
-        /* return null if the item to find is null */
-        if (PG_ARGISNULL(1))
+        /* get the item to search for, with proper edge/vertex coercion */
+        agt_item = get_one_agtype_from_variadic_args(fcinfo, 1, 1);
+
+        /* return null if the item is null or an agtype null */
+        if (agt_item == NULL)
         {
             PG_RETURN_NULL();
         }
-        /* get the item to search for */
-        agt_item = AG_GET_ARG_AGTYPE_P(1);
 
         /* init item iterator */
         it_item = agtype_iterator_init(&agt_item->root);
@@ -5043,13 +5044,14 @@ Datum agtype_in_operator(PG_FUNCTION_ARGS)
 
         array_size = AGT_ROOT_COUNT(agt_arg);
 
-        /* return null if the item to find is null */
-        if (PG_ARGISNULL(1))
+        /* get the item to search for, with proper edge/vertex coercion */
+        agt_item = get_one_agtype_from_variadic_args(fcinfo, 1, 1);
+
+        /* return null if the item is null or an agtype null */
+        if (agt_item == NULL)
         {
             PG_RETURN_NULL();
         }
-        /* get the item to search for */
-        agt_item = AG_GET_ARG_AGTYPE_P(1);
 
         /* init item iterator */
         it_item = agtype_iterator_init(&agt_item->root);
