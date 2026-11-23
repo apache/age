@@ -78,6 +78,7 @@
 #define AGE_VARNAME_DELETE_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"delete_clause"
 #define AGE_VARNAME_MERGE_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"merge_clause"
 #define AGE_VARNAME_ID AGE_DEFAULT_VARNAME_PREFIX"id"
+#define AGE_VARNAME_OPTIONAL_MATCH_UNIT AGE_DEFAULT_VARNAME_PREFIX"optional_match_unit"
 #define AGE_VARNAME_SET_CLAUSE AGE_DEFAULT_VARNAME_PREFIX"set_clause"
 #define AGE_VARNAME_SET_VALUE AGE_DEFAULT_VARNAME_PREFIX"set_value"
 
@@ -3989,6 +3990,42 @@ static void get_res_cols(ParseState *pstate, ParseNamespaceItem *l_pnsi,
 
     *res_colnames = list_concat(*res_colnames, colnames);
     *res_colvars = list_concat(*res_colvars, colvars);
+}
+
+/*
+ * make_optional_match_unit_clause
+ *      Build a clause that yields exactly one row, with no user-visible
+ *      columns, to stand in as the left side of a leading OPTIONAL MATCH.
+ *
+ * This mirrors transform_cypher_with, which likewise wraps a synthesized
+ * cypher_return in a cypher_clause. The single projected item is a null
+ * constant named with the hidden variable prefix, so expand_pnsi_attrs keeps
+ * it out of RETURN * expansion.
+ */
+cypher_clause *make_optional_match_unit_clause(void)
+{
+    A_Const *unit_value;
+    ResTarget *unit_item;
+    cypher_return *return_clause;
+    cypher_clause *wrapper;
+
+    unit_value = makeNode(A_Const);
+    unit_value->isnull = true;
+    unit_value->location = -1;
+
+    unit_item = makeNode(ResTarget);
+    unit_item->name = pstrdup(AGE_VARNAME_OPTIONAL_MATCH_UNIT);
+    unit_item->indirection = NIL;
+    unit_item->val = (Node *)unit_value;
+    unit_item->location = -1;
+
+    return_clause = make_ag_node(cypher_return);
+    return_clause->items = list_make1(unit_item);
+
+    wrapper = palloc0(sizeof(*wrapper));
+    wrapper->self = (Node *)return_clause;
+
+    return wrapper;
 }
 
 /*
