@@ -296,10 +296,87 @@ HINT:  No function matches the given name and argument types. You might need to 
 DROP FUNCTION myfunc;
 DROP SCHEMA call_stmt_test CASCADE;
 NOTICE:  drop cascades to function call_stmt_test.add_agtype(agtype,agtype)
+/*
+ * A statement executed inside a CALLed function advances the command
+ * counter outside the cypher executor. A SET later in the same query
+ * must still be visible to endNode() (issue #2605)
+ */
+CREATE FUNCTION pg_temp.issue_2605_noop() RETURNS boolean
+LANGUAGE plpgsql VOLATILE AS $$ BEGIN RETURN true; END $$;
+CREATE FUNCTION pg_temp.issue_2605_make_index() RETURNS boolean
+LANGUAGE plpgsql VOLATILE AS $$
+BEGIN
+    EXECUTE 'CREATE INDEX issue_2605_idx ON cypher_call."Other" USING gin (properties)';
+    RETURN true;
+END $$;
+CREATE TABLE pg_temp.issue_2605_sink (x int);
+CREATE FUNCTION pg_temp.issue_2605_insert() RETURNS boolean
+LANGUAGE plpgsql VOLATILE AS $$
+BEGIN
+    INSERT INTO pg_temp.issue_2605_sink VALUES (1);
+    RETURN true;
+END $$;
+SELECT * FROM cypher('cypher_call', $$
+    CREATE (:T {id: 1, k4: 'x'}), (:T {id: 11, k4: 'x'}),
+           (:T {id: 21, k4: 'x'}), (:Other {id: 2})
+$$) AS (v agtype);
+ v 
+---
+(0 rows)
+
+-- control: the CALL performs no statement
+SELECT * FROM cypher('cypher_call', $$
+    MATCH (n0:T {id: 1})
+    CALL pg_temp.issue_2605_noop() YIELD issue_2605_noop AS ignored
+    WITH n0
+    CREATE (n0)-[r:R {id: 12}]->(n0)
+    WITH n0, r
+    SET n0.k4 = NULL
+    RETURN properties(endNode(r)) AS ep
+$$) AS (ep agtype);
+    ep     
+-----------
+ {"id": 1}
+(1 row)
+
+-- the CALL creates an index on an unrelated label of the same graph
+SELECT * FROM cypher('cypher_call', $$
+    MATCH (n0:T {id: 11})
+    CALL pg_temp.issue_2605_make_index() YIELD issue_2605_make_index AS ignored
+    WITH n0
+    CREATE (n0)-[r:R {id: 13}]->(n0)
+    WITH n0, r
+    SET n0.k4 = NULL
+    RETURN properties(endNode(r)) AS ep
+$$) AS (ep agtype);
+     ep     
+------------
+ {"id": 11}
+(1 row)
+
+-- a plain INSERT inside the CALLed function has the same effect;
+-- no DDL is required to trigger the bug
+SELECT * FROM cypher('cypher_call', $$
+    MATCH (n0:T {id: 21})
+    CALL pg_temp.issue_2605_insert() YIELD issue_2605_insert AS ignored
+    WITH n0
+    CREATE (n0)-[r:R {id: 14}]->(n0)
+    WITH n0, r
+    SET n0.k4 = NULL
+    RETURN properties(endNode(r)) AS ep
+$$) AS (ep agtype);
+     ep     
+------------
+ {"id": 21}
+(1 row)
+
 SELECT drop_graph('cypher_call', true);
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to table cypher_call._ag_label_vertex
 drop cascades to table cypher_call._ag_label_edge
+drop cascades to table cypher_call."T"
+drop cascades to table cypher_call."Other"
+drop cascades to table cypher_call."R"
 NOTICE:  graph "cypher_call" has been dropped
  drop_graph 
 ------------
