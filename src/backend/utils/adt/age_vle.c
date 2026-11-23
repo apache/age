@@ -1972,7 +1972,8 @@ Datum age_vle(PG_FUNCTION_ARGS)
         /* all of these arguments need to be non NULL */
         if (PG_ARGISNULL(0) || /* graph name */
             PG_ARGISNULL(3) || /* edge prototype */
-            PG_ARGISNULL(6))   /* direction */
+            PG_ARGISNULL(6) || /* direction */
+            (PG_NARGS() == 8 && PG_ARGISNULL(7))) /* VLE grammar node id */
         {
              ereport(ERROR,
                 (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
