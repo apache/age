@@ -2621,6 +2621,8 @@ static Node *transform_SubLink(cypher_parsestate *cpstate, SubLink *sublink)
         case EXPR_KIND_FROM_SUBSELECT:
         case EXPR_KIND_WHERE:
         case EXPR_KIND_INSERT_TARGET:
+        case EXPR_KIND_LIMIT:
+        case EXPR_KIND_OFFSET:
             /* okay */
             break;
         default:
