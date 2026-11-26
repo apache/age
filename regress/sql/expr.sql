@@ -3973,10 +3973,11 @@ SELECT * FROM cypher('accessor_opt', $$
     RETURN count(r)
 $$) AS (count agtype);
 
--- The flat and nested forms above must produce identical plans (the redundant
--- conjunct is gone from both).
+-- The nested AND plan must retain both property conditions without the
+-- redundant type filter. VERBOSE would expose a database-specific graph OID
+-- in the projected edge value.
 SELECT * FROM cypher('accessor_opt', $$
-    EXPLAIN (VERBOSE, COSTS OFF)
+    EXPLAIN (COSTS OFF)
     MATCH ()-[r:KNOWS]->()
     WHERE r.since = 2020 AND (type(r) = 'KNOWS' AND r.since <> -1)
     RETURN count(r)
